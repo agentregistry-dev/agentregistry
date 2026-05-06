@@ -153,8 +153,6 @@ spec:
   source:
     image: ghcr.io/e2e-test/decl-agent:latest
   description: "E2E declarative apply test agent"
-  language: python
-  framework: adk
   modelProvider: gemini
   modelName: gemini-2.0-flash
 `, agentName, version)
@@ -284,8 +282,6 @@ spec:
   source:
     image: ghcr.io/e2e-test/multi-agent:latest
   description: "Multi-doc test agent"
-  language: python
-  framework: adk
   modelProvider: gemini
   modelName: gemini-2.0-flash
 `, serverName, version, agentName, version)
@@ -320,8 +316,6 @@ spec:
   source:
     image: ghcr.io/e2e-test/dryrun:latest
   description: "Dry-run test agent"
-  language: python
-  framework: adk
   modelProvider: gemini
   modelName: gemini-2.0-flash
 `, agentName, version)
@@ -672,8 +666,6 @@ spec:
   source:
     image: ghcr.io/e2e-test/idemp-agent:latest
   description: "Idempotent apply test agent"
-  language: python
-  framework: adk
   modelProvider: gemini
   modelName: gemini-2.0-flash
 `, agentName, version)
@@ -749,8 +741,6 @@ spec:
   source:
     image: ghcr.io/e2e-test/update-agent:latest
   description: "v1 description"
-  language: python
-  framework: adk
   modelProvider: gemini
   modelName: gemini-2.0-flash
 `, agentName, version)
@@ -779,8 +769,6 @@ spec:
   source:
     image: ghcr.io/e2e-test/update-agent:latest
   description: "v2 description"
-  language: python
-  framework: adk
   modelProvider: gemini
   modelName: gemini-2.0-flash
 `, agentName, version)
@@ -1103,8 +1091,6 @@ spec:
   source:
     image: ghcr.io/e2e-test/batch-agent:latest
   description: "Batch multi-resource apply test agent"
-  language: python
-  framework: adk
   modelProvider: gemini
   modelName: gemini-2.0-flash
 ---
@@ -1163,8 +1149,6 @@ spec:
   source:
     image: ghcr.io/e2e-test/idemp-batch-agent:latest
   description: "Idempotent batch apply test"
-  language: python
-  framework: adk
   modelProvider: gemini
   modelName: gemini-2.0-flash
 ---
@@ -1315,8 +1299,6 @@ spec:
   source:
     image: ghcr.io/e2e-test/del-batch-agent:latest
   description: "Delete-file batch test agent"
-  language: python
-  framework: adk
   modelProvider: gemini
   modelName: gemini-2.0-flash
 `, agentName, agentVersion)
@@ -1590,8 +1572,6 @@ spec:
   source:
     image: ghcr.io/e2e-test/delmulti-agent:latest
   description: "multi-kind delete test"
-  language: python
-  framework: adk
   modelProvider: gemini
   modelName: gemini-2.0-flash
 ---

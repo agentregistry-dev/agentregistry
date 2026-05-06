@@ -8,8 +8,6 @@ spec:
     image: ghcr.io/acme/summarizer:v1.0.0
     # repository:                 # optional: link to source code
     #   url: https://github.com/acme/summarizer
-  language: python
-  framework: adk
   modelProvider: gemini         # OpenAI | Anthropic | Gemini | AzureOpenAI | Agentgateway
   modelName: gemini-2.5-flash
   description: "An agent that summarizes documents"
@@ -17,13 +15,5 @@ spec:
   # mcpServers:
   #   - kind: MCPServer
   #     name: acme/fetch        # published via: arctl apply -f mcp.yaml
-  #     version: "1.0.0"
-  # skills:
-  #   - kind: Skill
-  #     name: summarize         # published via: arctl apply -f skill.yaml
-  #     version: "1.0.0"
-  # prompts:
-  #   - kind: Prompt
-  #     name: my-prompt         # published via: arctl apply -f prompt.yaml
   #     version: "1.0.0"
   # See full-stack.yaml for a complete example with all dependencies.
