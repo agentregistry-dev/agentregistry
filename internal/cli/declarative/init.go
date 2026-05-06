@@ -229,7 +229,13 @@ func parseNameVersion(s string) (string, string) {
 }
 
 // writeDeclarativeAgentYAML writes agent.yaml in the ar.dev/v1alpha1 declarative format.
+//
+// metadata.version is intentionally omitted: for content-registry kinds the
+// version is system-assigned by the server on apply. Authors mutate the
+// project; the registry stamps the version. Writing it from init would fail
+// validation on the first `arctl apply`.
 func writeDeclarativeAgentYAML(projectDir, name, ver, image, modelProvider, modelName, description, gitURL string, mcps []string) error {
+	_ = ver // version is server-assigned; kept on signature for caller compatibility
 	desc := description
 	if desc == "" {
 		desc = fmt.Sprintf("%s agent", name)
@@ -241,8 +247,7 @@ func writeDeclarativeAgentYAML(projectDir, name, ver, image, modelProvider, mode
 			Kind:       v1alpha1.KindAgent,
 		},
 		Metadata: v1alpha1.ObjectMeta{
-			Name:    name,
-			Version: ver,
+			Name: name,
 		},
 		Spec: v1alpha1.AgentSpec{
 			ModelProvider: modelProvider,
@@ -391,7 +396,11 @@ func mcpTemplateVars(name, baseName, version, description, image, pluginDir, pro
 	}
 }
 
+// writeDeclarativeMCPYAML writes mcp.yaml in the ar.dev/v1alpha1 declarative format.
+//
+// metadata.version is intentionally omitted: see writeDeclarativeAgentYAML.
 func writeDeclarativeMCPYAML(projectDir, name, ver, image, description string) error {
+	_ = ver // version is server-assigned; kept on signature for caller compatibility
 	nameParts := strings.SplitN(name, "/", 2)
 	shortName := nameParts[len(nameParts)-1]
 
@@ -406,8 +415,7 @@ func writeDeclarativeMCPYAML(projectDir, name, ver, image, description string) e
 			Kind:       v1alpha1.KindMCPServer,
 		},
 		Metadata: v1alpha1.ObjectMeta{
-			Name:    name,
-			Version: ver,
+			Name: name,
 		},
 		Spec: v1alpha1.MCPServerSpec{
 			Title:       shortName,
@@ -490,7 +498,11 @@ The generated skill.yaml can be applied directly:
 	return cmd
 }
 
+// writeDeclarativeSkillYAML writes skill.yaml in the ar.dev/v1alpha1 declarative format.
+//
+// metadata.version is intentionally omitted: see writeDeclarativeAgentYAML.
 func writeDeclarativeSkillYAML(projectDir, name, ver, description string) error {
+	_ = ver // version is server-assigned; kept on signature for caller compatibility
 	desc := description
 	if desc == "" {
 		desc = fmt.Sprintf("%s skill", name)
@@ -502,8 +514,7 @@ func writeDeclarativeSkillYAML(projectDir, name, ver, description string) error 
 			Kind:       v1alpha1.KindSkill,
 		},
 		Metadata: v1alpha1.ObjectMeta{
-			Name:    name,
-			Version: ver,
+			Name: name,
 		},
 		Spec: v1alpha1.SkillSpec{
 			Title:       name,
@@ -575,7 +586,11 @@ The generated file can be applied directly:
 	return cmd
 }
 
+// writeDeclarativePromptYAML writes <name>.yaml in the ar.dev/v1alpha1 declarative format.
+//
+// metadata.version is intentionally omitted: see writeDeclarativeAgentYAML.
 func writeDeclarativePromptYAML(path, name, ver, description, content string) error {
+	_ = ver // version is server-assigned; kept on signature for caller compatibility
 	desc := description
 	if desc == "" {
 		desc = fmt.Sprintf("%s prompt", name)
@@ -587,8 +602,7 @@ func writeDeclarativePromptYAML(path, name, ver, description, content string) er
 			Kind:       v1alpha1.KindPrompt,
 		},
 		Metadata: v1alpha1.ObjectMeta{
-			Name:    name,
-			Version: ver,
+			Name: name,
 		},
 		Spec: v1alpha1.PromptSpec{
 			Description: desc,
