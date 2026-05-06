@@ -52,6 +52,40 @@ func TestInitAgent_WritesYAMLAndArctlAndEnvExample(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// ---- init mcp ----
+
+func TestInitMCP_RequiresNamespaceSlashName(t *testing.T) {
+	tmp := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmp))
+	defer func() { _ = os.Chdir(origDir) }()
+
+	cmd := declarative.NewInitCmd()
+	cmd.SetArgs([]string{"mcp", "noslash", "--framework", "fastmcp", "--language", "python"})
+	require.Error(t, cmd.Execute())
+}
+
+func TestInitMCP_WritesYAMLAndArctl(t *testing.T) {
+	tmp := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmp))
+	defer func() { _ = os.Chdir(origDir) }()
+
+	cmd := declarative.NewInitCmd()
+	cmd.SetArgs([]string{"mcp", "acme/my-mcp", "--framework", "fastmcp", "--language", "python"})
+	require.NoError(t, cmd.Execute())
+
+	projectDir := filepath.Join(tmp, "my-mcp") // basename is project dir
+	_, err = os.Stat(filepath.Join(projectDir, "mcp.yaml"))
+	require.NoError(t, err)
+
+	cfg, err := buildconfig.Read(projectDir)
+	require.NoError(t, err)
+	assert.Equal(t, "fastmcp", cfg.Framework)
+}
+
 // ---- init skill ----
 
 func TestInitSkillCmd_BasicScaffold(t *testing.T) {

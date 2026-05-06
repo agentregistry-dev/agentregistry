@@ -8,8 +8,6 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/buildconfig"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common"
-	mcpframeworks "github.com/agentregistry-dev/agentregistry/internal/cli/mcp/frameworks"
-	mcptemplates "github.com/agentregistry-dev/agentregistry/internal/cli/mcp/templates"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/plugins"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	skilltemplates "github.com/agentregistry-dev/agentregistry/internal/cli/skill/templates"
@@ -357,48 +355,52 @@ func defaultInitModelName(provider string) (string, bool) {
 
 // --- init mcp ---
 
-var supportedMCPFrameworks = map[string]struct{}{
-	"fastmcp-python": {},
-	"mcp-go":         {},
-}
-
 func newInitMCPCmd() *cobra.Command {
 	var (
 		initVersion     string
 		initDescription string
 		initImage       string
+		initFramework   string
+		initLanguage    string
 	)
 
 	cmd := &cobra.Command{
-		Use:   "mcp FRAMEWORK NAMESPACE/NAME",
-		Short: "Scaffold a new MCP server project with declarative mcp.yaml",
-		Long: `Scaffold a new MCP server project. Creates a project directory
-containing a declarative mcp.yaml (ar.dev/v1alpha1) and source stubs.
+		Use:   "mcp NAMESPACE/NAME",
+		Short: "Scaffold a new MCP server project",
+		Long: `Scaffold a new MCP server project.
 
-NAME must be in namespace/name format as required by the registry.
-
-The generated mcp.yaml can be applied directly:
-  arctl apply -f NAME/mcp.yaml
-
-Supported frameworks: fastmcp-python, mcp-go`,
-		Example: `  arctl init mcp fastmcp-python myorg/my-server
-  arctl init mcp mcp-go myorg/my-server --version 1.0.0`,
-		Args:         cobra.ExactArgs(2),
+NAME must be in namespace/name format (registry requirement).
+Picks a framework + language interactively (or via --framework / --language).`,
+		Example: `  arctl init mcp acme/my-mcp
+  arctl init mcp acme/my-mcp --framework fastmcp --language python`,
+		Args:         cobra.ExactArgs(1),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			framework := strings.ToLower(args[0])
-			fullName := args[1]
-
-			if _, ok := supportedMCPFrameworks[framework]; !ok {
-				return fmt.Errorf("unsupported framework %q — supported: fastmcp-python, mcp-go", framework)
+			full := args[0]
+			parts := strings.SplitN(full, "/", 2)
+			if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+				return fmt.Errorf("name must be in namespace/name format (got %q)", full)
 			}
-			if err := validators.ValidateMCPServerName(fullName); err != nil {
-				return fmt.Errorf("invalid MCP server name: %w", err)
-			}
+			projectName := parts[1]
 
-			// Use just the name part (after /) as the project directory name.
-			parts := strings.SplitN(fullName, "/", 2)
-			dirName := parts[len(parts)-1]
+			cwd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			projectDir := filepath.Join(cwd, projectName)
+
+			r, err := loadPluginRegistry(projectDir)
+			if err != nil {
+				return err
+			}
+			plugin, err := plugins.Pick(plugins.PickOpts{
+				Registry: r, Type: "mcp",
+				Framework: initFramework, Language: initLanguage,
+				NonInteractive: !isatty(),
+			})
+			if err != nil {
+				return err
+			}
 
 			image := initImage
 			if image == "" {
@@ -406,50 +408,63 @@ Supported frameworks: fastmcp-python, mcp-go`,
 				if registry == "" {
 					registry = "localhost:5001"
 				}
-				image = fmt.Sprintf("%s/%s:latest", registry, dirName)
+				image = fmt.Sprintf("%s/%s:latest", registry, projectName)
 			}
 
-			cwd, err := os.Getwd()
-			if err != nil {
-				return fmt.Errorf("getting working directory: %w", err)
-			}
-			projectDir := filepath.Join(cwd, dirName)
-
-			generator, err := mcpframeworks.GetGenerator(framework)
-			if err != nil {
+			vars := mcpTemplateVars(full, projectName, initVersion, initDescription, image, plugin.SourceDir, projectDir)
+			if err := plugins.RenderTemplates(plugin, projectDir, vars); err != nil {
 				return err
 			}
-			cfg := mcptemplates.ProjectConfig{
-				ProjectName: dirName,
-				Version:     initVersion,
-				Description: initDescription,
-				Directory:   projectDir,
-				NoGit:       false,
+			if err := buildconfig.Write(projectDir, &buildconfig.Config{Framework: plugin.Framework, Language: plugin.Language}); err != nil {
+				return err
 			}
-			if err := generator.GenerateProject(cfg); err != nil {
-				return fmt.Errorf("generating MCP project: %w", err)
+			if err := buildconfig.WriteEnvExample(projectDir, plugin.Env.Required, plugin.Env.Optional); err != nil {
+				return err
 			}
-
-			if err := writeDeclarativeMCPYAML(projectDir, fullName, initVersion, image, initDescription); err != nil {
-				return fmt.Errorf("writing declarative mcp.yaml: %w", err)
+			if err := writeDeclarativeMCPYAML(projectDir, full, initVersion, image, initDescription); err != nil {
+				return err
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "✓ Successfully created MCP server: %s\n", fullName)
-			fmt.Fprintf(cmd.OutOrStdout(), "\n🚀 Next steps:\n")
-			fmt.Fprintf(cmd.OutOrStdout(), "  1. cd %s\n", dirName)
-			fmt.Fprintf(cmd.OutOrStdout(), "  2. (Optional) Build and push the image if developing locally:\n")
-			fmt.Fprintf(cmd.OutOrStdout(), "     arctl build . --push\n")
-			fmt.Fprintf(cmd.OutOrStdout(), "  3. Publish the MCP server to the registry:\n")
-			fmt.Fprintf(cmd.OutOrStdout(), "     arctl apply -f mcp.yaml\n")
+			fmt.Fprintf(cmd.OutOrStdout(), "✓ Created %s/ (framework: %s, language: %s)\n", projectName, plugin.Framework, plugin.Language)
 			return nil
 		},
 	}
 
 	cmd.Flags().StringVar(&initVersion, "version", "0.1.0", "Initial version")
 	cmd.Flags().StringVar(&initDescription, "description", "", "MCP server description")
-	cmd.Flags().StringVar(&initImage, "image", "", "Docker image (default: localhost:5001/<name>:latest)")
-
+	cmd.Flags().StringVar(&initImage, "image", "", "Image tag override")
+	cmd.Flags().StringVar(&initFramework, "framework", "", "Framework. Skips picker.")
+	cmd.Flags().StringVar(&initLanguage, "language", "", "Language. Skips picker.")
 	return cmd
+}
+
+// mcpTemplateVars returns the template-substitution vars for the mcp plugin's
+// templates. The vendored fastmcp-python and mcp-go templates reference fields
+// beyond the canonical Phase-5 set, so we supply safe defaults for those here.
+// Phase 12 simplifies the templates and trims this.
+func mcpTemplateVars(name, baseName, version, description, image, pluginDir, projectDir string) map[string]any {
+	desc := description
+	if desc == "" {
+		desc = fmt.Sprintf("%s MCP server", baseName)
+	}
+	toolName := "echo"
+	return map[string]any{
+		"Name":          name,
+		"BaseName":      baseName,
+		"Version":       version,
+		"Description":   desc,
+		"description":   desc, // legacy lowercase alias used by some templates
+		"Image":         image,
+		"PluginDir":     pluginDir,
+		"ProjectDir":    projectDir,
+		"ProjectName":   baseName,
+		"ToolName":      toolName,
+		"ToolNameTitle": "Echo",
+		"ClassName":     "Server",
+		"GoModuleName":  "github.com/example/" + baseName,
+		"Author":        "",
+		"Email":         "",
+	}
 }
 
 func writeDeclarativeMCPYAML(projectDir, name, ver, image, description string) error {
