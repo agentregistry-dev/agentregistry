@@ -12,9 +12,10 @@ func TestCommandTree(t *testing.T) {
 	root := Root()
 
 	// Top-level commands on the current (declarative) CLI surface.
-	// Imperative CRUD subcommands (publish, list, delete, show, init, build
-	// under agent/mcp/skill/prompt) were removed; init/build/apply/get/delete
-	// are now top-level declarative commands.
+	// Phase 12 deleted the legacy `arctl agent run`, `arctl mcp run` and
+	// `arctl skill pull` subcommands; run/pull are now top-level. The
+	// agent/mcp/skill parents are kept as namespacing for the remaining
+	// surface (mcp add-tool today; nothing else).
 	expectedTopLevel := []string{
 		"agent",
 		"apply",
@@ -25,6 +26,8 @@ func TestCommandTree(t *testing.T) {
 		"get",
 		"init",
 		"mcp",
+		"pull",
+		"run",
 		"skill",
 		"version",
 	}
@@ -47,12 +50,12 @@ func TestCommandTree(t *testing.T) {
 
 	// Verify subcommand counts for parent commands with surviving subcommands.
 	expectedSubcmdCounts := map[string]int{
-		// run
-		"agent": 1,
-		// add-tool, run
-		"mcp": 2,
-		// pull
-		"skill": 1,
+		// no surviving subcommands
+		"agent": 0,
+		// add-tool
+		"mcp": 1,
+		// no surviving subcommands
+		"skill": 0,
 	}
 
 	for _, cmd := range root.Commands() {

@@ -9,7 +9,6 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/agent"
-	agentutils "github.com/agentregistry-dev/agentregistry/internal/cli/agent/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/configure"
 	clidaemon "github.com/agentregistry-dev/agentregistry/internal/cli/daemon"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative"
@@ -71,7 +70,6 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 
-		agentutils.SetDefaultRegistryURL(c.BaseURL)
 		mcp.SetAPIClient(c)
 		agent.SetAPIClient(c)
 		skill.SetAPIClient(c)

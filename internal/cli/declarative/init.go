@@ -277,62 +277,6 @@ func writeDeclarativeAgentYAML(projectDir, name, ver, image, modelProvider, mode
 	return os.WriteFile(filepath.Join(projectDir, "agent.yaml"), b, 0o644)
 }
 
-var supportedInitModelProviders = map[string]struct{}{
-	"openai":       {},
-	"anthropic":    {},
-	"gemini":       {},
-	"azureopenai":  {},
-	"agentgateway": {},
-}
-
-func validateInitFrameworkAndLanguage(framework, language string) error {
-	if framework != "adk" {
-		return fmt.Errorf("unsupported framework %q — only 'adk' is supported", framework)
-	}
-	if language != "python" {
-		return fmt.Errorf("unsupported language %q for framework 'adk' — only 'python' is supported", language)
-	}
-	return nil
-}
-
-func normalizeInitModelProvider(value string) (string, error) {
-	trimmed := strings.ToLower(strings.TrimSpace(value))
-	if trimmed == "" {
-		return "", nil
-	}
-	if _, ok := supportedInitModelProviders[trimmed]; !ok {
-		return "", fmt.Errorf("unsupported model provider %q — supported: OpenAI, Anthropic, Gemini, AzureOpenAI, Agentgateway", value)
-	}
-	return trimmed, nil
-}
-
-func resolveInitModelName(cmd *cobra.Command, modelProvider, modelName string) string {
-	providerChanged := cmd.Flags().Changed("model-provider")
-	modelNameChanged := cmd.Flags().Changed("model-name")
-	name := strings.TrimSpace(modelName)
-	if providerChanged && !modelNameChanged {
-		if defaultName, ok := defaultInitModelName(modelProvider); ok {
-			return defaultName
-		}
-	}
-	return name
-}
-
-func defaultInitModelName(provider string) (string, bool) {
-	switch provider {
-	case "openai", "agentgateway":
-		return "gpt-4o-mini", true
-	case "anthropic":
-		return "claude-3-5-sonnet", true
-	case "gemini":
-		return "gemini-2.5-flash", true
-	case "azureopenai":
-		return "your-deployment-name", true
-	default:
-		return "", false
-	}
-}
-
 // --- init mcp ---
 
 func newInitMCPCmd() *cobra.Command {
