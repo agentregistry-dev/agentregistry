@@ -1,0 +1,16 @@
+apiVersion: arctl.dev/v1
+name: adk-python
+type: agent
+framework: adk
+language: python
+description: Google Agent Development Kit (Python)
+templatesDir: ./templates
+env:
+  required:
+    - GOOGLE_API_KEY
+  optional:
+    - LOG_LEVEL
+build:
+  command: ["docker", "build", "-t", "{{.Image}}", "{{.ProjectDir}}"]
+run:
+  command: ["docker", "compose", "-f", "{{.ProjectDir}}/docker-compose.yaml", "up"]

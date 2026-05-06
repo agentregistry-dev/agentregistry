@@ -14,3 +14,19 @@ func TestLoadEmbedded_EmptyOK(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, plugins) // empty slice or nil, both fine
 }
+
+func TestLoadEmbedded_FindsAdkPython(t *testing.T) {
+	plugins, err := LoadEmbedded(t.TempDir())
+	require.NoError(t, err)
+	var found *Plugin
+	for _, p := range plugins {
+		if p.Name == "adk-python" {
+			found = p
+			break
+		}
+	}
+	require.NotNil(t, found, "adk-python should be embedded")
+	assert.Equal(t, "agent", found.Type)
+	assert.Equal(t, "adk", found.Framework)
+	assert.Equal(t, "python", found.Language)
+}
