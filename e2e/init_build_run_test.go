@@ -62,3 +62,19 @@ func TestE2E_InitMCP_AcceptsNamespaceSlashName(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(mcp), "name: acme/my-mcp")
 }
+
+func TestE2E_RunDryRun_ReadsArctlYAMLAndDispatches(t *testing.T) {
+	tmp := t.TempDir()
+	require.NoError(t, os.Chdir(tmp))
+
+	require.NoError(t, RunArctl(t, tmp, "init", "agent", "myagent",
+		"--framework", "adk", "--language", "python").Err)
+
+	pd := filepath.Join(tmp, "myagent")
+	require.NoError(t, os.Chdir(pd))
+
+	result := RunArctl(t, pd, "run", "--dry-run")
+	RequireSuccess(t, result)
+	assert.Contains(t, result.Stdout, "adk-python")
+	assert.Contains(t, result.Stdout, "(dry-run; skipping exec)")
+}
