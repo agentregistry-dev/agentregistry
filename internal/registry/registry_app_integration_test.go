@@ -3,7 +3,6 @@
 package registry
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -17,6 +16,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
+	"github.com/agentregistry-dev/agentregistry/pkg/types/typestest"
 )
 
 const extensionApplyKind = "IntegrationExtension"
@@ -89,23 +89,6 @@ spec:
 	require.JSONEq(t, `{"value":"ok"}`, string(row.Spec))
 }
 
-// recordingAuditor captures every ResourceVersionCreated call so the
-// app-construction wiring test can confirm the AppOptions.Auditor field
-// is threaded all the way to the Store.Upsert audit emission point.
-type recordingAuditor struct {
-	events []struct {
-		kind, ns, name string
-		version        int
-	}
-}
-
-func (r *recordingAuditor) ResourceVersionCreated(_ context.Context, kind, ns, name string, version int) {
-	r.events = append(r.events, struct {
-		kind, ns, name string
-		version        int
-	}{kind, ns, name, version})
-}
-
 // TestBuildStoresAndImporter_PropagatesAuditor verifies the auditor
 // passed through buildStoresAndImporter (the AppOptions.Auditor field)
 // reaches every constructed Store. We drive a versioned-artifact
@@ -114,7 +97,7 @@ func (r *recordingAuditor) ResourceVersionCreated(_ context.Context, kind, ns, n
 // NewStores -> NewStore option chain.
 func TestBuildStoresAndImporter_PropagatesAuditor(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	auditor := &recordingAuditor{}
+	auditor := &typestest.RecordingAuditor{}
 	stores, _ := buildStoresAndImporter(pool, nil, nil, auditor)
 
 	agentStore := stores[v1alpha1.KindAgent]
@@ -127,11 +110,12 @@ func TestBuildStoresAndImporter_PropagatesAuditor(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.Len(t, auditor.events, 1)
-	require.Equal(t, v1alpha1.KindAgent, auditor.events[0].kind)
-	require.Equal(t, v1alpha1.DefaultNamespace, auditor.events[0].ns)
-	require.Equal(t, "audited", auditor.events[0].name)
-	require.Equal(t, 1, auditor.events[0].version)
+	events := auditor.Events()
+	require.Len(t, events, 1)
+	require.Equal(t, v1alpha1.KindAgent, events[0].Kind)
+	require.Equal(t, v1alpha1.DefaultNamespace, events[0].Namespace)
+	require.Equal(t, "audited", events[0].Name)
+	require.Equal(t, 1, events[0].Version)
 
 	// Sanity: nil auditor still works (NoopAuditor fallback) — guards the
 	// nil-check branch in buildStoresAndImporter.

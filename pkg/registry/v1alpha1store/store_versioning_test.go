@@ -14,6 +14,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
+	"github.com/agentregistry-dev/agentregistry/pkg/types/typestest"
 )
 
 // agentObj returns an Agent envelope with the given name + a deterministic
@@ -180,25 +181,6 @@ func TestUpsert_IdempotentAcrossRestarts(t *testing.T) {
 	require.Equal(t, v1alpha1store.UpsertNoOp, res2.Outcome)
 }
 
-// auditEvent captures the args of one Auditor.ResourceVersionCreated call
-// so tests can assert outcome semantics without depending on enterprise
-// audit-sink internals.
-type auditEvent struct {
-	kind, ns, name string
-	version        int
-}
-
-// recordingAuditor is a test-only Auditor that appends every call to
-// an in-memory slice. Not safe for concurrent use; the audit-event
-// tests are single-goroutine.
-type recordingAuditor struct {
-	events []auditEvent
-}
-
-func (r *recordingAuditor) ResourceVersionCreated(_ context.Context, kind, ns, name string, version int) {
-	r.events = append(r.events, auditEvent{kind, ns, name, version})
-}
-
 func setupAgentStoreWithAuditor(t *testing.T, a types.Auditor) *v1alpha1store.Store {
 	t.Helper()
 	pool := v1alpha1store.NewTestPool(t)
@@ -221,31 +203,31 @@ func setupProviderStoreWithAuditor(t *testing.T, a types.Auditor) *v1alpha1store
 // once per immutable version creation and stays silent for no-op /
 // labels-only updates.
 func TestUpsert_AuditorCalledOnUpsertCreated(t *testing.T) {
-	auditor := &recordingAuditor{}
+	auditor := &typestest.RecordingAuditor{}
 	store := setupAgentStoreWithAuditor(t, auditor)
 	ctx := context.Background()
 
 	// Branch 1: no prior row → audit event with version=1.
 	_, err := store.Upsert(ctx, agentObj("foo", "model-a", nil))
 	require.NoError(t, err)
-	require.Len(t, auditor.events, 1)
-	require.Equal(t, auditEvent{v1alpha1.KindAgent, "default", "foo", 1}, auditor.events[0])
+	require.Len(t, auditor.Events(), 1)
+	require.Equal(t, typestest.ResourceVersionEvent{Kind: v1alpha1.KindAgent, Namespace: "default", Name: "foo", Version: 1}, auditor.Events()[0])
 
 	// Branch 2 (no-op): same spec, same labels → no event.
 	_, err = store.Upsert(ctx, agentObj("foo", "model-a", nil))
 	require.NoError(t, err)
-	require.Len(t, auditor.events, 1, "UpsertNoOp must not produce an audit event")
+	require.Len(t, auditor.Events(), 1, "UpsertNoOp must not produce an audit event")
 
 	// Branch 2 (labels updated): same spec, different labels → no event.
 	_, err = store.Upsert(ctx, agentObj("foo", "model-a", map[string]string{"env": "prod"}))
 	require.NoError(t, err)
-	require.Len(t, auditor.events, 1, "UpsertLabelsUpdated must not produce an audit event")
+	require.Len(t, auditor.Events(), 1, "UpsertLabelsUpdated must not produce an audit event")
 
 	// Branch 3: changed spec → audit event with version=2.
 	_, err = store.Upsert(ctx, agentObj("foo", "model-b", nil))
 	require.NoError(t, err)
-	require.Len(t, auditor.events, 2)
-	require.Equal(t, auditEvent{v1alpha1.KindAgent, "default", "foo", 2}, auditor.events[1])
+	require.Len(t, auditor.Events(), 2)
+	require.Equal(t, typestest.ResourceVersionEvent{Kind: v1alpha1.KindAgent, Namespace: "default", Name: "foo", Version: 2}, auditor.Events()[1])
 }
 
 // TestUpsert_AuditorNotCalledForLegacyKinds verifies the legacy
@@ -253,7 +235,7 @@ func TestUpsert_AuditorCalledOnUpsertCreated(t *testing.T) {
 // — those kinds model lifecycle state and are out of scope for the
 // version-creation audit event.
 func TestUpsert_AuditorNotCalledForLegacyKinds(t *testing.T) {
-	auditor := &recordingAuditor{}
+	auditor := &typestest.RecordingAuditor{}
 	store := setupProviderStoreWithAuditor(t, auditor)
 	ctx := context.Background()
 
@@ -263,5 +245,5 @@ func TestUpsert_AuditorNotCalledForLegacyKinds(t *testing.T) {
 		Spec:     v1alpha1.ProviderSpec{Platform: v1alpha1.PlatformLocal},
 	})
 	require.NoError(t, err)
-	require.Empty(t, auditor.events, "legacy kinds must not emit ResourceVersionCreated")
+	require.Empty(t, auditor.Events(), "legacy kinds must not emit ResourceVersionCreated")
 }
