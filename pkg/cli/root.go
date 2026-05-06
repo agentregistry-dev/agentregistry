@@ -97,6 +97,7 @@ func init() {
 	rootCmd.AddCommand(declarative.DeleteCmd)
 	rootCmd.AddCommand(declarative.InitCmd)
 	rootCmd.AddCommand(declarative.BuildCmd)
+	rootCmd.AddCommand(declarative.RunCmd)
 }
 
 // resolveRegistryTarget returns base URL and token from flags and env.
