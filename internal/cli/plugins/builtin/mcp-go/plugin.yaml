@@ -1,0 +1,14 @@
+apiVersion: arctl.dev/v1
+name: mcp-go
+type: mcp
+framework: mcp-go
+language: go
+description: MCP server using the official Go SDK
+templatesDir: ./templates
+env:
+  optional:
+    - LOG_LEVEL
+build:
+  command: ["docker", "build", "-t", "{{.Image}}", "{{.ProjectDir}}"]
+run:
+  command: ["docker", "run", "--rm", "-i", "{{.Image}}"]

@@ -44,3 +44,17 @@ func TestLoadEmbedded_FindsFastmcpPython(t *testing.T) {
 	}
 	t.Fatal("fastmcp-python not found among embedded plugins")
 }
+
+func TestLoadEmbedded_FindsMcpGo(t *testing.T) {
+	plugins, err := LoadEmbedded(t.TempDir())
+	require.NoError(t, err)
+	for _, p := range plugins {
+		if p.Name == "mcp-go" {
+			assert.Equal(t, "mcp", p.Type)
+			assert.Equal(t, "mcp-go", p.Framework)
+			assert.Equal(t, "go", p.Language)
+			return
+		}
+	}
+	t.Fatal("mcp-go not found among embedded plugins")
+}

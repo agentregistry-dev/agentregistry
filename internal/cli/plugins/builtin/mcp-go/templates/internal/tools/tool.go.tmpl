@@ -1,0 +1,40 @@
+package tools
+
+import (
+	"context"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+)
+
+func init() {
+	registerTool(MCPTool[{{.ClassName}}Params, {{.ClassName}}Result]{
+		Name:        "{{.ToolName}}",
+		Description: "{{.Description}}",
+		Handler: func(ctx context.Context, request *mcp.CallToolRequest, params {{.ClassName}}Params) (*mcp.CallToolResult, {{.ClassName}}Result, error) {
+			result := run{{.ClassName}}(params)
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{
+					&mcp.TextContent{
+						Text: result.Result,
+					},
+				},
+			}, result, nil
+		},
+	})
+}
+
+// define your input/output schemas here
+type {{.ClassName}}Params struct {
+	Message string `json:"message" description:"The message to input to call {{.ClassName}}."`
+}
+
+type {{.ClassName}}Result struct {
+	Result string `json:"result" description:"The result of calling {{.ClassName}}."`
+}
+
+// your logic goes here
+func run{{.ClassName}}(args {{.ClassName}}Params) {{.ClassName}}Result {
+	// Implement your logic here
+	return {{.ClassName}}Result{
+		Result: "{{.ClassName}}: " + args.Message,
+	}
+}
