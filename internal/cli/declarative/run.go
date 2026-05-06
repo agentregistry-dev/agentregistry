@@ -26,6 +26,7 @@ func newRunCmd() *cobra.Command {
 	var (
 		extraEnv []string
 		dryRun   bool
+		watch    bool
 	)
 	cmd := &cobra.Command{
 		Use:   "run [DIRECTORY]",
@@ -38,7 +39,8 @@ dispatches to that plugin's run command. Loads .env (if present) and
 validates that the plugin's required env vars are set.`,
 		Example: `  arctl run
   arctl run ./myagent
-  arctl run -e FOO=bar -e BAZ=qux`,
+  arctl run -e FOO=bar -e BAZ=qux
+  arctl run --watch`,
 		SilenceUsage: true,
 		Args:         cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -46,11 +48,12 @@ validates that the plugin's required env vars are set.`,
 			if err != nil {
 				return err
 			}
-			return runProject(cmd.OutOrStdout(), dir, extraEnv, dryRun)
+			return runProject(cmd.OutOrStdout(), dir, extraEnv, dryRun, watch)
 		},
 	}
 	cmd.Flags().StringArrayVarP(&extraEnv, "env", "e", nil, "KEY=VALUE env override")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Skip actual exec; useful for tests")
+	cmd.Flags().BoolVar(&watch, "watch", false, "Rebuild and restart on file change")
 	return cmd
 }
 
@@ -75,7 +78,7 @@ func resolveProjectDir(args []string) (string, error) {
 	return abs, nil
 }
 
-func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun bool) error {
+func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun, watch bool) error {
 	cfg, err := buildconfig.Read(projectDir)
 	if err != nil {
 		return err
@@ -121,11 +124,15 @@ func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun bool
 	envv := mergeEnv(dotEnv, extraEnv)
 	vars := map[string]any{"ProjectDir": projectDir, "PluginDir": p.SourceDir}
 
-	fmt.Fprintf(out, "→ %s: %s\n", p.Name, strings.Join(p.Run.Command, " "))
 	if dryRun {
+		fmt.Fprintf(out, "→ %s: %s\n", p.Name, strings.Join(p.Run.Command, " "))
 		fmt.Fprintln(out, "(dry-run; skipping exec)")
 		return nil
 	}
+	if watch {
+		return runWithWatch(out, projectDir, p, envv)
+	}
+	fmt.Fprintf(out, "→ %s: %s\n", p.Name, strings.Join(p.Run.Command, " "))
 	return plugins.ExecForeground(p.Run, projectDir, vars, envv)
 }
 
