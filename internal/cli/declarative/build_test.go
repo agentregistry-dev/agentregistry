@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/buildconfig"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,12 +16,6 @@ func writeBuildYAML(t *testing.T, projectDir, filename, content string) {
 	t.Helper()
 	require.NoError(t, os.MkdirAll(projectDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(projectDir, filename), []byte(content), 0o644))
-}
-
-// writeDockerfile writes a minimal Dockerfile so docker build checks pass in tests.
-func writeDockerfile(t *testing.T, projectDir string) {
-	t.Helper()
-	require.NoError(t, os.WriteFile(filepath.Join(projectDir, "Dockerfile"), []byte("FROM scratch\n"), 0o644))
 }
 
 // TestBuildCmd_NoDirectory verifies the command fails when the directory doesn't exist.
@@ -110,8 +105,10 @@ spec:
 	assert.Contains(t, err.Error(), "unknown kind")
 }
 
-// TestBuildCmd_AgentMissingDockerfile verifies a clear error when Dockerfile is absent.
-func TestBuildCmd_AgentMissingDockerfile(t *testing.T) {
+// TestBuildCmd_AgentMissingArctlYAML verifies a clear error when arctl.yaml is missing.
+// Build dispatches via the plugin registry, which requires arctl.yaml to identify the
+// (framework, language) plugin to invoke.
+func TestBuildCmd_AgentMissingArctlYAML(t *testing.T) {
 	tmpDir := t.TempDir()
 	writeBuildYAML(t, tmpDir, "agent.yaml", `
 apiVersion: ar.dev/v1alpha1
@@ -127,84 +124,53 @@ spec:
   modelName: gemini-2.0-flash
   description: test agent
 `)
-	// No Dockerfile written — should fail with a clear message.
 	cmd := declarative.NewBuildCmd()
 	cmd.SetArgs([]string{tmpDir})
 	err := cmd.Execute()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "dockerfile not found")
+	assert.Contains(t, err.Error(), "arctl.yaml")
 }
 
-// TestBuildCmd_YAMLPrecedence verifies agent.yaml is preferred over mcp.yaml when both exist.
-func TestBuildCmd_YAMLPrecedence(t *testing.T) {
+// TestBuildCmd_SkillKindError verifies that building a Skill returns a helpful error.
+// Skills are metadata-only and have no build step.
+func TestBuildCmd_SkillKindError(t *testing.T) {
 	tmpDir := t.TempDir()
-	// Write both files; agent.yaml should be found first.
-	writeBuildYAML(t, tmpDir, "agent.yaml", `
+	writeBuildYAML(t, tmpDir, "skill.yaml", `
 apiVersion: ar.dev/v1alpha1
-kind: Agent
+kind: Skill
 metadata:
-  name: my-agent
+  name: my-skill
   version: 0.1.0
 spec:
-  image: localhost:5001/my-agent:latest
-  language: python
-  framework: adk
-  modelProvider: gemini
-  modelName: gemini-2.0-flash
-  description: test agent
+  title: my-skill
+  description: a test skill
 `)
-	writeBuildYAML(t, tmpDir, "mcp.yaml", `
-apiVersion: ar.dev/v1alpha1
-kind: MCPServer
-metadata:
-  name: my-server
-  version: 0.1.0
-spec:
-  title: my-server
-  description: test server
-`)
-	// No Dockerfile — the error is agent-specific (dockerfile not found), confirming
-	// agent.yaml was selected over mcp.yaml.
-	cmd := declarative.NewBuildCmd()
-	cmd.SetArgs([]string{tmpDir})
-	err := cmd.Execute()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "dockerfile not found")
-}
-
-// TestBuildCmd_AgentDockerNotAvailable verifies a clear error when Docker is not found.
-// This test only runs when docker is not in PATH (CI environments without Docker).
-func TestBuildCmd_AgentDockerNotAvailable(t *testing.T) {
-	// Only meaningful in environments without Docker — skip if Docker is present.
-	if isDockerAvailable() {
-		t.Skip("Docker is available; skipping no-docker error test")
-	}
-
-	tmpDir := t.TempDir()
-	writeBuildYAML(t, tmpDir, "agent.yaml", `
-apiVersion: ar.dev/v1alpha1
-kind: Agent
-metadata:
-  name: my-agent
-  version: 0.1.0
-spec:
-  image: localhost:5001/my-agent:latest
-  language: python
-  framework: adk
-  modelProvider: gemini
-  modelName: gemini-2.0-flash
-  description: test agent
-`)
-	writeDockerfile(t, tmpDir)
 
 	cmd := declarative.NewBuildCmd()
 	cmd.SetArgs([]string{tmpDir})
 	err := cmd.Execute()
 	require.Error(t, err)
+	assert.Contains(t, err.Error(), "skills have no build step")
 }
 
-// isDockerAvailable checks if the docker CLI is present and daemon is reachable.
-func isDockerAvailable() bool {
-	cmd := declarative.CheckDockerAvailable()
-	return cmd == nil
+// TestBuild_DispatchesViaPlugin verifies that arctl init writes a valid arctl.yaml
+// that build's plugin-dispatch path can read. End-to-end docker invocation is not
+// exercised here (no docker daemon assumption); the contract under test is that
+// init's output is what build expects to consume.
+func TestBuild_DispatchesViaPlugin(t *testing.T) {
+	tmp := t.TempDir()
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+	require.NoError(t, os.Chdir(tmp))
+
+	initCmd := declarative.NewInitCmd()
+	initCmd.SetArgs([]string{"agent", "myagent", "--framework", "adk", "--language", "python"})
+	require.NoError(t, initCmd.Execute())
+
+	projectDir := filepath.Join(tmp, "myagent")
+	cfg, err := buildconfig.Read(projectDir)
+	require.NoError(t, err)
+	assert.Equal(t, "adk", cfg.Framework)
+	assert.Equal(t, "python", cfg.Language)
 }

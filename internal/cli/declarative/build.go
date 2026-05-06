@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/buildconfig"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common/docker"
-	mcpbuild "github.com/agentregistry-dev/agentregistry/internal/cli/mcp/build"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/plugins"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
@@ -37,15 +39,16 @@ func newBuildCmd() *cobra.Command {
 		Short: "Build a Docker image for a declarative resource project",
 		Long: `Build the Docker image for a project created with 'arctl init'.
 
-Reads the declarative YAML file in the project directory (agent.yaml, mcp.yaml,
-or skill.yaml) to determine the resource kind and image tag, then runs docker build.
+Reads arctl.yaml in the project directory to determine the (framework, language)
+plugin and dispatches to that plugin's build command. Image tag is taken from the
+declarative YAML's spec (or --image override).
 
-Supported kinds: Agent, MCPServer, Skill
+Supported kinds: Agent, MCPServer
 
 Examples:
   arctl build ./my-agent
   arctl build ./my-server --push
-  arctl build ./my-skill  --image ghcr.io/acme/my-skill:v1.0.0 --platform linux/amd64`,
+  arctl build ./my-agent  --image ghcr.io/acme/my-agent:v1.0.0 --platform linux/amd64`,
 		Args:         cobra.ExactArgs(1),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -68,25 +71,19 @@ Examples:
 
 			kind := obj.GetKind()
 			// Validate the kind against the CLI dispatch table, then
-			// dispatch by canonical kind name. Build is intentionally
-			// kept as a CLI-side per-kind dispatch because the build
-			// logic depends on CLI packages (docker executor, mcp
-			// builder) that must not be imported by server-side
-			// kinds packages.
+			// dispatch by canonical kind name.
 			if _, kerr := scheme.Lookup(kind); kerr != nil {
 				return fmt.Errorf("unknown kind %q in %s", kind, yamlFile)
 			}
 
 			out := cmd.OutOrStdout()
 			switch kind {
-			case v1alpha1.KindAgent:
-				return buildAgent(out, projectDir, obj, buildImage, buildPlatform, buildPush)
-			case v1alpha1.KindMCPServer:
-				return buildMCPServer(out, projectDir, obj, buildImage, buildPlatform, buildPush)
-			case v1alpha1.KindSkill:
-				return buildSkill(out, projectDir, obj, buildImage, buildPlatform, buildPush)
+			case v1alpha1.KindAgent, v1alpha1.KindMCPServer:
+				return buildViaPlugin(out, projectDir, obj, buildImage, buildPlatform, buildPush)
 			case v1alpha1.KindPrompt:
 				return fmt.Errorf("prompts have no build step — use 'arctl apply -f %s' directly", yamlFile)
+			case v1alpha1.KindSkill:
+				return fmt.Errorf("skills have no build step — use 'arctl apply -f %s' directly", yamlFile)
 			default:
 				return nil
 			}
@@ -165,50 +162,54 @@ func mcpSpecPackageIdentifier(obj v1alpha1.Object) string {
 	return ""
 }
 
-func buildAgent(out io.Writer, projectDir string, obj v1alpha1.Object, flagImage, platform string, push bool) error {
-	dockerfilePath := filepath.Join(projectDir, "Dockerfile")
-	if _, err := os.Stat(dockerfilePath); err != nil {
-		return fmt.Errorf("dockerfile not found in %s", projectDir)
+// buildViaPlugin dispatches the build to the (framework, language) plugin
+// declared in arctl.yaml. The plugin's Build command is exec'd in the project
+// directory with template vars {Image, ProjectDir, Platform, PluginDir}.
+func buildViaPlugin(out io.Writer, projectDir string, obj v1alpha1.Object, flagImage, platform string, push bool) error {
+	cfg, err := buildconfig.Read(projectDir)
+	if err != nil {
+		return fmt.Errorf("read arctl.yaml: %w", err)
 	}
 
-	image := resolveImage(flagImage, agentSpecImage(obj), obj.GetMetadata().Name)
-
-	exec := docker.NewExecutor(false, projectDir)
-	if err := exec.CheckAvailability(); err != nil {
-		return fmt.Errorf("docker check failed: %w", err)
-	}
-
-	var extraArgs []string
-	if platform != "" {
-		extraArgs = append(extraArgs, "--platform", platform)
-	}
-
-	fmt.Fprintf(out, "Building agent image: %s\n", image)
-	if err := exec.Build(image, ".", extraArgs...); err != nil {
+	r, err := loadPluginRegistry(projectDir)
+	if err != nil {
 		return err
 	}
-	if push {
-		return exec.Push(image)
-	}
-	return nil
-}
 
-func buildMCPServer(out io.Writer, projectDir string, obj v1alpha1.Object, flagImage, platform string, push bool) error {
-	image := resolveImage(flagImage, mcpSpecPackageIdentifier(obj), obj.GetMetadata().Name)
+	pluginType := "agent"
+	specImage := agentSpecImage(obj)
+	if obj.GetKind() == v1alpha1.KindMCPServer {
+		pluginType = "mcp"
+		specImage = mcpSpecPackageIdentifier(obj)
+	}
 
-	fmt.Fprintf(out, "Building MCP server image: %s\n", image)
-	builder := mcpbuild.New()
-	if err := builder.Build(mcpbuild.Options{
-		ProjectDir: projectDir,
-		Tag:        image,
-		Platform:   platform,
-	}); err != nil {
-		return err
+	p, ok := r.Lookup(pluginType, cfg.Framework, cfg.Language)
+	if !ok {
+		return fmt.Errorf("no plugin for %s framework=%s language=%s", pluginType, cfg.Framework, cfg.Language)
+	}
+
+	image := resolveImage(flagImage, specImage, obj.GetMetadata().Name)
+	vars := map[string]any{
+		"Image":      image,
+		"ProjectDir": projectDir,
+		"Platform":   platform,
+		"PluginDir":  p.SourceDir,
+	}
+
+	fmt.Fprintf(out, "→ %s: %s\n", p.Name, strings.Join(p.Build.Command, " "))
+	if err := plugins.ExecForeground(p.Build, projectDir, vars, nil); err != nil {
+		return fmt.Errorf("plugin build: %w", err)
 	}
 	if push {
-		exec := docker.NewExecutor(false, "")
-		return exec.Push(image)
+		fmt.Fprintf(out, "→ pushing %s...\n", image)
+		pushCmd := exec.Command("docker", "push", image)
+		pushCmd.Stdout = out
+		pushCmd.Stderr = out
+		if err := pushCmd.Run(); err != nil {
+			return fmt.Errorf("docker push: %w", err)
+		}
 	}
+	fmt.Fprintf(out, "✓ Built %s\n", image)
 	return nil
 }
 
@@ -216,44 +217,4 @@ func buildMCPServer(out io.Writer, projectDir string, obj v1alpha1.Object, flagI
 // Exported for use in tests.
 func CheckDockerAvailable() error {
 	return docker.NewExecutor(false, "").CheckAvailability()
-}
-
-// skillDockerfile packages skill assets into a minimal OCI image.
-// Skills are metadata-only containers (no runtime); FROM scratch is intentional —
-// there is no entrypoint or shell, just the raw files copied in.
-const skillDockerfile = "FROM scratch\nCOPY . .\n"
-
-func buildSkill(out io.Writer, projectDir string, obj v1alpha1.Object, flagImage, platform string, push bool) error {
-	image := resolveImage(flagImage, "", obj.GetMetadata().Name)
-
-	fmt.Fprintf(out, "Building skill image: %s\n", image)
-
-	tmpFile, err := os.CreateTemp("", "skill-dockerfile-*")
-	if err != nil {
-		return fmt.Errorf("creating temp Dockerfile: %w", err)
-	}
-	defer os.Remove(tmpFile.Name())
-	if _, err := tmpFile.WriteString(skillDockerfile); err != nil {
-		tmpFile.Close()
-		return fmt.Errorf("writing temp Dockerfile: %w", err)
-	}
-	tmpFile.Close()
-
-	var extraArgs []string
-	extraArgs = append(extraArgs, "-f", tmpFile.Name())
-	if platform != "" {
-		extraArgs = append(extraArgs, "--platform", platform)
-	}
-
-	exec := docker.NewExecutor(false, projectDir)
-	if err := exec.CheckAvailability(); err != nil {
-		return fmt.Errorf("docker check failed: %w", err)
-	}
-	if err := exec.Build(image, projectDir, extraArgs...); err != nil {
-		return err
-	}
-	if push {
-		return exec.Push(image)
-	}
-	return nil
 }
