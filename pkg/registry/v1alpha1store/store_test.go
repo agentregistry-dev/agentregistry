@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"regexp"
 	"testing"
 	"time"
 
@@ -14,6 +15,11 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
+
+// uuidPattern matches the canonical 8-4-4-4-12 textual UUID Postgres
+// emits for `uid::text`. Sufficient for assertion: the column type is
+// already UUID, so we only need to confirm the wire shape.
+var uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 const testTable = "v1alpha1.agents"
 const testNS = "default"
@@ -712,4 +718,81 @@ func TestStore_LatestVersionTieBreakDeterministic(t *testing.T) {
 	}
 	// `version DESC` tie-break → snapshot-b comes out on top.
 	require.Equal(t, "snapshot-b", winners[0], "version DESC tie-break should prefer 'snapshot-b'")
+}
+
+// TestStore_UpsertAssignsUID pins the create-side of the metadata.uid
+// contract: Postgres' column default fires on first insert, the RETURNING
+// clause surfaces the assigned value to the caller, and a follow-up Get
+// reads back the same UID.
+func TestStore_UpsertAssignsUID(t *testing.T) {
+	pool := NewTestPool(t)
+	store := NewStore(pool, testTable)
+	ctx := context.Background()
+
+	res, err := store.Upsert(ctx, testNS, "uid-create", "v1", mustSpec(t, v1alpha1.AgentSpec{Title: "first"}), UpsertOpts{})
+	require.NoError(t, err)
+	require.True(t, res.Created)
+	require.Regexp(t, uuidPattern, res.UID, "UpsertResult.UID must be a canonical UUID")
+
+	obj, err := store.Get(ctx, testNS, "uid-create", "v1")
+	require.NoError(t, err)
+	require.Equal(t, res.UID, obj.Metadata.UID, "Get must surface the same UID Upsert returned")
+}
+
+// TestStore_UpsertPreservesUIDAcrossUpdates pins the immutability half:
+// the UID column lives outside the ON CONFLICT SET list, so neither a
+// no-op re-apply (same spec) nor a spec-changing re-apply may rotate it.
+// This is the Kubernetes-style read-only metadata.uid behavior — once
+// observed by a controller, the UID stays stable for the row's lifetime.
+func TestStore_UpsertPreservesUIDAcrossUpdates(t *testing.T) {
+	pool := NewTestPool(t)
+	store := NewStore(pool, testTable)
+	ctx := context.Background()
+
+	first, err := store.Upsert(ctx, testNS, "uid-stable", "v1", mustSpec(t, v1alpha1.AgentSpec{Title: "first"}), UpsertOpts{})
+	require.NoError(t, err)
+	require.NotEmpty(t, first.UID)
+
+	// No-op re-apply — generation stays at 1, UID must not change.
+	noop, err := store.Upsert(ctx, testNS, "uid-stable", "v1", mustSpec(t, v1alpha1.AgentSpec{Title: "first"}), UpsertOpts{})
+	require.NoError(t, err)
+	require.False(t, noop.SpecChanged)
+	require.Equal(t, first.UID, noop.UID, "no-op upsert must preserve UID")
+
+	// Spec-changing re-apply — generation bumps, UID still must not change.
+	bumped, err := store.Upsert(ctx, testNS, "uid-stable", "v1", mustSpec(t, v1alpha1.AgentSpec{Title: "second"}), UpsertOpts{})
+	require.NoError(t, err)
+	require.True(t, bumped.SpecChanged)
+	require.EqualValues(t, 2, bumped.Generation)
+	require.Equal(t, first.UID, bumped.UID, "spec-changing upsert must preserve UID")
+
+	obj, err := store.Get(ctx, testNS, "uid-stable", "v1")
+	require.NoError(t, err)
+	require.Equal(t, first.UID, obj.Metadata.UID, "Get must keep returning the original UID")
+}
+
+// TestStore_UpsertGeneratesFreshUIDAfterRecreate is the whole reason UID
+// exists: (namespace, name, version) is reusable across delete +
+// recreate, so without UID, a controller that observed the original row
+// can't tell when it has been replaced. The recreated row must carry a
+// new UID so observers can detect the boundary.
+func TestStore_UpsertGeneratesFreshUIDAfterRecreate(t *testing.T) {
+	pool := NewTestPool(t)
+	store := NewStore(pool, testTable)
+	ctx := context.Background()
+
+	first, err := store.Upsert(ctx, testNS, "uid-recreate", "v1", mustSpec(t, v1alpha1.AgentSpec{Title: "v1-first"}), UpsertOpts{})
+	require.NoError(t, err)
+	require.NotEmpty(t, first.UID)
+
+	// Finalizer-free hard-delete (matches the fast path Delete now takes
+	// for kinds without finalizers — see TestStore_DeleteFinalizerFreeHardDeletes).
+	require.NoError(t, store.Delete(ctx, testNS, "uid-recreate", "v1"))
+
+	second, err := store.Upsert(ctx, testNS, "uid-recreate", "v1", mustSpec(t, v1alpha1.AgentSpec{Title: "v1-second"}), UpsertOpts{})
+	require.NoError(t, err)
+	require.True(t, second.Created, "post-delete upsert is a fresh create")
+	require.NotEmpty(t, second.UID)
+	require.NotEqual(t, first.UID, second.UID,
+		"recreated row must carry a new UID so observers can distinguish it from the deleted predecessor")
 }

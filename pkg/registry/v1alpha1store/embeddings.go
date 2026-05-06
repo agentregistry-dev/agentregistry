@@ -193,7 +193,7 @@ func (s *Store) SemanticList(ctx context.Context, opts SemanticListOpts) ([]sema
 
 	args = append(args, limit)
 	query := fmt.Sprintf(`
-		SELECT namespace, name, version, generation, labels, annotations, spec, status,
+		SELECT namespace, name, version, uid::text, generation, labels, annotations, spec, status,
 		       deletion_timestamp, finalizers, created_at, updated_at,
 		       semantic_embedding <=> $1::vector AS score
 		FROM %s
@@ -223,6 +223,7 @@ func (s *Store) SemanticList(ctx context.Context, opts SemanticListOpts) ([]sema
 func scanSemanticRow(rows pgx.Rows) (*v1alpha1.RawObject, float32, error) {
 	var (
 		namespace, name, version string
+		uid                      string
 		generation               int64
 		labelsJSON               []byte
 		annotationsJSON          []byte
@@ -235,7 +236,7 @@ func scanSemanticRow(rows pgx.Rows) (*v1alpha1.RawObject, float32, error) {
 		score                    float32
 	)
 	if err := rows.Scan(
-		&namespace, &name, &version, &generation,
+		&namespace, &name, &version, &uid, &generation,
 		&labelsJSON, &annotationsJSON, &specJSON, &statusJSON,
 		&deletionTimestamp, &finalizersJSON,
 		&createdAt, &updatedAt,
@@ -245,7 +246,7 @@ func scanSemanticRow(rows pgx.Rows) (*v1alpha1.RawObject, float32, error) {
 	}
 
 	obj, err := decodeRow(
-		namespace, name, version, generation,
+		namespace, name, version, uid, generation,
 		labelsJSON, annotationsJSON, specJSON, statusJSON,
 		deletionTimestamp, finalizersJSON, createdAt, updatedAt,
 	)

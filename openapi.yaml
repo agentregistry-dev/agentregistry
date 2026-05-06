@@ -2050,6 +2050,8 @@ components:
                     type: string
                 namespace:
                     type: string
+                uid:
+                    type: string
                 updatedAt:
                     type: string
                     format: date-time

@@ -21,8 +21,8 @@ const DefaultNamespace = "default"
 // ObjectMeta is the metadata block common to every resource.
 //
 // Namespace, Name, Version, Labels, and Annotations are user-settable.
-// CreatedAt, UpdatedAt, and DeletionTimestamp are server-managed: the API
-// ignores them on apply and overwrites them on response.
+// UID, CreatedAt, UpdatedAt, and DeletionTimestamp are server-managed:
+// the API ignores them on apply and overwrites them on response.
 //
 // Generation is an internal coordination primitive — it drives
 // reconciler convergence (paired with Status.ObservedGeneration). It's
@@ -36,6 +36,15 @@ const DefaultNamespace = "default"
 // Namespace is an internal detail today — it defaults to "default" on
 // apply and is stripped from responses when it equals "default" so the
 // multi-tenant surface stays hidden until we deliberately enable it.
+//
+// UID is a server-assigned UUID stamped at row creation and never
+// mutated afterwards — same contract as Kubernetes' metadata.uid.
+// (Namespace, Name, Version) is reusable across delete + recreate
+// cycles; UID is not, so it disambiguates "the row I observed earlier"
+// from "a fresh row at the same identity". The apply pipeline strips
+// any caller-supplied value before the store sees it; Postgres assigns
+// the value via a column default, so even direct-SQL inserts get a
+// valid UID.
 //
 // Labels vs Annotations (Kubernetes convention):
 //   - Labels are queryable: short key/value pairs, GIN-indexed, used for
@@ -54,6 +63,7 @@ type ObjectMeta struct {
 	Namespace   string            `json:"namespace,omitempty" yaml:"namespace,omitempty"`
 	Name        string            `json:"name" yaml:"name"`
 	Version     string            `json:"version,omitempty" yaml:"version,omitempty"`
+	UID         string            `json:"uid,omitempty" yaml:"uid,omitempty"`
 	Labels      map[string]string `json:"labels,omitempty" yaml:"labels,omitempty"`
 	Annotations map[string]string `json:"annotations,omitempty" yaml:"annotations,omitempty"`
 
