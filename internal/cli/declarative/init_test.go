@@ -558,7 +558,8 @@ func TestInitPromptCmd_WritesFileNotDirectory(t *testing.T) {
 // arctl init can be re-read by the v1alpha1 decoder without error. After the
 // switch to system-assigned versioning, the decoder rejects manifests that
 // pre-set metadata.version — so this test guards the obvious user flow:
-//   arctl init <type> <name> -> arctl apply -f <name>/<type>.yaml
+//
+//	arctl init <type> <name> -> arctl apply -f <name>/<type>.yaml
 func TestInit_GeneratedYAMLDecodesCleanly(t *testing.T) {
 	cases := []struct {
 		name      string

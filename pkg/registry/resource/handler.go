@@ -356,38 +356,7 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 	// wins over the `{version}` capture in the underlying flow router
 	// (routes match in registration order).
 	if cfg.Store.IsVersionedArtifact() {
-		huma.Register(api, huma.Operation{
-			OperationID: "list-versions-" + strings.ToLower(kind),
-			Method:      http.MethodGet,
-			Path:        itemPath + "/versions",
-			Summary:     fmt.Sprintf("List all versions of a %s", kind),
-		}, func(ctx context.Context, in *listVersionsInput) (*listOutput[T], error) {
-			ns := resolveNamespace(in.Namespace, false)
-			name, err := unescapePath("name", in.Name)
-			if err != nil {
-				return nil, err
-			}
-			if cfg.Authorize != nil {
-				if err := cfg.Authorize(ctx, AuthorizeInput{Verb: "list", Kind: kind, Namespace: ns, Name: name}); err != nil {
-					return nil, err
-				}
-			}
-			rows, err := cfg.Store.ListVersions(ctx, ns, name)
-			if err != nil {
-				return nil, huma.Error500InternalServerError("list versions "+kind, err)
-			}
-			items := make([]T, 0, len(rows))
-			for _, row := range rows {
-				obj, err := v1alpha1.EnvelopeFromRaw(newObj, row, kind)
-				if err != nil {
-					return nil, huma.Error500InternalServerError("decode "+kind, err)
-				}
-				items = append(items, obj)
-			}
-			out := &listOutput[T]{}
-			out.Body.Items = items
-			return out, nil
-		})
+		registerListVersions(api, cfg, newObj, kind, itemPath)
 	}
 
 	// Get exact (name, version; namespace via query).
@@ -434,75 +403,7 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 	// system-side, so the URL {version} segment no longer fits — those
 	// kinds are written exclusively through POST /v0/apply.
 	if !cfg.Store.IsVersionedArtifact() {
-		huma.Register(api, huma.Operation{
-			OperationID:   "apply-" + strings.ToLower(kind),
-			Method:        http.MethodPut,
-			Path:          itemVersionPath,
-			Summary:       fmt.Sprintf("Apply a %s (idempotent upsert)", kind),
-			DefaultStatus: http.StatusOK,
-		}, func(ctx context.Context, in *putInput[T]) (*bodyOutput[T], error) {
-			ns := resolveNamespace(in.Namespace, false)
-			name, err := unescapePath("name", in.Name)
-			if err != nil {
-				return nil, err
-			}
-			version, err := unescapePath("version", in.Version)
-			if err != nil {
-				return nil, err
-			}
-			body := in.Body
-			if apiVer := body.GetAPIVersion(); apiVer != "" && apiVer != v1alpha1.GroupVersion {
-				return nil, huma.Error400BadRequest(fmt.Sprintf(
-					"apiVersion %q is not supported; expected %q", apiVer, v1alpha1.GroupVersion))
-			}
-			if k := body.GetKind(); k != "" && k != kind {
-				return nil, huma.Error400BadRequest(fmt.Sprintf(
-					"kind %q does not match endpoint kind %q", k, kind))
-			}
-			meta := body.GetMetadata()
-			if meta.Namespace != "" && meta.Namespace != ns {
-				return nil, huma.Error400BadRequest("metadata.namespace does not match ?namespace=")
-			}
-			if meta.Name != "" && meta.Name != name {
-				return nil, huma.Error400BadRequest("metadata.name does not match path")
-			}
-
-			// Stamp resolved identity into metadata so applyCore sees the
-			// resolved values (clients may omit namespace/name in the body
-			// and rely on the path + query). PUT is registered for legacy
-			// stores only, so the URL {version} is authoritative for the
-			// row identity.
-			meta.Namespace = ns
-			meta.Name = name
-			meta.Version = version
-			body.SetMetadata(*meta)
-
-			if _, ae := applyCore(ctx, cfg.Store, body, applyOpts{
-				Authorize:         cfg.Authorize,
-				Resolver:          cfg.Resolver,
-				RegistryValidator: cfg.RegistryValidator,
-				PostUpsert:        cfg.PostUpsert,
-			}, false); ae != nil {
-				return nil, mapApplyErrorToHuma(ae, kind, ns, name, version)
-			}
-
-			// Read back so the response reflects the stored identity
-			// (assigned generation, default'd metadata) plus any status /
-			// annotation writes the PostUpsert hook performed. PUT is
-			// legacy-only, so the URL {version} segment is the row's PK
-			// identity. Failure to re-read after a successful apply
-			// degrades to a 500 rather than swallowing the already-
-			// persisted change silently.
-			row, err := cfg.Store.Get(ctx, ns, name, version)
-			if err != nil {
-				return nil, huma.Error500InternalServerError("read back "+kind, err)
-			}
-			obj, err := v1alpha1.EnvelopeFromRaw(newObj, row, kind)
-			if err != nil {
-				return nil, huma.Error500InternalServerError("decode "+kind, err)
-			}
-			return &bodyOutput[T]{Body: obj}, nil
-		})
+		registerApplyLegacy(api, cfg, newObj, kind, itemVersionPath)
 	}
 
 	// Delete (soft).
@@ -555,6 +456,120 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 			return nil, mapApplyErrorToHuma(ae, kind, ns, name, version)
 		}
 		return &deleteOutput{}, nil
+	})
+}
+
+// registerListVersions wires the GET /{name}/versions endpoint for a
+// versioned-artifact kind. Extracted from Register to keep the per-kind
+// route registration sequence readable.
+func registerListVersions[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T, kind, itemPath string) {
+	huma.Register(api, huma.Operation{
+		OperationID: "list-versions-" + strings.ToLower(kind),
+		Method:      http.MethodGet,
+		Path:        itemPath + "/versions",
+		Summary:     fmt.Sprintf("List all versions of a %s", kind),
+	}, func(ctx context.Context, in *listVersionsInput) (*listOutput[T], error) {
+		ns := resolveNamespace(in.Namespace, false)
+		name, err := unescapePath("name", in.Name)
+		if err != nil {
+			return nil, err
+		}
+		if cfg.Authorize != nil {
+			if err := cfg.Authorize(ctx, AuthorizeInput{Verb: "list", Kind: kind, Namespace: ns, Name: name}); err != nil {
+				return nil, err
+			}
+		}
+		rows, err := cfg.Store.ListVersions(ctx, ns, name)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("list versions "+kind, err)
+		}
+		items := make([]T, 0, len(rows))
+		for _, row := range rows {
+			obj, err := v1alpha1.EnvelopeFromRaw(newObj, row, kind)
+			if err != nil {
+				return nil, huma.Error500InternalServerError("decode "+kind, err)
+			}
+			items = append(items, obj)
+		}
+		out := &listOutput[T]{}
+		out.Body.Items = items
+		return out, nil
+	})
+}
+
+// registerApplyLegacy wires PUT /{name}/{version} for legacy
+// (non-versioned-artifact) stores where the URL {version} segment is
+// authoritative for the row identity. Content-registry kinds assign
+// integer versions system-side and skip this route entirely.
+func registerApplyLegacy[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T, kind, itemVersionPath string) {
+	huma.Register(api, huma.Operation{
+		OperationID:   "apply-" + strings.ToLower(kind),
+		Method:        http.MethodPut,
+		Path:          itemVersionPath,
+		Summary:       fmt.Sprintf("Apply a %s (idempotent upsert)", kind),
+		DefaultStatus: http.StatusOK,
+	}, func(ctx context.Context, in *putInput[T]) (*bodyOutput[T], error) {
+		ns := resolveNamespace(in.Namespace, false)
+		name, err := unescapePath("name", in.Name)
+		if err != nil {
+			return nil, err
+		}
+		version, err := unescapePath("version", in.Version)
+		if err != nil {
+			return nil, err
+		}
+		body := in.Body
+		if apiVer := body.GetAPIVersion(); apiVer != "" && apiVer != v1alpha1.GroupVersion {
+			return nil, huma.Error400BadRequest(fmt.Sprintf(
+				"apiVersion %q is not supported; expected %q", apiVer, v1alpha1.GroupVersion))
+		}
+		if k := body.GetKind(); k != "" && k != kind {
+			return nil, huma.Error400BadRequest(fmt.Sprintf(
+				"kind %q does not match endpoint kind %q", k, kind))
+		}
+		meta := body.GetMetadata()
+		if meta.Namespace != "" && meta.Namespace != ns {
+			return nil, huma.Error400BadRequest("metadata.namespace does not match ?namespace=")
+		}
+		if meta.Name != "" && meta.Name != name {
+			return nil, huma.Error400BadRequest("metadata.name does not match path")
+		}
+
+		// Stamp resolved identity into metadata so applyCore sees the
+		// resolved values (clients may omit namespace/name in the body
+		// and rely on the path + query). PUT is registered for legacy
+		// stores only, so the URL {version} is authoritative for the
+		// row identity.
+		meta.Namespace = ns
+		meta.Name = name
+		meta.Version = version
+		body.SetMetadata(*meta)
+
+		if _, ae := applyCore(ctx, cfg.Store, body, applyOpts{
+			Authorize:         cfg.Authorize,
+			Resolver:          cfg.Resolver,
+			RegistryValidator: cfg.RegistryValidator,
+			PostUpsert:        cfg.PostUpsert,
+		}, false); ae != nil {
+			return nil, mapApplyErrorToHuma(ae, kind, ns, name, version)
+		}
+
+		// Read back so the response reflects the stored identity
+		// (assigned generation, default'd metadata) plus any status /
+		// annotation writes the PostUpsert hook performed. PUT is
+		// legacy-only, so the URL {version} segment is the row's PK
+		// identity. Failure to re-read after a successful apply
+		// degrades to a 500 rather than swallowing the already-
+		// persisted change silently.
+		row, err := cfg.Store.Get(ctx, ns, name, version)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("read back "+kind, err)
+		}
+		obj, err := v1alpha1.EnvelopeFromRaw(newObj, row, kind)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("decode "+kind, err)
+		}
+		return &bodyOutput[T]{Body: obj}, nil
 	})
 }
 

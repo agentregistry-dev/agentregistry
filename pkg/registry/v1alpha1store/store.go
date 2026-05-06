@@ -435,8 +435,8 @@ func (s *Store) upsertLegacy(ctx context.Context, meta *v1alpha1.ObjectMeta, spe
 			oldFinalizers  []byte
 			oldAnnotations []byte
 			oldLabels      []byte
-			oldDeletion   pgtype.Timestamptz
-			found         bool
+			oldDeletion    pgtype.Timestamptz
+			found          bool
 		)
 		err := tx.QueryRow(ctx,
 			fmt.Sprintf(`
@@ -458,8 +458,10 @@ func (s *Store) upsertLegacy(ctx context.Context, meta *v1alpha1.ObjectMeta, spe
 			return ErrTerminating
 		}
 
-		var newGen int64
-		outcome := UpsertNoOp
+		var (
+			newGen  int64
+			outcome UpsertOutcome
+		)
 		switch {
 		case !found:
 			newGen = 1
@@ -537,39 +539,9 @@ func (s *Store) ApplyPatch(ctx context.Context, namespace, name, version string,
 		return errors.New("v1alpha1 store: finalizers patching not supported on versioned-artifact tables")
 	}
 	return runInTx(ctx, s.pool, func(tx pgx.Tx) error {
-		var (
-			statusJSON      []byte
-			annotationsJSON []byte
-			finalizersJSON  []byte
-		)
-		if !s.legacy {
-			err := tx.QueryRow(ctx,
-				fmt.Sprintf(`
-					SELECT status, annotations FROM %s
-					WHERE namespace=$1 AND name=$2 AND version=$3
-					FOR UPDATE`, s.table),
-				namespace, name, version,
-			).Scan(&statusJSON, &annotationsJSON)
-			if errors.Is(err, pgx.ErrNoRows) {
-				return pkgdb.ErrNotFound
-			}
-			if err != nil {
-				return fmt.Errorf("load row: %w", err)
-			}
-		} else {
-			err := tx.QueryRow(ctx,
-				fmt.Sprintf(`
-					SELECT status, annotations, finalizers FROM %s
-					WHERE namespace=$1 AND name=$2 AND version=$3
-					FOR UPDATE`, s.table),
-				namespace, name, version,
-			).Scan(&statusJSON, &annotationsJSON, &finalizersJSON)
-			if errors.Is(err, pgx.ErrNoRows) {
-				return pkgdb.ErrNotFound
-			}
-			if err != nil {
-				return fmt.Errorf("load row: %w", err)
-			}
+		statusJSON, annotationsJSON, finalizersJSON, err := s.loadPatchRow(ctx, tx, namespace, name, version)
+		if err != nil {
+			return err
 		}
 
 		setClauses := make([]string, 0, 3)
@@ -600,15 +572,45 @@ func (s *Store) ApplyPatch(ctx context.Context, namespace, name, version string,
 			setClauses = append(setClauses, fmt.Sprintf("finalizers=$%d", len(args)))
 		}
 
-		_, err := tx.Exec(ctx,
+		if _, err := tx.Exec(ctx,
 			fmt.Sprintf(`UPDATE %s SET %s WHERE namespace=$1 AND name=$2 AND version=$3`,
 				s.table, strings.Join(setClauses, ", ")),
-			args...)
-		if err != nil {
+			args...); err != nil {
 			return fmt.Errorf("apply patch: %w", err)
 		}
 		return nil
 	})
+}
+
+// loadPatchRow loads the columns ApplyPatch may mutate
+// (status, annotations, and on legacy stores finalizers) and returns
+// pkgdb.ErrNotFound if no row matches. The finalizers payload is empty
+// for non-legacy stores.
+func (s *Store) loadPatchRow(ctx context.Context, tx pgx.Tx, namespace, name, version string) (statusJSON, annotationsJSON, finalizersJSON []byte, err error) {
+	if s.legacy {
+		err = tx.QueryRow(ctx,
+			fmt.Sprintf(`
+				SELECT status, annotations, finalizers FROM %s
+				WHERE namespace=$1 AND name=$2 AND version=$3
+				FOR UPDATE`, s.table),
+			namespace, name, version,
+		).Scan(&statusJSON, &annotationsJSON, &finalizersJSON)
+	} else {
+		err = tx.QueryRow(ctx,
+			fmt.Sprintf(`
+				SELECT status, annotations FROM %s
+				WHERE namespace=$1 AND name=$2 AND version=$3
+				FOR UPDATE`, s.table),
+			namespace, name, version,
+		).Scan(&statusJSON, &annotationsJSON)
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil, nil, pkgdb.ErrNotFound
+	}
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("load row: %w", err)
+	}
+	return statusJSON, annotationsJSON, finalizersJSON, nil
 }
 
 // buildStatusPatch hands the row's current status JSONB payload to the
