@@ -131,3 +131,25 @@ func TestE2E_Apply_InjectsArctlLabels(t *testing.T) {
 	assert.Contains(t, get.Stdout, "arctl.dev/framework: adk")
 	assert.Contains(t, get.Stdout, "arctl.dev/language: python")
 }
+
+func TestE2E_Pull_Agent_ClonesSource(t *testing.T) {
+	regURL := RegistryURL(t)
+	tmp := t.TempDir()
+	require.NoError(t, os.Chdir(tmp))
+
+	// First publish an agent with a known source repo URL.
+	require.NoError(t, RunArctl(t, tmp, "init", "agent", "pulltest",
+		"--framework", "adk", "--language", "python",
+		"--git", "https://github.com/agentregistry-dev/agentregistry-test-fixtures").Err)
+	pd := filepath.Join(tmp, "pulltest")
+	require.NoError(t, RunArctl(t, pd, "apply", "-f", filepath.Join(pd, "agent.yaml"), "--registry-url", regURL).Err)
+
+	// Pull into a different location.
+	pullDir := filepath.Join(tmp, "fork")
+	pull := RunArctl(t, tmp, "pull", "agent", "pulltest", pullDir, "--registry-url", regURL)
+	RequireSuccess(t, pull)
+
+	// Cloned repo should have the arctl.yaml that init wrote.
+	_, err := os.Stat(filepath.Join(pullDir, "arctl.yaml"))
+	require.NoError(t, err)
+}
