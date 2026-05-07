@@ -15,7 +15,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/buildconfig"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative/chat"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/plugins"
-	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/spf13/cobra"
 )
 
@@ -106,25 +105,25 @@ func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun, wat
 		return err
 	}
 
-	// Detect kind via sibling envelope.
-	obj, yamlFile, err := findDeclarativeResource(projectDir)
-	if err != nil {
-		return err
+	// Locate the plugin by (framework, language). Try agent first, fall back
+	// to mcp — arctl.yaml carries the framework but not the kind, so the
+	// plugin's own `type` field is what tells us which lifecycle to run.
+	var (
+		p          *plugins.Plugin
+		pluginType string
+	)
+	for _, t := range []string{"agent", "mcp"} {
+		if found, ok := r.Lookup(t, cfg.Framework, cfg.Language); ok {
+			p = found
+			pluginType = t
+			break
+		}
 	}
-	pluginType := "agent"
-	switch obj.GetKind() {
-	case v1alpha1.KindAgent:
-		pluginType = "agent"
-	case v1alpha1.KindMCPServer:
-		pluginType = "mcp"
-	default:
-		return fmt.Errorf("kind %q in %s not runnable locally", obj.GetKind(), yamlFile)
+	if p == nil {
+		return fmt.Errorf("no plugin for framework=%s language=%s", cfg.Framework, cfg.Language)
 	}
 
-	p, ok := r.Lookup(pluginType, cfg.Framework, cfg.Language)
-	if !ok {
-		return fmt.Errorf("no plugin for %s framework=%s language=%s", pluginType, cfg.Framework, cfg.Language)
-	}
+	name := filepath.Base(projectDir)
 
 	dotEnv, err := LoadDotEnv(projectDir)
 	if err != nil {
@@ -135,25 +134,15 @@ func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun, wat
 	}
 
 	required := append([]string(nil), p.Env.Required...)
-	if obj.GetKind() == v1alpha1.KindAgent {
-		if a, ok := obj.(*v1alpha1.Agent); ok && a.Spec.ModelProvider != "" {
-			required = append(required, ModelProviderEnvKeys(a.Spec.ModelProvider)...)
-		}
+	if pluginType == "agent" && cfg.ModelProvider != "" {
+		required = append(required, ModelProviderEnvKeys(cfg.ModelProvider)...)
 	}
 	if err := ValidateRequiredEnv(dotEnv, required); err != nil {
 		return err
 	}
 
 	envv := mergeEnv(dotEnv, extraEnv)
-
-	// Resolve image the same way `arctl build` does: prefer the spec field,
-	// fall back to localhost:5001/<name>:latest. Run commands like
-	// `docker run -i {{.Image}}` rely on this var being present.
-	specImage := agentSpecImage(obj)
-	if specImage == "" {
-		specImage = mcpSpecPackageIdentifier(obj)
-	}
-	image := resolveImage("", specImage, obj.GetMetadata().Name)
+	image := defaultImage(name)
 
 	vars := map[string]any{
 		"ProjectDir": projectDir,
@@ -196,7 +185,7 @@ func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun, wat
 	chatMode := pluginType == "agent" && !noChat
 
 	if chatMode {
-		return runWithChat(out, projectDir, obj.GetMetadata().Name, p.Name, rendered, envv, dryRun)
+		return runWithChat(out, projectDir, name, p.Name, rendered, envv, dryRun)
 	}
 
 	if dryRun {

@@ -70,3 +70,26 @@ func TestRun_ChatDefault_DryRunNarratesFullLifecycle(t *testing.T) {
 	require.Contains(t, out, "(dry-run; skipping exec)")
 }
 
+// TestRun_DoesNotRequireAgentYAML proves the structural decoupling: run
+// reads arctl.yaml only. Removing agent.yaml from a freshly inited project
+// must not break run.
+func TestRun_DoesNotRequireAgentYAML(t *testing.T) {
+	tmp := t.TempDir()
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	require.NoError(t, os.Chdir(tmp))
+	initCmd := declarative.NewInitCmd()
+	initCmd.SetArgs([]string{"agent", "noyaml", "--framework", "adk", "--language", "python"})
+	require.NoError(t, initCmd.Execute())
+
+	projectDir := filepath.Join(tmp, "noyaml")
+	require.NoError(t, os.Remove(filepath.Join(projectDir, "agent.yaml")))
+	require.NoError(t, os.Chdir(projectDir))
+
+	cmd := declarative.NewRunCmd()
+	cmd.SetArgs([]string{"--dry-run"})
+	require.NoError(t, cmd.Execute())
+}
+
