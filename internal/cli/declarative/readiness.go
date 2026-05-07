@@ -50,11 +50,12 @@ func waitForHTTPReady(ctx context.Context, url string, timeout, interval time.Du
 	}
 }
 
-// isReady returns true for 2xx and 3xx responses. Anything else (4xx
-// from "endpoint not implemented" or 5xx during startup) means keep
-// polling.
+// isReady returns true for any HTTP response — the server is alive and
+// answering. Even 405 / 404 / 5xx count, because they prove the process
+// has bound the port and the TCP handshake completed. Only connection
+// failures (handled by httpGet returning an error) mean "not ready yet."
 func isReady(status int) bool {
-	return status >= 200 && status < 400
+	return status > 0
 }
 
 // defaultHTTPGet performs the GET with a short per-request timeout so a
