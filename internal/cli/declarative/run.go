@@ -166,6 +166,23 @@ func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun, wat
 		return fmt.Errorf("render run command: %w", err)
 	}
 
+	// MCP plugins' run commands assume the OCI image already exists locally
+	// (typically `docker run -i {{.Image}}`). Build first so users don't
+	// have to remember `arctl build` between iterations. Agents get this
+	// for free via `docker compose up --build` in their run command.
+	if pluginType == "mcp" && len(p.Build.Command) > 0 {
+		buildRendered, err := plugins.RenderArgs(p.Build.Command, vars)
+		if err != nil {
+			return fmt.Errorf("render build command: %w", err)
+		}
+		fmt.Fprintf(out, "→ %s (build): %s\n", p.Name, strings.Join(buildRendered, " "))
+		if !dryRun {
+			if err := plugins.ExecForeground(p.Build, projectDir, vars, envv); err != nil {
+				return fmt.Errorf("plugin build: %w", err)
+			}
+		}
+	}
+
 	// --watch and --dry-run compose: enter the watch loop but skip the
 	// actual exec call inside it. This lets tests verify the watcher
 	// surface ("Watching for changes…", "Change detected") without
