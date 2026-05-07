@@ -21,6 +21,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/importer"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/danielgtaylor/huma/v2"
 )
 
@@ -78,6 +79,18 @@ type RouteOptions struct {
 
 	// Optional callback for integration-owned route registration.
 	ExtraRoutes func(api huma.API, pathPrefix string)
+
+	// CreateStager optionally intercepts validated creates before the row
+	// reaches production storage. Enterprise approval mode wires this.
+	CreateStager func(ctx context.Context, in resource.CreateStagerInput) (resource.CreateStagerResult, error)
+
+	// ResolverWrapper optionally decorates the shared ResourceRef resolver
+	// before CRUD/apply handlers capture it.
+	ResolverWrapper func(v1alpha1.ResolverFunc) v1alpha1.ResolverFunc
+
+	// Optional callback for integration-owned routes that need the finalized
+	// v1alpha1 store/resolver/hook context.
+	ExtraResourceRoutes func(api huma.API, pathPrefix string, ctx types.ResourceRouteContext)
 }
 
 // RegisterRoutes registers all API routes under /v0. Required
@@ -107,14 +120,19 @@ func RegisterRoutes(
 	// v1alpha1 generic routes. Cross-kind dangling-ref detection uses
 	// a Store-backed resolver. Deployment reconciliation hooks plug in
 	// when the coordinator is supplied.
-	registerKindRoutes(
+	resourceCtx := registerKindRoutes(
 		api,
 		pathPrefix,
 		opts.Stores,
 		opts.DeploymentCoordinator,
 		opts.PerKindHooks,
 		opts.RegistryValidator,
+		opts.CreateStager,
+		opts.ResolverWrapper,
 	)
+	if opts.ExtraResourceRoutes != nil {
+		opts.ExtraResourceRoutes(api, pathPrefix, resourceCtx)
+	}
 
 	// POST /v0/import — runs decoded manifests through the enrichment
 	// pipeline (validate + scanners + findings-write) before Upsert.
@@ -146,8 +164,20 @@ func RegisterRoutes(
 // When coord is non-nil, Deployment PUT/DELETE fire
 // coord.Apply/coord.Remove after the row is persisted so the platform
 // adapter converges runtime state synchronously with the API call.
-func registerKindRoutes(api huma.API, basePrefix string, stores Stores, coord *deploymentsvc.Coordinator, perKind crud.PerKindHooks, registryValidator v1alpha1.RegistryValidatorFunc) {
+func registerKindRoutes(
+	api huma.API,
+	basePrefix string,
+	stores Stores,
+	coord *deploymentsvc.Coordinator,
+	perKind crud.PerKindHooks,
+	registryValidator v1alpha1.RegistryValidatorFunc,
+	createStager func(ctx context.Context, in resource.CreateStagerInput) (resource.CreateStagerResult, error),
+	resolverWrapper func(v1alpha1.ResolverFunc) v1alpha1.ResolverFunc,
+) types.ResourceRouteContext {
 	resolver := internaldb.NewResolver(stores)
+	if resolverWrapper != nil {
+		resolver = resolverWrapper(resolver)
+	}
 	if registryValidator == nil {
 		registryValidator = registries.Dispatcher
 	}
@@ -184,6 +214,7 @@ func registerKindRoutes(api huma.API, basePrefix string, stores Stores, coord *d
 
 	// Per-kind CRUD endpoints — one call per built-in kind, hidden
 	// inside crud.Register.
+	perKind.CreateStager = createStager
 	crud.Register(api, basePrefix, stores, resolver, registryValidator, perKind)
 
 	// Deployment-specific endpoints: logs stream (cancel is subsumed
@@ -209,5 +240,13 @@ func registerKindRoutes(api huma.API, basePrefix string, stores Stores, coord *d
 		Authorizers:       perKind.Authorizers,
 		PostUpserts:       perKind.PostUpserts,
 		PostDeletes:       perKind.PostDeletes,
+		CreateStager:      createStager,
 	})
+	return types.ResourceRouteContext{
+		Stores:            stores,
+		Resolver:          resolver,
+		RegistryValidator: registryValidator,
+		PostUpserts:       perKind.PostUpserts,
+		PostDeletes:       perKind.PostDeletes,
+	}
 }

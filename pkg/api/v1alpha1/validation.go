@@ -16,6 +16,7 @@ var (
 	ErrRequiredField       = errors.New("required field missing")
 	ErrInvalidFormat       = errors.New("invalid format")
 	ErrInvalidVersion      = errors.New("invalid version string")
+	ErrInvalidTag          = errors.New("invalid tag")
 	ErrInvalidURL          = errors.New("invalid url")
 	ErrInvalidLabel        = errors.New("invalid label")
 	ErrInvalidRef          = errors.New("invalid resource reference")
@@ -105,6 +106,7 @@ var labelValueRegex = regexp.MustCompile(`^([a-zA-Z0-9]([-a-zA-Z0-9._]{0,61}[a-z
 // wildcards rather than concrete versions. Pinned versions like "v1.2.3"
 // or "1.2.3-beta.1" must NOT match.
 var versionRangeRegex = regexp.MustCompile(`(\^|~|>=|<=|>|<|\|\||\*|,|\bx\b|\bX\b|\s)`)
+var tagRegex = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$`)
 
 const maxVersionLen = 255
 
@@ -168,6 +170,16 @@ func validateVersion(v string) error {
 	}
 	if versionRangeRegex.MatchString(v) {
 		return fmt.Errorf("%w: must be a pinned version, not a range or wildcard (%q)", ErrInvalidVersion, v)
+	}
+	return nil
+}
+
+func validateTag(tag string) error {
+	if tag == "" {
+		return fmt.Errorf("%w", ErrRequiredField)
+	}
+	if !tagRegex.MatchString(tag) {
+		return fmt.Errorf("%w: must match %s", ErrInvalidTag, tagRegex.String())
 	}
 	return nil
 }
@@ -239,7 +251,15 @@ func validateRef(r ResourceRef, allowedKinds ...string) FieldErrors {
 	} else if !nameRegex.MatchString(r.Name) {
 		errs.Append("name", fmt.Errorf("%w: %q", ErrInvalidFormat, r.Name))
 	}
-	// Version is optional on a ref — blank means "resolve to latest".
+	if r.Tag != "" && r.Version != "" {
+		errs.Append("tag", fmt.Errorf("%w: set tag or version, not both", ErrInvalidRef))
+	}
+	// Tag is optional on content refs — blank means "resolve to latest".
+	if r.Tag != "" {
+		if err := validateTag(r.Tag); err != nil {
+			errs.Append("tag", err)
+		}
+	}
 	if r.Version != "" {
 		if err := validateVersion(r.Version); err != nil {
 			errs.Append("version", err)

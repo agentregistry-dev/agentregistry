@@ -25,9 +25,9 @@ func TestStore_AnnotationsRoundTrip(t *testing.T) {
 		Spec:     v1alpha1.AgentSpec{Title: "Ann"},
 	})
 	require.NoError(t, err)
-	require.Equal(t, 1, res.Version)
+	require.NotEmpty(t, res.Tag)
 
-	obj, err := store.Get(ctx, testNS, "ann", "1")
+	obj, err := store.Get(ctx, testNS, "ann", res.Tag)
 	require.NoError(t, err)
 	require.Equal(t, "clean", obj.Metadata.Annotations["security.agentregistry.solo.io/osv-status"])
 	require.Equal(t, "builtin-seed", obj.Metadata.Annotations["internal.agentregistry.solo.io/import-source"])
@@ -43,7 +43,7 @@ func TestStore_AnnotationsReplacedOnReapplyWithEmpty(t *testing.T) {
 	ctx := context.Background()
 
 	_, err := store.Upsert(ctx, &v1alpha1.Agent{
-		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "preserve", Annotations: map[string]string{"owner": "team-a"}},
+		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "preserve", Tag: "stable", Annotations: map[string]string{"owner": "team-a"}},
 		Spec:     v1alpha1.AgentSpec{Title: "P"},
 	})
 	require.NoError(t, err)
@@ -52,14 +52,14 @@ func TestStore_AnnotationsReplacedOnReapplyWithEmpty(t *testing.T) {
 	// New semantic: labels/annotations come from the object, so this
 	// clears the annotations to match what was sent.
 	res, err := store.Upsert(ctx, &v1alpha1.Agent{
-		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "preserve"},
+		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "preserve", Tag: "stable"},
 		Spec:     v1alpha1.AgentSpec{Title: "P"},
 	})
 	require.NoError(t, err)
-	require.Equal(t, UpsertLabelsUpdated, res.Outcome,
+	require.Equal(t, UpsertReplaced, res.Outcome,
 		"empty-annotations re-apply on identical spec must update labels/annotations in place")
 
-	obj, err := store.Get(ctx, testNS, "preserve", "1")
+	obj, err := store.Get(ctx, testNS, "preserve", "stable")
 	require.NoError(t, err)
 	require.Empty(t, obj.Metadata.Annotations)
 }
@@ -70,20 +70,20 @@ func TestStore_AnnotationsClearedOnEmptyMap(t *testing.T) {
 	ctx := context.Background()
 
 	_, err := store.Upsert(ctx, &v1alpha1.Agent{
-		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "clear", Annotations: map[string]string{"owner": "team-a"}},
+		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "clear", Tag: "stable", Annotations: map[string]string{"owner": "team-a"}},
 		Spec:     v1alpha1.AgentSpec{Title: "C"},
 	})
 	require.NoError(t, err)
 
 	// Re-apply with explicit empty map — annotations should clear.
 	res, err := store.Upsert(ctx, &v1alpha1.Agent{
-		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "clear", Annotations: map[string]string{}},
+		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "clear", Tag: "stable", Annotations: map[string]string{}},
 		Spec:     v1alpha1.AgentSpec{Title: "C"},
 	})
 	require.NoError(t, err)
-	require.Equal(t, UpsertLabelsUpdated, res.Outcome)
+	require.Equal(t, UpsertReplaced, res.Outcome)
 
-	obj, err := store.Get(ctx, testNS, "clear", "1")
+	obj, err := store.Get(ctx, testNS, "clear", "stable")
 	require.NoError(t, err)
 	require.Empty(t, obj.Metadata.Annotations)
 }

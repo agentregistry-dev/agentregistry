@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -100,8 +99,9 @@ type ImportResult struct {
 	// Error is the import-level failure message for Status="failed".
 	Error string `json:"error,omitempty"`
 
-	// Version is the server-assigned integer version after Upsert. Zero
-	// for failed or dry-run results.
+	// Tag is the content tag after Upsert.
+	Tag string `json:"tag,omitempty"`
+	// Version is populated only for legacy Provider/Deployment imports.
 	Version int `json:"version,omitempty"`
 }
 
@@ -311,8 +311,8 @@ func (i *Importer) importOne(ctx context.Context, source string, obj v1alpha1.Ob
 
 	// Stamp the legacy deployment store's required string version so
 	// non-upsert codepaths (findings.Replace) have a row identity to
-	// thread through. Versioned-artifact kinds carry their string row
-	// identity via strconv.Itoa(up.Version) once Upsert returns.
+	// thread through. Tagged-artifact kinds carry their string row identity
+	// via up.Tag once Upsert returns.
 	v1alpha1.DefaultMetadataVersionIfMissing(obj)
 
 	if err := v1alpha1.ValidateObject(obj); err != nil {
@@ -372,18 +372,18 @@ func (i *Importer) importOne(ctx context.Context, source string, obj v1alpha1.Ob
 		} else {
 			res.Status = ImportStatusUpdated
 		}
-	case v1alpha1store.UpsertLabelsUpdated:
+	case v1alpha1store.UpsertReplaced:
 		res.Status = ImportStatusUpdated
 	default:
 		res.Status = ImportStatusUnchanged
 	}
+	res.Tag = up.Tag
 	res.Version = up.Version
-	// findings.Replace needs the string row identity. Versioned-artifact
-	// kinds key by the assigned integer version; legacy deployments key
-	// by the defaulted meta.Version.
+	// findings.Replace needs the string row identity. Tagged-artifact
+	// kinds key by tag; legacy deployments key by the defaulted meta.Version.
 	findingsVersion := meta.Version
-	if store.IsVersionedArtifact() {
-		findingsVersion = strconv.Itoa(up.Version)
+	if store.IsTaggedArtifact() {
+		findingsVersion = up.Tag
 	}
 
 	i.writeFindings(ctx, obj, opts, pendingFindings, &res, findingsVersion)

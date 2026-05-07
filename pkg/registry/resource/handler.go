@@ -7,15 +7,15 @@
 //
 //	GET    {basePrefix}/{pluralKind}?namespace={ns}                   list
 //	GET    {basePrefix}/{pluralKind}/{name}?namespace={ns}            get latest
-//	GET    {basePrefix}/{pluralKind}/{name}/versions?namespace={ns}   list versions of one (versioned-artifact kinds only)
-//	GET    {basePrefix}/{pluralKind}/{name}/{version}?namespace={ns}  get exact version
-//	PUT    {basePrefix}/{pluralKind}/{name}/{version}?namespace={ns}  apply (idempotent upsert; legacy stores only — Provider/Deployment)
-//	DELETE {basePrefix}/{pluralKind}/{name}/{version}?namespace={ns}  delete
+//	GET    {basePrefix}/{pluralKind}/{name}/tags?namespace={ns}      list tags of one (tagged content kinds only)
+//	GET    {basePrefix}/{pluralKind}/{name}/{tag}?namespace={ns}     get exact tag/version
+//	PUT    {basePrefix}/{pluralKind}/{name}/{version}?namespace={ns} apply (idempotent upsert; legacy stores only — Provider/Deployment)
+//	DELETE {basePrefix}/{pluralKind}/{name}/{tag}?namespace={ns}     delete
 //
 // PUT is registered only for legacy stores (Provider, Deployment) where
 // the {version} URL segment is authoritative. Content-registry kinds
 // (Agent, MCPServer, RemoteMCPServer, Skill, Prompt) assign integer
-// versions system-side and are written exclusively through
+// tags declaratively and are written exclusively through
 // POST /v0/apply.
 package resource
 
@@ -25,7 +25,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -47,24 +46,6 @@ func unescapePath(field, value string) (string, error) {
 		return "", huma.Error400BadRequest(fmt.Sprintf("invalid %s path segment: %v", field, err))
 	}
 	return out, nil
-}
-
-// validateURLVersion enforces the per-mode contract on the {version} URL
-// path segment. Versioned-artifact stores (the default — agents,
-// mcp_servers, etc.) require a positive integer; the legacy deployments
-// store accepts any non-empty string. Returns a 400 huma error when the
-// segment violates the contract so clients see a clean message instead
-// of a 500 from a downstream `strconv.Atoi` failure.
-func validateURLVersion(store *v1alpha1store.Store, version string) error {
-	if !store.IsVersionedArtifact() {
-		return nil
-	}
-	v, err := strconv.Atoi(version)
-	if err != nil || v <= 0 {
-		return huma.Error400BadRequest(
-			fmt.Sprintf("version path segment %q must be a positive integer", version))
-	}
-	return nil
 }
 
 // Config is the per-kind configuration for Register. Kind / BasePrefix /
@@ -131,6 +112,11 @@ type Config struct {
 	// and writes the terminal Removed condition.
 	PostDelete func(ctx context.Context, obj v1alpha1.Object) error
 
+	// CreateStager optionally intercepts validated create attempts before
+	// production Upsert. Enterprise builds use this for approval staging.
+	// nil preserves the normal OSS direct-write behavior.
+	CreateStager func(ctx context.Context, in CreateStagerInput) (CreateStagerResult, error)
+
 	// Authorize is optional; when set, every read and write handler
 	// (get / list / apply / delete) invokes it as an access gate before
 	// touching the store. Return nil to allow; return a huma error
@@ -186,6 +172,8 @@ type AuthorizeInput struct {
 	Name string
 	// Version is empty for list or get-latest.
 	Version string
+	// Tag is populated for tagged content resources.
+	Tag string
 	// Object is non-nil only when Verb == "apply"; it carries the decoded
 	// request body post-validation-stamping (path identity already merged
 	// into metadata), so the hook can inspect labels / annotations / spec
@@ -223,7 +211,7 @@ func resolveNamespace(raw string, allowAll bool) string {
 type getInput struct {
 	Namespace string `query:"namespace" doc:"Namespace (internal; defaults to 'default')."`
 	Name      string `path:"name"`
-	Version   string `path:"version"`
+	Tag       string `path:"tag"`
 }
 
 type getLatestInput struct {
@@ -231,7 +219,7 @@ type getLatestInput struct {
 	Name      string `path:"name"`
 }
 
-type listVersionsInput struct {
+type listTagsInput struct {
 	Namespace string `query:"namespace" doc:"Namespace (internal; defaults to 'default')."`
 	Name      string `path:"name"`
 }
@@ -239,7 +227,7 @@ type listVersionsInput struct {
 type deleteInput struct {
 	Namespace string `query:"namespace" doc:"Namespace (internal; defaults to 'default')."`
 	Name      string `path:"name"`
-	Version   string `path:"version"`
+	Tag       string `path:"tag"`
 	// Force=true skips the kind's PostDelete reconciliation hook
 	// (e.g. provider teardown for Deployment) and only soft-deletes
 	// the row. Useful for orphaned records whose external state is
@@ -254,7 +242,7 @@ type listInput struct {
 	Limit      int    `query:"limit" doc:"Max items to return (default 50)." default:"50"`
 	Cursor     string `query:"cursor" doc:"Opaque pagination cursor."`
 	Labels     string `query:"labels" doc:"Label selector: key=value,key2=value2."`
-	LatestOnly bool   `query:"latestOnly" doc:"Only return the highest live version per (namespace, name)."`
+	LatestOnly bool   `query:"latestOnly" doc:"Only return the latest live tag per (namespace, name)."`
 	// IncludeTerminating surfaces soft-deleted rows (deletionTimestamp != nil)
 	// which are hidden by default.
 	IncludeTerminating bool `query:"includeTerminating" doc:"Include rows with a deletionTimestamp."`
@@ -274,7 +262,7 @@ type listOutput[T v1alpha1.Object] struct {
 type putInput[T v1alpha1.Object] struct {
 	Namespace string `query:"namespace" doc:"Namespace (internal; defaults to 'default')."`
 	Name      string `path:"name"`
-	Version   string `path:"version"`
+	Tag       string `path:"tag"`
 	Body      T
 }
 
@@ -296,7 +284,7 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 	// "all" on the list endpoint widens the scope to every namespace.
 	listPath := base + "/" + plural
 	itemPath := listPath + "/{name}"
-	itemVersionPath := itemPath + "/{version}"
+	itemTagPath := itemPath + "/{tag}"
 
 	// List: `/v0/{plural}?namespace=default` (or ?namespace=all).
 	huma.Register(api, huma.Operation{
@@ -326,7 +314,7 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		OperationID: "get-latest-" + strings.ToLower(kind),
 		Method:      http.MethodGet,
 		Path:        itemPath,
-		Summary:     fmt.Sprintf("Get the latest version of a %s", kind),
+		Summary:     fmt.Sprintf("Get the latest %s", kind),
 	}, func(ctx context.Context, in *getLatestInput) (*bodyOutput[T], error) {
 		ns := resolveNamespace(in.Namespace, false)
 		name, err := unescapePath("name", in.Name)
@@ -349,43 +337,46 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		return &bodyOutput[T]{Body: obj}, nil
 	})
 
-	// List versions (name only; namespace via query). Versioned-artifact
+	// List tags (name only; namespace via query). Tagged-artifact
 	// kinds only — the legacy deployments table has no concept of
-	// "every version of a logical resource". Registered before the
-	// get-exact route below so the literal "versions" path segment
-	// wins over the `{version}` capture in the underlying flow router
+	// "every tag of a logical resource". Registered before the
+	// get-exact route below so the literal "tags" path segment
+	// wins over the `{tag}` capture in the underlying flow router
 	// (routes match in registration order).
-	if cfg.Store.IsVersionedArtifact() {
-		registerListVersions(api, cfg, newObj, kind, itemPath)
+	if cfg.Store.IsTaggedArtifact() {
+		registerListTags(api, cfg, newObj, kind, itemPath)
 	}
 
-	// Get exact (name, version; namespace via query).
+	// Get exact (name, tag/version; namespace via query).
 	huma.Register(api, huma.Operation{
 		OperationID: "get-" + strings.ToLower(kind),
 		Method:      http.MethodGet,
-		Path:        itemVersionPath,
-		Summary:     fmt.Sprintf("Get a %s by name and version", kind),
+		Path:        itemTagPath,
+		Summary:     fmt.Sprintf("Get a %s by name and tag", kind),
 	}, func(ctx context.Context, in *getInput) (*bodyOutput[T], error) {
 		ns := resolveNamespace(in.Namespace, false)
 		name, err := unescapePath("name", in.Name)
 		if err != nil {
 			return nil, err
 		}
-		version, err := unescapePath("version", in.Version)
+		tag, err := unescapePath("tag", in.Tag)
 		if err != nil {
-			return nil, err
-		}
-		if err := validateURLVersion(cfg.Store, version); err != nil {
 			return nil, err
 		}
 		if cfg.Authorize != nil {
-			if err := cfg.Authorize(ctx, AuthorizeInput{Verb: "get", Kind: kind, Namespace: ns, Name: name, Version: version}); err != nil {
+			in := AuthorizeInput{Verb: "get", Kind: kind, Namespace: ns, Name: name}
+			if cfg.Store.IsTaggedArtifact() {
+				in.Tag = tag
+			} else {
+				in.Version = tag
+			}
+			if err := cfg.Authorize(ctx, in); err != nil {
 				return nil, err
 			}
 		}
-		row, err := cfg.Store.Get(ctx, ns, name, version)
+		row, err := cfg.Store.Get(ctx, ns, name, tag)
 		if err != nil {
-			return nil, mapNotFound(err, kind, ns, name, version)
+			return nil, mapNotFound(err, kind, ns, name, tag)
 		}
 		obj, err := v1alpha1.EnvelopeFromRaw(newObj, row, kind)
 		if err != nil {
@@ -397,20 +388,20 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 	// Apply (upsert).
 	//
 	// Direct PUT on the per-kind item URL is only registered for legacy
-	// stores (Provider, Deployment) where the {version} URL segment is
+	// stores (Provider, Deployment) where the {tag} URL segment is
 	// authoritative. Content-registry kinds (Agent, MCPServer,
-	// RemoteMCPServer, Skill, Prompt) assign integer versions
-	// system-side, so the URL {version} segment no longer fits — those
+	// RemoteMCPServer, Skill, Prompt) use metadata.tag, so direct PUT
+	// remains legacy-only — those
 	// kinds are written exclusively through POST /v0/apply.
-	if !cfg.Store.IsVersionedArtifact() {
-		registerApplyLegacy(api, cfg, newObj, kind, itemVersionPath)
+	if !cfg.Store.IsTaggedArtifact() {
+		registerApplyLegacy(api, cfg, newObj, kind, itemTagPath)
 	}
 
 	// Delete (soft).
 	huma.Register(api, huma.Operation{
 		OperationID:   "delete-" + strings.ToLower(kind),
 		Method:        http.MethodDelete,
-		Path:          itemVersionPath,
+		Path:          itemTagPath,
 		Summary:       fmt.Sprintf("Delete a %s (soft-delete: sets deletionTimestamp)", kind),
 		DefaultStatus: http.StatusNoContent,
 	}, func(ctx context.Context, in *deleteInput) (*deleteOutput, error) {
@@ -419,11 +410,8 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		if err != nil {
 			return nil, err
 		}
-		version, err := unescapePath("version", in.Version)
+		tag, err := unescapePath("tag", in.Tag)
 		if err != nil {
-			return nil, err
-		}
-		if err := validateURLVersion(cfg.Store, version); err != nil {
 			return nil, err
 		}
 
@@ -434,9 +422,9 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		var preDelete v1alpha1.Object
 		runHook := cfg.PostDelete != nil && !in.Force
 		if runHook {
-			row, err := cfg.Store.Get(ctx, ns, name, version)
+			row, err := cfg.Store.Get(ctx, ns, name, tag)
 			if err != nil {
-				return nil, mapNotFound(err, kind, ns, name, version)
+				return nil, mapNotFound(err, kind, ns, name, tag)
 			}
 			obj, err := v1alpha1.EnvelopeFromRaw(newObj, row, kind)
 			if err != nil {
@@ -452,23 +440,23 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		if runHook {
 			dopts.PostDelete = cfg.PostDelete
 		}
-		if ae := deleteCore(ctx, cfg.Store, kind, ns, name, version, dopts); ae != nil {
-			return nil, mapApplyErrorToHuma(ae, kind, ns, name, version)
+		if ae := deleteCore(ctx, cfg.Store, kind, ns, name, tag, dopts); ae != nil {
+			return nil, mapApplyErrorToHuma(ae, kind, ns, name, tag)
 		}
 		return &deleteOutput{}, nil
 	})
 }
 
-// registerListVersions wires the GET /{name}/versions endpoint for a
-// versioned-artifact kind. Extracted from Register to keep the per-kind
+// registerListTags wires the GET /{name}/tags endpoint for a
+// tagged-artifact kind. Extracted from Register to keep the per-kind
 // route registration sequence readable.
-func registerListVersions[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T, kind, itemPath string) {
+func registerListTags[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T, kind, itemPath string) {
 	huma.Register(api, huma.Operation{
-		OperationID: "list-versions-" + strings.ToLower(kind),
+		OperationID: "list-tags-" + strings.ToLower(kind),
 		Method:      http.MethodGet,
-		Path:        itemPath + "/versions",
-		Summary:     fmt.Sprintf("List all versions of a %s", kind),
-	}, func(ctx context.Context, in *listVersionsInput) (*listOutput[T], error) {
+		Path:        itemPath + "/tags",
+		Summary:     fmt.Sprintf("List all tags of a %s", kind),
+	}, func(ctx context.Context, in *listTagsInput) (*listOutput[T], error) {
 		ns := resolveNamespace(in.Namespace, false)
 		name, err := unescapePath("name", in.Name)
 		if err != nil {
@@ -479,9 +467,9 @@ func registerListVersions[T v1alpha1.Object](api huma.API, cfg Config, newObj fu
 				return nil, err
 			}
 		}
-		rows, err := cfg.Store.ListVersions(ctx, ns, name)
+		rows, err := cfg.Store.ListTags(ctx, ns, name)
 		if err != nil {
-			return nil, huma.Error500InternalServerError("list versions "+kind, err)
+			return nil, huma.Error500InternalServerError("list tags "+kind, err)
 		}
 		items := make([]T, 0, len(rows))
 		for _, row := range rows {
@@ -500,7 +488,7 @@ func registerListVersions[T v1alpha1.Object](api huma.API, cfg Config, newObj fu
 // registerApplyLegacy wires PUT /{name}/{version} for legacy
 // (non-versioned-artifact) stores where the URL {version} segment is
 // authoritative for the row identity. Content-registry kinds assign
-// integer versions system-side and skip this route entirely.
+// metadata.tag and skip this route entirely.
 func registerApplyLegacy[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T, kind, itemVersionPath string) {
 	huma.Register(api, huma.Operation{
 		OperationID:   "apply-" + strings.ToLower(kind),
@@ -514,7 +502,7 @@ func registerApplyLegacy[T v1alpha1.Object](api huma.API, cfg Config, newObj fun
 		if err != nil {
 			return nil, err
 		}
-		version, err := unescapePath("version", in.Version)
+		version, err := unescapePath("version", in.Tag)
 		if err != nil {
 			return nil, err
 		}
@@ -550,6 +538,7 @@ func registerApplyLegacy[T v1alpha1.Object](api huma.API, cfg Config, newObj fun
 			Resolver:          cfg.Resolver,
 			RegistryValidator: cfg.RegistryValidator,
 			PostUpsert:        cfg.PostUpsert,
+			CreateStager:      cfg.CreateStager,
 		}, false); ae != nil {
 			return nil, mapApplyErrorToHuma(ae, kind, ns, name, version)
 		}
@@ -588,6 +577,8 @@ func mapApplyErrorToHuma(ae *applyError, kind, ns, name, version string) error {
 		return huma.Error400BadRequest("refs: " + ae.Err.Error())
 	case stageRegistries:
 		return huma.Error400BadRequest("registries: " + ae.Err.Error())
+	case stageApproval:
+		return ae.Err
 	case stageMarshal:
 		return huma.Error400BadRequest("marshal spec: " + ae.Err.Error())
 	case stageUpsert:

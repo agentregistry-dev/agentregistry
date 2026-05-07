@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -25,21 +24,20 @@ type rowScanner interface {
 // queries) into a v1alpha1.RawObject. Spec and Status are retained as their
 // wire-form representations so callers can unmarshal into typed structs.
 //
-// versioned reflects the Store's table mode and decides whether the
-// version column should be scanned as int or string. Versioned-artifact
+// tagged reflects the Store's table mode and decides whether the identity
+// column should populate metadata.tag or metadata.version. Tagged content
 // queries emit a synthetic 0::bigint generation and '[]'::jsonb
 // finalizers so the column layout stays uniform across modes.
 //
 // Column order must match:
 //
-//	namespace, name, version, generation, labels, annotations, spec, status,
+//	namespace, name, tag-or-version, generation, labels, annotations, spec, status,
 //	deletion_timestamp, finalizers, created_at, updated_at
-func scanRow(row rowScanner, versioned bool) (*v1alpha1.RawObject, error) {
+func scanRow(row rowScanner, tagged bool) (*v1alpha1.RawObject, error) {
 	var (
 		namespace         string
 		name              string
-		versionInt        int
-		versionStr        string
+		identity          string
 		generation        int64
 		labelsJSON        []byte
 		annotationsJSON   []byte
@@ -51,14 +49,8 @@ func scanRow(row rowScanner, versioned bool) (*v1alpha1.RawObject, error) {
 		updatedAt         time.Time
 	)
 
-	var versionDest any
-	if versioned {
-		versionDest = &versionInt
-	} else {
-		versionDest = &versionStr
-	}
 	if err := row.Scan(
-		&namespace, &name, versionDest, &generation,
+		&namespace, &name, &identity, &generation,
 		&labelsJSON, &annotationsJSON, &specJSON, &statusJSON,
 		&deletionTimestamp, &finalizersJSON,
 		&createdAt, &updatedAt,
@@ -70,8 +62,8 @@ func scanRow(row rowScanner, versioned bool) (*v1alpha1.RawObject, error) {
 	}
 
 	return decodeRow(
-		versioned,
-		namespace, name, versionInt, versionStr,
+		tagged,
+		namespace, name, identity,
 		labelsJSON, annotationsJSON, specJSON, statusJSON,
 		deletionTimestamp, finalizersJSON, createdAt, updatedAt,
 	)
@@ -82,16 +74,11 @@ func scanRow(row rowScanner, versioned bool) (*v1alpha1.RawObject, error) {
 // distance score) can reuse the deserialization without repeating its
 // logic.
 //
-// Both modes populate Metadata.Version: it's the row's PK identifier
-// rendered as a string, so wire clients (CLI, e2e tests) can use it
-// without consulting Status. Versioned-artifact rows additionally fold
-// the integer into Status.Version — the canonical surface new code
-// should read for system-assigned versions. Status.Version stays zero
-// for legacy deployments since they have no integer counterpart.
+// Tagged mode populates Metadata.Tag with the row's identity. Legacy mode
+// populates Metadata.Version for Provider/Deployment compatibility.
 func decodeRow(
-	versioned bool,
-	namespace, name string,
-	versionInt int, versionStr string,
+	tagged bool,
+	namespace, name, identity string,
 	labelsJSON, annotationsJSON, specJSON, statusJSON []byte,
 	deletionTimestamp *time.Time,
 	finalizersJSON []byte,
@@ -124,29 +111,16 @@ func decodeRow(
 		UpdatedAt:         updatedAt,
 		DeletionTimestamp: deletionTimestamp,
 	}
-	if versioned {
-		meta.Version = strconv.Itoa(versionInt)
+	if tagged {
+		meta.Tag = identity
 	} else {
-		meta.Version = versionStr
-	}
-
-	// For versioned-artifact rows fold the row's integer version into
-	// the status payload so callers see status.version reflect the
-	// just-read row. Legacy deployment rows have no system-assigned
-	// integer version, so we leave the status payload alone.
-	finalStatus := json.RawMessage(statusJSON)
-	if versioned {
-		merged, err := v1alpha1.SetStatusVersionBytes(statusJSON, versionInt)
-		if err != nil {
-			return nil, fmt.Errorf("merge status.version: %w", err)
-		}
-		finalStatus = merged
+		meta.Version = identity
 	}
 
 	return &v1alpha1.RawObject{
 		Metadata: meta,
 		Spec:     json.RawMessage(specJSON),
-		Status:   finalStatus,
+		Status:   json.RawMessage(statusJSON),
 	}, nil
 }
 

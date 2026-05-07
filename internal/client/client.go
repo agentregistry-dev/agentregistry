@@ -239,13 +239,12 @@ func (c *Client) getRaw(ctx context.Context, path string) (*v1alpha1.RawObject, 
 	return &out, nil
 }
 
-// ListVersions returns every non-deleted version row for (kind,
-// namespace, name) by GET'ing /v0/{plural}/{name}/versions. Server
-// returns 404 for legacy (non-versioned-artifact) kinds; callers
-// should branch on that. The endpoint is unpaginated server-side and
-// returns rows with the latest version first.
-func (c *Client) ListVersions(ctx context.Context, kind, namespace, name string) ([]v1alpha1.RawObject, error) {
-	path := fmt.Sprintf("/%s/%s/versions%s",
+// ListTags returns every non-deleted tag row for (kind, namespace, name) by
+// GET'ing /v0/{plural}/{name}/tags. Server returns 404 for legacy kinds;
+// callers should branch on that. The endpoint is unpaginated server-side and
+// returns rows with the latest tag first.
+func (c *Client) ListTags(ctx context.Context, kind, namespace, name string) ([]v1alpha1.RawObject, error) {
+	path := fmt.Sprintf("/%s/%s/tags%s",
 		v1alpha1.PluralFor(kind),
 		url.PathEscape(name),
 		namespaceQuery(namespace))
@@ -259,6 +258,12 @@ func (c *Client) ListVersions(ctx context.Context, kind, namespace, name string)
 		return nil, err
 	}
 	return resp.Items, nil
+}
+
+// ListVersions is a compatibility alias for callers that have not yet renamed
+// to tag terminology. It calls the /tags endpoint.
+func (c *Client) ListVersions(ctx context.Context, kind, namespace, name string) ([]v1alpha1.RawObject, error) {
+	return c.ListTags(ctx, kind, namespace, name)
 }
 
 // List returns rows of kind, paginated. opts.Namespace="" (empty) lists

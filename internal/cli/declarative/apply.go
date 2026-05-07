@@ -118,7 +118,9 @@ func printResults(out io.Writer, results []arv0.ApplyResult, dryRun bool) {
 			mark = "✗"
 		}
 		fmt.Fprintf(out, "%s %s/%s", mark, r.Kind, r.Name)
-		if r.Version != "" {
+		if r.Tag != "" {
+			fmt.Fprintf(out, " (%s)", r.Tag)
+		} else if r.Version != "" {
 			fmt.Fprintf(out, " (%s)", r.Version)
 		}
 		fmt.Fprintf(out, " %s", r.Status)

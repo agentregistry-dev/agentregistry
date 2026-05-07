@@ -20,21 +20,17 @@ const DefaultNamespace = "default"
 
 // ObjectMeta is the metadata block common to every resource.
 //
-// Namespace, Name, Labels, and Annotations are user-settable. CreatedAt,
-// UpdatedAt, DeletionTimestamp, and Version are server-managed: the API
-// ignores them on apply (the decoder explicitly rejects
-// metadata.version on input) and overwrites them on response.
+// Namespace, Name, Labels, Annotations, and Tag are user-settable for
+// content-registry kinds. CreatedAt, UpdatedAt, and DeletionTimestamp are
+// server-managed. Version remains only for legacy infra/config kinds whose
+// storage still uses the old mutable (namespace, name, version) tuple.
 //
-// Version is the row's PK identifier: a system-assigned integer for
-// versioned-artifact kinds (Agent, MCPServer, RemoteMCPServer, Skill,
-// Prompt) and an opaque string for the legacy Provider and Deployment
-// kinds. Versioned-artifact kinds ALSO surface the integer via
-// Status.Version — the canonical source of truth for system-
-// assigned versions; metadata.version is rendered for legacy clients
-// (and for Provider/Deployment, which have no integer counterpart).
-// New code should read Status.Version for versioned-artifact kinds.
+// Content-registry identity is (Namespace, Name, Tag). Users may supply
+// metadata.tag to pin manifests declaratively before applying anything to a
+// live server. When Tag is omitted, the store deterministically fills it with
+// a canonical hash of spec plus the relevant user-authored metadata.
 //
-// Identity at the database level is (Namespace, Name, Version).
+// Legacy identity at the database level is (Namespace, Name, Version).
 // Namespace is an internal detail today — it defaults to "default" on
 // apply and is stripped from responses when it equals "default" so the
 // multi-tenant surface stays hidden until we deliberately enable it.
@@ -58,12 +54,12 @@ type ObjectMeta struct {
 	Labels      map[string]string `json:"labels,omitempty" yaml:"labels,omitempty"`
 	Annotations map[string]string `json:"annotations,omitempty" yaml:"annotations,omitempty"`
 
-	// Version is server-assigned (the decoder rejects user-supplied
-	// values). Versioned-artifact kinds populate Status.Version with
-	// the same integer; this field is the legacy Deployment Store's
-	// string identity and the v0 wire shape kept for clients that
-	// don't yet read Status. Apply must not include metadata.version
-	// — the system controls assignment.
+	// Tag is the user-visible identity for content-registry kinds
+	// (Agent, MCPServer, RemoteMCPServer, Skill, Prompt).
+	Tag string `json:"tag,omitempty" yaml:"tag,omitempty"`
+
+	// Version is the legacy Provider/Deployment Store's string identity.
+	// Content-registry manifests must not include metadata.version.
 	Version string `json:"version,omitempty" yaml:"version,omitempty"`
 
 	CreatedAt time.Time `json:"createdAt,omitzero" yaml:"createdAt,omitempty"`

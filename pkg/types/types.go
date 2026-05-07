@@ -39,7 +39,9 @@ type AuthorizeInput struct {
 	Namespace string
 	// Name is the resource name; "" for list verbs.
 	Name string
-	// Version is the resource version; "" for list and get-latest.
+	// Tag is the resource tag for content kinds; "" for list/get-latest.
+	Tag string
+	// Version is the legacy resource version; "" for list and get-latest.
 	Version string
 }
 
@@ -66,6 +68,38 @@ type PostUpsert func(ctx context.Context, obj v1alpha1.Object) error
 // batch's per-doc delete hook.
 type PostDelete func(ctx context.Context, obj v1alpha1.Object) error
 
+// CreateStagerInput is handed to an optional downstream create-approval hook.
+// Store is intentionally any to keep pkg/types independent from the concrete
+// resource store package; downstream integrations can type-assert when needed.
+type CreateStagerInput struct {
+	Kind      string
+	Namespace string
+	Name      string
+	Tag       string
+	Version   string
+	Object    v1alpha1.Object
+	Store     any
+}
+
+// CreateStagerResult reports whether the create was staged instead of written
+// to production storage.
+type CreateStagerResult struct {
+	Staged bool
+}
+
+// ResourceRouteContext exposes the finalized v1alpha1 route wiring to
+// downstream integrations that need to register adjacent routes against
+// the same stores, resolver, validator, and post-persist hooks.
+type ResourceRouteContext struct {
+	// Stores is the finalized per-kind store map. It is intentionally any to
+	// avoid a public package import cycle with the concrete store package.
+	Stores            any
+	Resolver          v1alpha1.ResolverFunc
+	RegistryValidator v1alpha1.RegistryValidatorFunc
+	PostUpserts       map[string]func(context.Context, v1alpha1.Object) error
+	PostDeletes       map[string]func(context.Context, v1alpha1.Object) error
+}
+
 // Auditor receives audit events for state changes that the OSS layer
 // considers significant. The default OSS implementation is a no-op;
 // enterprise plugs in a real audit sink via NewStore options.
@@ -75,15 +109,15 @@ type PostDelete func(ctx context.Context, obj v1alpha1.Object) error
 // rather than relying on observers (PostUpsert hooks, etc.) to remember
 // to log.
 type Auditor interface {
-	// ResourceVersionCreated is invoked when Store.Upsert creates a new
-	// immutable version row for a content-registry kind. Provider and
-	// Deployment (legacy mode) do not produce this event.
-	ResourceVersionCreated(ctx context.Context, kind, namespace, name string, version int)
+	// ResourceTagCreated is invoked when Store.Upsert creates a new tag row
+	// for a content-registry kind. Provider and Deployment (legacy mode) do
+	// not produce this event.
+	ResourceTagCreated(ctx context.Context, kind, namespace, name, tag string)
 }
 
 type noopAuditor struct{}
 
-func (noopAuditor) ResourceVersionCreated(ctx context.Context, kind, namespace, name string, version int) {
+func (noopAuditor) ResourceTagCreated(ctx context.Context, kind, namespace, name, tag string) {
 }
 
 // NoopAuditor is the default Auditor used when none is plugged in.
@@ -152,12 +186,29 @@ type AppOptions struct {
 	// PostDeletes mirror PostUpserts on the delete path.
 	PostDeletes map[string]PostDelete
 
+	// CreateStager optionally intercepts validated creates before the row
+	// reaches production storage. Enterprise builds use this for native
+	// approval staging; nil preserves normal direct writes.
+	CreateStager func(ctx context.Context, in CreateStagerInput) (CreateStagerResult, error)
+
+	// ResolverWrapper can decorate the shared v1alpha1 ResourceRef resolver
+	// before route registration. Enterprise approval mode uses this to allow
+	// same-submit pending references to validate without writing them to
+	// production storage first. Nil preserves the default store-backed resolver.
+	ResolverWrapper func(v1alpha1.ResolverFunc) v1alpha1.ResolverFunc
+
 	// V1Alpha1StoreTables registers additional v1alpha1 kinds with their
 	// backing PostgreSQL tables. Downstream builds that add their own
 	// Scheme kinds should populate this so the shared /v0/apply,
 	// /v0/import, resolver, and generic route plumbing can see the same
 	// store map as any ExtraRoutes they register.
 	V1Alpha1StoreTables map[string]string
+
+	// V1Alpha1LegacyStoreKinds marks extra v1alpha1 kinds that use the legacy
+	// mutable (namespace, name, version) row shape instead of tagged content
+	// semantics. Downstream kinds such as AccessPolicy are v1alpha1-shaped but
+	// are control-plane policy, not content artifacts.
+	V1Alpha1LegacyStoreKinds map[string]bool
 
 	// RegistryValidator overrides the per-package registry
 	// validator (the dispatcher consulted on apply / import to confirm
@@ -192,6 +243,10 @@ type AppOptions struct {
 	// routes.
 	ExtraRoutes func(api huma.API, pathPrefix string)
 
+	// ExtraResourceRoutes allows external integrations to register routes
+	// after the generic v1alpha1 resource context has been finalized.
+	ExtraResourceRoutes func(api huma.API, pathPrefix string, ctx ResourceRouteContext)
+
 	// HTTPServerFactory is an optional function to create a server that
 	// adds new API routes.
 	HTTPServerFactory HTTPServerFactory
@@ -213,7 +268,7 @@ type AppOptions struct {
 	AuthzProvider auth.AuthzProvider
 
 	// Auditor receives audit events from the v1alpha1 store layer
-	// (e.g. ResourceVersionCreated on Upsert creates). The default OSS
+	// (e.g. ResourceTagCreated on Upsert creates). The default OSS
 	// behavior is a no-op; enterprise builds plug in a real audit sink.
 	// If nil, NoopAuditor is used.
 	Auditor Auditor

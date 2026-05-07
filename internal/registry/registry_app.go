@@ -105,7 +105,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	if registryValidator == nil {
 		registryValidator = registries.Dispatcher
 	}
-	stores, importer := buildStoresAndImporter(pool, registryValidator, options.V1Alpha1StoreTables, options.Auditor)
+	stores, importer := buildStoresAndImporter(pool, registryValidator, options.V1Alpha1StoreTables, options.V1Alpha1LegacyStoreKinds, options.Auditor)
 
 	slog.Info("starting agentregistry", "version", version.Version, "commit", version.GitCommit)
 
@@ -181,7 +181,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	return nil
 }
 
-func buildStoresAndImporter(pool *pgxpool.Pool, registryValidator v1alpha1.RegistryValidatorFunc, extraStoreTables map[string]string, auditor types.Auditor) (map[string]*v1alpha1store.Store, *pkgimporter.Importer) {
+func buildStoresAndImporter(pool *pgxpool.Pool, registryValidator v1alpha1.RegistryValidatorFunc, extraStoreTables map[string]string, legacyExtraKinds map[string]bool, auditor types.Auditor) (map[string]*v1alpha1store.Store, *pkgimporter.Importer) {
 	if auditor == nil {
 		auditor = types.NoopAuditor
 	}
@@ -191,7 +191,12 @@ func buildStoresAndImporter(pool *pgxpool.Pool, registryValidator v1alpha1.Regis
 			slog.Warn("skipping v1alpha1 extra store with empty kind or table", "kind", kind, "table", table)
 			continue
 		}
-		stores[kind] = v1alpha1store.NewStore(pool, table, v1alpha1store.WithKind(kind), v1alpha1store.WithAuditor(auditor))
+		opts := []v1alpha1store.StoreOption{v1alpha1store.WithKind(kind), v1alpha1store.WithAuditor(auditor)}
+		if legacyExtraKinds[kind] {
+			stores[kind] = v1alpha1store.NewDeploymentStore(pool, table, opts...)
+			continue
+		}
+		stores[kind] = v1alpha1store.NewStore(pool, table, opts...)
 	}
 
 	// pool == nil is the noop/DatabaseFactory path used by gen-openapi
@@ -234,12 +239,30 @@ func buildRouteOptions(
 	importer *pkgimporter.Importer,
 	adapters map[string]types.DeploymentAdapter,
 ) *router.RouteOptions {
+	var createStager func(context.Context, resource.CreateStagerInput) (resource.CreateStagerResult, error)
+	if options.CreateStager != nil {
+		createStager = func(ctx context.Context, in resource.CreateStagerInput) (resource.CreateStagerResult, error) {
+			out, err := options.CreateStager(ctx, types.CreateStagerInput{
+				Kind:      in.Kind,
+				Namespace: in.Namespace,
+				Name:      in.Name,
+				Tag:       in.Tag,
+				Version:   in.Version,
+				Object:    in.Object,
+				Store:     in.Store,
+			})
+			return resource.CreateStagerResult{Staged: out.Staged}, err
+		}
+	}
 	routeOpts := &router.RouteOptions{
-		ExtraRoutes:       options.ExtraRoutes,
-		Stores:            stores,
-		Importer:          importer,
-		PerKindHooks:      crudPerKindHooks(options),
-		RegistryValidator: options.RegistryValidator,
+		ExtraRoutes:         options.ExtraRoutes,
+		Stores:              stores,
+		Importer:            importer,
+		PerKindHooks:        crudPerKindHooks(options),
+		RegistryValidator:   options.RegistryValidator,
+		CreateStager:        createStager,
+		ResolverWrapper:     options.ResolverWrapper,
+		ExtraResourceRoutes: options.ExtraResourceRoutes,
 	}
 
 	if stores != nil {
@@ -268,7 +291,7 @@ func crudPerKindHooks(options types.AppOptions) crud.PerKindHooks {
 			hooks.Authorizers[kind] = func(ctx context.Context, in resource.AuthorizeInput) error {
 				return f(ctx, types.AuthorizeInput{
 					Verb: in.Verb, Kind: in.Kind, Namespace: in.Namespace,
-					Name: in.Name, Version: in.Version,
+					Name: in.Name, Tag: in.Tag, Version: in.Version,
 				})
 			}
 		}
@@ -280,7 +303,7 @@ func crudPerKindHooks(options types.AppOptions) crud.PerKindHooks {
 			hooks.ListFilters[kind] = func(ctx context.Context, in resource.AuthorizeInput) (string, []any, error) {
 				return f(ctx, types.AuthorizeInput{
 					Verb: in.Verb, Kind: in.Kind, Namespace: in.Namespace,
-					Name: in.Name, Version: in.Version,
+					Name: in.Name, Tag: in.Tag, Version: in.Version,
 				})
 			}
 		}

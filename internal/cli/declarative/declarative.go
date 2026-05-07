@@ -21,7 +21,7 @@ func init() {
 	scheme.Register(typedKind(
 		"agent", "agents", []string{"Agent"},
 		[]scheme.Column{
-			{Header: "NAME"}, {Header: "VERSION"}, {Header: "FRAMEWORK"},
+			{Header: "NAME"}, {Header: "TAG"}, {Header: "FRAMEWORK"},
 			{Header: "LANGUAGE"}, {Header: "PROVIDER"}, {Header: "MODEL"},
 		},
 		v1alpha1.KindAgent,
@@ -31,7 +31,7 @@ func init() {
 
 	scheme.Register(typedKind(
 		"mcp", "mcps", []string{"MCPServer", "mcpserver", "mcp-server", "mcpservers"},
-		[]scheme.Column{{Header: "NAME"}, {Header: "VERSION"}, {Header: "DESCRIPTION"}},
+		[]scheme.Column{{Header: "NAME"}, {Header: "TAG"}, {Header: "DESCRIPTION"}},
 		v1alpha1.KindMCPServer,
 		func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} },
 		mcpRow,
@@ -40,7 +40,7 @@ func init() {
 	scheme.Register(typedKind(
 		"skill", "skills", []string{"Skill"},
 		[]scheme.Column{
-			{Header: "NAME"}, {Header: "VERSION"}, {Header: "DESCRIPTION"},
+			{Header: "NAME"}, {Header: "TAG"}, {Header: "DESCRIPTION"},
 		},
 		v1alpha1.KindSkill,
 		func() *v1alpha1.Skill { return &v1alpha1.Skill{} },
@@ -49,7 +49,7 @@ func init() {
 
 	scheme.Register(typedKind(
 		"prompt", "prompts", []string{"Prompt"},
-		[]scheme.Column{{Header: "NAME"}, {Header: "VERSION"}, {Header: "DESCRIPTION"}},
+		[]scheme.Column{{Header: "NAME"}, {Header: "TAG"}, {Header: "DESCRIPTION"}},
 		v1alpha1.KindPrompt,
 		func() *v1alpha1.Prompt { return &v1alpha1.Prompt{} },
 		promptRow,
@@ -59,7 +59,7 @@ func init() {
 		"remote-mcp", "remote-mcps", []string{
 			"RemoteMCPServer", "remotemcpserver", "remote-mcp-server", "remotemcpservers",
 		},
-		[]scheme.Column{{Header: "NAME"}, {Header: "VERSION"}, {Header: "TYPE"}, {Header: "URL"}},
+		[]scheme.Column{{Header: "NAME"}, {Header: "TAG"}, {Header: "TYPE"}, {Header: "URL"}},
 		v1alpha1.KindRemoteMCPServer,
 		func() *v1alpha1.RemoteMCPServer { return &v1alpha1.RemoteMCPServer{} },
 		remoteMCPServerRow,

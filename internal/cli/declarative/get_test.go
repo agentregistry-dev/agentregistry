@@ -136,9 +136,8 @@ func versionGetServer(t *testing.T, latest, specific v1alpha1.Agent) (*httptest.
 	return srv, &captured
 }
 
-// TestGet_Version_FetchesSpecificVersion verifies that
-// `arctl get agent NAME --version 1` hits the per-version GET endpoint
-// and renders that version's envelope.
+// TestGet_Version_FetchesSpecificVersion verifies the legacy --version flag
+// still fetches the exact tag endpoint and renders that tag's envelope.
 func TestGet_Version_FetchesSpecificVersion(t *testing.T) {
 	v1 := agentVersionFixture("acme/bot", "1")
 	v2 := agentVersionFixture("acme/bot", "2")
@@ -154,7 +153,7 @@ func TestGet_Version_FetchesSpecificVersion(t *testing.T) {
 
 	var got v1alpha1.Agent
 	require.NoError(t, json.Unmarshal(out.Bytes(), &got))
-	assert.Equal(t, "1", got.Metadata.Version, "expected v1 envelope")
+	assert.Equal(t, "1", got.Metadata.Tag, "expected tag 1 envelope")
 	assert.Equal(t, "v1", got.Spec.Description, "expected v1's spec description")
 
 	// At least one served call should be the specific-version path.
@@ -186,7 +185,7 @@ func TestGet_Version_DefaultsToLatest(t *testing.T) {
 
 	var got v1alpha1.Agent
 	require.NoError(t, json.Unmarshal(out.Bytes(), &got))
-	assert.Equal(t, "2", got.Metadata.Version, "expected latest (v2) envelope")
+	assert.Equal(t, "2", got.Metadata.Tag, "expected latest tag 2 envelope")
 
 	// All served calls should be the latest path (no version segment).
 	for _, p := range *captured {

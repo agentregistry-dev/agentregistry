@@ -51,7 +51,7 @@ func TestBuildStoresAndImporter_ExtensionKindAppliesThroughBatchEndpoint(t *test
 	pool := v1alpha1store.NewTestPool(t)
 	stores, importer := buildStoresAndImporter(pool, nil, map[string]string{
 		extensionApplyKind: "v1alpha1.agents",
-	}, nil)
+	}, nil, nil)
 	require.NotNil(t, importer)
 	extensionStore := stores[extensionApplyKind]
 	require.NotNil(t, extensionStore)
@@ -70,6 +70,7 @@ func TestBuildStoresAndImporter_ExtensionKindAppliesThroughBatchEndpoint(t *test
 kind: IntegrationExtension
 metadata:
   name: enterprise-only
+  tag: stable
 spec:
   value: ok
 `)
@@ -83,22 +84,23 @@ spec:
 	require.Len(t, out.Results, 1)
 	require.Equal(t, extensionApplyKind, out.Results[0].Kind)
 	require.Equal(t, arv0.ApplyStatusCreated, out.Results[0].Status)
+	require.Equal(t, "stable", out.Results[0].Tag)
 
-	row, err := extensionStore.Get(t.Context(), v1alpha1.DefaultNamespace, "enterprise-only", "1")
+	row, err := extensionStore.Get(t.Context(), v1alpha1.DefaultNamespace, "enterprise-only", "stable")
 	require.NoError(t, err)
 	require.JSONEq(t, `{"value":"ok"}`, string(row.Spec))
 }
 
 // TestBuildStoresAndImporter_PropagatesAuditor verifies the auditor
 // passed through buildStoresAndImporter (the AppOptions.Auditor field)
-// reaches every constructed Store. We drive a versioned-artifact
-// Upsert and assert the auditor saw the expected
-// ResourceVersionCreated event — proving the option survived the
+// reaches every constructed Store. We drive a tagged-artifact Upsert
+// and assert the auditor saw the expected ResourceTagCreated event,
+// proving the option survived the
 // NewStores -> NewStore option chain.
 func TestBuildStoresAndImporter_PropagatesAuditor(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
 	auditor := &typestest.RecordingAuditor{}
-	stores, _ := buildStoresAndImporter(pool, nil, nil, auditor)
+	stores, _ := buildStoresAndImporter(pool, nil, nil, nil, auditor)
 
 	agentStore := stores[v1alpha1.KindAgent]
 	require.NotNil(t, agentStore)
@@ -115,11 +117,11 @@ func TestBuildStoresAndImporter_PropagatesAuditor(t *testing.T) {
 	require.Equal(t, v1alpha1.KindAgent, events[0].Kind)
 	require.Equal(t, v1alpha1.DefaultNamespace, events[0].Namespace)
 	require.Equal(t, "audited", events[0].Name)
-	require.Equal(t, 1, events[0].Version)
+	require.NotEmpty(t, events[0].Tag)
 
 	// Sanity: nil auditor still works (NoopAuditor fallback) — guards the
 	// nil-check branch in buildStoresAndImporter.
-	stores2, _ := buildStoresAndImporter(pool, nil, nil, nil)
+	stores2, _ := buildStoresAndImporter(pool, nil, nil, nil, nil)
 	require.NotNil(t, stores2[v1alpha1.KindAgent])
 	_ = types.NoopAuditor
 }

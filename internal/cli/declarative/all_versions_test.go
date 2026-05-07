@@ -18,8 +18,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// agentVersionFixture builds a minimal Agent envelope at the given integer
-// version for use as a row in a /versions list response.
+// agentVersionFixture builds a minimal Agent envelope at the given tag for use
+// as a row in a /tags list response.
 func agentVersionFixture(name, version string) v1alpha1.Agent {
 	return v1alpha1.Agent{
 		TypeMeta: v1alpha1.TypeMeta{
@@ -29,7 +29,7 @@ func agentVersionFixture(name, version string) v1alpha1.Agent {
 		Metadata: v1alpha1.ObjectMeta{
 			Namespace: v1alpha1.DefaultNamespace,
 			Name:      name,
-			Version:   version,
+			Tag:       version,
 		},
 		Spec: v1alpha1.AgentSpec{
 			Description: "v" + version,
@@ -37,7 +37,7 @@ func agentVersionFixture(name, version string) v1alpha1.Agent {
 	}
 }
 
-// versionsListServer serves GET /v0/agents/{name}/versions and replies with
+// versionsListServer serves GET /v0/agents/{name}/tags and replies with
 // the provided rows. Other endpoints respond 404 so unintended calls fail
 // loudly. capturedPaths records every path served (concurrency-safe).
 func versionsListServer(t *testing.T, rows []v1alpha1.Agent) (*httptest.Server, *[]string) {
@@ -50,7 +50,7 @@ func versionsListServer(t *testing.T, rows []v1alpha1.Agent) (*httptest.Server, 
 		mu.Lock()
 		captured = append(captured, r.Method+" "+r.URL.Path)
 		mu.Unlock()
-		if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/versions") {
+		if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/tags") {
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]any{"items": rows})
 			return
@@ -109,8 +109,8 @@ func TestGet_AllVersions_Agent_JSONOutput(t *testing.T) {
 	var got []v1alpha1.Agent
 	require.NoError(t, json.Unmarshal(out.Bytes(), &got))
 	require.Len(t, got, 2)
-	assert.Equal(t, "2", got[0].Metadata.Version)
-	assert.Equal(t, "1", got[1].Metadata.Version)
+	assert.Equal(t, "2", got[0].Metadata.Tag)
+	assert.Equal(t, "1", got[1].Metadata.Tag)
 }
 
 // (3) `arctl get deployment NAME --all-versions` errors cleanly because

@@ -25,7 +25,9 @@ func NewResolver(stores map[string]*v1alpha1store.Store) v1alpha1.ResolverFunc {
 			return fmt.Errorf("%w: unknown kind %q", v1alpha1.ErrInvalidRef, ref.Kind)
 		}
 		var err error
-		if ref.Version == "" {
+		if ref.Tag != "" {
+			_, err = store.Get(ctx, ref.Namespace, ref.Name, ref.Tag)
+		} else if ref.Version == "" {
 			_, err = store.GetLatest(ctx, ref.Namespace, ref.Name)
 		} else {
 			_, err = store.Get(ctx, ref.Namespace, ref.Name, ref.Version)
@@ -58,7 +60,9 @@ func NewGetter(stores map[string]*v1alpha1store.Store) v1alpha1.GetterFunc {
 			raw *v1alpha1.RawObject
 			err error
 		)
-		if ref.Version == "" {
+		if ref.Tag != "" {
+			raw, err = store.Get(ctx, ref.Namespace, ref.Name, ref.Tag)
+		} else if ref.Version == "" {
 			raw, err = store.GetLatest(ctx, ref.Namespace, ref.Name)
 		} else {
 			raw, err = store.Get(ctx, ref.Namespace, ref.Name, ref.Version)

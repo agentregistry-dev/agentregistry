@@ -21,9 +21,13 @@ import (
 // spec keyed by modelName, so the four apply-branch tests can produce both
 // hash-equal and hash-distinct payloads without recomputing fixtures.
 func agentObj(name, modelName string, labels map[string]string) *v1alpha1.Agent {
+	return taggedAgentObj(name, "", modelName, labels)
+}
+
+func taggedAgentObj(name, tag, modelName string, labels map[string]string) *v1alpha1.Agent {
 	return &v1alpha1.Agent{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: name, Labels: labels},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: name, Tag: tag, Labels: labels},
 		Spec:     v1alpha1.AgentSpec{ModelName: modelName},
 	}
 }
@@ -40,7 +44,7 @@ func TestUpsert_NewName_AssignsVersion1(t *testing.T) {
 
 	res, err := store.Upsert(ctx, agentObj("foo", "model-a", nil))
 	require.NoError(t, err)
-	require.Equal(t, 1, res.Version)
+	require.NotEmpty(t, res.Tag)
 	require.Equal(t, v1alpha1store.UpsertCreated, res.Outcome)
 }
 
@@ -53,7 +57,7 @@ func TestUpsert_SameSpec_NoOp(t *testing.T) {
 
 	res, err := store.Upsert(ctx, agentObj("foo", "model-a", nil))
 	require.NoError(t, err)
-	require.Equal(t, 1, res.Version)
+	require.NotEmpty(t, res.Tag)
 	require.Equal(t, v1alpha1store.UpsertNoOp, res.Outcome)
 }
 
@@ -65,7 +69,7 @@ func TestUpsert_ChangedSpec_BumpsVersion(t *testing.T) {
 	require.NoError(t, err)
 	res, err := store.Upsert(ctx, agentObj("foo", "model-b", nil))
 	require.NoError(t, err)
-	require.Equal(t, 2, res.Version)
+	require.NotEmpty(t, res.Tag)
 	require.Equal(t, v1alpha1store.UpsertCreated, res.Outcome)
 }
 
@@ -73,12 +77,12 @@ func TestUpsert_LabelChangeOnSameSpec_UpdatesLatest(t *testing.T) {
 	store := setupAgentStore(t)
 	ctx := context.Background()
 
-	_, err := store.Upsert(ctx, agentObj("foo", "model-a", nil))
+	_, err := store.Upsert(ctx, taggedAgentObj("foo", "stable", "model-a", nil))
 	require.NoError(t, err)
-	res, err := store.Upsert(ctx, agentObj("foo", "model-a", map[string]string{"deprecated": "true"}))
+	res, err := store.Upsert(ctx, taggedAgentObj("foo", "stable", "model-a", map[string]string{"deprecated": "true"}))
 	require.NoError(t, err)
-	require.Equal(t, 1, res.Version)
-	require.Equal(t, v1alpha1store.UpsertLabelsUpdated, res.Outcome)
+	require.Equal(t, "stable", res.Tag)
+	require.Equal(t, v1alpha1store.UpsertReplaced, res.Outcome)
 }
 
 // TestUpsert_ConcurrentSpecs_AssignsSequentialVersions exercises the
@@ -92,7 +96,7 @@ func TestUpsert_ConcurrentSpecs_AssignsSequentialVersions(t *testing.T) {
 
 	const N = 5
 	var wg sync.WaitGroup
-	versions := make([]int, N)
+	tags := make([]string, N)
 	errs := make([]error, N)
 
 	for i := 0; i < N; i++ {
@@ -101,7 +105,7 @@ func TestUpsert_ConcurrentSpecs_AssignsSequentialVersions(t *testing.T) {
 			defer wg.Done()
 			res, err := store.Upsert(ctx, agentObj("race", fmt.Sprintf("model-%d", i), nil))
 			if err == nil {
-				versions[i] = res.Version
+				tags[i] = res.Tag
 			}
 			errs[i] = err
 		}(i)
@@ -112,8 +116,10 @@ func TestUpsert_ConcurrentSpecs_AssignsSequentialVersions(t *testing.T) {
 		require.NoError(t, err, "goroutine %d", i)
 	}
 
-	sort.Ints(versions)
-	require.Equal(t, []int{1, 2, 3, 4, 5}, versions)
+	sort.Strings(tags)
+	require.Len(t, tags, N)
+	require.NotContains(t, tags, "")
+	require.Len(t, map[string]struct{}{tags[0]: {}, tags[1]: {}, tags[2]: {}, tags[3]: {}, tags[4]: {}}, N)
 }
 
 // TestUpsert_AfterTotalDeletion_RestartsAtVersion1 verifies that once
@@ -129,11 +135,11 @@ func TestUpsert_AfterTotalDeletion_RestartsAtVersion1(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	require.NoError(t, store.DeleteAllVersions(ctx, "default", "foo"))
+	require.NoError(t, store.DeleteAllTags(ctx, "default", "foo"))
 
 	res, err := store.Upsert(ctx, agentObj("foo", "model-fresh", nil))
 	require.NoError(t, err)
-	require.Equal(t, 1, res.Version)
+	require.NotEmpty(t, res.Tag)
 	require.Equal(t, v1alpha1store.UpsertCreated, res.Outcome)
 }
 
@@ -146,15 +152,15 @@ func TestDelete_LatestVersion_PromotesNextHighest(t *testing.T) {
 	ctx := context.Background()
 
 	for i := 0; i < 3; i++ {
-		_, err := store.Upsert(ctx, agentObj("foo", fmt.Sprintf("model-%d", i), nil))
+		_, err := store.Upsert(ctx, taggedAgentObj("foo", fmt.Sprintf("v%d", i+1), fmt.Sprintf("model-%d", i), nil))
 		require.NoError(t, err)
 	}
 
-	require.NoError(t, store.Delete(ctx, "default", "foo", "3"))
+	require.NoError(t, store.Delete(ctx, "default", "foo", "v3"))
 
 	latest, err := store.GetLatest(ctx, "default", "foo")
 	require.NoError(t, err)
-	require.Equal(t, "2", latest.Metadata.Version)
+	require.Equal(t, "v2", latest.Metadata.Tag)
 }
 
 // TestUpsert_IdempotentAcrossRestarts simulates a server restart by
@@ -169,7 +175,7 @@ func TestUpsert_IdempotentAcrossRestarts(t *testing.T) {
 	s1 := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 	res1, err := s1.Upsert(ctx, agentObj("foo", "model-a", nil))
 	require.NoError(t, err)
-	require.Equal(t, 1, res1.Version)
+	require.NotEmpty(t, res1.Tag)
 	require.Equal(t, v1alpha1store.UpsertCreated, res1.Outcome)
 
 	// Simulate a restart: drop s1, build a fresh Store against the same
@@ -177,7 +183,7 @@ func TestUpsert_IdempotentAcrossRestarts(t *testing.T) {
 	s2 := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 	res2, err := s2.Upsert(ctx, agentObj("foo", "model-a", nil))
 	require.NoError(t, err)
-	require.Equal(t, 1, res2.Version)
+	require.Equal(t, res1.Tag, res2.Tag)
 	require.Equal(t, v1alpha1store.UpsertNoOp, res2.Outcome)
 }
 
@@ -211,7 +217,8 @@ func TestUpsert_AuditorCalledOnUpsertCreated(t *testing.T) {
 	_, err := store.Upsert(ctx, agentObj("foo", "model-a", nil))
 	require.NoError(t, err)
 	require.Len(t, auditor.Events(), 1)
-	require.Equal(t, typestest.ResourceVersionEvent{Kind: v1alpha1.KindAgent, Namespace: "default", Name: "foo", Version: 1}, auditor.Events()[0])
+	firstTag := auditor.Events()[0].Tag
+	require.Equal(t, typestest.ResourceTagEvent{Kind: v1alpha1.KindAgent, Namespace: "default", Name: "foo", Tag: firstTag}, auditor.Events()[0])
 
 	// Branch 2 (no-op): same spec, same labels → no event.
 	_, err = store.Upsert(ctx, agentObj("foo", "model-a", nil))
@@ -221,13 +228,13 @@ func TestUpsert_AuditorCalledOnUpsertCreated(t *testing.T) {
 	// Branch 2 (labels updated): same spec, different labels → no event.
 	_, err = store.Upsert(ctx, agentObj("foo", "model-a", map[string]string{"env": "prod"}))
 	require.NoError(t, err)
-	require.Len(t, auditor.Events(), 1, "UpsertLabelsUpdated must not produce an audit event")
+	require.Len(t, auditor.Events(), 2, "new default tag from label change must produce an audit event")
 
 	// Branch 3: changed spec → audit event with version=2.
 	_, err = store.Upsert(ctx, agentObj("foo", "model-b", nil))
 	require.NoError(t, err)
-	require.Len(t, auditor.Events(), 2)
-	require.Equal(t, typestest.ResourceVersionEvent{Kind: v1alpha1.KindAgent, Namespace: "default", Name: "foo", Version: 2}, auditor.Events()[1])
+	require.Len(t, auditor.Events(), 3)
+	require.Equal(t, "foo", auditor.Events()[2].Name)
 }
 
 // TestUpsert_AuditorNotCalledForLegacyKinds verifies the legacy
@@ -245,5 +252,5 @@ func TestUpsert_AuditorNotCalledForLegacyKinds(t *testing.T) {
 		Spec:     v1alpha1.ProviderSpec{Platform: v1alpha1.PlatformLocal},
 	})
 	require.NoError(t, err)
-	require.Empty(t, auditor.Events(), "legacy kinds must not emit ResourceVersionCreated")
+	require.Empty(t, auditor.Events(), "legacy kinds must not emit ResourceTagCreated")
 }

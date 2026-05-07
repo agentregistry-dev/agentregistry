@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
 
 	"github.com/danielgtaylor/huma/v2"
 
@@ -61,6 +60,11 @@ type ApplyConfig struct {
 	// soft-deletes the row but never tears down the platform adapter
 	// state.
 	PostDeletes map[string]func(ctx context.Context, obj v1alpha1.Object) error
+
+	// CreateStager optionally intercepts validated create attempts before
+	// production Upsert. Enterprise builds use this to stage non-admin
+	// creates for approval while leaving OSS behavior unchanged.
+	CreateStager func(ctx context.Context, in CreateStagerInput) (CreateStagerResult, error)
 }
 
 // applyInput receives a raw multi-doc YAML stream. RawBody keeps bytes
@@ -167,6 +171,7 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 		Resolver:          cfg.Resolver,
 		RegistryValidator: cfg.RegistryValidator,
 		PostUpsert:        cfg.PostUpserts[obj.GetKind()],
+		CreateStager:      cfg.CreateStager,
 	}, dryRun)
 	if ae != nil {
 		return failResult(res, ae)
@@ -182,16 +187,20 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 	// changed → new version" (v>1) — both surface as
 	// ApplyStatusCreated. UpsertLabelsUpdated is the same-spec /
 	// changed-metadata case the legacy "configured" status modeled.
-	switch up.Outcome {
-	case v1alpha1store.UpsertCreated:
-		res.Status = arv0.ApplyStatusCreated
-	case v1alpha1store.UpsertLabelsUpdated:
-		res.Status = arv0.ApplyStatusConfigured
-	case v1alpha1store.UpsertNoOp:
-		res.Status = arv0.ApplyStatusUnchanged
+	if up.Staged {
+		res.Status = arv0.ApplyStatusStaged
+	} else {
+		switch up.Outcome {
+		case v1alpha1store.UpsertCreated:
+			res.Status = arv0.ApplyStatusCreated
+		case v1alpha1store.UpsertReplaced:
+			res.Status = arv0.ApplyStatusConfigured
+		case v1alpha1store.UpsertNoOp:
+			res.Status = arv0.ApplyStatusUnchanged
+		}
 	}
-	if store.IsVersionedArtifact() {
-		res.Version = strconv.Itoa(up.Version)
+	if store.IsTaggedArtifact() {
+		res.Tag = up.Tag
 	} else {
 		res.Version = meta.Version
 	}
@@ -238,8 +247,14 @@ func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun
 		}
 	}
 
-	if store.IsVersionedArtifact() {
-		if err := store.DeleteAllVersions(ctx, meta.Namespace, meta.Name); err != nil {
+	if store.IsTaggedArtifact() {
+		var err error
+		if meta.Tag != "" {
+			err = store.Delete(ctx, meta.Namespace, meta.Name, meta.Tag)
+		} else {
+			err = store.DeleteAllTags(ctx, meta.Namespace, meta.Name)
+		}
+		if err != nil {
 			return failResult(res, &applyError{
 				Stage:    stageDelete,
 				Err:      err,

@@ -88,10 +88,10 @@ func ListAllTyped[T v1alpha1.Object](
 	}
 }
 
-// ListVersionsOfName returns every version of one named resource with
-// the latest version first. Wraps GET /v0/{plural}/{name}/versions and
+// ListTagsOfName returns every tag of one named resource with
+// the latest tag first. Wraps GET /v0/{plural}/{name}/tags and
 // materializes each row into a typed envelope.
-func ListVersionsOfName[T v1alpha1.Object](
+func ListTagsOfName[T v1alpha1.Object](
 	ctx context.Context,
 	c *Client,
 	kind, namespace, name string,
@@ -100,7 +100,7 @@ func ListVersionsOfName[T v1alpha1.Object](
 	if c == nil {
 		return nil, fmt.Errorf("client is nil")
 	}
-	rows, err := c.ListVersions(ctx, kind, namespace, name)
+	rows, err := c.ListTags(ctx, kind, namespace, name)
 	if err != nil {
 		return nil, err
 	}
@@ -113,4 +113,15 @@ func ListVersionsOfName[T v1alpha1.Object](
 		out = append(out, obj)
 	}
 	return out, nil
+}
+
+// ListVersionsOfName is a compatibility alias for callers that have not yet
+// renamed to tag terminology.
+func ListVersionsOfName[T v1alpha1.Object](
+	ctx context.Context,
+	c *Client,
+	kind, namespace, name string,
+	newObj func() T,
+) ([]T, error) {
+	return ListTagsOfName(ctx, c, kind, namespace, name, newObj)
 }

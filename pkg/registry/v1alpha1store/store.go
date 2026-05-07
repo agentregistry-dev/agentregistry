@@ -29,12 +29,12 @@ import (
 // Store has two modes, picked at construction time:
 //
 //   - Versioned-artifact mode (the default; produced by NewStore).
-//     Identity is (namespace, name, integer version). Rows are append-only
-//     and the row with MAX(version) for a (namespace, name) is "latest".
-//     Spec is JSONB with a CHAR(64) spec_hash so Upsert recognises an
-//     unchanged spec and short-circuits rather than emitting a redundant
-//     new version. Used for agents, mcp_servers, remote_mcp_servers,
-//     skills, prompts, and providers.
+//     Identity is (namespace, name, tag). Users may supply the tag
+//     declaratively; missing tags are filled with a canonical hash of the
+//     object's spec plus labels/annotations. Re-applying the same tag replaces
+//     the prior row atomically when the content changes. The most recently
+//     applied non-deleted tag is "latest". Used for agents, mcp_servers,
+//     remote_mcp_servers, skills, and prompts.
 //
 //   - Legacy-deployment mode (produced by NewDeploymentStore). Identity is
 //     (namespace, name, string version). Rows are mutable; re-applying
@@ -124,12 +124,9 @@ func NewDeploymentStore(pool *pgxpool.Pool, table string, opts ...StoreOption) *
 	return s
 }
 
-// IsVersionedArtifact reports whether the Store operates in
-// versioned-artifact mode (integer versions, append-only rows). Returns
-// false for the legacy deployments mode. Callers gate URL-path /
-// metadata.version validation on this — versioned-artifact tables
-// require a positive integer; the deployments table accepts any string.
-func (s *Store) IsVersionedArtifact() bool {
+// IsTaggedArtifact reports whether the Store operates in tagged content mode.
+// Returns false for the legacy Provider/Deployment mode.
+func (s *Store) IsTaggedArtifact() bool {
 	return !s.legacy
 }
 
@@ -137,25 +134,21 @@ func (s *Store) IsVersionedArtifact() bool {
 type UpsertOutcome int
 
 const (
-	// UpsertCreated reports that a new immutable version row was inserted —
-	// either because the (namespace, name) had no rows yet, or the incoming
-	// spec hash differed from the latest live row's.
+	// UpsertCreated reports that a new tag row was inserted.
 	UpsertCreated UpsertOutcome = iota
-	// UpsertNoOp reports that the incoming spec matched the latest live row's
-	// hash and labels/annotations were unchanged. No row was written.
+	// UpsertNoOp reports that the incoming content matched the existing row
+	// for the tag. No row was written.
 	UpsertNoOp
-	// UpsertLabelsUpdated reports that the incoming spec matched but
-	// labels and/or annotations differed; the latest row's metadata was
-	// patched in place without bumping the version.
-	UpsertLabelsUpdated
+	// UpsertReplaced reports that an existing tag row was atomically replaced
+	// with new content.
+	UpsertReplaced
 )
 
 // UpsertResult is the outcome of Upsert.
 type UpsertResult struct {
-	// Version is the integer version of the live row after the call. For
-	// versioned-artifact tables this is the row's positive monotonic
-	// version. For the legacy deployments path it is the integer parse of
-	// the supplied string version when possible, else 0.
+	// Tag is the content identity after the call for tagged-artifact tables.
+	Tag string
+	// Version is populated only for the legacy Provider/Deployment path.
 	Version int
 	// Outcome categorises what the call did. See UpsertOutcome constants.
 	Outcome UpsertOutcome
@@ -189,10 +182,10 @@ type ListOpts struct {
 	Limit int
 	// Cursor is an opaque pagination token. Empty starts from the beginning.
 	Cursor string
-	// LatestOnly restricts to the highest-version live row per
-	// (namespace, name). For versioned-artifact tables this resolves via a
-	// MAX(version) filter; for the deployments table it consults the
-	// legacy is_latest_version flag.
+	// LatestOnly restricts to the most recently applied live row per
+	// (namespace, name). For tagged-artifact tables this resolves via
+	// updated_at; for the deployments table it consults the legacy
+	// is_latest_version flag.
 	LatestOnly bool
 	// IncludeTerminating includes rows with deletion_timestamp set. Default
 	// false — callers asking for "alive" rows shouldn't see terminating ones.
@@ -223,26 +216,24 @@ type ListOpts struct {
 }
 
 // listCursor is the opaque pagination position for List. The fields
-// mirror the (namespace, name, version, updated_at) sort order used by
+// mirror the (namespace, name, tag/version, updated_at) sort order used by
 // the underlying query.
 type listCursor struct {
 	Namespace string    `json:"namespace"`
 	Name      string    `json:"name"`
-	Version   string    `json:"version"`
+	Identity  string    `json:"identity"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 // Upsert applies obj into the Store. Behaviour depends on the table's
 // versioning mode:
 //
-//   - Versioned-artifact tables (agents, mcp_servers, etc.) follow
-//     hash-based append-only apply semantics:
-//   - new (namespace, name) → insert at version=1
-//   - same spec_hash as latest live row, same labels+annotations →
-//     no-op, return the latest version
-//   - same spec_hash, different labels or annotations → update labels /
-//     annotations on the latest row in place (no version bump)
-//   - different spec_hash → insert a new row at MAX(version)+1
+//   - Tagged-artifact tables (agents, mcp_servers, etc.) follow
+//     declarative tag semantics:
+//   - missing metadata.tag → default to a canonical sha256 tag
+//   - new (namespace, name, tag) → insert the row
+//   - same tag and same canonical content hash → no-op
+//   - same tag and different content hash → replace the row in place
 //   - The legacy deployments table follows the older
 //     update-in-place semantics: rows are keyed by the caller-supplied
 //     string version and re-applied with the same spec do not bump
@@ -250,9 +241,8 @@ type listCursor struct {
 //
 // Status is never touched by Upsert — use PatchStatus for that.
 //
-// Upsert ignores obj.Metadata.Version on the versioned-artifact path; the
-// version is system-assigned. For the deployments path the metadata.version
-// string IS the row's identity and must be supplied by the caller.
+// Upsert rejects obj.Metadata.Version on the tagged-artifact path; metadata.tag
+// is the identity. For the legacy path, metadata.version is the row identity.
 func (s *Store) Upsert(ctx context.Context, obj v1alpha1.Object) (UpsertResult, error) {
 	if obj == nil {
 		return UpsertResult{}, errors.New("v1alpha1 store: nil object")
@@ -270,16 +260,16 @@ func (s *Store) Upsert(ctx context.Context, obj v1alpha1.Object) (UpsertResult, 
 	}
 
 	if !s.legacy {
-		res, err := s.upsertVersioned(ctx, meta, specJSON)
+		res, err := s.upsertTagged(ctx, meta, specJSON)
 		if err != nil {
 			return res, err
 		}
 		// Fire the audit event AFTER the transaction commits. If the tx
 		// rolls back (err != nil above) the event is suppressed. Branch 2
 		// outcomes (UpsertNoOp, UpsertLabelsUpdated) do not introduce a
-		// new immutable version, so they are not recorded.
+		// new tag row, so they are not recorded.
 		if res.Outcome == UpsertCreated {
-			s.auditor.ResourceVersionCreated(ctx, s.kindFor(obj), meta.Namespace, meta.Name, res.Version)
+			s.auditor.ResourceTagCreated(ctx, s.kindFor(obj), meta.Namespace, meta.Name, res.Tag)
 		}
 		return res, nil
 	}
@@ -297,10 +287,23 @@ func (s *Store) kindFor(obj v1alpha1.Object) string {
 	return obj.GetKind()
 }
 
-// upsertVersioned implements the hash-based append-only apply semantics
-// for versioned-artifact tables. See Upsert for the full state machine.
-func (s *Store) upsertVersioned(ctx context.Context, meta *v1alpha1.ObjectMeta, specJSON json.RawMessage) (UpsertResult, error) {
-	incomingHash := SpecHash(specJSON)
+// upsertTagged implements the hash-based tag apply semantics for tagged
+// artifact tables. See Upsert for the full state machine.
+func (s *Store) upsertTagged(ctx context.Context, meta *v1alpha1.ObjectMeta, specJSON json.RawMessage) (UpsertResult, error) {
+	if meta.Version != "" {
+		return UpsertResult{}, errors.New("v1alpha1 store: content resources use metadata.tag, not metadata.version")
+	}
+	if meta.Tag == "" {
+		tag, err := DefaultTag(meta, specJSON)
+		if err != nil {
+			return UpsertResult{}, fmt.Errorf("v1alpha1 store: default tag: %w", err)
+		}
+		meta.Tag = tag
+	}
+	incomingHash, err := ContentHash(meta, specJSON)
+	if err != nil {
+		return UpsertResult{}, fmt.Errorf("v1alpha1 store: content hash: %w", err)
+	}
 	incomingLabelsJSON, err := canonicalJSONMap(meta.Labels)
 	if err != nil {
 		return UpsertResult{}, fmt.Errorf("v1alpha1 store: marshal labels: %w", err)
@@ -326,22 +329,17 @@ func (s *Store) upsertVersioned(ctx context.Context, meta *v1alpha1.ObjectMeta, 
 		}
 
 		var (
-			latestVersion       int
-			latestHash          string
-			latestLabelsRaw     []byte
-			latestAnnotationRaw []byte
-			latestDeletionTS    pgtype.Timestamptz
-			found               bool
+			existingHash       string
+			existingDeletionTS pgtype.Timestamptz
+			found              bool
 		)
 		err := tx.QueryRow(ctx,
 			fmt.Sprintf(`
-				SELECT version, spec_hash, labels, annotations, deletion_timestamp
+				SELECT content_hash, deletion_timestamp
 				FROM %s
-				WHERE namespace=$1 AND name=$2
-				ORDER BY version DESC
-				LIMIT 1
+				WHERE namespace=$1 AND name=$2 AND tag=$3
 				FOR UPDATE`, s.table),
-			meta.Namespace, meta.Name).Scan(&latestVersion, &latestHash, &latestLabelsRaw, &latestAnnotationRaw, &latestDeletionTS)
+			meta.Namespace, meta.Name, meta.Tag).Scan(&existingHash, &existingDeletionTS)
 		switch {
 		case err == nil:
 			found = true
@@ -353,53 +351,36 @@ func (s *Store) upsertVersioned(ctx context.Context, meta *v1alpha1.ObjectMeta, 
 
 		// Reject mutations on terminating rows. Mirrors Kubernetes:
 		// `kubectl apply` on an object with deletionTimestamp returns 409.
-		if found && latestDeletionTS.Valid {
+		if found && existingDeletionTS.Valid {
 			return ErrTerminating
 		}
 
-		// Branch 1: no prior row → INSERT at version 1.
 		if !found {
 			if _, err := tx.Exec(ctx,
 				fmt.Sprintf(`
-					INSERT INTO %s (namespace, name, version, labels, annotations, spec, spec_hash)
-					VALUES ($1, $2, 1, $3, $4, $5, $6)`, s.table),
-				meta.Namespace, meta.Name, incomingLabelsJSON, incomingAnnotationsJSON, []byte(specJSON), incomingHash); err != nil {
-				return fmt.Errorf("insert v1: %w", err)
+					INSERT INTO %s (namespace, name, tag, labels, annotations, spec, content_hash)
+					VALUES ($1, $2, $3, $4, $5, $6, $7)`, s.table),
+				meta.Namespace, meta.Name, meta.Tag, incomingLabelsJSON, incomingAnnotationsJSON, []byte(specJSON), incomingHash); err != nil {
+				return fmt.Errorf("insert tag: %w", err)
 			}
-			result = UpsertResult{Version: 1, Outcome: UpsertCreated}
+			result = UpsertResult{Tag: meta.Tag, Outcome: UpsertCreated}
 			return nil
 		}
 
-		// Branch 2: spec hash matches the latest live row.
-		if incomingHash == latestHash {
-			labelsEqual := equalJSONMap(latestLabelsRaw, incomingLabelsJSON)
-			annotationsEqual := equalJSONMap(latestAnnotationRaw, incomingAnnotationsJSON)
-			if labelsEqual && annotationsEqual {
-				result = UpsertResult{Version: latestVersion, Outcome: UpsertNoOp}
-				return nil
-			}
-			if _, err := tx.Exec(ctx,
-				fmt.Sprintf(`
-					UPDATE %s
-					SET labels = $4, annotations = $5
-					WHERE namespace = $1 AND name = $2 AND version = $3`, s.table),
-				meta.Namespace, meta.Name, latestVersion, incomingLabelsJSON, incomingAnnotationsJSON); err != nil {
-				return fmt.Errorf("update labels: %w", err)
-			}
-			result = UpsertResult{Version: latestVersion, Outcome: UpsertLabelsUpdated}
+		if incomingHash == existingHash {
+			result = UpsertResult{Tag: meta.Tag, Outcome: UpsertNoOp}
 			return nil
 		}
 
-		// Branch 3: spec hash differs → append a new row at MAX(version)+1.
-		newVersion := latestVersion + 1
 		if _, err := tx.Exec(ctx,
 			fmt.Sprintf(`
-				INSERT INTO %s (namespace, name, version, labels, annotations, spec, spec_hash)
-				VALUES ($1, $2, $3, $4, $5, $6, $7)`, s.table),
-			meta.Namespace, meta.Name, newVersion, incomingLabelsJSON, incomingAnnotationsJSON, []byte(specJSON), incomingHash); err != nil {
-			return fmt.Errorf("insert new version: %w", err)
+				UPDATE %s
+				SET labels=$4, annotations=$5, spec=$6, content_hash=$7, status='{}'::jsonb, deletion_timestamp=NULL
+				WHERE namespace=$1 AND name=$2 AND tag=$3`, s.table),
+			meta.Namespace, meta.Name, meta.Tag, incomingLabelsJSON, incomingAnnotationsJSON, []byte(specJSON), incomingHash); err != nil {
+			return fmt.Errorf("replace tag: %w", err)
 		}
-		result = UpsertResult{Version: newVersion, Outcome: UpsertCreated}
+		result = UpsertResult{Tag: meta.Tag, Outcome: UpsertReplaced}
 		return nil
 	})
 	if err != nil {
@@ -472,7 +453,7 @@ func (s *Store) upsertLegacy(ctx context.Context, meta *v1alpha1.ObjectMeta, spe
 		default:
 			newGen = oldGen
 			if !equalJSONMap(oldLabels, labelsJSON) || !equalJSONMap(oldAnnotations, annotationsJSON) {
-				outcome = UpsertLabelsUpdated
+				outcome = UpsertReplaced
 			} else {
 				outcome = UpsertNoOp
 			}
@@ -528,15 +509,15 @@ type PatchOpts struct {
 // row doesn't exist.
 //
 // Finalizers patching is supported only on the deployments table; the
-// versioned-artifact tables don't carry a finalizers column. Calling
-// PatchFinalizers on a versioned-artifact Store returns an error to
+// tagged-artifact tables don't carry a finalizers column. Calling
+// PatchFinalizers on a tagged-artifact Store returns an error to
 // surface the misconfiguration loudly rather than silently no-op.
 func (s *Store) ApplyPatch(ctx context.Context, namespace, name, version string, patch PatchOpts) error {
 	if patch.Status == nil && patch.Annotations == nil && patch.Finalizers == nil {
 		return nil
 	}
 	if patch.Finalizers != nil && !s.legacy {
-		return errors.New("v1alpha1 store: finalizers patching not supported on versioned-artifact tables")
+		return errors.New("v1alpha1 store: finalizers patching not supported on tagged-artifact tables")
 	}
 	return runInTx(ctx, s.pool, func(tx pgx.Tx) error {
 		statusJSON, annotationsJSON, finalizersJSON, err := s.loadPatchRow(ctx, tx, namespace, name, version)
@@ -573,8 +554,8 @@ func (s *Store) ApplyPatch(ctx context.Context, namespace, name, version string,
 		}
 
 		if _, err := tx.Exec(ctx,
-			fmt.Sprintf(`UPDATE %s SET %s WHERE namespace=$1 AND name=$2 AND version=$3`,
-				s.table, strings.Join(setClauses, ", ")),
+			fmt.Sprintf(`UPDATE %s SET %s WHERE namespace=$1 AND name=$2 AND %s=$3`,
+				s.table, strings.Join(setClauses, ", "), s.identityColumn()),
 			args...); err != nil {
 			return fmt.Errorf("apply patch: %w", err)
 		}
@@ -599,7 +580,7 @@ func (s *Store) loadPatchRow(ctx context.Context, tx pgx.Tx, namespace, name, ve
 		err = tx.QueryRow(ctx,
 			fmt.Sprintf(`
 				SELECT status, annotations FROM %s
-				WHERE namespace=$1 AND name=$2 AND version=$3
+				WHERE namespace=$1 AND name=$2 AND tag=$3
 				FOR UPDATE`, s.table),
 			namespace, name, version,
 		).Scan(&statusJSON, &annotationsJSON)
@@ -687,27 +668,30 @@ func (s *Store) PatchAnnotations(ctx context.Context, namespace, name, version s
 	return s.ApplyPatch(ctx, namespace, name, version, PatchOpts{Annotations: mutate})
 }
 
-// Get returns a single row by (namespace, name, version), including
+// Get returns a single row by (namespace, name, tag/version), including
 // terminating rows. Returns pkgdb.ErrNotFound if missing.
 //
-// version is parsed as an integer for versioned-artifact tables and
-// passed through verbatim for the deployments table.
-func (s *Store) Get(ctx context.Context, namespace, name, version string) (*v1alpha1.RawObject, error) {
-	args, err := s.identityArgs(namespace, name, version)
+// identity is a tag for content tables and version for legacy tables.
+func (s *Store) Get(ctx context.Context, namespace, name, identity string) (*v1alpha1.RawObject, error) {
+	args, err := s.identityArgs(namespace, name, identity)
 	if err != nil {
 		return nil, err
+	}
+	col := "version"
+	if !s.legacy {
+		col = "tag"
 	}
 	row := s.pool.QueryRow(ctx,
 		fmt.Sprintf(`
 			SELECT %s
 			FROM %s
-			WHERE namespace=$1 AND name=$2 AND version=$3`, s.selectColumns(), s.table),
+			WHERE namespace=$1 AND name=$2 AND %s=$3`, s.selectColumns(), s.table, col),
 		args...)
 	return scanRow(row, !s.legacy)
 }
 
-// GetLatest returns the highest-version live row for (namespace, name) on
-// versioned-artifact tables, or the is_latest_version row on the
+// GetLatest returns the most recently applied live tag for (namespace, name) on
+// tagged-artifact tables, or the is_latest_version row on the
 // deployments table. Returns pkgdb.ErrNotFound if no live version exists.
 // Terminating rows are excluded.
 func (s *Store) GetLatest(ctx context.Context, namespace, name string) (*v1alpha1.RawObject, error) {
@@ -717,7 +701,7 @@ func (s *Store) GetLatest(ctx context.Context, namespace, name string) (*v1alpha
 			SELECT %s
 			FROM %s
 			WHERE namespace=$1 AND name=$2 AND deletion_timestamp IS NULL
-			ORDER BY version DESC
+			ORDER BY updated_at DESC, tag DESC
 			LIMIT 1`, s.selectColumns(), s.table)
 	} else {
 		query = fmt.Sprintf(`
@@ -730,13 +714,13 @@ func (s *Store) GetLatest(ctx context.Context, namespace, name string) (*v1alpha
 }
 
 // Delete removes a single row. For deployments, the legacy soft-delete +
-// finalizer drain dance still applies. For versioned-artifact tables,
+// finalizer drain dance still applies. For tagged-artifact tables,
 // rows have no finalizers — Delete sets deletion_timestamp directly so
 // reads filtered on deletion_timestamp IS NULL stop returning the row;
-// PurgeFinalized hard-deletes terminating versioned-artifact rows on a
+// PurgeFinalized hard-deletes terminating tagged-artifact rows on a
 // separate GC pass. Returns pkgdb.ErrNotFound if the row doesn't exist.
-func (s *Store) Delete(ctx context.Context, namespace, name, version string) error {
-	args, err := s.identityArgs(namespace, name, version)
+func (s *Store) Delete(ctx context.Context, namespace, name, identity string) error {
+	args, err := s.identityArgs(namespace, name, identity)
 	if err != nil {
 		return err
 	}
@@ -746,17 +730,17 @@ func (s *Store) Delete(ctx context.Context, namespace, name, version string) err
 	return s.deleteLegacy(ctx, args)
 }
 
-// ListVersions returns every non-deleted version row for (namespace,
-// name), ordered by integer version descending. Versioned-artifact mode
+// ListTags returns every non-deleted tag row for (namespace,
+// name), ordered by most recently applied first. Tagged-artifact mode
 // only — the legacy deployments table doesn't model "list every
-// version of a logical resource" and reports an error.
+// tag of a logical resource" and reports an error.
 //
 // Returns an empty slice (no error) when no rows exist for the
 // identity: list semantics differ from the single-row Get path. The
 // HTTP layer surfaces empty results as 200 with `{"items": []}`.
-func (s *Store) ListVersions(ctx context.Context, namespace, name string) ([]*v1alpha1.RawObject, error) {
+func (s *Store) ListTags(ctx context.Context, namespace, name string) ([]*v1alpha1.RawObject, error) {
 	if s.legacy {
-		return nil, errors.New("v1alpha1 store: ListVersions is not supported on the legacy deployments table")
+		return nil, errors.New("v1alpha1 store: ListTags is not supported on the legacy deployments table")
 	}
 	if namespace == "" || name == "" {
 		return nil, errors.New("v1alpha1 store: namespace and name are required")
@@ -766,10 +750,10 @@ func (s *Store) ListVersions(ctx context.Context, namespace, name string) ([]*v1
 			SELECT %s
 			FROM %s
 			WHERE namespace=$1 AND name=$2 AND deletion_timestamp IS NULL
-			ORDER BY version DESC`, s.selectColumns(), s.table),
+			ORDER BY updated_at DESC, tag DESC`, s.selectColumns(), s.table),
 		namespace, name)
 	if err != nil {
-		return nil, fmt.Errorf("list versions: %w", err)
+		return nil, fmt.Errorf("list tags: %w", err)
 	}
 	defer rows.Close()
 
@@ -787,21 +771,18 @@ func (s *Store) ListVersions(ctx context.Context, namespace, name string) ([]*v1
 	return out, nil
 }
 
-// DeleteAllVersions hard-deletes every version row for (namespace, name)
-// on a versioned-artifact table — the (ns, name) identity is freed
-// entirely so the next apply starts at v1. This is the contract of the
+// DeleteAllTags hard-deletes every tag row for (namespace, name)
+// on a tagged-artifact table. This is the contract of the
 // batch DELETE endpoint: identity is logical, callers cannot pin it to
-// a single integer version. Per-version soft-delete tracking is
-// unnecessary in versioned-artifact mode because every spec change
-// already produces a fresh immutable row. Returns pkgdb.ErrNotFound
+// a single tag unless they include metadata.tag. Returns pkgdb.ErrNotFound
 // when no row exists for (namespace, name).
 //
 // Calling on the legacy deployments Store is a programming error; the
 // per-kind Store hands deployment to the single-version Delete path
 // instead.
-func (s *Store) DeleteAllVersions(ctx context.Context, namespace, name string) error {
+func (s *Store) DeleteAllTags(ctx context.Context, namespace, name string) error {
 	if s.legacy {
-		return errors.New("v1alpha1 store: DeleteAllVersions is not supported on the legacy deployments table")
+		return errors.New("v1alpha1 store: DeleteAllTags is not supported on the legacy deployments table")
 	}
 	if namespace == "" || name == "" {
 		return errors.New("v1alpha1 store: namespace and name are required")
@@ -812,7 +793,7 @@ func (s *Store) DeleteAllVersions(ctx context.Context, namespace, name string) e
 			WHERE namespace=$1 AND name=$2`, s.table),
 		namespace, name)
 	if err != nil {
-		return fmt.Errorf("delete all versions: %w", err)
+		return fmt.Errorf("delete all tags: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return pkgdb.ErrNotFound
@@ -827,7 +808,7 @@ func (s *Store) deleteVersioned(ctx context.Context, args []any) error {
 			fmt.Sprintf(`
 				SELECT deletion_timestamp
 				FROM %s
-				WHERE namespace=$1 AND name=$2 AND version=$3
+				WHERE namespace=$1 AND name=$2 AND tag=$3
 				FOR UPDATE`, s.table),
 			args...).Scan(&deletionTS)
 		if err != nil {
@@ -837,12 +818,12 @@ func (s *Store) deleteVersioned(ctx context.Context, args []any) error {
 			return fmt.Errorf("load row: %w", err)
 		}
 
-		// Versioned-artifact tables have no finalizers — hard-delete
+		// Tagged-artifact tables have no finalizers — hard-delete
 		// immediately. This matches the OSS fast-path for finalizer-free
 		// rows: `arctl delete X` then `arctl apply X` works without any
 		// background GC.
 		if _, err := tx.Exec(ctx,
-			fmt.Sprintf(`DELETE FROM %s WHERE namespace=$1 AND name=$2 AND version=$3`, s.table),
+			fmt.Sprintf(`DELETE FROM %s WHERE namespace=$1 AND name=$2 AND tag=$3`, s.table),
 			args...); err != nil {
 			return fmt.Errorf("hard delete: %w", err)
 		}
@@ -911,7 +892,7 @@ func jsonArrayNonEmpty(raw []byte) (bool, error) {
 }
 
 // PurgeFinalized hard-deletes terminating rows. For deployments this
-// requires finalizers to be empty; for versioned-artifact tables there is
+// requires finalizers to be empty; for tagged-artifact tables there is
 // no finalizers column, so any row past deletion_timestamp is purged.
 // Returns the number of rows purged.
 func (s *Store) PurgeFinalized(ctx context.Context) (int64, error) {
@@ -932,7 +913,7 @@ func (s *Store) PurgeFinalized(ctx context.Context) (int64, error) {
 }
 
 // List returns rows filtered by opts, ordered by (namespace, name,
-// version) ASC with updated_at as a stable tiebreaker. Pagination cursor
+// tag/version) ASC with updated_at as a stable tiebreaker. Pagination cursor
 // is returned when more rows are available; pass it back via
 // ListOpts.Cursor to continue. Terminating rows are excluded unless
 // IncludeTerminating is true.
@@ -951,11 +932,9 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 	}
 	if opts.LatestOnly {
 		if !s.legacy {
-			// Pick the row with MAX(version) per (namespace, name) via a
-			// correlated subquery; the (namespace, name, version DESC)
-			// index serves the lookup efficiently.
+			// Pick the most recently applied live tag per (namespace, name).
 			where = append(where, fmt.Sprintf(
-				"version = (SELECT MAX(version) FROM %s sub WHERE sub.namespace = %s.namespace AND sub.name = %s.name AND sub.deletion_timestamp IS NULL)",
+				"updated_at = (SELECT MAX(updated_at) FROM %s sub WHERE sub.namespace = %s.namespace AND sub.name = %s.name AND sub.deletion_timestamp IS NULL)",
 				s.table, s.table, s.table))
 		} else {
 			where = append(where, "is_latest_version")
@@ -977,16 +956,14 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 		if err != nil {
 			return nil, "", err
 		}
-		// Order by stable identity (namespace, name, version) first so a
+		// Order by stable identity (namespace, name, tag/version) first so a
 		// row's updated_at changing under a concurrent PatchStatus does
 		// not let it skip across pages.
-		cursorVersion, err := s.cursorVersionArg(cursor.Version)
-		if err != nil {
-			return nil, "", err
-		}
-		args = append(args, cursor.Namespace, cursor.Name, cursorVersion, cursor.UpdatedAt)
+		args = append(args, cursor.Namespace, cursor.Name, cursor.Identity, cursor.UpdatedAt)
+		idCol := s.identityColumn()
 		where = append(where, fmt.Sprintf(
-			"(namespace, name, version, updated_at) > ($%d, $%d, $%d, $%d)",
+			"(namespace, name, %s, updated_at) > ($%d, $%d, $%d, $%d)",
+			idCol,
 			len(args)-3, len(args)-2, len(args)-1, len(args),
 		))
 	}
@@ -1011,7 +988,7 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 		query += " WHERE " + strings.Join(where, " AND ")
 	}
 	args = append(args, limit+1)
-	query += fmt.Sprintf(" ORDER BY namespace, name, version, updated_at LIMIT $%d", len(args))
+	query += fmt.Sprintf(" ORDER BY namespace, name, %s, updated_at LIMIT $%d", s.identityColumn(), len(args))
 
 	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
@@ -1087,7 +1064,7 @@ func decodeListCursor(token string) (listCursor, error) {
 	if err := json.Unmarshal(raw, &cursor); err != nil {
 		return listCursor{}, fmt.Errorf("%w: decode payload: %v", ErrInvalidCursor, err)
 	}
-	if cursor.UpdatedAt.IsZero() || cursor.Namespace == "" || cursor.Name == "" || cursor.Version == "" {
+	if cursor.UpdatedAt.IsZero() || cursor.Namespace == "" || cursor.Name == "" || cursor.Identity == "" {
 		return listCursor{}, fmt.Errorf("%w: missing position fields", ErrInvalidCursor)
 	}
 	return cursor, nil
@@ -1101,9 +1078,12 @@ func encodeListCursor(obj *v1alpha1.RawObject) (string, error) {
 		UpdatedAt: obj.Metadata.UpdatedAt,
 		Namespace: obj.Metadata.Namespace,
 		Name:      obj.Metadata.Name,
-		Version:   obj.Metadata.Version,
+		Identity:  obj.Metadata.Version,
 	}
-	if cursor.UpdatedAt.IsZero() || cursor.Namespace == "" || cursor.Name == "" || cursor.Version == "" {
+	if obj.Metadata.Tag != "" {
+		cursor.Identity = obj.Metadata.Tag
+	}
+	if cursor.UpdatedAt.IsZero() || cursor.Namespace == "" || cursor.Name == "" || cursor.Identity == "" {
 		return "", errors.New("missing row position")
 	}
 	payload, err := json.Marshal(cursor)
@@ -1142,7 +1122,7 @@ func (s *Store) FindReferrers(ctx context.Context, pathJSON json.RawMessage, opt
 	}
 	if opts.LatestOnly {
 		if !s.legacy {
-			query += fmt.Sprintf(" AND version = (SELECT MAX(version) FROM %s sub WHERE sub.namespace = %s.namespace AND sub.name = %s.name AND sub.deletion_timestamp IS NULL)",
+			query += fmt.Sprintf(" AND updated_at = (SELECT MAX(updated_at) FROM %s sub WHERE sub.namespace = %s.namespace AND sub.name = %s.name AND sub.deletion_timestamp IS NULL)",
 				s.table, s.table, s.table)
 		} else {
 			query += " AND is_latest_version"
@@ -1168,8 +1148,8 @@ func (s *Store) FindReferrers(ctx context.Context, pathJSON json.RawMessage, opt
 }
 
 // recomputeLatestDeployments recomputes is_latest_version for the
-// deployments table only. Versioned-artifact tables have no
-// is_latest_version column — latest is MAX(version).
+// deployments table only. Tagged-artifact tables have no
+// is_latest_version column — latest is updated_at ordering.
 func (s *Store) recomputeLatestDeployments(ctx context.Context, tx pgx.Tx, namespace, name string) error {
 	if !s.legacy {
 		return nil
@@ -1209,41 +1189,31 @@ func (s *Store) recomputeLatestDeployments(ctx context.Context, tx pgx.Tx, names
 
 // selectColumns returns the column list emitted by Get/List/FindReferrers
 // queries. Deployments include legacy generation/finalizers columns;
-// versioned-artifact tables emit synthetic placeholders for them so
+// tagged-artifact tables emit synthetic placeholders for them so
 // scanRow's column layout stays uniform.
 func (s *Store) selectColumns() string {
 	if !s.legacy {
-		return `namespace, name, version, 0::bigint AS generation, labels, annotations, spec, status,
+		return `namespace, name, tag, 0::bigint AS generation, labels, annotations, spec, status,
 		       deletion_timestamp, '[]'::jsonb AS finalizers, created_at, updated_at`
 	}
 	return `namespace, name, version, generation, labels, annotations, spec, status,
 		       deletion_timestamp, finalizers, created_at, updated_at`
 }
 
-// identityArgs converts (ns, name, version) into the bind args used by
-// per-row queries. For versioned-artifact tables version is parsed to int.
-func (s *Store) identityArgs(namespace, name, version string) ([]any, error) {
-	if !s.legacy {
-		v, err := strconv.Atoi(version)
-		if err != nil || v <= 0 {
-			return nil, fmt.Errorf("v1alpha1 store: invalid integer version %q for table %s", version, s.table)
-		}
-		return []any{namespace, name, v}, nil
+// identityArgs converts (ns, name, tag/version) into the bind args used by
+// per-row queries.
+func (s *Store) identityArgs(namespace, name, identity string) ([]any, error) {
+	if identity == "" {
+		return nil, fmt.Errorf("v1alpha1 store: identity is required for table %s", s.table)
 	}
-	return []any{namespace, name, version}, nil
+	return []any{namespace, name, identity}, nil
 }
 
-// cursorVersionArg parses a cursor's version field into the right SQL
-// type for the Store's table.
-func (s *Store) cursorVersionArg(version string) (any, error) {
+func (s *Store) identityColumn() string {
 	if !s.legacy {
-		v, err := strconv.Atoi(version)
-		if err != nil || v <= 0 {
-			return nil, fmt.Errorf("%w: cursor version %q is not a positive integer", ErrInvalidCursor, version)
-		}
-		return v, nil
+		return "tag"
 	}
-	return version, nil
+	return "version"
 }
 
 // canonicalJSONMap renders m to canonical JSON suitable for an

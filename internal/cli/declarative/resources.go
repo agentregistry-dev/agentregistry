@@ -216,7 +216,7 @@ func agentRow(agent *v1alpha1.Agent) []string {
 	}
 	return []string{
 		printer.TruncateString(agent.Metadata.Name, 40),
-		agent.Metadata.Version,
+		agent.Metadata.Tag,
 		printer.EmptyValueOrDefault(agent.Spec.Framework, "<none>"),
 		printer.EmptyValueOrDefault(agent.Spec.Language, "<none>"),
 		printer.EmptyValueOrDefault(agent.Spec.ModelProvider, "<none>"),
@@ -230,7 +230,7 @@ func mcpRow(server *v1alpha1.MCPServer) []string {
 	}
 	return []string{
 		printer.TruncateString(server.Metadata.Name, 40),
-		server.Metadata.Version,
+		server.Metadata.Tag,
 		printer.TruncateString(printer.EmptyValueOrDefault(server.Spec.Description, "<none>"), 60),
 	}
 }
@@ -241,7 +241,7 @@ func skillRow(skill *v1alpha1.Skill) []string {
 	}
 	return []string{
 		printer.TruncateString(skill.Metadata.Name, 40),
-		skill.Metadata.Version,
+		skill.Metadata.Tag,
 		printer.TruncateString(printer.EmptyValueOrDefault(skill.Spec.Description, "<none>"), 60),
 	}
 }
@@ -252,7 +252,7 @@ func promptRow(prompt *v1alpha1.Prompt) []string {
 	}
 	return []string{
 		printer.TruncateString(prompt.Metadata.Name, 40),
-		prompt.Metadata.Version,
+		prompt.Metadata.Tag,
 		printer.TruncateString(printer.EmptyValueOrDefault(prompt.Spec.Description, "<none>"), 60),
 	}
 }
@@ -270,7 +270,7 @@ func remoteMCPServerRow(r *v1alpha1.RemoteMCPServer) []string {
 	}
 	return []string{
 		printer.TruncateString(r.Metadata.Name, 40),
-		r.Metadata.Version,
+		r.Metadata.Tag,
 		printer.EmptyValueOrDefault(r.Spec.Remote.Type, "<none>"),
 		printer.TruncateString(printer.EmptyValueOrDefault(r.Spec.Remote.URL, "<none>"), 60),
 	}

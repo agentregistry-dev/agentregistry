@@ -4,9 +4,9 @@
 --   v1alpha1.remote_mcp_servers — peer of v1alpha1.mcp_servers, points at a
 --                                 running MCP endpoint (no lifecycle).
 --
--- Schema mirrors the other versioned-artifact tables in 001: integer
--- monotonic version, SHA-256 spec_hash, append-only Upsert. The same
--- (namespace, name, version DESC) index serves "latest live row" queries.
+-- Schema mirrors the other tagged-artifact tables in 001: tag string,
+-- SHA-256 content_hash, replace-on-same-tag Upsert. The same (namespace,
+-- name, updated_at DESC, tag) index serves "latest live row" queries.
 --
 -- This migration only creates the table. Existing pre-v1alpha1 demo data is
 -- intentionally not translated; operators should start this API shape from a
@@ -15,18 +15,18 @@
 CREATE TABLE IF NOT EXISTS v1alpha1.remote_mcp_servers (
     namespace          VARCHAR(255) NOT NULL,
     name               VARCHAR(255) NOT NULL,
-    version            INTEGER      NOT NULL CHECK (version > 0),
+    tag                VARCHAR(255) NOT NULL,
     labels             JSONB        NOT NULL DEFAULT '{}'::jsonb,
     annotations        JSONB        NOT NULL DEFAULT '{}'::jsonb,
     spec               JSONB        NOT NULL,
-    spec_hash          CHAR(64)     NOT NULL,
+    content_hash       CHAR(64)     NOT NULL,
     status             JSONB        NOT NULL DEFAULT '{}'::jsonb,
     created_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     deletion_timestamp TIMESTAMPTZ,
-    PRIMARY KEY (namespace, name, version)
+    PRIMARY KEY (namespace, name, tag)
 );
-CREATE INDEX IF NOT EXISTS v1alpha1_remote_mcp_servers_name_version_desc ON v1alpha1.remote_mcp_servers (namespace, name, version DESC);
+CREATE INDEX IF NOT EXISTS v1alpha1_remote_mcp_servers_name_tag_updated_desc ON v1alpha1.remote_mcp_servers (namespace, name, updated_at DESC, tag);
 CREATE INDEX IF NOT EXISTS v1alpha1_remote_mcp_servers_labels_gin        ON v1alpha1.remote_mcp_servers USING GIN (labels);
 CREATE INDEX IF NOT EXISTS v1alpha1_remote_mcp_servers_spec_gin          ON v1alpha1.remote_mcp_servers USING GIN (spec jsonb_path_ops);
 CREATE INDEX IF NOT EXISTS v1alpha1_remote_mcp_servers_updated_at_desc   ON v1alpha1.remote_mcp_servers (updated_at DESC);

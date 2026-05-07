@@ -3,7 +3,6 @@ package resource
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
@@ -20,6 +19,7 @@ type applyOpts struct {
 	Resolver          v1alpha1.ResolverFunc
 	RegistryValidator v1alpha1.RegistryValidatorFunc
 	PostUpsert        func(ctx context.Context, obj v1alpha1.Object) error
+	CreateStager      func(ctx context.Context, in CreateStagerInput) (CreateStagerResult, error)
 }
 
 // upsertResult is the outcome of a successful applyCore call.
@@ -27,10 +27,35 @@ type upsertResult struct {
 	// Outcome categorises what the underlying Store.Upsert did. Callers
 	// map this onto their wire status (ApplyStatusCreated, etc.).
 	Outcome v1alpha1store.UpsertOutcome
-	// Version is the integer version of the row after the apply. The
-	// PUT handler uses this for the read-back URL; the batch handler
-	// returns it on the per-document ApplyResult.
+	// Tag is the content tag after apply for tagged artifact stores.
+	Tag string
+	// Version is used only by legacy Provider/Deployment stores.
 	Version int
+	// Staged means a CreateStager handled the object outside production
+	// storage and no production upsert was attempted.
+	Staged bool
+}
+
+// CreateStagerInput is handed to an optional enterprise create-approval
+// hook after auth/validation/ref checks and before production Upsert.
+// The hook may inspect the production Store to decide whether this apply
+// is a create and, if policy requires it, persist the object somewhere
+// outside the production v1alpha1 table.
+type CreateStagerInput struct {
+	Kind      string
+	Namespace string
+	Name      string
+	Tag       string
+	Version   string
+	Object    v1alpha1.Object
+	Store     *v1alpha1store.Store
+}
+
+// CreateStagerResult reports whether the hook handled the apply by
+// staging it. When Staged is true, applyCore short-circuits before the
+// production Upsert and does not run PostUpsert.
+type CreateStagerResult struct {
+	Staged bool
 }
 
 // applyStage tags which step of the pipeline produced an error so
@@ -43,6 +68,7 @@ const (
 	stageValidation applyStage = "validation"
 	stageRefs       applyStage = "refs"
 	stageRegistries applyStage = "registries"
+	stageApproval   applyStage = "approval"
 	stageMarshal    applyStage = "marshal"
 	stageUpsert     applyStage = "upsert"
 	stagePostUpsert applyStage = "post-upsert"
@@ -94,11 +120,12 @@ func applyCore(
 	// reaches Upsert with a non-empty meta.Version where the legacy
 	// path needs it.
 	v1alpha1.DefaultMetadataVersionIfMissing(obj)
+	meta = obj.GetMetadata()
 
 	if opts.Authorize != nil {
 		if err := opts.Authorize(ctx, AuthorizeInput{
 			Verb: "apply", Kind: kind,
-			Namespace: meta.Namespace, Name: meta.Name, Version: meta.Version,
+			Namespace: meta.Namespace, Name: meta.Name, Tag: meta.Tag, Version: meta.Version,
 			Object: obj,
 		}); err != nil {
 			return upsertResult{}, &applyError{Stage: stageAuth, Err: err}
@@ -115,8 +142,39 @@ func applyCore(
 		return upsertResult{}, &applyError{Stage: stageRegistries, Err: err}
 	}
 
+	if store.IsTaggedArtifact() && meta.Tag == "" {
+		spec, err := obj.MarshalSpec()
+		if err != nil {
+			return upsertResult{}, &applyError{Stage: stageMarshal, Err: err}
+		}
+		tag, err := v1alpha1store.DefaultTag(meta, spec)
+		if err != nil {
+			return upsertResult{}, &applyError{Stage: stageMarshal, Err: err}
+		}
+		meta.Tag = tag
+		obj.SetMetadata(*meta)
+	}
+
 	if dryRun {
 		return upsertResult{}, nil
+	}
+
+	if opts.CreateStager != nil {
+		staged, err := opts.CreateStager(ctx, CreateStagerInput{
+			Kind:      kind,
+			Namespace: meta.Namespace,
+			Name:      meta.Name,
+			Tag:       meta.Tag,
+			Version:   meta.Version,
+			Object:    obj,
+			Store:     store,
+		})
+		if err != nil {
+			return upsertResult{}, &applyError{Stage: stageApproval, Err: err}
+		}
+		if staged.Staged {
+			return upsertResult{Tag: meta.Tag, Version: parseLegacyVersion(meta.Version), Staged: true}, nil
+		}
 	}
 
 	up, err := store.Upsert(ctx, obj)
@@ -129,18 +187,8 @@ func applyCore(
 	}
 	res := upsertResult{
 		Outcome: up.Outcome,
+		Tag:     up.Tag,
 		Version: up.Version,
-	}
-
-	// Stamp the freshly-assigned version onto the response body so the
-	// PUT handler's read-back picks the integer version the Store
-	// actually wrote rather than whatever the caller supplied via the
-	// URL path — versioned-artifact tables ignore the caller version
-	// on the upsert path. Status.Version is the canonical surface for
-	// the system-assigned integer; write it through Marshal/Unmarshal
-	// so any other status fields the caller already set survive.
-	if err := stampStatusVersion(obj, up.Version); err != nil {
-		return res, &applyError{Stage: stagePostUpsert, Err: err}
 	}
 
 	if opts.PostUpsert != nil {
@@ -151,22 +199,15 @@ func applyCore(
 	return res, nil
 }
 
-// stampStatusVersion sets Status.Version on obj to v while preserving
-// any other status fields. Used after Upsert so the wire response
-// reflects the integer version the Store assigned.
-func stampStatusVersion(obj v1alpha1.Object, v int) error {
-	current, err := obj.MarshalStatus()
-	if err != nil {
-		return fmt.Errorf("marshal status: %w", err)
+func parseLegacyVersion(version string) int {
+	var out int
+	for _, r := range version {
+		if r < '0' || r > '9' {
+			return 0
+		}
+		out = out*10 + int(r-'0')
 	}
-	patched, err := v1alpha1.SetStatusVersionBytes(current, v)
-	if err != nil {
-		return fmt.Errorf("set status.version: %w", err)
-	}
-	if err := obj.UnmarshalStatus(patched); err != nil {
-		return fmt.Errorf("apply status: %w", err)
-	}
-	return nil
+	return out
 }
 
 // deleteOpts threads the per-kind dependencies into deleteCore. As with
@@ -181,7 +222,7 @@ type deleteOpts struct {
 }
 
 // deleteCore runs Authorize → Store.Delete → PostDelete for a single
-// (kind, namespace, name, version) tuple. Validation is intentionally
+// (kind, namespace, name, tag/version) tuple. Validation is intentionally
 // skipped — deleting a row should not require its spec to validate.
 //
 // Returns NotFound=true on the missing-row case so callers can map it

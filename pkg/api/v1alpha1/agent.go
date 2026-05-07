@@ -28,8 +28,8 @@ type AgentSpec struct {
 	Source *AgentSource `json:"source,omitempty" yaml:"source,omitempty"`
 
 	// References to top-level resources. Each entry's Kind must match the
-	// field name's singular form (MCPServer, Skill, Prompt). Version empty
-	// means "resolve latest at reference time".
+	// field name's singular form (MCPServer, Skill, Prompt). Tag empty means
+	// "resolve latest at reference time".
 	MCPServers []ResourceRef `json:"mcpServers,omitempty" yaml:"mcpServers,omitempty"`
 	Skills     []ResourceRef `json:"skills,omitempty" yaml:"skills,omitempty"`
 	Prompts    []ResourceRef `json:"prompts,omitempty" yaml:"prompts,omitempty"`

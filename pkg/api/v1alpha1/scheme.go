@@ -144,11 +144,9 @@ func (s *Scheme) Decode(data []byte) (any, error) {
 	return obj, nil
 }
 
-// IsContentRegistryKind reports whether a kind belongs to the
-// content-registry bucket (versioned, immutable, system-assigned
-// integer version). Infra/config kinds (Provider, Deployment, etc.)
-// keep their main legacy shape and accept user-supplied
-// metadata.version / metadata.generation.
+// IsContentRegistryKind reports whether a kind belongs to the tagged
+// content-registry bucket. Infra/config kinds (Provider, Deployment, etc.)
+// keep their legacy shape and accept user-supplied metadata.version.
 func IsContentRegistryKind(kind string) bool {
 	switch kind {
 	case KindAgent, KindMCPServer, KindRemoteMCPServer, KindSkill, KindPrompt:
@@ -158,14 +156,9 @@ func IsContentRegistryKind(kind string) bool {
 	}
 }
 
-// rejectSystemMetadata fails the decode when a content-registry
-// manifest sets fields that are server-assigned. Without this,
-// callers writing `metadata.version: "5"` would assume their value
-// influences the stored row even though the system overwrites it
-// with the MAX(version)+1 it picked. metadata.generation has the
-// same problem (always derived). Surface it as an error at decode
-// time so users can't accidentally encode system state into
-// manifests.
+// rejectSystemMetadata fails the decode when a content-registry manifest sets
+// fields that are not part of the tagged declarative contract. Users choose
+// metadata.tag; metadata.version/generation are legacy or server-owned fields.
 //
 // Infra/config kinds (Provider, Deployment, etc.) keep their legacy
 // shape and accept user-supplied metadata.version /
@@ -184,7 +177,7 @@ func rejectSystemMetadata(data []byte) error {
 		return nil
 	}
 	if _, ok := raw.Metadata["version"]; ok {
-		return errors.New("v1alpha1: metadata.version is system-assigned; remove it from your manifest")
+		return errors.New("v1alpha1: content resources use metadata.tag; remove metadata.version from your manifest")
 	}
 	if _, ok := raw.Metadata["generation"]; ok {
 		return errors.New("v1alpha1: metadata.generation is system-managed; remove it from your manifest")

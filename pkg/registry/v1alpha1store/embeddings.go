@@ -227,12 +227,11 @@ func (s *Store) SemanticList(ctx context.Context, opts SemanticListOpts) ([]sema
 
 // scanSemanticRow is scanRow + one trailing float column for the distance
 // score. Kept separate so the regular Get/List paths don't take a hit.
-func scanSemanticRow(rows pgx.Rows, versioned bool) (*v1alpha1.RawObject, float32, error) {
+func scanSemanticRow(rows pgx.Rows, tagged bool) (*v1alpha1.RawObject, float32, error) {
 	var (
 		namespace         string
 		name              string
-		versionInt        int
-		versionStr        string
+		identity          string
 		generation        int64
 		labelsJSON        []byte
 		annotationsJSON   []byte
@@ -245,14 +244,8 @@ func scanSemanticRow(rows pgx.Rows, versioned bool) (*v1alpha1.RawObject, float3
 		score             float32
 	)
 
-	var versionDest any
-	if versioned {
-		versionDest = &versionInt
-	} else {
-		versionDest = &versionStr
-	}
 	if err := rows.Scan(
-		&namespace, &name, versionDest, &generation,
+		&namespace, &name, &identity, &generation,
 		&labelsJSON, &annotationsJSON, &specJSON, &statusJSON,
 		&deletionTimestamp, &finalizersJSON,
 		&createdAt, &updatedAt,
@@ -262,8 +255,8 @@ func scanSemanticRow(rows pgx.Rows, versioned bool) (*v1alpha1.RawObject, float3
 	}
 
 	obj, err := decodeRow(
-		versioned,
-		namespace, name, versionInt, versionStr,
+		tagged,
+		namespace, name, identity,
 		labelsJSON, annotationsJSON, specJSON, statusJSON,
 		deletionTimestamp, finalizersJSON, createdAt, updatedAt,
 	)

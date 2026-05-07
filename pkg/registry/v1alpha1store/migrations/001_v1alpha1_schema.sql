@@ -1,15 +1,13 @@
 -- v1alpha1 schema: every resource uses the same envelope (apiVersion +
 -- metadata + spec + status). Metadata fields are promoted to real columns;
--- spec and status stay JSONB. (namespace, name, version) is the composite
--- primary key for every kind.
+-- spec and status stay JSONB. Content resources use (namespace, name, tag);
+-- Provider and Deployment keep legacy (namespace, name, version).
 --
--- Versioned-artifact tables (agents, mcp_servers, remote_mcp_servers,
--- skills, prompts) are append-only with system-assigned monotonic
--- INTEGER versions. Each row carries a SHA-256 spec_hash so Upsert can
--- recognise an unchanged spec and skip emitting a new version. "Latest"
--- is computed as MAX(version) over the live rows for a (namespace,
--- name); the per-table (namespace, name, version DESC) index serves
--- that lookup.
+-- Tagged-artifact tables (agents, mcp_servers, remote_mcp_servers, skills,
+-- prompts) store one mutable row per tag. The store fills omitted tags with a
+-- canonical SHA-256 hash of spec plus labels/annotations, and same-tag applies
+-- replace the prior row atomically. "Latest" is the most recently applied live
+-- tag for a (namespace, name).
 --
 -- Providers and Deployments are not versioned-artifact rows — they're
 -- infra/lifecycle state and keep the older string-version shape (out of
@@ -47,7 +45,7 @@ $$ LANGUAGE plpgsql;
 -- reconcilers subscribe to status-only events so they observe reconciliation
 -- convergence without being woken up by idempotent re-applies.
 --
--- Payload: {"op": "INSERT|UPDATE|DELETE", "id": "<namespace>/<name>/<version>"}
+-- Payload: {"op": "INSERT|UPDATE|DELETE", "id": "<namespace>/<name>/<tag-or-version>"}
 CREATE OR REPLACE FUNCTION v1alpha1.notify_status_change()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -61,7 +59,7 @@ BEGIN
         op := 'DELETE';
         payload := json_build_object(
             'op', op,
-            'id', OLD.namespace || '/' || OLD.name || '/' || OLD.version);
+            'id', OLD.namespace || '/' || OLD.name || '/' || COALESCE(to_jsonb(OLD)->>'tag', to_jsonb(OLD)->>'version'));
         PERFORM pg_notify(channel, payload::text);
         RETURN OLD;
     ELSE
@@ -72,52 +70,49 @@ BEGIN
     END IF;
     payload := json_build_object(
         'op', op,
-        'id', NEW.namespace || '/' || NEW.name || '/' || NEW.version);
+        'id', NEW.namespace || '/' || NEW.name || '/' || COALESCE(to_jsonb(NEW)->>'tag', to_jsonb(NEW)->>'version'));
     PERFORM pg_notify(channel, payload::text);
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
 -- -----------------------------------------------------------------------------
--- Versioned-artifact tables: identical shape across agents, mcp_servers,
+-- Tagged-artifact tables: identical shape across agents, mcp_servers,
 -- skills, prompts. (remote_mcp_servers shares the shape and is created
 -- in 005_remote_resources.sql.)
 --
 -- Columns:
---   namespace, name, version   — composite identity (PK); version is a
---                                positive integer assigned by the store on
---                                Upsert (MAX(version)+1).
+--   namespace, name, tag        — composite identity (PK).
 --   labels, annotations        — user-set key/value JSONB
 --   spec                       — JSONB per pkg/api/v1alpha1 typed Spec
---   spec_hash                  — SHA-256 hex of the canonical-JSON spec;
+--   content_hash               — SHA-256 hex of spec plus relevant metadata;
 --                                Upsert short-circuits when the incoming
---                                hash matches the latest live row's hash.
---   status                     — JSONB per v1alpha1.Status (Status.Version
---                                mirrors the row's version column).
+--                                hash matches the existing tag row's hash.
+--   status                     — JSONB per v1alpha1.Status.
 --   deletion_timestamp         — server-managed soft-delete marker
 --   created_at, updated_at     — timestamps (trigger-maintained)
 --
 -- Indexes:
---   PK (namespace, name, version) supports per-version lookups.
---   (namespace, name, version DESC) serves "give me the latest live row"
---   queries (MAX(version) + ORDER BY version DESC LIMIT 1).
+--   PK (namespace, name, tag) supports per-tag lookups.
+--   (namespace, name, updated_at DESC, tag) serves "give me the latest live row"
+--   queries (ORDER BY updated_at DESC, tag DESC LIMIT 1).
 -- -----------------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS v1alpha1.agents (
     namespace          VARCHAR(255) NOT NULL,
     name               VARCHAR(255) NOT NULL,
-    version            INTEGER      NOT NULL CHECK (version > 0),
+    tag                VARCHAR(255) NOT NULL,
     labels             JSONB        NOT NULL DEFAULT '{}'::jsonb,
     annotations        JSONB        NOT NULL DEFAULT '{}'::jsonb,
     spec               JSONB        NOT NULL,
-    spec_hash          CHAR(64)     NOT NULL,
+    content_hash       CHAR(64)     NOT NULL,
     status             JSONB        NOT NULL DEFAULT '{}'::jsonb,
     created_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     deletion_timestamp TIMESTAMPTZ,
-    PRIMARY KEY (namespace, name, version)
+    PRIMARY KEY (namespace, name, tag)
 );
-CREATE INDEX IF NOT EXISTS v1alpha1_agents_name_version_desc ON v1alpha1.agents (namespace, name, version DESC);
+CREATE INDEX IF NOT EXISTS v1alpha1_agents_name_tag_updated_desc ON v1alpha1.agents (namespace, name, updated_at DESC, tag);
 CREATE INDEX IF NOT EXISTS v1alpha1_agents_labels_gin        ON v1alpha1.agents USING GIN (labels);
 CREATE INDEX IF NOT EXISTS v1alpha1_agents_spec_gin          ON v1alpha1.agents USING GIN (spec jsonb_path_ops);
 CREATE INDEX IF NOT EXISTS v1alpha1_agents_updated_at_desc   ON v1alpha1.agents (updated_at DESC);
@@ -129,18 +124,18 @@ CREATE OR REPLACE TRIGGER agents_notify_status   AFTER  INSERT OR UPDATE OR DELE
 CREATE TABLE IF NOT EXISTS v1alpha1.mcp_servers (
     namespace          VARCHAR(255) NOT NULL,
     name               VARCHAR(255) NOT NULL,
-    version            INTEGER      NOT NULL CHECK (version > 0),
+    tag                VARCHAR(255) NOT NULL,
     labels             JSONB        NOT NULL DEFAULT '{}'::jsonb,
     annotations        JSONB        NOT NULL DEFAULT '{}'::jsonb,
     spec               JSONB        NOT NULL,
-    spec_hash          CHAR(64)     NOT NULL,
+    content_hash       CHAR(64)     NOT NULL,
     status             JSONB        NOT NULL DEFAULT '{}'::jsonb,
     created_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     deletion_timestamp TIMESTAMPTZ,
-    PRIMARY KEY (namespace, name, version)
+    PRIMARY KEY (namespace, name, tag)
 );
-CREATE INDEX IF NOT EXISTS v1alpha1_mcp_servers_name_version_desc ON v1alpha1.mcp_servers (namespace, name, version DESC);
+CREATE INDEX IF NOT EXISTS v1alpha1_mcp_servers_name_tag_updated_desc ON v1alpha1.mcp_servers (namespace, name, updated_at DESC, tag);
 CREATE INDEX IF NOT EXISTS v1alpha1_mcp_servers_labels_gin        ON v1alpha1.mcp_servers USING GIN (labels);
 CREATE INDEX IF NOT EXISTS v1alpha1_mcp_servers_spec_gin          ON v1alpha1.mcp_servers USING GIN (spec jsonb_path_ops);
 CREATE INDEX IF NOT EXISTS v1alpha1_mcp_servers_updated_at_desc   ON v1alpha1.mcp_servers (updated_at DESC);
@@ -151,18 +146,18 @@ CREATE OR REPLACE TRIGGER mcp_servers_notify_status   AFTER  INSERT OR UPDATE OR
 CREATE TABLE IF NOT EXISTS v1alpha1.skills (
     namespace          VARCHAR(255) NOT NULL,
     name               VARCHAR(255) NOT NULL,
-    version            INTEGER      NOT NULL CHECK (version > 0),
+    tag                VARCHAR(255) NOT NULL,
     labels             JSONB        NOT NULL DEFAULT '{}'::jsonb,
     annotations        JSONB        NOT NULL DEFAULT '{}'::jsonb,
     spec               JSONB        NOT NULL,
-    spec_hash          CHAR(64)     NOT NULL,
+    content_hash       CHAR(64)     NOT NULL,
     status             JSONB        NOT NULL DEFAULT '{}'::jsonb,
     created_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     deletion_timestamp TIMESTAMPTZ,
-    PRIMARY KEY (namespace, name, version)
+    PRIMARY KEY (namespace, name, tag)
 );
-CREATE INDEX IF NOT EXISTS v1alpha1_skills_name_version_desc ON v1alpha1.skills (namespace, name, version DESC);
+CREATE INDEX IF NOT EXISTS v1alpha1_skills_name_tag_updated_desc ON v1alpha1.skills (namespace, name, updated_at DESC, tag);
 CREATE INDEX IF NOT EXISTS v1alpha1_skills_labels_gin        ON v1alpha1.skills USING GIN (labels);
 CREATE INDEX IF NOT EXISTS v1alpha1_skills_spec_gin          ON v1alpha1.skills USING GIN (spec jsonb_path_ops);
 CREATE INDEX IF NOT EXISTS v1alpha1_skills_updated_at_desc   ON v1alpha1.skills (updated_at DESC);
@@ -173,18 +168,18 @@ CREATE OR REPLACE TRIGGER skills_notify_status   AFTER  INSERT OR UPDATE OR DELE
 CREATE TABLE IF NOT EXISTS v1alpha1.prompts (
     namespace          VARCHAR(255) NOT NULL,
     name               VARCHAR(255) NOT NULL,
-    version            INTEGER      NOT NULL CHECK (version > 0),
+    tag                VARCHAR(255) NOT NULL,
     labels             JSONB        NOT NULL DEFAULT '{}'::jsonb,
     annotations        JSONB        NOT NULL DEFAULT '{}'::jsonb,
     spec               JSONB        NOT NULL,
-    spec_hash          CHAR(64)     NOT NULL,
+    content_hash       CHAR(64)     NOT NULL,
     status             JSONB        NOT NULL DEFAULT '{}'::jsonb,
     created_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     deletion_timestamp TIMESTAMPTZ,
-    PRIMARY KEY (namespace, name, version)
+    PRIMARY KEY (namespace, name, tag)
 );
-CREATE INDEX IF NOT EXISTS v1alpha1_prompts_name_version_desc ON v1alpha1.prompts (namespace, name, version DESC);
+CREATE INDEX IF NOT EXISTS v1alpha1_prompts_name_tag_updated_desc ON v1alpha1.prompts (namespace, name, updated_at DESC, tag);
 CREATE INDEX IF NOT EXISTS v1alpha1_prompts_labels_gin        ON v1alpha1.prompts USING GIN (labels);
 CREATE INDEX IF NOT EXISTS v1alpha1_prompts_spec_gin          ON v1alpha1.prompts USING GIN (spec jsonb_path_ops);
 CREATE INDEX IF NOT EXISTS v1alpha1_prompts_updated_at_desc   ON v1alpha1.prompts (updated_at DESC);
