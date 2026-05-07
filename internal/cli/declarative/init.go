@@ -35,14 +35,15 @@ func newInitCmd() *cobra.Command {
 declarative format and can be applied directly with 'arctl apply'.
 
 Supported types:
-  agent FRAMEWORK LANGUAGE NAME
-  mcp   FRAMEWORK NAME
+  agent NAME              # picker selects framework + language
+  mcp NAMESPACE/NAME      # picker selects framework + language
   skill NAME
   prompt NAME
 
 Examples:
-  arctl init agent adk python myagent
-  arctl init mcp fastmcp-python myorg/my-server
+  arctl init agent myagent
+  arctl init agent myagent --framework adk --language python
+  arctl init mcp acme/my-server
   arctl init skill my-skill
   arctl init prompt my-prompt`,
 		SilenceUsage: true,
