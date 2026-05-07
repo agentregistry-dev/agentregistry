@@ -538,3 +538,61 @@ func TestResourceRegister_PostUpsertFailureLeavesPersistedRow(t *testing.T) {
 		"once the platform-adapter clears, identical-spec re-apply succeeds without a spec bump")
 	require.Equal(t, 1, hookCalls)
 }
+
+// TestResourceRegister_IncludeTerminatingByDefault pins the opt-in
+// behavior: a kind registered with IncludeTerminatingByDefault=true
+// surfaces terminating rows on plain LIST (no ?includeTerminating=true
+// needed), and the OR-ing with ?latestOnly=true still returns terminating
+// rows even though recomputeLatest has cleared is_latest_version on them.
+func TestResourceRegister_IncludeTerminatingByDefault(t *testing.T) {
+	pool := v1alpha1store.NewTestPool(t)
+	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+
+	_, api := humatest.New(t)
+	resource.Register[*v1alpha1.Agent](api, resource.Config{
+		Kind:                        v1alpha1.KindAgent,
+		BasePrefix:                  "/v0",
+		Store:                       store,
+		IncludeTerminatingByDefault: true,
+	}, func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
+
+	// Seed a row, attach a finalizer, then soft-delete so the row goes
+	// terminating (deletion_timestamp set) and recomputeLatest clears
+	// its is_latest_version flag.
+	body := v1alpha1.Agent{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "draining", Version: "v1"},
+		Spec:     v1alpha1.AgentSpec{Title: "Draining"},
+	}
+	resp := api.Put("/v0/agents/draining/v1", body)
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+
+	require.NoError(t, store.PatchFinalizers(t.Context(), "default", "draining", "v1",
+		func([]string) []string { return []string{"finalizer.example.com"} }))
+	require.NoError(t, store.Delete(t.Context(), "default", "draining", "v1"))
+
+	var list struct {
+		Items      []v1alpha1.Agent `json:"items"`
+		NextCursor string           `json:"nextCursor,omitempty"`
+	}
+
+	// Plain LIST with no ?includeTerminating still returns the terminating
+	// row because the kind opted in via IncludeTerminatingByDefault.
+	resp = api.Get("/v0/agents")
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &list))
+	require.Len(t, list.Items, 1)
+	require.Equal(t, "draining", list.Items[0].Metadata.Name)
+	require.NotNil(t, list.Items[0].Metadata.DeletionTimestamp,
+		"opt-in default must surface the deletionTimestamp so operators see in-flight teardown")
+
+	// LatestOnly OR-ed with the default-on flag: store widens the
+	// predicate to "(is_latest_version OR deletion_timestamp IS NOT NULL)"
+	// so the terminating row still appears even though its
+	// is_latest_version was cleared by recomputeLatest.
+	resp = api.Get("/v0/agents?latestOnly=true")
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &list))
+	require.Len(t, list.Items, 1)
+	require.Equal(t, "draining", list.Items[0].Metadata.Name)
+}

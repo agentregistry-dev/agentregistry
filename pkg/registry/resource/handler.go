@@ -141,6 +141,17 @@ type Config struct {
 	// the placeholder + parameterization rules there before wiring a
 	// new caller.
 	ListFilter func(ctx context.Context, in AuthorizeInput) (extraWhere string, extraArgs []any, err error)
+
+	// IncludeTerminatingByDefault, when true, makes the list handler
+	// surface rows with deletion_timestamp set even if the caller
+	// hasn't passed ?includeTerminating=true. Used by kinds whose
+	// teardown is operator-observable so `arctl get` can
+	// show phase=Terminating during in-flight cleanup; the row drops
+	// from the list once the reconciler hard-deletes it. The user's
+	// ?includeTerminating query value is OR-ed with this flag, so the
+	// caller can still force inclusion but never exclusion when the
+	// kind has opted in.
+	IncludeTerminatingByDefault bool
 }
 
 // AuthorizeInput is the context passed to Config.Authorize on every handler
@@ -530,7 +541,7 @@ func runList[T v1alpha1.Object](
 		Limit:              p.Limit,
 		Cursor:             p.Cursor,
 		LatestOnly:         p.LatestOnly,
-		IncludeTerminating: p.IncludeTerminating,
+		IncludeTerminating: p.IncludeTerminating || cfg.IncludeTerminatingByDefault,
 	}
 	if p.Labels != "" {
 		selector, err := parseLabelSelector(p.Labels)
