@@ -38,10 +38,10 @@ func TestPath(t *testing.T) {
 	assert.Equal(t, filepath.Join("/proj", "arctl.yaml"), Path("/proj"))
 }
 
-func TestWriteEnvExample_RequiredAndOptional(t *testing.T) {
+func TestWriteDotEnv_RequiredAndOptional(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, WriteEnvExample(dir, []string{"OPENAI_API_KEY"}, []string{"LOG_LEVEL"}))
-	data, err := os.ReadFile(filepath.Join(dir, ".env.example"))
+	require.NoError(t, WriteDotEnv(dir, []string{"OPENAI_API_KEY"}, []string{"LOG_LEVEL"}))
+	data, err := os.ReadFile(filepath.Join(dir, ".env"))
 	require.NoError(t, err)
 	got := string(data)
 	assert.Contains(t, got, "OPENAI_API_KEY=")
@@ -50,9 +50,55 @@ func TestWriteEnvExample_RequiredAndOptional(t *testing.T) {
 	assert.Contains(t, got, "# Optional")
 }
 
-func TestWriteEnvExample_NoneOmitsFile(t *testing.T) {
+func TestWriteDotEnv_NoneOmitsFile(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, WriteEnvExample(dir, nil, nil))
-	_, err := os.Stat(filepath.Join(dir, ".env.example"))
+	require.NoError(t, WriteDotEnv(dir, nil, nil))
+	_, err := os.Stat(filepath.Join(dir, ".env"))
 	assert.True(t, os.IsNotExist(err))
+}
+
+func TestEnsureGitignored_CreatesFileWhenMissing(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, EnsureGitignored(dir, ".env"))
+	data, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	require.NoError(t, err)
+	assert.Equal(t, ".env\n", string(data))
+}
+
+func TestEnsureGitignored_AppendsToExisting(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("dist/\nnode_modules/\n"), 0644))
+	require.NoError(t, EnsureGitignored(dir, ".env"))
+	data, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	require.NoError(t, err)
+	assert.Equal(t, "dist/\nnode_modules/\n.env\n", string(data))
+}
+
+func TestEnsureGitignored_AppendsTrailingNewlineWhenMissing(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("dist/"), 0644))
+	require.NoError(t, EnsureGitignored(dir, ".env"))
+	data, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	require.NoError(t, err)
+	assert.Equal(t, "dist/\n.env\n", string(data))
+}
+
+func TestEnsureGitignored_NoOpIfAlreadyPresent(t *testing.T) {
+	dir := t.TempDir()
+	original := "dist/\n.env\nnode_modules/\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(original), 0644))
+	require.NoError(t, EnsureGitignored(dir, ".env"))
+	data, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	require.NoError(t, err)
+	assert.Equal(t, original, string(data))
+}
+
+func TestEnsureGitignored_IgnoresWhitespaceWhenMatching(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("  .env  \n"), 0644))
+	require.NoError(t, EnsureGitignored(dir, ".env"))
+	data, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	require.NoError(t, err)
+	// Should not append a duplicate.
+	assert.Equal(t, "  .env  \n", string(data))
 }

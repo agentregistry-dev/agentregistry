@@ -24,7 +24,7 @@ func readYAMLFile(t *testing.T, path string) map[string]any {
 
 // ---- init agent ----
 
-func TestInitAgent_WritesYAMLAndArctlAndEnvExample(t *testing.T) {
+func TestInitAgent_WritesYAMLAndArctlAndDotEnv(t *testing.T) {
 	tmp := t.TempDir()
 	origDir, err := os.Getwd()
 	require.NoError(t, err)
@@ -47,9 +47,14 @@ func TestInitAgent_WritesYAMLAndArctlAndEnvExample(t *testing.T) {
 	assert.Equal(t, "adk", cfg.Framework)
 	assert.Equal(t, "python", cfg.Language)
 
-	// .env.example written
-	_, err = os.Stat(filepath.Join(projectDir, ".env.example"))
+	// .env written directly (no cp step needed)
+	_, err = os.Stat(filepath.Join(projectDir, ".env"))
 	assert.NoError(t, err)
+
+	// .env should be gitignored so secrets aren't accidentally committed
+	gi, err := os.ReadFile(filepath.Join(projectDir, ".gitignore"))
+	require.NoError(t, err)
+	assert.Contains(t, string(gi), ".env")
 }
 
 // ---- init mcp ----

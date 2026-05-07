@@ -34,3 +34,12 @@ func TestValidateRequiredEnv_MissingErrs(t *testing.T) {
 	assert.Contains(t, err.Error(), "FOO")
 	assert.Contains(t, err.Error(), "BAR")
 }
+
+// An empty placeholder in .env (the shape `arctl init` writes) is treated
+// as missing — the user hasn't filled it in yet.
+func TestValidateRequiredEnv_EmptyValueErrs(t *testing.T) {
+	t.Setenv("FOO", "") // ensure process env doesn't satisfy it
+	err := ValidateRequiredEnv(map[string]string{"FOO": ""}, []string{"FOO"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "FOO")
+}

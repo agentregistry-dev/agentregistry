@@ -25,10 +25,12 @@ func LoadDotEnv(projectDir string) (map[string]string, error) {
 
 // ValidateRequiredEnv returns an error listing every required key not in env.
 // A required key is also considered satisfied if it is set in the process env.
+// Empty string values are treated as missing — `arctl init` writes a `.env`
+// with empty placeholders, and an unfilled placeholder is not a satisfied var.
 func ValidateRequiredEnv(env map[string]string, required []string) error {
 	var missing []string
 	for _, k := range required {
-		if _, ok := env[k]; ok {
+		if v, ok := env[k]; ok && v != "" {
 			continue
 		}
 		if v := os.Getenv(k); v != "" {

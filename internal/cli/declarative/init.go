@@ -80,7 +80,7 @@ Picks a framework + language interactively (or via --framework / --language).
 Writes:
   - agent.yaml — v1alpha1 envelope
   - arctl.yaml — local build config (framework + language)
-  - .env.example — env vars the chosen plugin needs`,
+  - .env — env vars the chosen plugin needs (gitignored)`,
 		Example: `  arctl init agent myagent
   arctl init agent myagent --framework adk --language python`,
 		Args:         cobra.ExactArgs(1),
@@ -130,8 +130,13 @@ Writes:
 			if err := buildconfig.Write(projectDir, cfg); err != nil {
 				return fmt.Errorf("write arctl.yaml: %w", err)
 			}
-			if err := buildconfig.WriteEnvExample(projectDir, plugin.Env.Required, plugin.Env.Optional); err != nil {
-				return fmt.Errorf("write .env.example: %w", err)
+			if err := buildconfig.WriteDotEnv(projectDir, plugin.Env.Required, plugin.Env.Optional); err != nil {
+				return fmt.Errorf("write .env: %w", err)
+			}
+			if len(plugin.Env.Required) > 0 || len(plugin.Env.Optional) > 0 {
+				if err := buildconfig.EnsureGitignored(projectDir, ".env"); err != nil {
+					return fmt.Errorf("update .gitignore: %w", err)
+				}
 			}
 
 			// Skills/Prompts/Language/Framework removed from AgentSpec (Phase 11);
@@ -343,8 +348,13 @@ Picks a framework + language interactively (or via --framework / --language).`,
 			if err := buildconfig.Write(projectDir, &buildconfig.Config{Framework: plugin.Framework, Language: plugin.Language}); err != nil {
 				return err
 			}
-			if err := buildconfig.WriteEnvExample(projectDir, plugin.Env.Required, plugin.Env.Optional); err != nil {
+			if err := buildconfig.WriteDotEnv(projectDir, plugin.Env.Required, plugin.Env.Optional); err != nil {
 				return err
+			}
+			if len(plugin.Env.Required) > 0 || len(plugin.Env.Optional) > 0 {
+				if err := buildconfig.EnsureGitignored(projectDir, ".env"); err != nil {
+					return fmt.Errorf("update .gitignore: %w", err)
+				}
 			}
 			if err := writeDeclarativeMCPYAML(projectDir, full, initVersion, image, initDescription); err != nil {
 				return err
