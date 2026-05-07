@@ -297,16 +297,24 @@ func composeDownArgs(rendered []string, projectDir string) []string {
 }
 
 // mergeEnv flattens dotEnv into KEY=VALUE strings and appends overrides.
+//
+// Precedence (matches dotenv defaults across Node/Python/Ruby/Go ecosystems):
+//   1. --env CLI flags (highest, in `overrides`)
+//   2. Process env (the user's shell export)
+//   3. .env file (project default)
+//
 // Empty .env values are skipped — they are unfilled placeholders written
-// by `arctl init`, not real assignments. Emitting them would shadow the
-// same key inherited from the parent process env (e.g. an exported
-// GOOGLE_API_KEY).
-// Overrides come last, so the child process sees them as the effective value.
+// by `arctl init`. .env entries whose key already has a non-empty value
+// in process env are also skipped, so the user's shell export wins.
+// Overrides come last so explicit --env flags trump everything.
 func mergeEnv(dotEnv map[string]string, overrides []string) []string {
 	out := make([]string, 0, len(dotEnv)+len(overrides))
 	for k, v := range dotEnv {
 		if v == "" {
 			continue
+		}
+		if existing := os.Getenv(k); existing != "" {
+			continue // process env wins over .env file
 		}
 		out = append(out, k+"="+v)
 	}
