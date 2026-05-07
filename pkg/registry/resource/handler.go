@@ -152,6 +152,28 @@ type Config struct {
 	// caller can still force inclusion but never exclusion when the
 	// kind has opted in.
 	IncludeTerminatingByDefault bool
+
+	// InitialFinalizers, when non-nil, is invoked on every apply (PUT
+	// + /v0/apply batch) to compute the finalizer set passed to Upsert.
+	// Returning nil/empty leaves the row with finalizers=[] — today's
+	// behavior. Returning a non-empty slice makes Store.Delete take the
+	// soft-delete path on the next DELETE, keeping the row visible to
+	// the kind's reconciler until it finishes platform-side teardown.
+	//
+	// The store applies the result only on create; updates preserve
+	// existing finalizers as before. Calling on every apply (rather
+	// than guarding with a create-detection load round-trip) keeps the
+	// pipeline straight-line — implementations should be cheap and
+	// side-effect-free. Reapply scenarios where a row already exists
+	// with the wrong finalizer set must use PatchFinalizers from a
+	// PostUpsert hook.
+	//
+	// Required for kinds whose teardown owns external infrastructure
+	// the reconciler is responsible for cleaning up. Without it, a
+	// concurrent DELETE between Upsert commit and any post-upsert
+	// finalizer write hits the hard-delete fast-path and orphans
+	// whatever the reconciler would have torn down.
+	InitialFinalizers func(obj v1alpha1.Object) []string
 }
 
 // AuthorizeInput is the context passed to Config.Authorize on every handler
@@ -411,6 +433,7 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 			Resolver:          cfg.Resolver,
 			RegistryValidator: cfg.RegistryValidator,
 			PostUpsert:        cfg.PostUpsert,
+			InitialFinalizers: cfg.InitialFinalizers,
 		}, false); ae != nil {
 			return nil, mapApplyErrorToHuma(ae, kind, ns, name, version)
 		}

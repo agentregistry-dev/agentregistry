@@ -160,9 +160,21 @@ type listCursor struct {
 // row post-apply; nil means "leave existing annotations unchanged",
 // while an explicit empty map means "clear all annotations". Used by
 // controllers that add annotations out-of-band with user applies.
+//
+// InitialFinalizers is applied only on the create path (when no row
+// exists yet at the supplied (namespace, name, version)). On update,
+// existing finalizers are preserved as before — InitialFinalizers is
+// ignored. This is the atomic seam for kinds whose teardown is owned
+// by a reconciler driving external infrastructure: the finalizer must
+// exist from the moment the row is visible to a concurrent DELETE,
+// otherwise Delete's "finalizers empty → hard-delete fast path" can
+// drop the row before the reconciler ever sees it and orphan whatever
+// the reconciler was responsible for cleaning up. Mutating finalizers
+// on existing rows still goes through PatchFinalizers.
 type UpsertOpts struct {
-	Labels      map[string]string
-	Annotations map[string]string
+	Labels            map[string]string
+	Annotations       map[string]string
+	InitialFinalizers []string
 }
 
 // Upsert writes the given object under its (namespace, name, version). On
@@ -243,14 +255,21 @@ func (s *Store) Upsert(ctx context.Context, namespace, name, version string, spe
 		}
 		res.Generation = newGen
 
-		// Finalizers preserved verbatim from the existing row (or `[]`
-		// for new rows). The public Upsert API has no `Finalizers`
-		// option anymore — the column is retained for the future
-		// orphan-reconciler hook only. PatchFinalizers (still exported)
-		// is the sole way to mutate it.
+		// Finalizers preserved verbatim from the existing row on
+		// update; on create, opts.InitialFinalizers seeds the column
+		// (defaulting to `[]` when unset). PatchFinalizers remains the
+		// sole way to mutate finalizers on an existing row.
 		finalizersJSON := oldFinalizersRaw
 		if !found {
-			finalizersJSON = []byte("[]")
+			if len(opts.InitialFinalizers) > 0 {
+				b, err := json.Marshal(opts.InitialFinalizers)
+				if err != nil {
+					return fmt.Errorf("marshal initial finalizers: %w", err)
+				}
+				finalizersJSON = b
+			} else {
+				finalizersJSON = []byte("[]")
+			}
 		}
 
 		// Annotation handling: nil preserves existing,

@@ -250,6 +250,83 @@ func TestStore_DeleteWithFinalizersSoftDeletes(t *testing.T) {
 	require.True(t, res.Created)
 }
 
+// readFinalizers reads the current finalizers slice for a row through
+// PatchFinalizers's identity mutator. RawObject doesn't expose the
+// finalizers column directly (there's no public Get accessor), and
+// PatchFinalizers is the only typed read path that doesn't require a
+// raw SQL query.
+func readFinalizers(t *testing.T, ctx context.Context, store *Store, ns, name, version string) []string {
+	t.Helper()
+	var got []string
+	require.NoError(t, store.PatchFinalizers(ctx, ns, name, version, func(current []string) []string {
+		got = append([]string(nil), current...)
+		return current
+	}))
+	return got
+}
+
+// TestStore_UpsertSeedsInitialFinalizers pins the atomic seam used by
+// kinds whose teardown is owned by a reconciler: passing
+// InitialFinalizers on the create path of Upsert writes the row with
+// the finalizer in the same transaction as the spec, so a concurrent
+// DELETE arriving before any out-of-band PatchFinalizers can't take
+// the hard-delete fast path and skip the reconciler's cleanup.
+func TestStore_UpsertSeedsInitialFinalizers(t *testing.T) {
+	pool := NewTestPool(t)
+	store := NewStore(pool, testTable)
+	ctx := context.Background()
+
+	const finalizer = "finalizer.example.com/teardown"
+	res, err := store.Upsert(ctx, testNS, "foo", "v1", mustSpec(t, v1alpha1.AgentSpec{}), UpsertOpts{
+		InitialFinalizers: []string{finalizer},
+	})
+	require.NoError(t, err)
+	require.True(t, res.Created)
+
+	// The freshly-written row carries the seeded finalizer.
+	require.Equal(t, []string{finalizer}, readFinalizers(t, ctx, store, testNS, "foo", "v1"))
+
+	// Delete now takes the soft-delete branch (because the row is
+	// already finalized) — without InitialFinalizers it would hard-
+	// delete and orphan whatever the reconciler was supposed to clean
+	// up.
+	require.NoError(t, store.Delete(ctx, testNS, "foo", "v1"))
+	row, err := store.Get(ctx, testNS, "foo", "v1")
+	require.NoError(t, err)
+	require.NotNil(t, row.Metadata.DeletionTimestamp, "finalizer-seeded row must soft-delete, not hard-delete")
+}
+
+// TestStore_UpsertInitialFinalizersIgnoredOnUpdate pins the contract:
+// InitialFinalizers seeds the row only on the create path. A subsequent
+// Upsert against the same identity must not overwrite finalizers that
+// were attached out-of-band (or seeded earlier), since updates are not
+// the authoritative finalizer-mutation seam — PatchFinalizers is.
+func TestStore_UpsertInitialFinalizersIgnoredOnUpdate(t *testing.T) {
+	pool := NewTestPool(t)
+	store := NewStore(pool, testTable)
+	ctx := context.Background()
+
+	const seeded = "finalizer.example.com/teardown"
+	_, err := store.Upsert(ctx, testNS, "foo", "v1", mustSpec(t, v1alpha1.AgentSpec{}), UpsertOpts{
+		InitialFinalizers: []string{seeded},
+	})
+	require.NoError(t, err)
+
+	// Re-apply with a different InitialFinalizers slice + a spec change
+	// to force the update branch. Existing finalizers must be preserved
+	// untouched.
+	res, err := store.Upsert(ctx, testNS, "foo", "v1", mustSpec(t, v1alpha1.AgentSpec{Title: "updated"}), UpsertOpts{
+		InitialFinalizers: []string{"different.example.com/never-applied"},
+	})
+	require.NoError(t, err)
+	require.False(t, res.Created)
+	require.True(t, res.SpecChanged)
+
+	require.Equal(t, []string{seeded},
+		readFinalizers(t, ctx, store, testNS, "foo", "v1"),
+		"update path must not overwrite finalizers; PatchFinalizers is the only mutation seam")
+}
+
 // TestStore_UpsertRejectsTerminatingRow guards the Kubernetes-style
 // invariant: once a row is soft-deleted, it cannot be mutated in place via
 // Upsert. Pre-fix behavior was a silent partial-update (ON CONFLICT bumped
