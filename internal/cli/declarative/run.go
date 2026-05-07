@@ -124,6 +124,11 @@ func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun, wat
 	envv := mergeEnv(dotEnv, extraEnv)
 	vars := map[string]any{"ProjectDir": projectDir, "PluginDir": p.SourceDir}
 
+	rendered, err := plugins.RenderArgs(p.Run.Command, vars)
+	if err != nil {
+		return fmt.Errorf("render run command: %w", err)
+	}
+
 	// --watch and --dry-run compose: enter the watch loop but skip the
 	// actual exec call inside it. This lets tests verify the watcher
 	// surface ("Watching for changes…", "Change detected") without
@@ -132,11 +137,11 @@ func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun, wat
 		return runWithWatch(out, projectDir, p, envv, dryRun)
 	}
 	if dryRun {
-		fmt.Fprintf(out, "→ %s: %s\n", p.Name, strings.Join(p.Run.Command, " "))
+		fmt.Fprintf(out, "→ %s: %s\n", p.Name, strings.Join(rendered, " "))
 		fmt.Fprintln(out, "(dry-run; skipping exec)")
 		return nil
 	}
-	fmt.Fprintf(out, "→ %s: %s\n", p.Name, strings.Join(p.Run.Command, " "))
+	fmt.Fprintf(out, "→ %s: %s\n", p.Name, strings.Join(rendered, " "))
 	return plugins.ExecForeground(p.Run, projectDir, vars, envv)
 }
 

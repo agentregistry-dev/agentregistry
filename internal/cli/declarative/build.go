@@ -196,7 +196,11 @@ func buildViaPlugin(out io.Writer, projectDir string, obj v1alpha1.Object, flagI
 		"PluginDir":  p.SourceDir,
 	}
 
-	fmt.Fprintf(out, "→ %s: %s\n", p.Name, strings.Join(p.Build.Command, " "))
+	rendered, err := plugins.RenderArgs(p.Build.Command, vars)
+	if err != nil {
+		return fmt.Errorf("render build command: %w", err)
+	}
+	fmt.Fprintf(out, "→ %s: %s\n", p.Name, strings.Join(rendered, " "))
 	if err := plugins.ExecForeground(p.Build, projectDir, vars, nil); err != nil {
 		return fmt.Errorf("plugin build: %w", err)
 	}

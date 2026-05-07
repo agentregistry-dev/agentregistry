@@ -28,7 +28,6 @@ func runWithWatch(out io.Writer, projectDir string, p *plugins.Plugin, env []str
 			_ = current.Process.Kill()
 			_ = current.Wait()
 		}
-		fmt.Fprintf(out, "→ %s: %s\n", p.Name, strings.Join(p.Run.Command, " "))
 		argv, err := plugins.RenderArgs(p.Run.Command, map[string]any{
 			"ProjectDir": projectDir,
 			"PluginDir":  p.SourceDir,
@@ -36,6 +35,7 @@ func runWithWatch(out io.Writer, projectDir string, p *plugins.Plugin, env []str
 		if err != nil {
 			return err
 		}
+		fmt.Fprintf(out, "→ %s: %s\n", p.Name, strings.Join(argv, " "))
 		if dryRun {
 			fmt.Fprintln(out, "(dry-run; skipping exec)")
 			return nil
