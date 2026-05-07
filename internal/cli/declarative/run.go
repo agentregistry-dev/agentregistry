@@ -145,7 +145,21 @@ func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun, wat
 	}
 
 	envv := mergeEnv(dotEnv, extraEnv)
-	vars := map[string]any{"ProjectDir": projectDir, "PluginDir": p.SourceDir}
+
+	// Resolve image the same way `arctl build` does: prefer the spec field,
+	// fall back to localhost:5001/<name>:latest. Run commands like
+	// `docker run -i {{.Image}}` rely on this var being present.
+	specImage := agentSpecImage(obj)
+	if specImage == "" {
+		specImage = mcpSpecPackageIdentifier(obj)
+	}
+	image := resolveImage("", specImage, obj.GetMetadata().Name)
+
+	vars := map[string]any{
+		"ProjectDir": projectDir,
+		"PluginDir":  p.SourceDir,
+		"Image":      image,
+	}
 
 	rendered, err := plugins.RenderArgs(p.Run.Command, vars)
 	if err != nil {
