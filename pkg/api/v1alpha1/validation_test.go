@@ -225,18 +225,17 @@ func TestDeploymentValidate_RejectsBadDesiredState(t *testing.T) {
 	require.Contains(t, paths, "spec.desiredState")
 }
 
-// Deployment.spec.targetRef must pin a tag so deployment targets are
-// declarative and stable.
-func TestDeploymentValidate_RejectsEmptyTargetRefTag(t *testing.T) {
+// Deployment.spec.targetRef may omit tag; reference resolution treats blank as
+// the literal "latest" tag.
+func TestDeploymentValidate_AllowsEmptyTargetRefTag(t *testing.T) {
 	d := &Deployment{
 		Metadata: ObjectMeta{Namespace: "default", Name: "prod", Version: "1"},
 		Spec: DeploymentSpec{
-			TargetRef:   ResourceRef{Kind: KindAgent, Name: "alice"}, // no version
+			TargetRef:   ResourceRef{Kind: KindAgent, Name: "alice"},
 			ProviderRef: ResourceRef{Kind: KindProvider, Name: "local", Version: "1"},
 		},
 	}
-	paths := failedFields(t, d.Validate())
-	require.Contains(t, paths, "spec.targetRef.tag")
+	require.NoError(t, d.Validate())
 }
 
 func TestDeploymentValidate_RejectsBadTargetRefTag(t *testing.T) {

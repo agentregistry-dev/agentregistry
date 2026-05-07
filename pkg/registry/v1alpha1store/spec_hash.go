@@ -32,9 +32,11 @@ func SpecHash(raw json.RawMessage) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// ContentHash returns the canonical digest used for default metadata.tag and
-// same-tag replacement detection. It deliberately includes only
-// user-authored declarative state: spec plus labels/annotations.
+const DefaultTagValue = "latest"
+
+// ContentHash returns the canonical digest used for same-tag replacement
+// detection. It deliberately includes only user-authored declarative state:
+// spec plus labels/annotations.
 func ContentHash(meta *v1alpha1.ObjectMeta, spec json.RawMessage) (string, error) {
 	payload := struct {
 		Metadata struct {
@@ -60,10 +62,7 @@ func ContentHash(meta *v1alpha1.ObjectMeta, spec json.RawMessage) (string, error
 	return hex.EncodeToString(sum[:]), nil
 }
 
-func DefaultTag(meta *v1alpha1.ObjectMeta, spec json.RawMessage) (string, error) {
-	hash, err := ContentHash(meta, spec)
-	if err != nil {
-		return "", err
-	}
-	return "sha256-" + hash, nil
+// DefaultTag returns the tag assigned when metadata.tag is omitted.
+func DefaultTag() string {
+	return DefaultTagValue
 }

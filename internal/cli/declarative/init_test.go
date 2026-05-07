@@ -555,9 +555,9 @@ func TestInitPromptCmd_WritesFileNotDirectory(t *testing.T) {
 // ---- decoder round-trip ----
 
 // TestInit_GeneratedYAMLDecodesCleanly verifies that every kind produced by
-// arctl init can be re-read by the v1alpha1 decoder without error. After the
-// switch to system-assigned versioning, the decoder rejects manifests that
-// pre-set metadata.version — so this test guards the obvious user flow:
+// arctl init can be re-read by the v1alpha1 decoder without error. Content
+// manifests must not pre-set metadata.version, so this test guards the obvious
+// user flow:
 //
 //	arctl init <type> <name> -> arctl apply -f <name>/<type>.yaml
 func TestInit_GeneratedYAMLDecodesCleanly(t *testing.T) {

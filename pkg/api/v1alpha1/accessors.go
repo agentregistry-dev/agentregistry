@@ -24,8 +24,7 @@ func (m *ObjectMeta) SetMetadata(meta ObjectMeta) {
 // Status is intentionally exchanged as json.RawMessage on this interface.
 // The envelope itself stays agnostic to per-kind status schemas:
 //   - OSS kinds currently bind Status to the typed v1alpha1.Status
-//     (system-assigned version + K8s-style Conditions) via the accessor
-//     methods below.
+//     (K8s-style Conditions) via the accessor methods below.
 //   - Enterprise kinds can use any shape they like without conforming to
 //     meta.v1 conditions.
 //
@@ -79,7 +78,7 @@ type MetadataVersionDefaulter interface {
 // obj.Metadata.Version when it's empty AND the kind opts in via the
 // MetadataVersionDefaulter interface. No-op for kinds that don't implement
 // the interface or that already have a version. Used by the legacy
-// deployment apply path; versioned-artifact kinds ignore meta.Version.
+// deployment apply path; tagged-artifact kinds ignore meta.Version.
 func DefaultMetadataVersionIfMissing(obj Object) {
 	meta := obj.GetMetadata()
 	if meta.Version != "" {

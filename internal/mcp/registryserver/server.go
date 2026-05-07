@@ -128,13 +128,15 @@ type listInput struct {
 	Cursor    string `json:"cursor,omitempty"    doc:"Pagination cursor returned by a previous call"`
 	Limit     int    `json:"limit,omitempty"     doc:"Max items (1-100, default 30)"`
 	Search    string `json:"search,omitempty"    doc:"Case-insensitive substring filter on metadata.name"`
-	Version   string `json:"version,omitempty"   doc:"'latest' to return only the highest live version per (namespace, name); empty returns every version"`
+	Tag       string `json:"tag,omitempty"       doc:"'latest' to return only the literal latest tag per (namespace, name); empty returns every tag"`
+	Version   string `json:"version,omitempty"   doc:"Deprecated alias for tag"`
 }
 
 type getByRefInput struct {
 	Namespace string `json:"namespace,omitempty" doc:"Namespace (empty defaults to 'default')"`
 	Name      string `json:"name"                doc:"Resource name"    required:"true"`
-	Version   string `json:"version,omitempty"   doc:"Exact version; empty or 'latest' returns the highest live version"`
+	Tag       string `json:"tag,omitempty"       doc:"Exact tag; empty or 'latest' returns the literal latest tag"`
+	Version   string `json:"version,omitempty"   doc:"Deprecated alias for tag"`
 }
 
 // listOutput is the generic envelope every list_* tool returns. Items
@@ -180,7 +182,11 @@ func runList(ctx context.Context, store *v1alpha1store.Store, args listInput) ([
 		Limit:     clampLimit(args.Limit),
 		Cursor:    args.Cursor,
 	}
-	if strings.EqualFold(strings.TrimSpace(args.Version), "latest") {
+	tag := strings.TrimSpace(args.Tag)
+	if tag == "" {
+		tag = strings.TrimSpace(args.Version)
+	}
+	if strings.EqualFold(tag, "latest") {
 		opts.LatestOnly = true
 	}
 	raws, next, err := store.List(ctx, opts)
@@ -229,16 +235,19 @@ func getEnvelope[T v1alpha1.Object](
 	if namespace == "" {
 		namespace = v1alpha1.DefaultNamespace
 	}
-	version := strings.TrimSpace(args.Version)
+	tag := strings.TrimSpace(args.Tag)
+	if tag == "" {
+		tag = strings.TrimSpace(args.Version)
+	}
 
 	var (
 		raw *v1alpha1.RawObject
 		err error
 	)
-	if version == "" || strings.EqualFold(version, "latest") {
+	if tag == "" || strings.EqualFold(tag, "latest") {
 		raw, err = store.GetLatest(ctx, namespace, args.Name)
 	} else {
-		raw, err = store.Get(ctx, namespace, args.Name, version)
+		raw, err = store.Get(ctx, namespace, args.Name, tag)
 	}
 	if err != nil {
 		var zero T

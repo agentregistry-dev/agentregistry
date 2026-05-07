@@ -43,10 +43,8 @@ func TestClient_V1Alpha1RoundTrip(t *testing.T) {
 	c := client.NewClient(ts.URL, "")
 	ctx := context.Background()
 
-	// Apply a single-doc YAML → creates the Agent. metadata.version is
-	// rejected on input (the system assigns the integer); the URL
-	// version "1" matches the integer the Store assigns to the first
-	// apply.
+	// Apply a single-doc YAML → creates the Agent. metadata.version is rejected
+	// on input; omitted metadata.tag defaults to the literal "latest" tag.
 	yamlBody := []byte(`
 apiVersion: ar.dev/v1alpha1
 kind: Agent
@@ -62,12 +60,12 @@ spec:
 	require.Len(t, results, 1)
 	require.Equal(t, "created", results[0].Status)
 
-	// Get by exact version.
-	raw, err := c.Get(ctx, v1alpha1.KindAgent, "default", "acme/planner", "1")
+	// Get by exact tag.
+	raw, err := c.Get(ctx, v1alpha1.KindAgent, "default", "acme/planner", "latest")
 	require.NoError(t, err)
 	require.Equal(t, v1alpha1.KindAgent, raw.Kind)
 	require.Equal(t, "acme/planner", raw.Metadata.Name)
-	require.Equal(t, "1", raw.Metadata.Version)
+	require.Equal(t, "latest", raw.Metadata.Tag)
 
 	// Unmarshal Spec into the typed Agent.
 	var spec v1alpha1.AgentSpec
@@ -77,7 +75,7 @@ spec:
 	// GetLatest returns the same row.
 	latest, err := c.GetLatest(ctx, v1alpha1.KindAgent, "default", "acme/planner")
 	require.NoError(t, err)
-	require.Equal(t, "1", latest.Metadata.Version)
+	require.Equal(t, "latest", latest.Metadata.Tag)
 
 	// List (cross-namespace) returns the one row.
 	items, next, err := c.List(ctx, v1alpha1.KindAgent, client.ListOpts{})
@@ -94,9 +92,9 @@ spec:
 	// Delete → finalizer-free Agent hard-deletes immediately. Both
 	// GetLatest and the exact-version Get return ErrNotFound; the row
 	// is gone, not soft-deleted.
-	require.NoError(t, c.Delete(ctx, v1alpha1.KindAgent, "default", "acme/planner", "1"))
+	require.NoError(t, c.Delete(ctx, v1alpha1.KindAgent, "default", "acme/planner", "latest"))
 
-	_, err = c.Get(ctx, v1alpha1.KindAgent, "default", "acme/planner", "1")
+	_, err = c.Get(ctx, v1alpha1.KindAgent, "default", "acme/planner", "latest")
 	require.ErrorIs(t, err, client.ErrNotFound)
 
 	_, err = c.GetLatest(ctx, v1alpha1.KindAgent, "default", "acme/planner")
@@ -153,7 +151,7 @@ func TestClient_V1Alpha1_NotFound(t *testing.T) {
 
 	c := client.NewClient(ts.URL, "")
 
-	_, err := c.Get(context.Background(), v1alpha1.KindAgent, "default", "does-not-exist", "1")
+	_, err := c.Get(context.Background(), v1alpha1.KindAgent, "default", "does-not-exist", "latest")
 	require.Error(t, err)
 	require.True(t, errors.Is(err, client.ErrNotFound))
 }

@@ -36,34 +36,53 @@ Examples:
   arctl get mcps
   arctl get agent acme/summarizer
   arctl get agent acme/summarizer -o yaml
-  arctl get agent acme/summarizer --version 1
-  arctl get agent acme/summarizer --all-versions
+  arctl get agent acme/summarizer --tag stable
+  arctl get agent acme/summarizer --all-tags
   arctl get skills -o json`,
 		Args:         cobra.RangeArgs(1, 2),
 		SilenceUsage: true,
 		RunE:         runGet,
 	}
 	cmd.Flags().StringP("output", "o", "table", "Output format: table, yaml, json")
-	cmd.Flags().String("version", "", "Specific version to fetch (defaults to latest; versioned-artifact kinds only; not allowed with --all-versions)")
-	cmd.Flags().Bool("all-versions", false, "List every version of NAME (versioned-artifact kinds only)")
+	cmd.Flags().String("tag", "", "Specific tag to fetch (defaults to latest; tagged content kinds only; not allowed with --all-tags)")
+	cmd.Flags().String("version", "", "Deprecated alias for --tag on content kinds")
+	cmd.Flags().Bool("all-tags", false, "List every tag of NAME (tagged content kinds only)")
+	cmd.Flags().Bool("all-versions", false, "Deprecated alias for --all-tags")
 	return cmd
 }
 
 func runGet(cmd *cobra.Command, args []string) error {
 	outputFormat, _ := cmd.Flags().GetString("output")
+	allTags, _ := cmd.Flags().GetBool("all-tags")
 	allVersions, _ := cmd.Flags().GetBool("all-versions")
+	tag, _ := cmd.Flags().GetString("tag")
 	version, _ := cmd.Flags().GetString("version")
+	if allVersions {
+		allTags = true
+	}
+	allTagsFlag := "--all-tags"
+	if allVersions {
+		allTagsFlag = "--all-versions"
+	}
+	tagFlag := "--tag"
+	if version != "" {
+		if tag != "" {
+			return fmt.Errorf("--tag and --version are mutually exclusive")
+		}
+		tag = version
+		tagFlag = "--version"
+	}
 
-	if allVersions && version != "" {
-		return fmt.Errorf("--version and --all-versions are mutually exclusive")
+	if allTags && tag != "" {
+		return fmt.Errorf("%s and %s are mutually exclusive", tagFlag, allTagsFlag)
 	}
 
 	if args[0] == "all" {
-		if allVersions {
-			return fmt.Errorf("--all-versions cannot be used with `get all`")
+		if allTags {
+			return fmt.Errorf("%s cannot be used with `get all`", allTagsFlag)
 		}
-		if version != "" {
-			return fmt.Errorf("--version cannot be used with `get all`")
+		if tag != "" {
+			return fmt.Errorf("%s cannot be used with `get all`", tagFlag)
 		}
 		return runGetAll(cmd, outputFormat)
 	}
@@ -79,37 +98,37 @@ func runGet(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("API client not initialized")
 	}
 
-	if allVersions {
+	if allTags {
 		if len(args) != 2 {
-			return fmt.Errorf("--all-versions requires NAME")
+			return fmt.Errorf("%s requires NAME", allTagsFlag)
 		}
 		name := args[1]
 		items, err := listVersions(k, name)
 		if err != nil {
-			return fmt.Errorf("listing versions of %s %q: %w", k.Kind, name, err)
+			return fmt.Errorf("listing tags of %s %q: %w", k.Kind, name, err)
 		}
 		if len(items) == 0 {
-			fmt.Fprintf(cmd.OutOrStdout(), "No versions of %s %q found.\n", k.Kind, name)
+			fmt.Fprintf(cmd.OutOrStdout(), "No tags of %s %q found.\n", k.Kind, name)
 			return nil
 		}
 		return printItems(cmd, k, items, outputFormat)
 	}
 
-	// --version is only meaningful for versioned-artifact (content-registry)
-	// kinds. ListVersions is set exclusively on those kinds via typedKind, so
+	// --tag is only meaningful for tagged content-registry kinds.
+	// ListVersions is set exclusively on those kinds via typedKind, so
 	// it's a stable proxy without coupling get.go to v1alpha1's kind table.
-	if version != "" {
+	if tag != "" {
 		if len(args) != 2 {
-			return fmt.Errorf("--version requires NAME")
+			return fmt.Errorf("%s requires NAME", tagFlag)
 		}
 		if k.ListVersions == nil {
-			return fmt.Errorf("--version not supported for kind %q (resource is not versioned)", k.Kind)
+			return fmt.Errorf("%s not supported for kind %q (resource is not tagged)", tagFlag, k.Kind)
 		}
 	}
 
 	if len(args) == 2 {
 		name := args[1]
-		item, err := getItem(k, name, version)
+		item, err := getItem(k, name, tag)
 		if err != nil {
 			return fmt.Errorf("getting %s %q: %w", k.Kind, name, err)
 		}

@@ -71,8 +71,8 @@ func TestStatus_GetCondition(t *testing.T) {
 	}
 }
 
-func TestStatus_VersionRoundTrip(t *testing.T) {
-	s := Status{Version: 7, Conditions: []Condition{{Type: "Synced", Status: ConditionTrue}}}
+func TestStatus_ConditionsRoundTrip(t *testing.T) {
+	s := Status{Conditions: []Condition{{Type: "Synced", Status: ConditionTrue}}}
 	data, err := MarshalStatusForStorage(s)
 	if err != nil {
 		t.Fatal(err)
@@ -80,9 +80,6 @@ func TestStatus_VersionRoundTrip(t *testing.T) {
 	var got Status
 	if err := UnmarshalStatusFromStorage(data, &got); err != nil {
 		t.Fatal(err)
-	}
-	if got.Version != 7 {
-		t.Errorf("Version not round-tripped: got %d, want 7", got.Version)
 	}
 	if len(got.Conditions) != 1 {
 		t.Errorf("Conditions not round-tripped: got %d, want 1", len(got.Conditions))

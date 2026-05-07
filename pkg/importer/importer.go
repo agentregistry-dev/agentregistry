@@ -314,6 +314,11 @@ func (i *Importer) importOne(ctx context.Context, source string, obj v1alpha1.Ob
 	// thread through. Tagged-artifact kinds carry their string row identity
 	// via up.Tag once Upsert returns.
 	v1alpha1.DefaultMetadataVersionIfMissing(obj)
+	if store.IsTaggedArtifact() && meta.Tag == "" {
+		meta.Tag = v1alpha1store.DefaultTag()
+		obj.SetMetadata(*meta)
+		res.Tag = meta.Tag
+	}
 
 	if err := v1alpha1.ValidateObject(obj); err != nil {
 		res.Status = ImportStatusFailed
@@ -364,13 +369,17 @@ func (i *Importer) importOne(ctx context.Context, source string, obj v1alpha1.Ob
 	}
 	switch up.Outcome {
 	case v1alpha1store.UpsertCreated:
-		// Distinguish a true first-version create from a subsequent
-		// version bump using the integer version: v1 is a fresh create,
-		// anything higher is an update of an existing logical resource.
-		if up.Version == 1 {
+		if store.IsTaggedArtifact() {
 			res.Status = ImportStatusCreated
 		} else {
-			res.Status = ImportStatusUpdated
+			// Distinguish a true first-version create from a subsequent
+			// version bump using the integer version: v1 is a fresh create,
+			// anything higher is an update of an existing logical resource.
+			if up.Version == 1 {
+				res.Status = ImportStatusCreated
+			} else {
+				res.Status = ImportStatusUpdated
+			}
 		}
 	case v1alpha1store.UpsertReplaced:
 		res.Status = ImportStatusUpdated

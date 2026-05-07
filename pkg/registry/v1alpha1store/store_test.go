@@ -19,9 +19,8 @@ const testTable = "v1alpha1.agents"
 const testNS = "default"
 
 // upsertAgent is a small helper that builds an Agent envelope from
-// (name, spec, labels) and applies it. Callers thread spec semantics
-// through Spec; metadata.version is ignored on the versioned-artifact
-// path so we don't accept a version arg.
+// (name, spec, labels) and applies it without metadata.tag. The store
+// defaults blank tags to the literal "latest" tag.
 func upsertAgent(t *testing.T, store *Store, name string, spec v1alpha1.AgentSpec, labels map[string]string) UpsertResult {
 	t.Helper()
 	res, err := store.Upsert(context.Background(), &v1alpha1.Agent{
@@ -43,13 +42,13 @@ func TestStore_UpsertCreatesRow(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, UpsertCreated, res.Outcome)
-	require.Equal(t, 1, res.Version)
+	require.Equal(t, DefaultTag(), res.Tag)
 
-	obj, err := store.Get(ctx, testNS, "foo", "1")
+	obj, err := store.Get(ctx, testNS, "foo", DefaultTag())
 	require.NoError(t, err)
 	require.Equal(t, testNS, obj.Metadata.Namespace)
 	require.Equal(t, "foo", obj.Metadata.Name)
-	require.Equal(t, "1", obj.Metadata.Version)
+	require.Equal(t, DefaultTag(), obj.Metadata.Tag)
 	require.False(t, obj.Metadata.CreatedAt.IsZero())
 }
 
@@ -62,38 +61,43 @@ func TestStore_UpsertNoOpOnIdenticalSpec(t *testing.T) {
 	upsertAgent(t, store, "foo", v1alpha1.AgentSpec{Title: "alpha"}, nil)
 	res := upsertAgent(t, store, "foo", v1alpha1.AgentSpec{Title: "alpha"}, nil)
 	require.Equal(t, UpsertNoOp, res.Outcome)
-	require.Equal(t, 1, res.Version)
+	require.Equal(t, DefaultTag(), res.Tag)
 }
 
-// TestStore_UpsertBumpsVersionOnSpecChange verifies the new apply-branch
-// semantics: differing spec hash inserts a new row at version+1.
-func TestStore_UpsertBumpsVersionOnSpecChange(t *testing.T) {
+// TestStore_UpsertReplacesLatestOnSpecChange verifies that a changed payload
+// for the same default tag atomically replaces the previous latest row.
+func TestStore_UpsertReplacesLatestOnSpecChange(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 
 	upsertAgent(t, store, "foo", v1alpha1.AgentSpec{Title: "first"}, nil)
 	res := upsertAgent(t, store, "foo", v1alpha1.AgentSpec{Title: "second"}, nil)
-	require.Equal(t, UpsertCreated, res.Outcome)
-	require.Equal(t, 2, res.Version)
+	require.Equal(t, UpsertReplaced, res.Outcome)
+	require.Equal(t, DefaultTag(), res.Tag)
 
-	obj, err := store.Get(context.Background(), testNS, "foo", "2")
+	obj, err := store.Get(context.Background(), testNS, "foo", DefaultTag())
 	require.NoError(t, err)
-	require.Equal(t, "2", obj.Metadata.Version)
+	require.Equal(t, DefaultTag(), obj.Metadata.Tag)
 }
 
-// TestStore_GetLatestPicksMaxVersion verifies that GetLatest returns the
-// row with the highest live version after a chain of spec-changing applies.
-func TestStore_GetLatestPicksMaxVersion(t *testing.T) {
+// TestStore_GetLatestReadsLiteralLatestTag verifies that GetLatest returns the
+// row tagged "latest", not the newest or lexicographically highest tag.
+func TestStore_GetLatestReadsLiteralLatestTag(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 
-	for _, title := range []string{"a", "b", "c"} {
-		upsertAgent(t, store, "foo", v1alpha1.AgentSpec{Title: title}, nil)
+	for _, tag := range []string{"stable", "candidate"} {
+		_, err := store.Upsert(context.Background(), &v1alpha1.Agent{
+			Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "foo", Tag: tag},
+			Spec:     v1alpha1.AgentSpec{Title: tag},
+		})
+		require.NoError(t, err)
 	}
+	upsertAgent(t, store, "foo", v1alpha1.AgentSpec{Title: "current"}, nil)
 
 	latest, err := store.GetLatest(context.Background(), testNS, "foo")
 	require.NoError(t, err)
-	require.Equal(t, "3", latest.Metadata.Version)
+	require.Equal(t, DefaultTag(), latest.Metadata.Tag)
 }
 
 func TestStore_PatchStatusDisjointFromSpec(t *testing.T) {
@@ -105,12 +109,12 @@ func TestStore_PatchStatusDisjointFromSpec(t *testing.T) {
 
 	// Store.PatchStatus takes an opaque-bytes mutator; the typed
 	// Status callback wraps through v1alpha1.StatusPatcher.
-	err := store.PatchStatus(ctx, testNS, "foo", "1", v1alpha1.StatusPatcher(func(s *v1alpha1.Status) {
+	err := store.PatchStatus(ctx, testNS, "foo", DefaultTag(), v1alpha1.StatusPatcher(func(s *v1alpha1.Status) {
 		s.SetCondition(v1alpha1.Condition{Type: "Ready", Status: v1alpha1.ConditionTrue, Reason: "Converged"})
 	}))
 	require.NoError(t, err)
 
-	obj, err := store.Get(ctx, testNS, "foo", "1")
+	obj, err := store.Get(ctx, testNS, "foo", DefaultTag())
 	require.NoError(t, err)
 	var status v1alpha1.Status
 	require.NoError(t, v1alpha1.UnmarshalStatusFromStorage(obj.Status, &status))
@@ -140,36 +144,42 @@ func TestStore_GetNotFound(t *testing.T) {
 	require.True(t, errors.Is(err, pkgdb.ErrNotFound))
 }
 
-// TestStore_DeleteHardDeletesVersionedRow guards the immutable-versioning
-// fast path: versioned-artifact rows have no finalizers and Delete
+// TestStore_DeleteHardDeletesTaggedRow guards the tagged-artifact fast path:
+// rows have no finalizers and Delete
 // hard-deletes immediately. arctl delete + arctl apply works without any
 // background GC pass.
-func TestStore_DeleteHardDeletesVersionedRow(t *testing.T) {
+func TestStore_DeleteHardDeletesTaggedRow(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
-	upsertAgent(t, store, "foo", v1alpha1.AgentSpec{Title: "v1"}, nil)
-	upsertAgent(t, store, "foo", v1alpha1.AgentSpec{Title: "v2"}, nil)
-
-	require.NoError(t, store.Delete(ctx, testNS, "foo", "2"))
-
-	// is_latest_version is no longer a column — GetLatest reads MAX(version)
-	// over the surviving live rows.
-	latest, err := store.GetLatest(ctx, testNS, "foo")
+	_, err := store.Upsert(ctx, &v1alpha1.Agent{
+		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "foo", Tag: "stable"},
+		Spec:     v1alpha1.AgentSpec{Title: "stable"},
+	})
 	require.NoError(t, err)
-	require.Equal(t, "1", latest.Metadata.Version)
+	upsertAgent(t, store, "foo", v1alpha1.AgentSpec{Title: "current"}, nil)
 
-	// v2 is gone — fully removed.
-	_, err = store.Get(ctx, testNS, "foo", "2")
+	require.NoError(t, store.Delete(ctx, testNS, "foo", DefaultTag()))
+
+	// GetLatest is literal tag lookup, so deleting "latest" does not promote
+	// another tag.
+	_, err = store.GetLatest(ctx, testNS, "foo")
 	require.ErrorIs(t, err, pkgdb.ErrNotFound)
 
-	// Re-apply with the same spec is a fresh first version.
+	// latest is gone — fully removed, while the explicit tag remains.
+	_, err = store.Get(ctx, testNS, "foo", DefaultTag())
+	require.ErrorIs(t, err, pkgdb.ErrNotFound)
+	stable, err := store.Get(ctx, testNS, "foo", "stable")
+	require.NoError(t, err)
+	require.Equal(t, "stable", stable.Metadata.Tag)
+
+	// Re-apply with the same logical identity succeeds as a fresh latest tag.
 	res := upsertAgent(t, store, "bar", v1alpha1.AgentSpec{Title: "reborn"}, nil)
 	require.Equal(t, UpsertCreated, res.Outcome)
-	require.Equal(t, 1, res.Version)
+	require.Equal(t, DefaultTag(), res.Tag)
 
-	// Deleting a missing version still errors.
+	// Deleting a missing tag still errors.
 	err = store.Delete(ctx, testNS, "foo", "99")
 	require.ErrorIs(t, err, pkgdb.ErrNotFound)
 }
@@ -211,7 +221,7 @@ func TestStore_List(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, teamAOwnerX, 1)
 
-	require.NoError(t, store.Delete(ctx, "team-a", "a", "1"))
+	require.NoError(t, store.Delete(ctx, "team-a", "a", DefaultTag()))
 
 	alive, _, err := store.List(ctx, ListOpts{})
 	require.NoError(t, err)
@@ -330,7 +340,7 @@ func TestStore_ListRejectsInvalidCursor(t *testing.T) {
 }
 
 // TestStore_ListCursorStableUnderStatusChurn exercises the
-// reason List orders by (namespace, name, version, updated_at) ASC
+// reason List orders by (namespace, name, tag/version, updated_at) ASC
 // rather than updated_at DESC: a row whose updated_at moves under a
 // concurrent PatchStatus must not jump pages or get returned twice.
 func TestStore_ListCursorStableUnderStatusChurn(t *testing.T) {
@@ -349,7 +359,7 @@ func TestStore_ListCursorStableUnderStatusChurn(t *testing.T) {
 	require.Equal(t, "alpha", page1[0].Metadata.Name)
 	require.Equal(t, "beta", page1[1].Metadata.Name)
 
-	require.NoError(t, store.PatchStatus(ctx, testNS, "alpha", "1", func(json.RawMessage) (json.RawMessage, error) {
+	require.NoError(t, store.PatchStatus(ctx, testNS, "alpha", DefaultTag(), func(json.RawMessage) (json.RawMessage, error) {
 		return json.RawMessage(`{"version":1}`), nil
 	}))
 
@@ -380,13 +390,13 @@ func TestStore_PatchAnnotationsPreservesExistingKeys(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = store.PatchAnnotations(ctx, testNS, "annotated", "1", func(annotations map[string]string) map[string]string {
+	err = store.PatchAnnotations(ctx, testNS, "annotated", DefaultTag(), func(annotations map[string]string) map[string]string {
 		annotations["add"] = "value"
 		return annotations
 	})
 	require.NoError(t, err)
 
-	obj, err := store.Get(ctx, testNS, "annotated", "1")
+	obj, err := store.Get(ctx, testNS, "annotated", DefaultTag())
 	require.NoError(t, err)
 	require.Equal(t, map[string]string{
 		"add":  "value",
@@ -448,9 +458,8 @@ func TestStore_SeededProviders(t *testing.T) {
 }
 
 // TestStore_NotifyPayloadDiscreteFields guards the R2 fix:
-// the status NOTIFY trigger emits (namespace, name, version) as three
-// discrete JSON fields instead of a concatenated "ns/name/version"
-// string. Versioned-artifact tables emit version as a JSON number.
+// the status NOTIFY trigger emits (namespace, name, tag) as three
+// discrete JSON fields instead of a concatenated "ns/name/tag" string.
 func TestStore_NotifyPayloadDiscreteFields(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
@@ -462,8 +471,7 @@ func TestStore_NotifyPayloadDiscreteFields(t *testing.T) {
 	_, err = conn.Exec(ctx, "LISTEN v1alpha1_agents_status")
 	require.NoError(t, err)
 
-	// Name with `/` — versioned-artifact tables emit integer version, but
-	// the discrete-fields wire format stays the same.
+	// Name with `/` keeps the discrete-fields wire format intact.
 	const nsName = "ai.exa/exa"
 	_, err = store.Upsert(ctx, &v1alpha1.Agent{
 		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: nsName},
@@ -478,16 +486,16 @@ func TestStore_NotifyPayloadDiscreteFields(t *testing.T) {
 	require.Equal(t, "v1alpha1_agents_status", notif.Channel)
 
 	var payload struct {
-		Op        string          `json:"op"`
-		Namespace string          `json:"namespace"`
-		Name      string          `json:"name"`
-		Version   json.RawMessage `json:"version"`
+		Op        string `json:"op"`
+		Namespace string `json:"namespace"`
+		Name      string `json:"name"`
+		Tag       string `json:"version"`
 	}
 	require.NoError(t, json.Unmarshal([]byte(notif.Payload), &payload),
-		"payload must be JSON with discrete (namespace, name, version) fields")
+		"payload must be JSON with discrete (namespace, name, tag) fields")
 	require.Equal(t, "INSERT", payload.Op)
 	require.Equal(t, testNS, payload.Namespace)
 	require.Equal(t, nsName, payload.Name,
 		"name must round-trip intact, including the / character")
-	require.JSONEq(t, "1", string(payload.Version), "version emitted as the integer 1")
+	require.Equal(t, DefaultTag(), payload.Tag, "tag emitted as the default latest tag")
 }

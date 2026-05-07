@@ -86,10 +86,10 @@ spec:
 `
 	res := applyAgentYAML(t, api, createYAML)
 	require.Equal(t, arv0.ApplyStatusCreated, res.Status, "first apply must report created")
-	require.Equal(t, "1", res.Version, "first apply assigns version 1")
+	require.Equal(t, v1alpha1store.DefaultTag(), res.Tag)
 
-	// GET exact version.
-	resp := api.Get("/v0/agents/alice/1")
+	// GET exact tag.
+	resp := api.Get("/v0/agents/alice/latest")
 	require.Equal(t, http.StatusOK, resp.Code)
 	var gotAgent v1alpha1.Agent
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &gotAgent))
@@ -97,12 +97,7 @@ spec:
 	require.Equal(t, v1alpha1.KindAgent, gotAgent.Kind)
 	require.Equal(t, "default", gotAgent.Metadata.NamespaceOrDefault())
 	require.Equal(t, "alice", gotAgent.Metadata.Name)
-	// metadata.version + status.version both carry the system-assigned
-	// integer for versioned-artifact kinds. Status.Version is the
-	// canonical surface for new code; metadata.version is rendered for
-	// legacy clients that haven't migrated.
-	require.Equal(t, "1", gotAgent.Metadata.Version)
-	require.Equal(t, 1, gotAgent.Status.Version)
+	require.Equal(t, v1alpha1store.DefaultTag(), gotAgent.Metadata.Tag)
 	require.Equal(t, "Alice", gotAgent.Spec.Title)
 	require.Equal(t, "platform", gotAgent.Metadata.Labels["team"])
 
@@ -110,8 +105,7 @@ spec:
 	resp = api.Get("/v0/agents/alice")
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &gotAgent))
-	require.Equal(t, "1", gotAgent.Metadata.Version)
-	require.Equal(t, 1, gotAgent.Status.Version)
+	require.Equal(t, v1alpha1store.DefaultTag(), gotAgent.Metadata.Tag)
 
 	// LIST in namespace with label selector.
 	resp = api.Get("/v0/agents?labels=team%3Dplatform")
@@ -131,16 +125,14 @@ spec:
 	require.Len(t, list.Items, 1)
 
 	// Re-apply with the same spec is a no-op at the Store layer; the
-	// row remains at version 1 and version 2 is never created.
+	// row remains at tag latest.
 	res = applyAgentYAML(t, api, createYAML)
 	require.Equal(t, arv0.ApplyStatusUnchanged, res.Status, "no-op re-apply must report unchanged")
 	latest, err := store.GetLatest(t.Context(), "default", "alice")
 	require.NoError(t, err)
-	require.Equal(t, "1", latest.Metadata.Version, "no-op apply must not bump version")
+	require.Equal(t, v1alpha1store.DefaultTag(), latest.Metadata.Tag)
 
-	// Apply with mutated spec — versioned-artifact path appends a new
-	// immutable row at version 2; the result reflects the assigned
-	// integer version (system-assigned).
+	// Apply with mutated spec under the same default tag replaces the row.
 	updateYAML := `apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
@@ -154,32 +146,29 @@ spec:
     image: ghcr.io/example/alice:1.0.0
 `
 	res = applyAgentYAML(t, api, updateYAML)
-	require.Equal(t, arv0.ApplyStatusCreated, res.Status, "spec change must create a new version")
-	require.Equal(t, "2", res.Version, "spec change appends version 2 (system-assigned)")
+	require.Equal(t, arv0.ApplyStatusConfigured, res.Status, "spec change must replace latest")
+	require.Equal(t, v1alpha1store.DefaultTag(), res.Tag)
 	latest, err = store.GetLatest(t.Context(), "default", "alice")
 	require.NoError(t, err)
-	require.Equal(t, "2", latest.Metadata.Version)
+	require.Equal(t, v1alpha1store.DefaultTag(), latest.Metadata.Tag)
 	// store.GetLatest returns spec as raw JSON; read back through the
 	// per-kind GET handler for the typed view.
-	resp = api.Get("/v0/agents/alice/2")
+	resp = api.Get("/v0/agents/alice/latest")
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &gotAgent))
 	require.Equal(t, "Alice v2", gotAgent.Spec.Title)
 
-	// DELETE — versioned-artifact rows have no finalizers, so DELETE
-	// hard-deletes the targeted version immediately. The version-1 row
-	// remains; only the URL-targeted version is removed.
-	resp = api.Delete("/v0/agents/alice/2")
-	require.Equal(t, http.StatusNoContent, resp.Code)
-	resp = api.Delete("/v0/agents/alice/1")
+	// DELETE — tagged-artifact rows have no finalizers, so DELETE
+	// hard-deletes the targeted tag immediately.
+	resp = api.Delete("/v0/agents/alice/latest")
 	require.Equal(t, http.StatusNoContent, resp.Code)
 
 	// GetLatest returns 404 — row is gone.
 	resp = api.Get("/v0/agents/alice")
 	require.Equal(t, http.StatusNotFound, resp.Code, resp.Body.String())
 
-	// GET on the exact version returns 404 too.
-	resp = api.Get("/v0/agents/alice/1")
+	// GET on the exact tag returns 404 too.
+	resp = api.Get("/v0/agents/alice/latest")
 	require.Equal(t, http.StatusNotFound, resp.Code)
 
 	// List is empty.
@@ -227,12 +216,12 @@ spec:
 
 	// Namespaced GETs resolve the right one.
 	var got v1alpha1.Agent
-	resp := api.Get("/v0/agents/shared/1?namespace=team-a")
+	resp := api.Get("/v0/agents/shared/latest?namespace=team-a")
 	require.Equal(t, http.StatusOK, resp.Code)
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &got))
 	require.Equal(t, "A's", got.Spec.Title)
 
-	resp = api.Get("/v0/agents/shared/1?namespace=team-b")
+	resp = api.Get("/v0/agents/shared/latest?namespace=team-b")
 	require.Equal(t, http.StatusOK, resp.Code)
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &got))
 	require.Equal(t, "B's", got.Spec.Title)
@@ -416,8 +405,8 @@ func TestResourceRegister_ListFilter(t *testing.T) {
 // post-redesign contract: direct PUT on the per-kind item URL is no
 // longer registered for content-registry kinds (Agent, MCPServer,
 // RemoteMCPServer, Skill, Prompt). POST /v0/apply is the single
-// create/update entry point — system-assigned integer versions don't
-// fit the {version} URL segment of a direct PUT. Provider/Deployment
+// create/update entry point — user-controlled tags live in metadata.tag rather
+// than the URL segment of a direct PUT. Provider/Deployment
 // (legacy stores) still expose direct PUT.
 //
 // The test issues a PUT against the agents handler and expects 405
@@ -465,7 +454,11 @@ func TestResourceRegister_ResolverDetectsDanglingRef(t *testing.T) {
 		if ref.Kind != v1alpha1.KindMCPServer {
 			return nil
 		}
-		_, err := mcpStore.Get(ctx, ref.Namespace, ref.Name, ref.Version)
+		identity := ref.Tag
+		if identity == "" {
+			identity = v1alpha1store.DefaultTag()
+		}
+		_, err := mcpStore.Get(ctx, ref.Namespace, ref.Name, identity)
 		return err
 	}
 
@@ -496,10 +489,10 @@ spec:
   mcpServers:
     - kind: MCPServer
       name: tools
-      version: "1"
+      tag: latest
     - kind: MCPServer
       name: missing
-      version: "1"
+      tag: latest
 `
 	resp := api.Post("/v0/apply", "Content-Type: application/yaml", strings.NewReader(yaml))
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
@@ -536,31 +529,29 @@ spec:
 `
 	res := applyAgentYAML(t, api, createYAML)
 	require.Equal(t, arv0.ApplyStatusCreated, res.Status)
-	require.Equal(t, "1", res.Version)
+	require.Equal(t, v1alpha1store.DefaultTag(), res.Tag)
 
 	// DELETE on a finalizer-free row hard-deletes immediately. DELETE
 	// stays per-kind for content-registry kinds (CLI uses it for
-	// "arctl delete agent foo --version 3").
-	resp := api.Delete("/v0/agents/soft/1")
+	// "arctl delete agent foo --tag latest").
+	resp := api.Delete("/v0/agents/soft/latest")
 	require.Equal(t, http.StatusNoContent, resp.Code)
 
 	// GET returns 404 — row is gone, not terminating.
-	resp = api.Get("/v0/agents/soft/1")
+	resp = api.Get("/v0/agents/soft/latest")
 	require.Equal(t, http.StatusNotFound, resp.Code)
 
 	// Re-apply with the same logical identity succeeds — no
 	// "object is terminating" race since the row is fully removed.
-	// Versioned-artifact rows have no separate generation column; the
-	// row's identity-as-version is the integer assigned at insert time.
-	// A fresh create after hard-delete starts at version 1 again.
+	// A fresh create after hard-delete recreates the latest tag.
 	res = applyAgentYAML(t, api, createYAML)
 	require.Equal(t, arv0.ApplyStatusCreated, res.Status)
-	require.Equal(t, "1", res.Version,
-		"re-apply after hard-delete is a fresh insert at version 1")
+	require.Equal(t, v1alpha1store.DefaultTag(), res.Tag,
+		"re-apply after hard-delete is a fresh insert at tag latest")
 
-	row, err := store.Get(t.Context(), "default", "soft", "1")
+	row, err := store.Get(t.Context(), "default", "soft", v1alpha1store.DefaultTag())
 	require.NoError(t, err)
-	require.Equal(t, "1", row.Metadata.Version)
+	require.Equal(t, v1alpha1store.DefaultTag(), row.Metadata.Tag)
 }
 
 // TestResourceRegister_PostUpsertFailureLeavesPersistedRow pins the
@@ -614,7 +605,7 @@ spec:
 	require.Equal(t, 1, hookCalls, "PostUpsert must fire exactly once on the failing apply")
 
 	// Row persists despite the hook failure: subsequent GET returns 200.
-	resp := api.Get("/v0/agents/halfapplied/1")
+	resp := api.Get("/v0/agents/halfapplied/latest")
 	require.Equal(t, http.StatusOK, resp.Code,
 		"contract: Store.Upsert commits before the hook, so a hook failure leaves the row persisted")
 

@@ -27,8 +27,8 @@ const DefaultNamespace = "default"
 //
 // Content-registry identity is (Namespace, Name, Tag). Users may supply
 // metadata.tag to pin manifests declaratively before applying anything to a
-// live server. When Tag is omitted, the store deterministically fills it with
-// a canonical hash of spec plus the relevant user-authored metadata.
+// live server. When Tag is omitted, the store fills it with the literal
+// "latest" tag.
 //
 // Legacy identity at the database level is (Namespace, Name, Version).
 // Namespace is an internal detail today — it defaults to "default" on
@@ -109,8 +109,8 @@ func (m ObjectMeta) NamespaceOrDefault() string {
 // RawObject is the generic wire envelope used during decode and apply dispatch
 // when the concrete Kind is not yet known. Spec AND Status are both held as
 // raw JSON bytes so the envelope layer stays agnostic to per-kind schemas:
-// OSS kinds layer a typed v1alpha1.Status (system-assigned version + K8s-style
-// conditions) on top; enterprise kinds can ship any JSON shape they like
+// OSS kinds layer a typed v1alpha1.Status (K8s-style conditions) on top;
+// enterprise kinds can ship any JSON shape they like
 // without having to conform to meta.v1 conditions.
 //
 // Callers route into a typed object via Scheme.Decode / Scheme.DecodeMulti

@@ -181,12 +181,9 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 		res.Status = arv0.ApplyStatusDryRun
 		return res
 	}
-	// Map the Store outcome onto the wire status. Under
-	// versioned-artifact mode every spec change creates a new immutable
-	// row, so UpsertCreated covers both "first apply" (v1) and "spec
-	// changed → new version" (v>1) — both surface as
-	// ApplyStatusCreated. UpsertLabelsUpdated is the same-spec /
-	// changed-metadata case the legacy "configured" status modeled.
+	// Map the Store outcome onto the wire status. Tagged-artifact creates
+	// surface as created, same-tag replacements as configured, and exact
+	// re-applies as unchanged.
 	if up.Staged {
 		res.Status = arv0.ApplyStatusStaged
 	} else {
@@ -213,12 +210,10 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 // decoded body verbatim — batch callers expecting hook input matching
 // the persisted row should re-apply before deleting.
 //
-// Identity is logical (namespace, name) for versioned-artifact kinds:
-// metadata.version on the doc is intentionally ignored, and every
-// version row for (ns, name) is hard-deleted in one call so the
-// identity is freed and the next apply starts at v1. The legacy
-// deployment path keeps its single-version delete since deployment
-// rows are mutable rather than append-only.
+// Tagged-artifact identity is (namespace, name, tag). If metadata.tag is
+// omitted on a delete document, it defaults to the literal "latest" tag. The
+// legacy deployment path keeps its single-version delete since deployment rows
+// are mutable rather than append-only.
 func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun bool) arv0.ApplyResult {
 	store, meta, ae := resolveBatchTarget(cfg, obj, "delete")
 	res := arv0.ApplyResult{
@@ -248,12 +243,10 @@ func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun
 	}
 
 	if store.IsTaggedArtifact() {
-		var err error
-		if meta.Tag != "" {
-			err = store.Delete(ctx, meta.Namespace, meta.Name, meta.Tag)
-		} else {
-			err = store.DeleteAllTags(ctx, meta.Namespace, meta.Name)
+		if meta.Tag == "" {
+			meta.Tag = v1alpha1store.DefaultTag()
 		}
+		err := store.Delete(ctx, meta.Namespace, meta.Name, meta.Tag)
 		if err != nil {
 			return failResult(res, &applyError{
 				Stage:    stageDelete,
@@ -315,10 +308,9 @@ func resolveBatchTarget(cfg ApplyConfig, obj v1alpha1.Object, verb string) (*v1a
 	// version when the kind opts in via MetadataVersionDefaulter. The
 	// defaulter supplies "1" so the legacy delete path has a row
 	// identity to use when the manifest omits metadata.version.
-	// Versioned-artifact kinds reject metadata.version at decode time
-	// and ignore meta.Version entirely on the upsert/delete path
-	// (the store's DeleteAllVersions doesn't read it), so they don't
-	// implement the interface and this call is a no-op for them.
+	// Tagged-artifact kinds reject metadata.version at decode time and ignore
+	// meta.Version entirely on the upsert/delete path, so they don't implement
+	// the interface and this call is a no-op for them.
 	v1alpha1.DefaultMetadataVersionIfMissing(obj)
 
 	// Defense-in-depth: when any Authorizers are wired, a kind without

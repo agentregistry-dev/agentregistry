@@ -28,14 +28,11 @@ type Condition struct {
 	LastTransitionTime time.Time       `json:"lastTransitionTime,omitzero" yaml:"lastTransitionTime,omitempty"`
 }
 
-// Status is the observed-state subresource. Version is the
-// system-assigned monotonic integer identifying the immutable resource
-// row this status belongs to; Conditions is the list of fine-grained
-// state facets written by the reconciler and service layer. No Phase
-// roll-up — K8s deprecated it in favor of Conditions, and carrying a
+// Status is the observed-state subresource. Conditions is the list of
+// fine-grained state facets written by the reconciler and service layer. No
+// Phase roll-up — K8s deprecated it in favor of Conditions, and carrying a
 // string summary encourages downstream string-comparison anti-patterns.
 type Status struct {
-	Version    int         `json:"version,omitempty" yaml:"version,omitempty"`
 	Conditions []Condition `json:"conditions,omitempty" yaml:"conditions,omitempty"`
 }
 
@@ -98,7 +95,6 @@ type conditionStore struct {
 // distinct so storage-only fields can be added without altering the wire
 // schema. See MarshalStatusForStorage / UnmarshalStatusFromStorage.
 type statusStore struct {
-	Version    int              `json:"version,omitempty"`
 	Conditions []conditionStore `json:"conditions,omitempty"`
 }
 
@@ -114,7 +110,6 @@ func MarshalStatusForStorage(s Status) ([]byte, error) {
 		storeConds[i] = conditionStore(c)
 	}
 	return json.Marshal(statusStore{
-		Version:    s.Version,
 		Conditions: storeConds,
 	})
 }
@@ -143,20 +138,6 @@ func StatusPatcher(mutate func(*Status)) func(current json.RawMessage) (json.Raw
 	}
 }
 
-// SetStatusVersionBytes sets Status.Version on a marshaled status payload,
-// preserving any other status fields. Returns the new payload bytes.
-// Used by the store on read to ensure status.version mirrors the row's
-// version column even if the on-disk status drifted, and by the apply
-// pipeline to stamp the system-assigned version onto the response body.
-func SetStatusVersionBytes(data []byte, v int) ([]byte, error) {
-	var s Status
-	if err := UnmarshalStatusFromStorage(data, &s); err != nil {
-		return nil, err
-	}
-	s.Version = v
-	return MarshalStatusForStorage(s)
-}
-
 // UnmarshalStatusFromStorage is the read-side inverse of
 // MarshalStatusForStorage: decode a status JSONB payload back into a
 // live Status struct.
@@ -174,7 +155,6 @@ func UnmarshalStatusFromStorage(data []byte, s *Status) error {
 		conds[i] = Condition(c)
 	}
 	*s = Status{
-		Version:    w.Version,
 		Conditions: conds,
 	}
 	return nil

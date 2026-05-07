@@ -50,7 +50,7 @@ spec:
   mcpServers:
     - kind: MCPServer
       name: tools
-      version: "1"
+      tag: latest
 `)
 	resp := api.Post("/v0/apply", "Content-Type: application/yaml", strings.NewReader(string(yaml)))
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
@@ -116,9 +116,9 @@ spec:
 }
 
 // TestRegisterApply_RejectsUserSuppliedVersion pins the contract that
-// the batch decoder fails any document carrying metadata.version —
-// that field is system-assigned and must not be settable from a
-// manifest. Failures surface as a single batch-level error result
+// the batch decoder fails any content document carrying metadata.version —
+// content identity must use metadata.tag. Failures surface as a single
+// batch-level error result
 // (not per-doc) because the decode step short-circuits the stream.
 func TestRegisterApply_RejectsUserSuppliedVersion(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)

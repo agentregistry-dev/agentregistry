@@ -5,8 +5,8 @@ package v1alpha1
 // infra/config references may still use Version.
 //
 // Namespace is optional: blank means "same namespace as the referencing
-// object" (the common case). Tag is optional: blank means "resolve to
-// latest" at reference-resolution time.
+// object" (the common case). Tag is optional: blank means "resolve to the
+// literal latest tag" at reference-resolution time.
 type ResourceRef struct {
 	Kind      string `json:"kind" yaml:"kind"`
 	Namespace string `json:"namespace,omitempty" yaml:"namespace,omitempty"`

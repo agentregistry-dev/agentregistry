@@ -46,9 +46,9 @@ func TestStore_SetEmbedding_RoundTrip(t *testing.T) {
 		Dimensions: 1536,
 		Checksum:   "sha256:abc",
 	}
-	require.NoError(t, store.SetEmbedding(ctx, testNS, "foo", "1", emb))
+	require.NoError(t, store.SetEmbedding(ctx, testNS, "foo", DefaultTag(), emb))
 
-	meta, err := store.GetEmbeddingMetadata(ctx, testNS, "foo", "1")
+	meta, err := store.GetEmbeddingMetadata(ctx, testNS, "foo", DefaultTag())
 	require.NoError(t, err)
 	require.NotNil(t, meta)
 	require.Equal(t, "openai", meta.Provider)
@@ -66,7 +66,7 @@ func TestStore_GetEmbeddingMetadata_NilWhenMissing(t *testing.T) {
 	upsertAgent(t, store, "foo", v1alpha1.AgentSpec{Title: "x"}, nil)
 
 	// Row exists but no embedding yet.
-	meta, err := store.GetEmbeddingMetadata(ctx, testNS, "foo", "1")
+	meta, err := store.GetEmbeddingMetadata(ctx, testNS, "foo", DefaultTag())
 	require.NoError(t, err)
 	require.Nil(t, meta)
 }
@@ -85,7 +85,7 @@ func TestStore_SetEmbedding_ErrNotFound(t *testing.T) {
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
-	err := store.SetEmbedding(ctx, testNS, "nope", "1", semantic.SemanticEmbedding{
+	err := store.SetEmbedding(ctx, testNS, "nope", DefaultTag(), semantic.SemanticEmbedding{
 		Vector: zeroPadVec(1),
 	})
 	require.True(t, errors.Is(err, pkgdb.ErrNotFound))
@@ -98,7 +98,7 @@ func TestStore_SemanticList_RanksByDistance(t *testing.T) {
 
 	mkAgent := func(name string, vec []float32) {
 		upsertAgent(t, store, name, v1alpha1.AgentSpec{Title: name}, nil)
-		require.NoError(t, store.SetEmbedding(ctx, testNS, name, "1",
+		require.NoError(t, store.SetEmbedding(ctx, testNS, name, DefaultTag(),
 			semantic.SemanticEmbedding{
 				Vector:     vec,
 				Provider:   "test",
@@ -134,7 +134,7 @@ func TestStore_SemanticList_ThresholdFilter(t *testing.T) {
 
 	mkAgent := func(name string, vec []float32) {
 		upsertAgent(t, store, name, v1alpha1.AgentSpec{Title: name}, nil)
-		require.NoError(t, store.SetEmbedding(ctx, testNS, name, "1",
+		require.NoError(t, store.SetEmbedding(ctx, testNS, name, DefaultTag(),
 			semantic.SemanticEmbedding{Vector: vec, Provider: "test", Dimensions: 1536}))
 	}
 	mkAgent("exact", zeroPadVec(1, 0, 0))
@@ -158,7 +158,7 @@ func TestStore_SemanticList_SkipsRowsWithoutEmbedding(t *testing.T) {
 	// Two rows — only one has an embedding.
 	upsertAgent(t, store, "with-emb", v1alpha1.AgentSpec{}, nil)
 	upsertAgent(t, store, "no-emb", v1alpha1.AgentSpec{}, nil)
-	require.NoError(t, store.SetEmbedding(ctx, testNS, "with-emb", "1",
+	require.NoError(t, store.SetEmbedding(ctx, testNS, "with-emb", DefaultTag(),
 		semantic.SemanticEmbedding{Vector: zeroPadVec(1, 0, 0), Dimensions: 1536}))
 
 	results, err := store.SemanticList(ctx, SemanticListOpts{
@@ -175,16 +175,18 @@ func TestStore_SemanticList_LatestOnly(t *testing.T) {
 	store := NewStore(pool, testTable)
 	ctx := context.Background()
 
-	// Two versions of the same agent.
-	upsertAgent(t, store, "foo", v1alpha1.AgentSpec{Title: "first"}, nil)
-	upsertAgent(t, store, "foo", v1alpha1.AgentSpec{Title: "second"}, nil)
-
-	for _, v := range []string{"1", "2"} {
-		require.NoError(t, store.SetEmbedding(ctx, testNS, "foo", v,
+	_, err := store.Upsert(ctx, &v1alpha1.Agent{
+		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "foo", Tag: "stable"},
+		Spec:     v1alpha1.AgentSpec{Title: "stable"},
+	})
+	require.NoError(t, err)
+	upsertAgent(t, store, "foo", v1alpha1.AgentSpec{Title: "current"}, nil)
+	for _, tag := range []string{"stable", DefaultTag()} {
+		require.NoError(t, store.SetEmbedding(ctx, testNS, "foo", tag,
 			semantic.SemanticEmbedding{Vector: zeroPadVec(1, 0, 0), Dimensions: 1536}))
 	}
 
-	// Both versions return by default.
+	// Both tags return by default.
 	all, err := store.SemanticList(ctx, SemanticListOpts{
 		Query:     zeroPadVec(1, 0, 0),
 		Namespace: testNS,
@@ -192,7 +194,7 @@ func TestStore_SemanticList_LatestOnly(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, all, 2)
 
-	// LatestOnly collapses to MAX(version) — version=2.
+	// LatestOnly returns only the literal latest tag.
 	latest, err := store.SemanticList(ctx, SemanticListOpts{
 		Query:      zeroPadVec(1, 0, 0),
 		Namespace:  testNS,
@@ -200,5 +202,5 @@ func TestStore_SemanticList_LatestOnly(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, latest, 1)
-	require.Equal(t, "2", latest[0].Object.Metadata.Version)
+	require.Equal(t, DefaultTag(), latest[0].Object.Metadata.Tag)
 }

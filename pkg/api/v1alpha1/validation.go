@@ -115,10 +115,9 @@ const maxVersionLen = 255
 // -----------------------------------------------------------------------------
 
 // ValidateObjectMeta checks the namespace/name format and label shape.
-// Server-managed fields (CreatedAt, UpdatedAt, DeletionTimestamp,
-// system-assigned version) are ignored — version is no longer carried
-// on ObjectMeta and identity-by-version flows through the URL +
-// Status.Version instead.
+// Server-managed fields (CreatedAt, UpdatedAt, DeletionTimestamp) are ignored.
+// Content resources use metadata.tag for identity; legacy infra/config kinds
+// may still use metadata.version.
 //
 // Both kinds with semantic version history (Agent, MCPServer, Skill,
 // Prompt) and unversioned kinds (Provider, Deployment) call this same

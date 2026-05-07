@@ -165,7 +165,7 @@ func (i *Indexer) runOne(ctx context.Context, b KindBinding, opts IndexOptions, 
 					"kind", b.Kind,
 					"namespace", row.Metadata.Namespace,
 					"name", row.Metadata.Name,
-					"version", row.Metadata.Version,
+					"identity", rowIdentity(row),
 					"error", err,
 				)
 				stats.Failures++
@@ -197,7 +197,7 @@ func (i *Indexer) indexRow(ctx context.Context, b KindBinding, row *v1alpha1.Raw
 	checksum := PayloadChecksum(payload)
 
 	if !opts.Force {
-		meta, err := b.Store.GetEmbeddingMetadata(ctx, row.Metadata.Namespace, row.Metadata.Name, row.Metadata.Version)
+		meta, err := b.Store.GetEmbeddingMetadata(ctx, row.Metadata.Namespace, row.Metadata.Name, rowIdentity(row))
 		if err != nil {
 			return fmt.Errorf("load metadata: %w", err)
 		}
@@ -217,11 +217,18 @@ func (i *Indexer) indexRow(ctx context.Context, b KindBinding, row *v1alpha1.Raw
 		return nil
 	}
 
-	if err := b.Store.SetEmbedding(ctx, row.Metadata.Namespace, row.Metadata.Name, row.Metadata.Version, *emb); err != nil {
+	if err := b.Store.SetEmbedding(ctx, row.Metadata.Namespace, row.Metadata.Name, rowIdentity(row), *emb); err != nil {
 		return fmt.Errorf("set embedding: %w", err)
 	}
 	stats.Updated++
 	return nil
+}
+
+func rowIdentity(row *v1alpha1.RawObject) string {
+	if row.Metadata.Tag != "" {
+		return row.Metadata.Tag
+	}
+	return row.Metadata.Version
 }
 
 // DefaultBindings returns the KindBindings for every v1alpha1 built-in

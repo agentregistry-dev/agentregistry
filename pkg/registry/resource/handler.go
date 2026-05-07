@@ -486,7 +486,7 @@ func registerListTags[T v1alpha1.Object](api huma.API, cfg Config, newObj func()
 }
 
 // registerApplyLegacy wires PUT /{name}/{version} for legacy
-// (non-versioned-artifact) stores where the URL {version} segment is
+// (non-tagged-artifact) stores where the URL {version} segment is
 // authoritative for the row identity. Content-registry kinds assign
 // metadata.tag and skip this route entirely.
 func registerApplyLegacy[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T, kind, itemVersionPath string) {

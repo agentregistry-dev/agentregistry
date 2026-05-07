@@ -161,11 +161,8 @@ func (s *Store) SemanticList(ctx context.Context, opts SemanticListOpts) ([]sema
 	}
 	if opts.LatestOnly {
 		if !s.legacy {
-			// Versioned-artifact tables don't carry is_latest_version;
-			// pick MAX(version) live row per (namespace, name).
-			where = append(where, fmt.Sprintf(
-				"version = (SELECT MAX(version) FROM %s sub WHERE sub.namespace = %s.namespace AND sub.name = %s.name AND sub.deletion_timestamp IS NULL)",
-				s.table, s.table, s.table))
+			args = append(args, DefaultTag())
+			where = append(where, fmt.Sprintf("tag = $%d", len(args)))
 		} else {
 			where = append(where, "is_latest_version")
 		}

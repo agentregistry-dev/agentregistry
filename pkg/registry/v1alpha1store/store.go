@@ -28,12 +28,11 @@ import (
 //
 // Store has two modes, picked at construction time:
 //
-//   - Versioned-artifact mode (the default; produced by NewStore).
+//   - Tagged-artifact mode (the default; produced by NewStore).
 //     Identity is (namespace, name, tag). Users may supply the tag
-//     declaratively; missing tags are filled with a canonical hash of the
-//     object's spec plus labels/annotations. Re-applying the same tag replaces
-//     the prior row atomically when the content changes. The most recently
-//     applied non-deleted tag is "latest". Used for agents, mcp_servers,
+//     declaratively; missing tags are filled with the literal "latest".
+//     Re-applying the same tag replaces the prior row atomically when the
+//     content changes. Used for agents, mcp_servers,
 //     remote_mcp_servers, skills, and prompts.
 //
 //   - Legacy-deployment mode (produced by NewDeploymentStore). Identity is
@@ -48,9 +47,9 @@ import (
 // The legacy flag is set ONLY by NewDeploymentStore. The two constructors
 // are mutually exclusive — do not mix tables across modes; do not flip
 // the flag after construction. Adding new kinds means picking
-// versioned-artifact (the default) at registration time; the legacy
-// branch exists only to keep the deployments code path unforked while the
-// rest of the system migrates.
+// tagged-artifact (the default) at registration time; the legacy branch exists
+// only to keep the deployments code path unforked while the rest of the system
+// migrates.
 //
 // PatchStatus is disjoint from Upsert: it touches only status and
 // updated_at, never spec. Reconcilers use PatchStatus exclusively; apply
@@ -94,7 +93,7 @@ func WithKind(kind string) StoreOption {
 	return func(s *Store) { s.kind = kind }
 }
 
-// NewStore constructs a versioned-artifact Store bound to a single table
+// NewStore constructs a tagged-artifact Store bound to a single table
 // (e.g. "v1alpha1.agents"). The table must exist in the schema; NewStore
 // does not validate it.
 //
@@ -230,7 +229,7 @@ type listCursor struct {
 //
 //   - Tagged-artifact tables (agents, mcp_servers, etc.) follow
 //     declarative tag semantics:
-//   - missing metadata.tag → default to a canonical sha256 tag
+//   - missing metadata.tag → default to the literal "latest" tag
 //   - new (namespace, name, tag) → insert the row
 //   - same tag and same canonical content hash → no-op
 //   - same tag and different content hash → replace the row in place
@@ -287,18 +286,14 @@ func (s *Store) kindFor(obj v1alpha1.Object) string {
 	return obj.GetKind()
 }
 
-// upsertTagged implements the hash-based tag apply semantics for tagged
-// artifact tables. See Upsert for the full state machine.
+// upsertTagged implements the tag apply semantics for tagged artifact tables.
+// See Upsert for the full state machine.
 func (s *Store) upsertTagged(ctx context.Context, meta *v1alpha1.ObjectMeta, specJSON json.RawMessage) (UpsertResult, error) {
 	if meta.Version != "" {
 		return UpsertResult{}, errors.New("v1alpha1 store: content resources use metadata.tag, not metadata.version")
 	}
 	if meta.Tag == "" {
-		tag, err := DefaultTag(meta, specJSON)
-		if err != nil {
-			return UpsertResult{}, fmt.Errorf("v1alpha1 store: default tag: %w", err)
-		}
-		meta.Tag = tag
+		meta.Tag = DefaultTag()
 	}
 	incomingHash, err := ContentHash(meta, specJSON)
 	if err != nil {
@@ -317,9 +312,8 @@ func (s *Store) upsertTagged(ctx context.Context, meta *v1alpha1.ObjectMeta, spe
 	err = runInTx(ctx, s.pool, func(tx pgx.Tx) error {
 		// Serialize concurrent applies for the same (namespace, name).
 		// `SELECT ... FOR UPDATE` is row-level and provides no gap-lock
-		// semantics: goroutines that see "no prior row" all proceed to
-		// INSERT v1, and even goroutines that block on an existing row
-		// see a stale view of MAX(version) after the lock releases.
+		// semantics: goroutines that see "no prior row" can all proceed
+		// to INSERT the same tag before one wins the unique constraint.
 		// An advisory transaction lock serializes the entire
 		// (lookup, insert) decision per identity. The lock auto-releases
 		// at COMMIT/ROLLBACK because we use pg_advisory_xact_lock.
@@ -690,7 +684,7 @@ func (s *Store) Get(ctx context.Context, namespace, name, identity string) (*v1a
 	return scanRow(row, !s.legacy)
 }
 
-// GetLatest returns the most recently applied live tag for (namespace, name) on
+// GetLatest returns the literal "latest" live tag for (namespace, name) on
 // tagged-artifact tables, or the is_latest_version row on the
 // deployments table. Returns pkgdb.ErrNotFound if no live version exists.
 // Terminating rows are excluded.
@@ -700,9 +694,9 @@ func (s *Store) GetLatest(ctx context.Context, namespace, name string) (*v1alpha
 		query = fmt.Sprintf(`
 			SELECT %s
 			FROM %s
-			WHERE namespace=$1 AND name=$2 AND deletion_timestamp IS NULL
-			ORDER BY updated_at DESC, tag DESC
-			LIMIT 1`, s.selectColumns(), s.table)
+			WHERE namespace=$1 AND name=$2 AND tag=$3 AND deletion_timestamp IS NULL`, s.selectColumns(), s.table)
+		row := s.pool.QueryRow(ctx, query, namespace, name, DefaultTag())
+		return scanRow(row, true)
 	} else {
 		query = fmt.Sprintf(`
 			SELECT %s
@@ -710,7 +704,7 @@ func (s *Store) GetLatest(ctx context.Context, namespace, name string) (*v1alpha
 			WHERE namespace=$1 AND name=$2 AND is_latest_version`, s.selectColumns(), s.table)
 	}
 	row := s.pool.QueryRow(ctx, query, namespace, name)
-	return scanRow(row, !s.legacy)
+	return scanRow(row, false)
 }
 
 // Delete removes a single row. For deployments, the legacy soft-delete +
@@ -932,10 +926,8 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 	}
 	if opts.LatestOnly {
 		if !s.legacy {
-			// Pick the most recently applied live tag per (namespace, name).
-			where = append(where, fmt.Sprintf(
-				"updated_at = (SELECT MAX(updated_at) FROM %s sub WHERE sub.namespace = %s.namespace AND sub.name = %s.name AND sub.deletion_timestamp IS NULL)",
-				s.table, s.table, s.table))
+			args = append(args, DefaultTag())
+			where = append(where, fmt.Sprintf("tag = $%d", len(args)))
 		} else {
 			where = append(where, "is_latest_version")
 		}
@@ -1122,8 +1114,8 @@ func (s *Store) FindReferrers(ctx context.Context, pathJSON json.RawMessage, opt
 	}
 	if opts.LatestOnly {
 		if !s.legacy {
-			query += fmt.Sprintf(" AND updated_at = (SELECT MAX(updated_at) FROM %s sub WHERE sub.namespace = %s.namespace AND sub.name = %s.name AND sub.deletion_timestamp IS NULL)",
-				s.table, s.table, s.table)
+			args = append(args, DefaultTag())
+			query += fmt.Sprintf(" AND tag = $%d", len(args))
 		} else {
 			query += " AND is_latest_version"
 		}

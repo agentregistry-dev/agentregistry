@@ -143,15 +143,7 @@ func applyCore(
 	}
 
 	if store.IsTaggedArtifact() && meta.Tag == "" {
-		spec, err := obj.MarshalSpec()
-		if err != nil {
-			return upsertResult{}, &applyError{Stage: stageMarshal, Err: err}
-		}
-		tag, err := v1alpha1store.DefaultTag(meta, spec)
-		if err != nil {
-			return upsertResult{}, &applyError{Stage: stageMarshal, Err: err}
-		}
-		meta.Tag = tag
+		meta.Tag = v1alpha1store.DefaultTag()
 		obj.SetMetadata(*meta)
 	}
 
