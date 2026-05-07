@@ -105,7 +105,10 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	if registryValidator == nil {
 		registryValidator = registries.Dispatcher
 	}
-	stores, importer := buildStoresAndImporter(pool, registryValidator, options.V1Alpha1StoreTables, options.Auditor)
+	stores, importer, err := buildStoresAndImporter(pool, registryValidator, options.V1Alpha1StoreTables, options.Auditor)
+	if err != nil {
+		return err
+	}
 
 	slog.Info("starting agentregistry", "version", version.Version, "commit", version.GitCommit)
 
@@ -181,17 +184,26 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	return nil
 }
 
-func buildStoresAndImporter(pool *pgxpool.Pool, registryValidator v1alpha1.RegistryValidatorFunc, extraStoreTables map[string]string, auditor types.Auditor) (map[string]*v1alpha1store.Store, *pkgimporter.Importer) {
+func buildStoresAndImporter(pool *pgxpool.Pool, registryValidator v1alpha1.RegistryValidatorFunc, extraStores []types.ExtraStore, auditor types.Auditor) (map[string]*v1alpha1store.Store, *pkgimporter.Importer, error) {
 	if auditor == nil {
 		auditor = types.NoopAuditor
 	}
 	stores := v1alpha1store.NewStores(pool, v1alpha1store.WithAuditor(auditor))
-	for kind, table := range extraStoreTables {
-		if kind == "" || table == "" {
-			slog.Warn("skipping v1alpha1 extra store with empty kind or table", "kind", kind, "table", table)
+	for _, es := range extraStores {
+		if es.Kind == "" || es.Table == "" {
+			slog.Warn("skipping v1alpha1 extra store with empty kind or table", "kind", es.Kind, "table", es.Table)
 			continue
 		}
-		stores[kind] = v1alpha1store.NewStore(pool, table, v1alpha1store.WithKind(kind), v1alpha1store.WithAuditor(auditor))
+		opts := []v1alpha1store.StoreOption{v1alpha1store.WithKind(es.Kind), v1alpha1store.WithAuditor(auditor)}
+		switch es.Mode {
+		case types.StoreModeVersionedArtifact:
+			stores[es.Kind] = v1alpha1store.NewStore(pool, es.Table, opts...)
+		case types.StoreModeMutable:
+			stores[es.Kind] = v1alpha1store.NewDeploymentStore(pool, es.Table, opts...)
+		default:
+			return nil, nil, fmt.Errorf("V1Alpha1StoreTables[%s]: invalid Mode %q (must be %q or %q)",
+				es.Kind, es.Mode, types.StoreModeVersionedArtifact, types.StoreModeMutable)
+		}
 	}
 
 	// pool == nil is the noop/DatabaseFactory path used by gen-openapi
@@ -201,7 +213,7 @@ func buildStoresAndImporter(pool *pgxpool.Pool, registryValidator v1alpha1.Regis
 	// never serves real traffic.
 	if pool == nil {
 		slog.Info("v1alpha1 routes registered against nil pool: query path will panic if exercised (likely noop/DatabaseFactory)")
-		return stores, nil
+		return stores, nil, nil
 	}
 
 	// GITHUB_TOKEN (when set in env) authenticates scanner fetches
@@ -221,11 +233,11 @@ func buildStoresAndImporter(pool *pgxpool.Pool, registryValidator v1alpha1.Regis
 	if err != nil {
 		slog.Warn("failed to construct v1alpha1 importer; HTTP import disabled for this path", "error", err)
 		slog.Info("v1alpha1 routes enabled")
-		return stores, nil
+		return stores, nil, nil
 	}
 
 	slog.Info("v1alpha1 routes enabled")
-	return stores, imp
+	return stores, imp, nil
 }
 
 func buildRouteOptions(

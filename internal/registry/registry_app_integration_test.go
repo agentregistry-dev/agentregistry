@@ -49,9 +49,10 @@ func (e *extensionApplyObject) UnmarshalStatus(data json.RawMessage) error {
 
 func TestBuildStoresAndImporter_ExtensionKindAppliesThroughBatchEndpoint(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	stores, importer := buildStoresAndImporter(pool, nil, map[string]string{
-		extensionApplyKind: "v1alpha1.agents",
+	stores, importer, err := buildStoresAndImporter(pool, nil, []types.ExtraStore{
+		{Kind: extensionApplyKind, Table: "v1alpha1.agents", Mode: types.StoreModeVersionedArtifact},
 	}, nil)
+	require.NoError(t, err)
 	require.NotNil(t, importer)
 	extensionStore := stores[extensionApplyKind]
 	require.NotNil(t, extensionStore)
@@ -98,12 +99,13 @@ spec:
 func TestBuildStoresAndImporter_PropagatesAuditor(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
 	auditor := &typestest.RecordingAuditor{}
-	stores, _ := buildStoresAndImporter(pool, nil, nil, auditor)
+	stores, _, err := buildStoresAndImporter(pool, nil, nil, auditor)
+	require.NoError(t, err)
 
 	agentStore := stores[v1alpha1.KindAgent]
 	require.NotNil(t, agentStore)
 
-	_, err := agentStore.Upsert(t.Context(), &v1alpha1.Agent{
+	_, err = agentStore.Upsert(t.Context(), &v1alpha1.Agent{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
 		Metadata: v1alpha1.ObjectMeta{Namespace: v1alpha1.DefaultNamespace, Name: "audited"},
 		Spec:     v1alpha1.AgentSpec{ModelName: "model-a"},
@@ -119,7 +121,8 @@ func TestBuildStoresAndImporter_PropagatesAuditor(t *testing.T) {
 
 	// Sanity: nil auditor still works (NoopAuditor fallback) — guards the
 	// nil-check branch in buildStoresAndImporter.
-	stores2, _ := buildStoresAndImporter(pool, nil, nil, nil)
+	stores2, _, err := buildStoresAndImporter(pool, nil, nil, nil)
+	require.NoError(t, err)
 	require.NotNil(t, stores2[v1alpha1.KindAgent])
 	_ = types.NoopAuditor
 }
