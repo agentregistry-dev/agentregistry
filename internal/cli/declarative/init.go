@@ -1,6 +1,8 @@
 package declarative
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -71,6 +73,7 @@ func newInitAgentCmd() *cobra.Command {
 		initImage         string
 		initGit           string
 		initMCPs          []string
+		initLocalMCPs     []string
 	)
 
 	cmd := &cobra.Command{
@@ -165,6 +168,15 @@ Writes:
 				}
 			}
 
+			// --local-mcp wires sibling MCP projects via the runtime's
+			// MCP_SERVERS_CONFIG env var. Each path's arctl.yaml carries
+			// the port; we write a JSON array of {name, url} entries.
+			if len(initLocalMCPs) > 0 {
+				if err := appendLocalMCPsToDotEnv(projectDir, initLocalMCPs); err != nil {
+					return fmt.Errorf("wire local MCPs: %w", err)
+				}
+			}
+
 			// Skills/Prompts/Language/Framework removed from AgentSpec (Phase 11);
 			// language/framework now live in arctl.yaml only. The declarative
 			// agent.yaml carries only canonical AgentSpec fields.
@@ -191,8 +203,87 @@ Writes:
 	cmd.Flags().StringVar(&initModelName, "model-name", "", "Model name")
 	cmd.Flags().StringVar(&initImage, "image", "", "Image tag override")
 	cmd.Flags().StringVar(&initGit, "git", "", "Git repository URL")
-	cmd.Flags().StringSliceVar(&initMCPs, "mcp", nil, "MCP server refs (name@version)")
+	cmd.Flags().StringSliceVar(&initMCPs, "mcp", nil, "Registry MCP server ref (name@version). Repeatable.")
+	cmd.Flags().StringSliceVar(&initLocalMCPs, "local-mcp", nil, "Path to a sibling MCP project; wires it into .env so the local agent can reach it. Repeatable.")
 	return cmd
+}
+
+// appendLocalMCPsToDotEnv resolves each sibling MCP project path, reads its
+// arctl.yaml for the port, derives the registry-style name from the sibling's
+// mcp.yaml, and appends a single MCP_SERVERS_CONFIG line to projectDir/.env
+// carrying a JSON array of {name, url} entries.
+//
+// host.docker.internal works on Docker Desktop (Mac/Windows) by default. Linux
+// users need `--add-host=host.docker.internal:host-gateway` in the agent's
+// docker-compose; we don't auto-inject that here.
+func appendLocalMCPsToDotEnv(projectDir string, paths []string) error {
+	type entry struct {
+		Name string `json:"name"`
+		URL  string `json:"url"`
+	}
+	var entries []entry
+	for _, p := range paths {
+		abs, err := filepath.Abs(p)
+		if err != nil {
+			return fmt.Errorf("resolve %q: %w", p, err)
+		}
+		cfg, err := buildconfig.Read(abs)
+		if err != nil {
+			return fmt.Errorf("read sibling arctl.yaml at %s: %w", abs, err)
+		}
+		port := cfg.Port
+		if port == 0 {
+			port = 3000
+		}
+
+		// Sibling MCP's registry-style name (e.g. "acme/foo") lives in mcp.yaml.
+		siblingName, err := readMCPName(abs)
+		if err != nil {
+			return err
+		}
+		entries = append(entries, entry{
+			Name: siblingName,
+			URL:  fmt.Sprintf("http://host.docker.internal:%d/mcp", port),
+		})
+	}
+
+	jsonBlob, err := json.Marshal(entries)
+	if err != nil {
+		return fmt.Errorf("marshal MCP_SERVERS_CONFIG: %w", err)
+	}
+	envPath := filepath.Join(projectDir, ".env")
+	existing, err := os.ReadFile(envPath)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	out := string(existing)
+	if out != "" && !strings.HasSuffix(out, "\n") {
+		out += "\n"
+	}
+	out += "\n# Wired by arctl init --local-mcp.\n"
+	out += "MCP_SERVERS_CONFIG=" + string(jsonBlob) + "\n"
+	return os.WriteFile(envPath, []byte(out), 0o644)
+}
+
+// readMCPName pulls metadata.name out of a sibling mcp.yaml. Used to label
+// entries in MCP_SERVERS_CONFIG.
+func readMCPName(projectDir string) (string, error) {
+	data, err := os.ReadFile(filepath.Join(projectDir, "mcp.yaml"))
+	if err != nil {
+		return "", fmt.Errorf("read sibling mcp.yaml: %w", err)
+	}
+	var env struct {
+		Metadata struct {
+			Name string `yaml:"name"`
+		} `yaml:"metadata"`
+	}
+	if err := yaml.Unmarshal(data, &env); err != nil {
+		return "", fmt.Errorf("parse sibling mcp.yaml: %w", err)
+	}
+	if env.Metadata.Name == "" {
+		return "", fmt.Errorf("sibling mcp.yaml missing metadata.name")
+	}
+	return env.Metadata.Name, nil
 }
 
 // defaultInitModelName returns the default model name for a provider when
