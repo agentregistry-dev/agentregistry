@@ -134,7 +134,13 @@ func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun, wat
 		fmt.Fprintf(out, "→ Loaded .env (%d vars)\n", len(dotEnv))
 	}
 
-	if err := ValidateRequiredEnv(dotEnv, p.Env.Required); err != nil {
+	required := append([]string(nil), p.Env.Required...)
+	if obj.GetKind() == v1alpha1.KindAgent {
+		if a, ok := obj.(*v1alpha1.Agent); ok && a.Spec.ModelProvider != "" {
+			required = append(required, ModelProviderEnvKeys(a.Spec.ModelProvider)...)
+		}
+	}
+	if err := ValidateRequiredEnv(dotEnv, required); err != nil {
 		return err
 	}
 

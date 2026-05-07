@@ -6,8 +6,8 @@ language: python
 description: Google Agent Development Kit (Python)
 templatesDir: ./templates
 env:
-  required:
-    - GOOGLE_API_KEY
+  # Model-provider keys are computed by arctl from spec.modelProvider; the
+  # plugin only declares its infra/framework env (none for adk-python today).
   optional:
     - LOG_LEVEL
 build:

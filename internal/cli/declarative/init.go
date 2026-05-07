@@ -130,10 +130,21 @@ Writes:
 			if err := buildconfig.Write(projectDir, cfg); err != nil {
 				return fmt.Errorf("write arctl.yaml: %w", err)
 			}
-			if err := buildconfig.WriteDotEnv(projectDir, plugin.Env.Required, plugin.Env.Optional); err != nil {
+
+			// Required env = plugin's infra keys + model provider's keys.
+			// arctl owns the provider→keys map (see modelenv.go) so plugins
+			// don't have to restate it. Default provider is gemini.
+			provider := initModelProvider
+			if provider == "" {
+				provider = "gemini"
+			}
+			required := append([]string{}, plugin.Env.Required...)
+			required = append(required, ModelProviderEnvKeys(provider)...)
+
+			if err := buildconfig.WriteDotEnv(projectDir, required, plugin.Env.Optional); err != nil {
 				return fmt.Errorf("write .env: %w", err)
 			}
-			if len(plugin.Env.Required) > 0 || len(plugin.Env.Optional) > 0 {
+			if len(required) > 0 || len(plugin.Env.Optional) > 0 {
 				if err := buildconfig.EnsureGitignored(projectDir, ".env"); err != nil {
 					return fmt.Errorf("update .gitignore: %w", err)
 				}
@@ -150,8 +161,8 @@ Writes:
 
 			fmt.Fprintf(cmd.OutOrStdout(), "✓ Created %s/ (framework: %s, language: %s)\n", name, plugin.Framework, plugin.Language)
 			fmt.Fprintf(cmd.OutOrStdout(), "  next: cd %s && arctl run\n", name)
-			if len(plugin.Env.Required) > 0 {
-				fmt.Fprintf(cmd.OutOrStdout(), "        (export %s in your shell or set it in .env first)\n", strings.Join(plugin.Env.Required, ", "))
+			if len(required) > 0 {
+				fmt.Fprintf(cmd.OutOrStdout(), "        (export %s in your shell or set it in .env first)\n", strings.Join(required, ", "))
 			}
 			return nil
 		},
