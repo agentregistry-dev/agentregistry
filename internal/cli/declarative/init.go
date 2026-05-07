@@ -144,9 +144,10 @@ Writes:
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "✓ Created %s/ (framework: %s, language: %s)\n", name, plugin.Framework, plugin.Language)
-			fmt.Fprintf(cmd.OutOrStdout(), "  next: cd %s\n", name)
-			fmt.Fprintf(cmd.OutOrStdout(), "        cp .env.example .env  # then edit\n")
-			fmt.Fprintf(cmd.OutOrStdout(), "        arctl run\n")
+			fmt.Fprintf(cmd.OutOrStdout(), "  next: cd %s && arctl run\n", name)
+			if len(plugin.Env.Required) > 0 {
+				fmt.Fprintf(cmd.OutOrStdout(), "        (export %s in your shell or set it in .env first)\n", strings.Join(plugin.Env.Required, ", "))
+			}
 			return nil
 		},
 	}
@@ -350,6 +351,10 @@ Picks a framework + language interactively (or via --framework / --language).`,
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "✓ Created %s/ (framework: %s, language: %s)\n", projectName, plugin.Framework, plugin.Language)
+			fmt.Fprintf(cmd.OutOrStdout(), "  next: cd %s && arctl run\n", projectName)
+			if len(plugin.Env.Required) > 0 {
+				fmt.Fprintf(cmd.OutOrStdout(), "        (export %s in your shell or set it in .env first)\n", strings.Join(plugin.Env.Required, ", "))
+			}
 			return nil
 		},
 	}
