@@ -1,6 +1,7 @@
 package declarative_test
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -30,3 +31,42 @@ func TestRun_DispatchesToPluginRunCommand(t *testing.T) {
 	cmd.SetArgs([]string{"--dry-run"})
 	require.NoError(t, cmd.Execute())
 }
+
+// TestRun_ChatDefault_DryRunNarratesFullLifecycle verifies that for an Agent
+// kind, `arctl run --dry-run` reaches the chat-default branch and narrates
+// the detached compose-up, readiness wait, chat launch, and teardown without
+// shelling out to docker.
+func TestRun_ChatDefault_DryRunNarratesFullLifecycle(t *testing.T) {
+	tmp := t.TempDir()
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	require.NoError(t, os.Chdir(tmp))
+	initCmd := declarative.NewInitCmd()
+	initCmd.SetArgs([]string{"agent", "chatdefault", "--framework", "adk", "--language", "python"})
+	require.NoError(t, initCmd.Execute())
+
+	projectDir := filepath.Join(tmp, "chatdefault")
+	require.NoError(t, os.Chdir(projectDir))
+
+	cmd := declarative.NewRunCmd()
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"--dry-run"})
+	require.NoError(t, cmd.Execute())
+
+	out := buf.String()
+	// Detached compose-up narration.
+	require.Contains(t, out, "docker compose")
+	require.Contains(t, out, "up -d --build")
+	// Readiness wait + chat launch narration.
+	require.Contains(t, out, "would wait for http://localhost:8080/")
+	require.Contains(t, out, "launch chat (chatdefault)")
+	// Teardown narration.
+	require.Contains(t, out, "on chat exit would teardown")
+	require.Contains(t, out, "down")
+	require.Contains(t, out, "(dry-run; skipping exec)")
+}
+
