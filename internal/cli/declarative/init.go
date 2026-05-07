@@ -44,6 +44,7 @@ Examples:
   arctl init agent myagent
   arctl init agent myagent --framework adk --language python
   arctl init mcp acme/my-server
+  arctl init mcp acme/my-server --framework fastmcp --language python
   arctl init skill my-skill
   arctl init prompt my-prompt`,
 		SilenceUsage: true,
