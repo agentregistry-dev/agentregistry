@@ -82,8 +82,15 @@ var (
 func (m pickerModel) View() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s %s\n\n", pickerHeaderStyle.Render("?"), pickerHeaderStyle.Render("Pick a framework:"))
+	frameworkCount := map[string]int{}
+	for _, p := range m.items {
+		frameworkCount[p.Framework]++
+	}
 	for i, p := range m.items {
 		label := p.Framework
+		if frameworkCount[p.Framework] > 1 {
+			label = fmt.Sprintf("%s (%s)", p.Framework, p.Language)
+		}
 		if p.Description != "" {
 			label = fmt.Sprintf("%s — %s", label, p.Description)
 		}
