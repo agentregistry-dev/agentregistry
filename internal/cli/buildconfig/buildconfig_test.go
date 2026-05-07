@@ -11,13 +11,35 @@ import (
 
 func TestWriteAndRead_RoundTrip(t *testing.T) {
 	dir := t.TempDir()
-	cfg := &Config{Framework: "adk", Language: "python"}
+	cfg := &Config{
+		Framework:     "adk",
+		Language:      "python",
+		ModelProvider: "openai",
+		ModelName:     "gpt-4",
+	}
 	require.NoError(t, Write(dir, cfg))
 
 	got, err := Read(dir)
 	require.NoError(t, err)
 	assert.Equal(t, cfg.Framework, got.Framework)
 	assert.Equal(t, cfg.Language, got.Language)
+	assert.Equal(t, cfg.ModelProvider, got.ModelProvider)
+	assert.Equal(t, cfg.ModelName, got.ModelName)
+}
+
+func TestWriteAndRead_OmitsEmptyModelFields(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, Write(dir, &Config{Framework: "fastmcp", Language: "python"}))
+
+	data, err := os.ReadFile(filepath.Join(dir, "arctl.yaml"))
+	require.NoError(t, err)
+	assert.NotContains(t, string(data), "modelProvider")
+	assert.NotContains(t, string(data), "modelName")
+
+	got, err := Read(dir)
+	require.NoError(t, err)
+	assert.Empty(t, got.ModelProvider)
+	assert.Empty(t, got.ModelName)
 }
 
 func TestRead_MissingFileErrs(t *testing.T) {

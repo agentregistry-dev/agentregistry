@@ -16,8 +16,10 @@ const Filename = "arctl.yaml"
 // Config is the per-project build-config. Future fields are additive; older
 // arctl ignores unknown keys.
 type Config struct {
-	Framework string `yaml:"framework"`
-	Language  string `yaml:"language"`
+	Framework     string `yaml:"framework"`
+	Language      string `yaml:"language"`
+	ModelProvider string `yaml:"modelProvider,omitempty"`
+	ModelName     string `yaml:"modelName,omitempty"`
 }
 
 // Path returns the canonical arctl.yaml path under projectDir.
