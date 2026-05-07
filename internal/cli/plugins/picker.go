@@ -38,7 +38,7 @@ func Pick(opts PickOpts) (*Plugin, error) {
 		return nil, fmt.Errorf("ambiguous plugin selection (need --framework/--language). Available: %s", listPlugins(candidates))
 	}
 
-	return interactivePick(candidates, opts.Framework, opts.Language)
+	return interactivePick(opts.Type, candidates, opts.Framework, opts.Language)
 }
 
 func listPlugins(plugins []*Plugin) string {
@@ -50,11 +50,10 @@ func listPlugins(plugins []*Plugin) string {
 	return strings.Join(parts, ", ")
 }
 
-// interactivePick is a placeholder for the bubbletea TUI. For now it just
-// returns the first candidate when there is only one, and errors when ambiguous.
-// Replaced by a real TUI in a follow-up commit (Task 4.2).
-func interactivePick(candidates []*Plugin, framework, language string) (*Plugin, error) {
-	// Filter by partial flags.
+// interactivePick filters candidates by any partial flags and presents a
+// bubbletea picker. The picker is shown even when only one candidate
+// remains, for consistency and discoverability (per design).
+func interactivePick(pluginType string, candidates []*Plugin, framework, language string) (*Plugin, error) {
 	filtered := candidates[:0:0]
 	for _, p := range candidates {
 		if framework != "" && p.Framework != framework {
@@ -65,11 +64,8 @@ func interactivePick(candidates []*Plugin, framework, language string) (*Plugin,
 		}
 		filtered = append(filtered, p)
 	}
-	if len(filtered) == 1 {
-		return filtered[0], nil
-	}
 	if len(filtered) == 0 {
 		return nil, fmt.Errorf("no plugin matches the supplied flags")
 	}
-	return nil, fmt.Errorf("multiple plugins match (need --framework/--language to disambiguate). Available: %s", listPlugins(filtered))
+	return runPickerTUI(pluginType, filtered)
 }
