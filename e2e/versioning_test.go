@@ -6,7 +6,8 @@
 //   - applying a changed spec bumps to the next integer
 //   - manifests with metadata.version set are rejected at decode time
 //   - delete defaults to latest; --all-versions clears the entire history
-//     and frees the name (numbering resets on next apply)
+//     and frees the name, but the version high-water mark is tombstoned
+//     so a re-apply resumes from max_assigned + 1 (never recycles)
 //
 // Lives next to declarative_test.go and reuses its writeDeclarativeYAML and
 // resourceURL helpers.
@@ -179,7 +180,9 @@ spec:
 //   - apply v1 + v2 (changed spec)
 //   - delete without flag → removes only the latest (v2); v1 remains
 //   - delete --all-versions → removes everything; name is freed
-//   - re-apply → numbering resets (the new row is v1, not v3)
+//   - re-apply → numbering resumes from the high-water mark (the new
+//     row is v3, NOT v1) so deployments that pinned to "agents/foo:1"
+//     never silently retarget to a different spec across delete cycles.
 func TestVersioning_DeleteSemantics(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
@@ -224,13 +227,16 @@ func TestVersioning_DeleteSemantics(t *testing.T) {
 			getResult.Stdout, getResult.Stderr)
 	}
 
-	// Step 4: re-apply → numbering resets to v1.
+	// Step 4: re-apply → tombstone resumes numbering from the high-water
+	// mark (max_assigned was 2 from steps 1+2), so the new row is v3.
+	// Reusing v1 here would silently retarget any deployment pinned to
+	// "agents/<name>:1" — the tombstone is what prevents that.
 	applyAgentWithDesc(t, regURL, tmpDir, name, "after-reset")
-	if got := agentStatusVersion(t, regURL, tmpDir, name); got != 1 {
-		t.Fatalf("after reset re-apply: expected status.version=1, got %d", got)
+	if got := agentStatusVersion(t, regURL, tmpDir, name); got != 3 {
+		t.Fatalf("after delete-all + reapply: expected status.version=3 (resume from tombstone high-water mark), got %d", got)
 	}
 	if got := agentVersionCount(t, regURL, tmpDir, name); got != 1 {
-		t.Fatalf("after reset re-apply: expected 1 version row, got %d", got)
+		t.Fatalf("after delete-all + reapply: expected 1 surviving version row, got %d", got)
 	}
 }
 
