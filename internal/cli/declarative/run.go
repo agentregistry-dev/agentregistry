@@ -297,10 +297,17 @@ func composeDownArgs(rendered []string, projectDir string) []string {
 }
 
 // mergeEnv flattens dotEnv into KEY=VALUE strings and appends overrides.
+// Empty .env values are skipped — they are unfilled placeholders written
+// by `arctl init`, not real assignments. Emitting them would shadow the
+// same key inherited from the parent process env (e.g. an exported
+// GOOGLE_API_KEY).
 // Overrides come last, so the child process sees them as the effective value.
 func mergeEnv(dotEnv map[string]string, overrides []string) []string {
 	out := make([]string, 0, len(dotEnv)+len(overrides))
 	for k, v := range dotEnv {
+		if v == "" {
+			continue
+		}
 		out = append(out, k+"="+v)
 	}
 	out = append(out, overrides...)
