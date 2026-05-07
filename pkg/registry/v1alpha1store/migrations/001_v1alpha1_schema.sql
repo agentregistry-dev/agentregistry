@@ -87,6 +87,9 @@ $$ LANGUAGE plpgsql;
 --   namespace, name, version   — composite identity (PK); version is a
 --                                positive integer assigned by the store on
 --                                Upsert (MAX(version)+1).
+--   uid                        — server-assigned UUID, stamped at row creation
+--                                and never mutated; DEFAULT gen_random_uuid()
+--                                so direct-SQL inserts also get a valid UID.
 --   labels, annotations        — user-set key/value JSONB
 --   spec                       — JSONB per pkg/api/v1alpha1 typed Spec
 --   spec_hash                  — SHA-256 hex of the canonical-JSON spec;
@@ -107,6 +110,7 @@ CREATE TABLE IF NOT EXISTS v1alpha1.agents (
     namespace          VARCHAR(255) NOT NULL,
     name               VARCHAR(255) NOT NULL,
     version            INTEGER      NOT NULL CHECK (version > 0),
+    uid                UUID         NOT NULL DEFAULT gen_random_uuid(),
     labels             JSONB        NOT NULL DEFAULT '{}'::jsonb,
     annotations        JSONB        NOT NULL DEFAULT '{}'::jsonb,
     spec               JSONB        NOT NULL,
@@ -130,6 +134,7 @@ CREATE TABLE IF NOT EXISTS v1alpha1.mcp_servers (
     namespace          VARCHAR(255) NOT NULL,
     name               VARCHAR(255) NOT NULL,
     version            INTEGER      NOT NULL CHECK (version > 0),
+    uid                UUID         NOT NULL DEFAULT gen_random_uuid(),
     labels             JSONB        NOT NULL DEFAULT '{}'::jsonb,
     annotations        JSONB        NOT NULL DEFAULT '{}'::jsonb,
     spec               JSONB        NOT NULL,
@@ -152,6 +157,7 @@ CREATE TABLE IF NOT EXISTS v1alpha1.skills (
     namespace          VARCHAR(255) NOT NULL,
     name               VARCHAR(255) NOT NULL,
     version            INTEGER      NOT NULL CHECK (version > 0),
+    uid                UUID         NOT NULL DEFAULT gen_random_uuid(),
     labels             JSONB        NOT NULL DEFAULT '{}'::jsonb,
     annotations        JSONB        NOT NULL DEFAULT '{}'::jsonb,
     spec               JSONB        NOT NULL,
@@ -174,6 +180,7 @@ CREATE TABLE IF NOT EXISTS v1alpha1.prompts (
     namespace          VARCHAR(255) NOT NULL,
     name               VARCHAR(255) NOT NULL,
     version            INTEGER      NOT NULL CHECK (version > 0),
+    uid                UUID         NOT NULL DEFAULT gen_random_uuid(),
     labels             JSONB        NOT NULL DEFAULT '{}'::jsonb,
     annotations        JSONB        NOT NULL DEFAULT '{}'::jsonb,
     spec               JSONB        NOT NULL,
@@ -204,6 +211,7 @@ CREATE TABLE IF NOT EXISTS v1alpha1.providers (
     namespace          VARCHAR(255) NOT NULL,
     name               VARCHAR(255) NOT NULL,
     version            VARCHAR(255) NOT NULL,
+    uid                UUID         NOT NULL DEFAULT gen_random_uuid(),
     generation         BIGINT       NOT NULL DEFAULT 1,
     labels             JSONB        NOT NULL DEFAULT '{}'::jsonb,
     annotations        JSONB        NOT NULL DEFAULT '{}'::jsonb,
@@ -228,6 +236,7 @@ CREATE TABLE IF NOT EXISTS v1alpha1.deployments (
     namespace          VARCHAR(255) NOT NULL,
     name               VARCHAR(255) NOT NULL,
     version            VARCHAR(255) NOT NULL,
+    uid                UUID         NOT NULL DEFAULT gen_random_uuid(),
     generation         BIGINT       NOT NULL DEFAULT 1,
     labels             JSONB        NOT NULL DEFAULT '{}'::jsonb,
     annotations        JSONB        NOT NULL DEFAULT '{}'::jsonb,

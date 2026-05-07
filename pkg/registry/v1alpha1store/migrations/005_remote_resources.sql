@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS v1alpha1.remote_mcp_servers (
     namespace          VARCHAR(255) NOT NULL,
     name               VARCHAR(255) NOT NULL,
     version            INTEGER      NOT NULL CHECK (version > 0),
+    uid                UUID         NOT NULL DEFAULT gen_random_uuid(),
     labels             JSONB        NOT NULL DEFAULT '{}'::jsonb,
     annotations        JSONB        NOT NULL DEFAULT '{}'::jsonb,
     spec               JSONB        NOT NULL,

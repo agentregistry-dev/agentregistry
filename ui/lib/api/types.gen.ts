@@ -253,6 +253,7 @@ export type ObjectMeta = {
     };
     name: string;
     namespace?: string;
+    uid?: string;
     updatedAt?: string;
     version?: string;
 };

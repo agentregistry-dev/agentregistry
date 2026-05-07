@@ -491,3 +491,4 @@ func TestStore_NotifyPayloadDiscreteFields(t *testing.T) {
 		"name must round-trip intact, including the / character")
 	require.JSONEq(t, "1", string(payload.Version), "version emitted as the integer 1")
 }
+

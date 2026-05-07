@@ -20,10 +20,11 @@ const DefaultNamespace = "default"
 
 // ObjectMeta is the metadata block common to every resource.
 //
-// Namespace, Name, Labels, and Annotations are user-settable. CreatedAt,
-// UpdatedAt, DeletionTimestamp, and Version are server-managed: the API
-// ignores them on apply (the decoder explicitly rejects
-// metadata.version on input) and overwrites them on response.
+// Namespace, Name, Labels, and Annotations are user-settable. UID,
+// Version, CreatedAt, UpdatedAt, and DeletionTimestamp are
+// server-managed: the API ignores them on apply (the decoder explicitly
+// rejects metadata.version on input for content-registry kinds) and
+// overwrites them on response.
 //
 // Version is the row's PK identifier: a system-assigned integer for
 // versioned-artifact kinds (Agent, MCPServer, RemoteMCPServer, Skill,
@@ -38,6 +39,15 @@ const DefaultNamespace = "default"
 // Namespace is an internal detail today — it defaults to "default" on
 // apply and is stripped from responses when it equals "default" so the
 // multi-tenant surface stays hidden until we deliberately enable it.
+//
+// UID is a server-assigned UUID stamped at row creation and never
+// mutated afterwards — same contract as Kubernetes' metadata.uid.
+// (Namespace, Name, Version) is reusable across delete + recreate
+// cycles; UID is not, so it disambiguates "the row I observed earlier"
+// from "a fresh row at the same identity". The apply pipeline strips
+// any caller-supplied value before the store sees it; Postgres assigns
+// the value via a column default, so even direct-SQL inserts get a
+// valid UID.
 //
 // Labels vs Annotations (Kubernetes convention):
 //   - Labels are queryable: short key/value pairs, GIN-indexed, used for
@@ -55,6 +65,7 @@ const DefaultNamespace = "default"
 type ObjectMeta struct {
 	Namespace   string            `json:"namespace,omitempty" yaml:"namespace,omitempty"`
 	Name        string            `json:"name" yaml:"name"`
+	UID         string            `json:"uid,omitempty" yaml:"uid,omitempty"`
 	Labels      map[string]string `json:"labels,omitempty" yaml:"labels,omitempty"`
 	Annotations map[string]string `json:"annotations,omitempty" yaml:"annotations,omitempty"`
 

@@ -291,6 +291,10 @@ func resolveBatchTarget(cfg ApplyConfig, obj v1alpha1.Object, verb string) (*v1a
 	// Default namespace before authorize/applyCore see it. The handler.go
 	// PUT path stamps namespace from the URL; the batch path has only the
 	// YAML body to look at, so default explicitly here.
+	//
+	// metadata.uid is stripped centrally inside applyCore so the single
+	// PUT path benefits from the same sanitization — no need to repeat it
+	// here.
 	if meta.Namespace == "" {
 		meta.Namespace = v1alpha1.DefaultNamespace
 		obj.SetMetadata(*meta)
