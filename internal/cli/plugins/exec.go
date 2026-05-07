@@ -7,8 +7,35 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"text/template"
 )
+
+// renderPathComponents substitutes Go template syntax in each path component
+// (split on os.PathSeparator). Components without `{{` are passed through
+// untouched. Empty results after substitution are an error.
+func renderPathComponents(rel string, vars map[string]any) (string, error) {
+	parts := strings.Split(rel, string(os.PathSeparator))
+	for i, part := range parts {
+		if !strings.Contains(part, "{{") {
+			continue
+		}
+		t, err := template.New("path").Option("missingkey=error").Parse(part)
+		if err != nil {
+			return "", fmt.Errorf("parse path component %q: %w", part, err)
+		}
+		var buf bytes.Buffer
+		if err := t.Execute(&buf, vars); err != nil {
+			return "", fmt.Errorf("substitute path component %q: %w", part, err)
+		}
+		out := buf.String()
+		if out == "" {
+			return "", fmt.Errorf("path component %q rendered empty", part)
+		}
+		parts[i] = out
+	}
+	return filepath.Join(parts...), nil
+}
 
 // RenderArgs runs Go text/template substitution on each arg independently.
 // Missing values cause an error.
@@ -112,11 +139,18 @@ func RenderTemplates(p *Plugin, dst string, vars map[string]any) error {
 		if err != nil {
 			return err
 		}
+		// Substitute Go template syntax in each path component so directories
+		// like `{{.Name}}/` resolve to e.g. `myagent/`. Standard cookiecutter
+		// pattern; no special placeholder syntax — just `{{ }}` in the name.
+		relRendered, err := renderPathComponents(rel, vars)
+		if err != nil {
+			return err
+		}
 		if d.IsDir() {
-			return os.MkdirAll(filepath.Join(dst, rel), 0755)
+			return os.MkdirAll(filepath.Join(dst, relRendered), 0755)
 		}
 
-		outPath := filepath.Join(dst, rel)
+		outPath := filepath.Join(dst, relRendered)
 		isTpl := filepath.Ext(rel) == ".tmpl"
 		if isTpl {
 			outPath = outPath[:len(outPath)-len(".tmpl")]
