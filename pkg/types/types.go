@@ -89,6 +89,48 @@ func (noopAuditor) ResourceVersionCreated(ctx context.Context, kind, namespace, 
 // NoopAuditor is the default Auditor used when none is plugged in.
 var NoopAuditor Auditor = noopAuditor{}
 
+// StoreMode picks which row-shape an extra v1alpha1 store binds to.
+// The two modes are permanent design choices and the choice is required
+// at registration time — the empty value is invalid and rejected by
+// the registry app, on purpose, so callers must consciously pick.
+//
+// StoreMode lives in pkg/types (rather than pkg/registry/v1alpha1store)
+// so AppOptions can reference it without inverting the existing
+// v1alpha1store -> types import direction. The v1alpha1store package
+// re-exports the constants for ergonomics.
+type StoreMode string
+
+const (
+	// StoreModeVersionedArtifact selects the append-only, integer-version
+	// row shape (spec_hash, immutable rows). Used by content-registry
+	// kinds — Agent, MCPServer, RemoteMCPServer, Skill, Prompt — whose
+	// history is meaningful to readers.
+	StoreModeVersionedArtifact StoreMode = "versioned-artifact"
+
+	// StoreModeMutable selects the in-place-update row shape (string
+	// version, generation, finalizers, is_latest_version). Used by
+	// infra/config kinds — Provider, Deployment, AccessPolicy, Gateway —
+	// whose identity is (namespace, name) and whose spec is overwritten
+	// rather than versioned.
+	StoreModeMutable StoreMode = "mutable"
+)
+
+// ExtraStore registers a single non-built-in v1alpha1 kind with the
+// registry app. Each entry binds a Kind to a Postgres table and picks
+// the row-shape via Mode. All three fields are required; Mode in
+// particular has no default — see StoreMode.
+type ExtraStore struct {
+	// Kind is the canonical v1alpha1 Kind name (matches the kind
+	// previously registered with v1alpha1.Scheme).
+	Kind string
+	// Table is the fully qualified Postgres table backing the kind
+	// (e.g. "v1alpha1.access_policies").
+	Table string
+	// Mode picks the row shape. Empty Mode is rejected at app start —
+	// see StoreModeVersionedArtifact / StoreModeMutable for the choices.
+	Mode StoreMode
+}
+
 // AppOptions contains configuration for the registry app.
 // All fields are optional and allow external developers to extend
 // functionality.
@@ -157,7 +199,13 @@ type AppOptions struct {
 	// Scheme kinds should populate this so the shared /v0/apply,
 	// /v0/import, resolver, and generic route plumbing can see the same
 	// store map as any ExtraRoutes they register.
-	V1Alpha1StoreTables map[string]string
+	//
+	// Each entry must specify Mode explicitly — there is no default. The
+	// row shape (versioned-artifact vs mutable) is a permanent property
+	// of the table and picking the wrong one at registration time leads
+	// to runtime SQL errors, so the registration API forces the choice
+	// up front.
+	V1Alpha1StoreTables []ExtraStore
 
 	// RegistryValidator overrides the per-package registry
 	// validator (the dispatcher consulted on apply / import to confirm

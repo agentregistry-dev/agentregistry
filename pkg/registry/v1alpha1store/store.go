@@ -67,6 +67,20 @@ type Store struct {
 	auditor types.Auditor
 }
 
+// Re-exports of the StoreMode enum from pkg/types so callers that already
+// import this package don't need to pull in pkg/types just to register
+// an extra store. The canonical declarations live in pkg/types because
+// pkg/types.AppOptions is the surface that consumes them and we don't
+// want to invert the v1alpha1store -> types import direction.
+type StoreMode = types.StoreMode
+
+const (
+	// StoreModeVersionedArtifact mirrors types.StoreModeVersionedArtifact.
+	StoreModeVersionedArtifact = types.StoreModeVersionedArtifact
+	// StoreModeMutable mirrors types.StoreModeMutable.
+	StoreModeMutable = types.StoreModeMutable
+)
+
 // StoreOption configures an optional Store behaviour at construction
 // time. Options compose; later options override earlier ones for the
 // same field.
