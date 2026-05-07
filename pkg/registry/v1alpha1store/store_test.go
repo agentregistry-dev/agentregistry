@@ -383,6 +383,36 @@ func TestStore_List(t *testing.T) {
 	require.Len(t, withTerm, 3)
 }
 
+func TestStore_ListLatestOnlyIncludeTerminating(t *testing.T) {
+	pool := NewTestPool(t)
+	store := NewStore(pool, testTable)
+	ctx := context.Background()
+
+	_, err := store.Upsert(ctx, testNS, "foo", "v1.0.0", mustSpec(t, v1alpha1.AgentSpec{Title: "v1"}), UpsertOpts{})
+	require.NoError(t, err)
+	_, err = store.Upsert(ctx, testNS, "foo", "v2.0.0", mustSpec(t, v1alpha1.AgentSpec{Title: "v2"}), UpsertOpts{})
+	require.NoError(t, err)
+
+	// Soft-delete the older version via the finalizer path so it goes
+	// terminating and recomputeLatest clears is_latest_version on it.
+	require.NoError(t, store.PatchFinalizers(ctx, testNS, "foo", "v1.0.0",
+		func([]string) []string { return []string{"finalizer.example.com"} }))
+	require.NoError(t, store.Delete(ctx, testNS, "foo", "v1.0.0"))
+
+	// LatestOnly without IncludeTerminating: only the live latest (v2).
+	live, _, err := store.List(ctx, ListOpts{LatestOnly: true})
+	require.NoError(t, err)
+	require.Len(t, live, 1)
+	require.Equal(t, "v2.0.0", live[0].Metadata.Version)
+
+	// LatestOnly + IncludeTerminating: live latest plus the terminating row.
+	combined, _, err := store.List(ctx, ListOpts{LatestOnly: true, IncludeTerminating: true})
+	require.NoError(t, err)
+	require.Len(t, combined, 2)
+	versions := []string{combined[0].Metadata.Version, combined[1].Metadata.Version}
+	require.ElementsMatch(t, []string{"v1.0.0", "v2.0.0"}, versions)
+}
+
 func TestStore_ListExtraWhereRebasesPlaceholders(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)

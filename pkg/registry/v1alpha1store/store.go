@@ -100,7 +100,11 @@ type ListOpts struct {
 	// Cursor is an opaque pagination token. Empty starts from the beginning.
 	Cursor string
 	// LatestOnly restricts to rows where is_latest_version=true (one per
-	// (namespace, name)).
+	// (namespace, name)). When combined with IncludeTerminating=true, the
+	// predicate widens to "latest live row OR any terminating row" because
+	// recomputeLatest clears is_latest_version on terminating rows; in that
+	// mode the one-per-(namespace, name) guarantee no longer holds — multiple
+	// concurrently-terminating versions of the same name can all surface.
 	LatestOnly bool
 	// IncludeTerminating includes rows with deletion_timestamp set. Default
 	// false — callers asking for "alive" rows shouldn't see terminating ones.
@@ -605,7 +609,10 @@ func (s *Store) PurgeFinalized(ctx context.Context) (int64, error) {
 // List returns rows filtered by opts, ordered by updated_at DESC with
 // stable identity tie-breakers. A pagination cursor is returned when
 // more rows are available; pass it back via ListOpts.Cursor to continue.
-// Terminating rows are excluded unless IncludeTerminating is true.
+// Terminating rows are excluded unless IncludeTerminating is true. When
+// LatestOnly and IncludeTerminating are both true, results contain the
+// live latest row plus any terminating rows for each (namespace, name)
+// — see ListOpts.LatestOnly for the rationale.
 func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject, string, error) {
 	limit := opts.Limit
 	if limit <= 0 {
@@ -620,7 +627,17 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 		where = append(where, fmt.Sprintf("namespace = $%d", len(args)))
 	}
 	if opts.LatestOnly {
-		where = append(where, "is_latest_version")
+		if opts.IncludeTerminating {
+			// recomputeLatest clears is_latest_version on terminating
+			// rows, so a strict "is_latest_version" filter would hide
+			// them even with IncludeTerminating=true. Widen the predicate
+			// to "the live latest row OR any terminating row" so kinds
+			// whose teardown is operator-observable can
+			// surface in-flight teardown alongside healthy rows.
+			where = append(where, "(is_latest_version OR deletion_timestamp IS NOT NULL)")
+		} else {
+			where = append(where, "is_latest_version")
+		}
 	}
 	if !opts.IncludeTerminating {
 		where = append(where, "deletion_timestamp IS NULL")
