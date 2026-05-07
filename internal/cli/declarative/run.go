@@ -144,10 +144,16 @@ func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun, wat
 	envv := mergeEnv(dotEnv, extraEnv)
 	image := defaultImage(name)
 
+	port := cfg.Port
+	if port == 0 && pluginType == "mcp" {
+		port = 3000
+	}
+
 	vars := map[string]any{
 		"ProjectDir": projectDir,
 		"PluginDir":  p.SourceDir,
 		"Image":      image,
+		"Port":       port,
 	}
 
 	rendered, err := plugins.RenderArgs(p.Run.Command, vars)

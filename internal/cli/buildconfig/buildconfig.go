@@ -20,6 +20,9 @@ type Config struct {
 	Language      string `yaml:"language"`
 	ModelProvider string `yaml:"modelProvider,omitempty"`
 	ModelName     string `yaml:"modelName,omitempty"`
+	// Port is set for MCPServer projects to expose HTTP transport. arctl run
+	// maps it to the host and the MCP runtime binds 0.0.0.0:<port>.
+	Port int `yaml:"port,omitempty"`
 }
 
 // Path returns the canonical arctl.yaml path under projectDir.

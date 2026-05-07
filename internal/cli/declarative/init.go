@@ -330,6 +330,7 @@ func newInitMCPCmd() *cobra.Command {
 		initImage       string
 		initFramework   string
 		initLanguage    string
+		initPort        int
 	)
 
 	cmd := &cobra.Command{
@@ -383,7 +384,11 @@ Picks a framework + language interactively (or via --framework / --language).`,
 			if err := plugins.RenderTemplates(plugin, projectDir, vars); err != nil {
 				return err
 			}
-			if err := buildconfig.Write(projectDir, &buildconfig.Config{Framework: plugin.Framework, Language: plugin.Language}); err != nil {
+			if err := buildconfig.Write(projectDir, &buildconfig.Config{
+				Framework: plugin.Framework,
+				Language:  plugin.Language,
+				Port:      initPort,
+			}); err != nil {
 				return err
 			}
 			if err := buildconfig.WriteDotEnv(projectDir, plugin.Env.Required, plugin.Env.Optional); err != nil {
@@ -412,6 +417,7 @@ Picks a framework + language interactively (or via --framework / --language).`,
 	cmd.Flags().StringVar(&initImage, "image", "", "Image tag override")
 	cmd.Flags().StringVar(&initFramework, "framework", "", "Framework. Skips picker.")
 	cmd.Flags().StringVar(&initLanguage, "language", "", "Language. Skips picker.")
+	cmd.Flags().IntVar(&initPort, "port", 3000, "HTTP port the MCP server binds to (and that arctl run maps)")
 	return cmd
 }
 

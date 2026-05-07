@@ -11,4 +11,8 @@ env:
 build:
   command: ["docker", "build", "-t", "{{.Image}}", "{{.ProjectDir}}"]
 run:
-  command: ["docker", "run", "--rm", "-i", "{{.Image}}"]
+  # HTTP transport via the runtime's --http flag. Stdio mode is not used by
+  # `arctl run` because it produces no useful state without an attached MCP
+  # client.
+  command: ["docker", "run", "--rm", "-p", "{{.Port}}:{{.Port}}",
+            "{{.Image}}", "--http", "0.0.0.0:{{.Port}}"]
