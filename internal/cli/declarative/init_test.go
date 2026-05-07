@@ -10,7 +10,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v3"
+	"sigs.k8s.io/yaml"
 )
 
 // readYAMLFile parses a YAML file at the given absolute path and returns it as a map.
