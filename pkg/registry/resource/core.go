@@ -19,13 +19,36 @@ type applyOpts struct {
 	Resolver          v1alpha1.ResolverFunc
 	RegistryValidator v1alpha1.RegistryValidatorFunc
 	PostUpsert        func(ctx context.Context, obj v1alpha1.Object) error
+	CreateStager      func(ctx context.Context, in CreateStagerInput) (CreateStagerResult, error)
 }
 
 // upsertResult is the outcome of a successful applyCore call.
 type upsertResult struct {
 	Created     bool
+	Staged      bool
 	SpecChanged bool
 	Generation  int64
+}
+
+// CreateStagerInput is handed to an optional enterprise create-approval
+// hook after auth/validation/ref checks and before production Upsert.
+// The hook may inspect the production Store to decide whether this apply
+// is a create and, if policy requires it, persist the object somewhere
+// outside the production v1alpha1 table.
+type CreateStagerInput struct {
+	Kind      string
+	Namespace string
+	Name      string
+	Version   string
+	Object    v1alpha1.Object
+	Store     *v1alpha1store.Store
+}
+
+// CreateStagerResult reports whether the hook handled the apply by
+// staging it. When Staged is true, applyCore short-circuits before the
+// production Upsert and does not run PostUpsert.
+type CreateStagerResult struct {
+	Staged bool
 }
 
 // applyStage tags which step of the pipeline produced an error so
@@ -38,6 +61,7 @@ const (
 	stageValidation applyStage = "validation"
 	stageRefs       applyStage = "refs"
 	stageRegistries applyStage = "registries"
+	stageApproval   applyStage = "approval"
 	stageMarshal    applyStage = "marshal"
 	stageUpsert     applyStage = "upsert"
 	stagePostUpsert applyStage = "post-upsert"
@@ -135,6 +159,23 @@ func applyCore(
 
 	if dryRun {
 		return upsertResult{}, nil
+	}
+
+	if opts.CreateStager != nil {
+		staged, err := opts.CreateStager(ctx, CreateStagerInput{
+			Kind:      kind,
+			Namespace: meta.Namespace,
+			Name:      meta.Name,
+			Version:   meta.Version,
+			Object:    obj,
+			Store:     store,
+		})
+		if err != nil {
+			return upsertResult{}, &applyError{Stage: stageApproval, Err: err}
+		}
+		if staged.Staged {
+			return upsertResult{Staged: true}, nil
+		}
 	}
 
 	specJSON, err := obj.MarshalSpec()

@@ -105,6 +105,11 @@ type Config struct {
 	// and writes the terminal Removed condition.
 	PostDelete func(ctx context.Context, obj v1alpha1.Object) error
 
+	// CreateStager optionally intercepts validated create attempts before
+	// production Upsert. Enterprise builds use this for approval staging.
+	// nil preserves the normal OSS direct-write behavior.
+	CreateStager func(ctx context.Context, in CreateStagerInput) (CreateStagerResult, error)
+
 	// Authorize is optional; when set, every read and write handler
 	// (get / list / apply / delete) invokes it as an access gate before
 	// touching the store. Return nil to allow; return a huma error
@@ -395,13 +400,18 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		meta.Version = version
 		body.SetMetadata(*meta)
 
-		if _, ae := applyCore(ctx, cfg.Store, body, applyOpts{
+		up, ae := applyCore(ctx, cfg.Store, body, applyOpts{
 			Authorize:         cfg.Authorize,
 			Resolver:          cfg.Resolver,
 			RegistryValidator: cfg.RegistryValidator,
 			PostUpsert:        cfg.PostUpsert,
-		}, false); ae != nil {
+			CreateStager:      cfg.CreateStager,
+		}, false)
+		if ae != nil {
 			return nil, mapApplyErrorToHuma(ae, kind, ns, name, version)
+		}
+		if up.Staged {
+			return &bodyOutput[T]{Body: body}, nil
 		}
 
 		// Read back so the response reflects the stored identity (assigned
@@ -485,6 +495,8 @@ func mapApplyErrorToHuma(ae *applyError, kind, ns, name, version string) error {
 		return huma.Error400BadRequest("refs: " + ae.Err.Error())
 	case stageRegistries:
 		return huma.Error400BadRequest("registries: " + ae.Err.Error())
+	case stageApproval:
+		return ae.Err
 	case stageMarshal:
 		return huma.Error400BadRequest("marshal spec: " + ae.Err.Error())
 	case stageUpsert:

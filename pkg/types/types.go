@@ -18,6 +18,8 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 	"github.com/danielgtaylor/huma/v2"
 )
 
@@ -65,6 +67,17 @@ type PostUpsert func(ctx context.Context, obj v1alpha1.Object) error
 // resource. Wired into resource.Config.PostDelete + the apply
 // batch's per-doc delete hook.
 type PostDelete func(ctx context.Context, obj v1alpha1.Object) error
+
+// ResourceRouteContext exposes the finalized v1alpha1 route wiring to
+// downstream integrations that need to register adjacent routes against
+// the same stores, resolver, validator, and post-persist hooks.
+type ResourceRouteContext struct {
+	Stores            map[string]*v1alpha1store.Store
+	Resolver          v1alpha1.ResolverFunc
+	RegistryValidator v1alpha1.RegistryValidatorFunc
+	PostUpserts       map[string]func(context.Context, v1alpha1.Object) error
+	PostDeletes       map[string]func(context.Context, v1alpha1.Object) error
+}
 
 // AppOptions contains configuration for the registry app.
 // All fields are optional and allow external developers to extend
@@ -129,6 +142,17 @@ type AppOptions struct {
 	// PostDeletes mirror PostUpserts on the delete path.
 	PostDeletes map[string]PostDelete
 
+	// CreateStager optionally intercepts validated creates before the row
+	// reaches production storage. Enterprise builds use this for native
+	// approval staging; nil preserves normal direct writes.
+	CreateStager func(ctx context.Context, in resource.CreateStagerInput) (resource.CreateStagerResult, error)
+
+	// ResolverWrapper can decorate the shared v1alpha1 ResourceRef resolver
+	// before route registration. Enterprise approval mode uses this to allow
+	// same-submit pending references to validate without writing them to
+	// production storage first. Nil preserves the default store-backed resolver.
+	ResolverWrapper func(v1alpha1.ResolverFunc) v1alpha1.ResolverFunc
+
 	// V1Alpha1StoreTables registers additional v1alpha1 kinds with their
 	// backing PostgreSQL tables. Downstream builds that add their own
 	// Scheme kinds should populate this so the shared /v0/apply,
@@ -168,6 +192,11 @@ type AppOptions struct {
 	// routes using the same API instance and path prefix as OSS core
 	// routes.
 	ExtraRoutes func(api huma.API, pathPrefix string)
+
+	// ExtraResourceRoutes is like ExtraRoutes, but runs after the v1alpha1
+	// resource route context has been finalized. Use this when an adjacent
+	// route must share the same stores and post-persist hooks as /v0/apply.
+	ExtraResourceRoutes func(api huma.API, pathPrefix string, ctx ResourceRouteContext)
 
 	// HTTPServerFactory is an optional function to create a server that
 	// adds new API routes.

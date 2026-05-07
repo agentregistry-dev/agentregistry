@@ -58,6 +58,11 @@ type ApplyConfig struct {
 	// soft-deletes the row but never tears down the platform adapter
 	// state.
 	PostDeletes map[string]func(ctx context.Context, obj v1alpha1.Object) error
+
+	// CreateStager optionally intercepts validated create attempts before
+	// production Upsert. Enterprise builds use this to stage non-admin
+	// creates for approval while leaving OSS behavior unchanged.
+	CreateStager func(ctx context.Context, in CreateStagerInput) (CreateStagerResult, error)
 }
 
 // applyInput receives a raw multi-doc YAML stream. RawBody keeps bytes
@@ -165,6 +170,7 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 		Resolver:          cfg.Resolver,
 		RegistryValidator: cfg.RegistryValidator,
 		PostUpsert:        cfg.PostUpserts[obj.GetKind()],
+		CreateStager:      cfg.CreateStager,
 	}, dryRun)
 	if ae != nil {
 		return failResult(res, ae)
@@ -175,6 +181,8 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 		return res
 	}
 	switch {
+	case up.Staged:
+		res.Status = arv0.ApplyStatusStaged
 	case up.Created:
 		res.Status = arv0.ApplyStatusCreated
 	case up.SpecChanged:
