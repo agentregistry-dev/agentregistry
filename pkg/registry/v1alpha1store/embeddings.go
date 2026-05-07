@@ -116,7 +116,8 @@ type SemanticListOpts struct {
 	Limit int
 	// Namespace narrows to a specific namespace; blank = cross-namespace.
 	Namespace string
-	// LatestOnly restricts to is_latest_version rows.
+	// LatestOnly restricts to the literal "latest" tag, or
+	// is_latest_version rows for legacy stores.
 	LatestOnly bool
 	// IncludeTerminating includes rows with a set DeletionTimestamp.
 	IncludeTerminating bool
@@ -253,7 +254,7 @@ func scanSemanticRow(rows pgx.Rows, tagged bool) (*v1alpha1.RawObject, float32, 
 
 	obj, err := decodeRow(
 		tagged,
-		namespace, name, identity,
+		namespace, name, identity, generation,
 		labelsJSON, annotationsJSON, specJSON, statusJSON,
 		deletionTimestamp, finalizersJSON, createdAt, updatedAt,
 	)

@@ -32,9 +32,9 @@ var TableFor = map[string]string{
 // themselves.
 //
 // KindDeployment and KindProvider are bound through NewDeploymentStore
-// (legacy mode) — both are infra/lifecycle state, not versioned
+// (legacy mode) — both are infra/lifecycle state, not tagged
 // artifacts. Every other built-in kind uses NewStore
-// (versioned-artifact mode). Iterates v1alpha1.BuiltinKinds so
+// (tagged-artifact mode). Iterates v1alpha1.BuiltinKinds so
 // registration order stays stable across builds (important for
 // OpenAPI output).
 //

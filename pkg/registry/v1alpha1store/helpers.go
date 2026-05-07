@@ -63,7 +63,7 @@ func scanRow(row rowScanner, tagged bool) (*v1alpha1.RawObject, error) {
 
 	return decodeRow(
 		tagged,
-		namespace, name, identity,
+		namespace, name, identity, generation,
 		labelsJSON, annotationsJSON, specJSON, statusJSON,
 		deletionTimestamp, finalizersJSON, createdAt, updatedAt,
 	)
@@ -79,6 +79,7 @@ func scanRow(row rowScanner, tagged bool) (*v1alpha1.RawObject, error) {
 func decodeRow(
 	tagged bool,
 	namespace, name, identity string,
+	generation int64,
 	labelsJSON, annotationsJSON, specJSON, statusJSON []byte,
 	deletionTimestamp *time.Time,
 	finalizersJSON []byte,
@@ -107,6 +108,7 @@ func decodeRow(
 		Name:              name,
 		Labels:            labels,
 		Annotations:       annotations,
+		Generation:        generation,
 		CreatedAt:         createdAt,
 		UpdatedAt:         updatedAt,
 		DeletionTimestamp: deletionTimestamp,

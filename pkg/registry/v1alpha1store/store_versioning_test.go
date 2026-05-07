@@ -73,6 +73,29 @@ func TestUpsert_ChangedSpec_ReplacesDefaultTag(t *testing.T) {
 	require.Equal(t, v1alpha1store.UpsertReplaced, res.Outcome)
 }
 
+func TestUpsert_SameTagGenerationTracksDeclarativeChanges(t *testing.T) {
+	store := setupAgentStore(t)
+	ctx := context.Background()
+
+	res, err := store.Upsert(ctx, agentObj("foo", "model-a", nil))
+	require.NoError(t, err)
+	require.EqualValues(t, 1, res.Generation)
+
+	res, err = store.Upsert(ctx, agentObj("foo", "model-a", nil))
+	require.NoError(t, err)
+	require.Equal(t, v1alpha1store.UpsertNoOp, res.Outcome)
+	require.EqualValues(t, 1, res.Generation)
+
+	res, err = store.Upsert(ctx, agentObj("foo", "model-b", nil))
+	require.NoError(t, err)
+	require.Equal(t, v1alpha1store.UpsertReplaced, res.Outcome)
+	require.EqualValues(t, 2, res.Generation)
+
+	row, err := store.Get(ctx, "default", "foo", v1alpha1store.DefaultTag())
+	require.NoError(t, err)
+	require.EqualValues(t, 2, row.Metadata.Generation)
+}
+
 func TestUpsert_LabelChangeOnSameSpec_UpdatesLatest(t *testing.T) {
 	store := setupAgentStore(t)
 	ctx := context.Background()

@@ -4,14 +4,13 @@
 -- Provider and Deployment keep legacy (namespace, name, version).
 --
 -- Tagged-artifact tables (agents, mcp_servers, remote_mcp_servers, skills,
--- prompts) store one mutable row per tag. The store fills omitted tags with a
--- canonical SHA-256 hash of spec plus labels/annotations, and same-tag applies
--- replace the prior row atomically. "Latest" is the most recently applied live
--- tag for a (namespace, name).
+-- prompts) store one mutable row per tag. The store fills omitted tags with the
+-- literal "latest" tag, and same-tag applies replace the prior row atomically.
+-- "Latest" is a normal tag value, not the most recently applied live tag.
 --
--- Providers and Deployments are not versioned-artifact rows — they're
+-- Providers and Deployments are not tagged-artifact rows — they're
 -- infra/lifecycle state and keep the older string-version shape (out of
--- scope for the immutable-versioning redesign).
+-- scope for the tagged-artifact redesign).
 --
 -- All tables live under the dedicated PostgreSQL schema `v1alpha1` so they
 -- coexist with the legacy `public.agents`, `public.servers`, etc. during
@@ -83,6 +82,7 @@ $$ LANGUAGE plpgsql;
 --
 -- Columns:
 --   namespace, name, tag        — composite identity (PK).
+--   generation                 — server-managed convergence counter
 --   labels, annotations        — user-set key/value JSONB
 --   spec                       — JSONB per pkg/api/v1alpha1 typed Spec
 --   content_hash               — SHA-256 hex of spec plus relevant metadata;
@@ -94,14 +94,15 @@ $$ LANGUAGE plpgsql;
 --
 -- Indexes:
 --   PK (namespace, name, tag) supports per-tag lookups.
---   (namespace, name, updated_at DESC, tag) serves "give me the latest live row"
---   queries (ORDER BY updated_at DESC, tag DESC LIMIT 1).
+--   (namespace, name, updated_at DESC, tag) serves "list tags by newest apply"
+--   queries.
 -- -----------------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS v1alpha1.agents (
     namespace          VARCHAR(255) NOT NULL,
     name               VARCHAR(255) NOT NULL,
     tag                VARCHAR(255) NOT NULL,
+    generation         BIGINT       NOT NULL DEFAULT 1,
     labels             JSONB        NOT NULL DEFAULT '{}'::jsonb,
     annotations        JSONB        NOT NULL DEFAULT '{}'::jsonb,
     spec               JSONB        NOT NULL,
@@ -125,6 +126,7 @@ CREATE TABLE IF NOT EXISTS v1alpha1.mcp_servers (
     namespace          VARCHAR(255) NOT NULL,
     name               VARCHAR(255) NOT NULL,
     tag                VARCHAR(255) NOT NULL,
+    generation         BIGINT       NOT NULL DEFAULT 1,
     labels             JSONB        NOT NULL DEFAULT '{}'::jsonb,
     annotations        JSONB        NOT NULL DEFAULT '{}'::jsonb,
     spec               JSONB        NOT NULL,
@@ -147,6 +149,7 @@ CREATE TABLE IF NOT EXISTS v1alpha1.skills (
     namespace          VARCHAR(255) NOT NULL,
     name               VARCHAR(255) NOT NULL,
     tag                VARCHAR(255) NOT NULL,
+    generation         BIGINT       NOT NULL DEFAULT 1,
     labels             JSONB        NOT NULL DEFAULT '{}'::jsonb,
     annotations        JSONB        NOT NULL DEFAULT '{}'::jsonb,
     spec               JSONB        NOT NULL,
@@ -169,6 +172,7 @@ CREATE TABLE IF NOT EXISTS v1alpha1.prompts (
     namespace          VARCHAR(255) NOT NULL,
     name               VARCHAR(255) NOT NULL,
     tag                VARCHAR(255) NOT NULL,
+    generation         BIGINT       NOT NULL DEFAULT 1,
     labels             JSONB        NOT NULL DEFAULT '{}'::jsonb,
     annotations        JSONB        NOT NULL DEFAULT '{}'::jsonb,
     spec               JSONB        NOT NULL,
@@ -188,10 +192,10 @@ CREATE OR REPLACE TRIGGER prompts_set_updated_at  BEFORE UPDATE ON v1alpha1.prom
 CREATE OR REPLACE TRIGGER prompts_notify_status   AFTER  INSERT OR UPDATE OR DELETE ON v1alpha1.prompts  FOR EACH ROW EXECUTE FUNCTION v1alpha1.notify_status_change('v1alpha1_prompts_status');
 
 -- -----------------------------------------------------------------------------
--- Providers and Deployments: lifecycle/infra state, NOT versioned artifacts.
--- Both retain the pre-immutable-versioning shape (string version, generation,
+-- Providers and Deployments: lifecycle/infra state, NOT tagged artifacts.
+-- Both retain the pre-tagging shape (string version, generation,
 -- finalizers, is_latest_version). Provider belongs with Deployment as
--- infra/config — the actual versioned artifacts that get deployed are
+-- infra/config — the actual tagged artifacts that get deployed are
 -- Agents/MCPServers/Skills/Prompts/RemoteMCPServers.
 -- -----------------------------------------------------------------------------
 

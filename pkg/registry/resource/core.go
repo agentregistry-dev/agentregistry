@@ -31,6 +31,8 @@ type upsertResult struct {
 	Tag string
 	// Version is used only by legacy Provider/Deployment stores.
 	Version int
+	// Generation is the internal row generation after apply.
+	Generation int64
 	// Staged means a CreateStager handled the object outside production
 	// storage and no production upsert was attempted.
 	Staged bool
@@ -178,9 +180,10 @@ func applyCore(
 		}
 	}
 	res := upsertResult{
-		Outcome: up.Outcome,
-		Tag:     up.Tag,
-		Version: up.Version,
+		Outcome:    up.Outcome,
+		Tag:        up.Tag,
+		Version:    up.Version,
+		Generation: up.Generation,
 	}
 
 	if opts.PostUpsert != nil {

@@ -149,6 +149,8 @@ type UpsertResult struct {
 	Tag string
 	// Version is populated only for the legacy Provider/Deployment path.
 	Version int
+	// Generation is the server-managed row generation after the call.
+	Generation int64
 	// Outcome categorises what the call did. See UpsertOutcome constants.
 	Outcome UpsertOutcome
 }
@@ -181,10 +183,8 @@ type ListOpts struct {
 	Limit int
 	// Cursor is an opaque pagination token. Empty starts from the beginning.
 	Cursor string
-	// LatestOnly restricts to the most recently applied live row per
-	// (namespace, name). For tagged-artifact tables this resolves via
-	// updated_at; for the deployments table it consults the legacy
-	// is_latest_version flag.
+	// LatestOnly restricts to the literal "latest" tag per (namespace, name).
+	// For the deployments table it consults the legacy is_latest_version flag.
 	LatestOnly bool
 	// IncludeTerminating includes rows with deletion_timestamp set. Default
 	// false — callers asking for "alive" rows shouldn't see terminating ones.
@@ -325,15 +325,16 @@ func (s *Store) upsertTagged(ctx context.Context, meta *v1alpha1.ObjectMeta, spe
 		var (
 			existingHash       string
 			existingDeletionTS pgtype.Timestamptz
+			existingGeneration int64
 			found              bool
 		)
 		err := tx.QueryRow(ctx,
 			fmt.Sprintf(`
-				SELECT content_hash, deletion_timestamp
-				FROM %s
-				WHERE namespace=$1 AND name=$2 AND tag=$3
-				FOR UPDATE`, s.table),
-			meta.Namespace, meta.Name, meta.Tag).Scan(&existingHash, &existingDeletionTS)
+					SELECT content_hash, deletion_timestamp, generation
+					FROM %s
+					WHERE namespace=$1 AND name=$2 AND tag=$3
+					FOR UPDATE`, s.table),
+			meta.Namespace, meta.Name, meta.Tag).Scan(&existingHash, &existingDeletionTS, &existingGeneration)
 		switch {
 		case err == nil:
 			found = true
@@ -357,24 +358,25 @@ func (s *Store) upsertTagged(ctx context.Context, meta *v1alpha1.ObjectMeta, spe
 				meta.Namespace, meta.Name, meta.Tag, incomingLabelsJSON, incomingAnnotationsJSON, []byte(specJSON), incomingHash); err != nil {
 				return fmt.Errorf("insert tag: %w", err)
 			}
-			result = UpsertResult{Tag: meta.Tag, Outcome: UpsertCreated}
+			result = UpsertResult{Tag: meta.Tag, Generation: 1, Outcome: UpsertCreated}
 			return nil
 		}
 
 		if incomingHash == existingHash {
-			result = UpsertResult{Tag: meta.Tag, Outcome: UpsertNoOp}
+			result = UpsertResult{Tag: meta.Tag, Generation: existingGeneration, Outcome: UpsertNoOp}
 			return nil
 		}
 
+		nextGeneration := existingGeneration + 1
 		if _, err := tx.Exec(ctx,
 			fmt.Sprintf(`
-				UPDATE %s
-				SET labels=$4, annotations=$5, spec=$6, content_hash=$7, status='{}'::jsonb, deletion_timestamp=NULL
-				WHERE namespace=$1 AND name=$2 AND tag=$3`, s.table),
-			meta.Namespace, meta.Name, meta.Tag, incomingLabelsJSON, incomingAnnotationsJSON, []byte(specJSON), incomingHash); err != nil {
+					UPDATE %s
+					SET labels=$4, annotations=$5, spec=$6, content_hash=$7, generation=$8, status='{}'::jsonb, deletion_timestamp=NULL
+					WHERE namespace=$1 AND name=$2 AND tag=$3`, s.table),
+			meta.Namespace, meta.Name, meta.Tag, incomingLabelsJSON, incomingAnnotationsJSON, []byte(specJSON), incomingHash, nextGeneration); err != nil {
 			return fmt.Errorf("replace tag: %w", err)
 		}
-		result = UpsertResult{Tag: meta.Tag, Outcome: UpsertReplaced}
+		result = UpsertResult{Tag: meta.Tag, Generation: nextGeneration, Outcome: UpsertReplaced}
 		return nil
 	})
 	if err != nil {
@@ -479,7 +481,7 @@ func (s *Store) upsertLegacy(ctx context.Context, meta *v1alpha1.ObjectMeta, spe
 		}
 
 		v, _ := strconv.Atoi(meta.Version)
-		result = UpsertResult{Version: v, Outcome: outcome}
+		result = UpsertResult{Version: v, Generation: newGen, Outcome: outcome}
 		return nil
 	})
 	if err != nil {
@@ -1089,8 +1091,8 @@ func encodeListCursor(obj *v1alpha1.RawObject) (string, error) {
 type FindReferrersOpts struct {
 	// Namespace, when non-empty, restricts results to a single namespace.
 	Namespace string
-	// LatestOnly, when true, restricts to the latest live row per
-	// (namespace, name).
+	// LatestOnly, when true, restricts to the literal "latest" tag per
+	// (namespace, name), or the legacy latest-version row for deployments.
 	LatestOnly bool
 	// IncludeTerminating, when true, keeps rows whose deletion_timestamp
 	// is set. Default (false) excludes them.
@@ -1185,7 +1187,7 @@ func (s *Store) recomputeLatestDeployments(ctx context.Context, tx pgx.Tx, names
 // scanRow's column layout stays uniform.
 func (s *Store) selectColumns() string {
 	if !s.legacy {
-		return `namespace, name, tag, 0::bigint AS generation, labels, annotations, spec, status,
+		return `namespace, name, tag, generation, labels, annotations, spec, status,
 		       deletion_timestamp, '[]'::jsonb AS finalizers, created_at, updated_at`
 	}
 	return `namespace, name, version, generation, labels, annotations, spec, status,

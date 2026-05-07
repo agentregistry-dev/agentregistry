@@ -201,6 +201,7 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 	} else {
 		res.Version = meta.Version
 	}
+	res.Generation = up.Generation
 	return res
 }
 

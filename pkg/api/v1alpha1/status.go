@@ -20,20 +20,30 @@ const (
 // Reason is a machine-readable CamelCase token; Message is a
 // human-readable explanation; LastTransitionTime is when Status last
 // flipped.
+//
+// ObservedGeneration is the spec generation this condition was derived from.
+// Like ObjectMeta.Generation it is an internal reconciler convergence signal:
+// kept on the struct for controllers to read, persisted in storage, but hidden
+// from the wire so the user-facing metadata surface stays minimal.
 type Condition struct {
 	Type               string          `json:"type" yaml:"type"`
 	Status             ConditionStatus `json:"status" yaml:"status"`
 	Reason             string          `json:"reason,omitempty" yaml:"reason,omitempty"`
 	Message            string          `json:"message,omitempty" yaml:"message,omitempty"`
 	LastTransitionTime time.Time       `json:"lastTransitionTime,omitzero" yaml:"lastTransitionTime,omitempty"`
+	ObservedGeneration int64           `json:"-" yaml:"-"`
 }
 
-// Status is the observed-state subresource. Conditions is the list of
+// Status is the observed-state subresource. ObservedGeneration is the highest
+// metadata.generation any reconciler has acted on; Conditions is the list of
 // fine-grained state facets written by the reconciler and service layer. No
 // Phase roll-up — K8s deprecated it in favor of Conditions, and carrying a
 // string summary encourages downstream string-comparison anti-patterns.
+//
+// ObservedGeneration is internal-only (matches ObjectMeta.Generation).
 type Status struct {
-	Conditions []Condition `json:"conditions,omitempty" yaml:"conditions,omitempty"`
+	ObservedGeneration int64       `json:"-" yaml:"-"`
+	Conditions         []Condition `json:"conditions,omitempty" yaml:"conditions,omitempty"`
 }
 
 // SetCondition adds or updates the condition matching c.Type on s. If an entry
@@ -80,22 +90,24 @@ func (s *Status) IsConditionTrue(conditionType string) bool {
 	return c != nil && c.Status == ConditionTrue
 }
 
-// conditionStore is the on-disk shape of a Condition. Currently identical
-// to Condition; retained as a separate type so storage-only fields can be
-// added without leaking into the wire schema.
+// conditionStore is the on-disk shape of a Condition. It serializes
+// ObservedGeneration for controller state while the public wire shape keeps
+// that field hidden.
 type conditionStore struct {
 	Type               string          `json:"type"`
 	Status             ConditionStatus `json:"status"`
 	Reason             string          `json:"reason,omitempty"`
 	Message            string          `json:"message,omitempty"`
 	LastTransitionTime time.Time       `json:"lastTransitionTime,omitzero"`
+	ObservedGeneration int64           `json:"observedGeneration,omitempty"`
 }
 
-// statusStore is the on-disk shape of Status. Mirrors Status today; kept
-// distinct so storage-only fields can be added without altering the wire
-// schema. See MarshalStatusForStorage / UnmarshalStatusFromStorage.
+// statusStore is the on-disk shape of Status. Mirrors Status, but with
+// ObservedGeneration visible to the JSON encoder. See MarshalStatusForStorage /
+// UnmarshalStatusFromStorage.
 type statusStore struct {
-	Conditions []conditionStore `json:"conditions,omitempty"`
+	ObservedGeneration int64            `json:"observedGeneration,omitempty"`
+	Conditions         []conditionStore `json:"conditions,omitempty"`
 }
 
 // MarshalStatusForStorage serializes a Status to JSON suitable for
@@ -110,17 +122,19 @@ func MarshalStatusForStorage(s Status) ([]byte, error) {
 		storeConds[i] = conditionStore(c)
 	}
 	return json.Marshal(statusStore{
-		Conditions: storeConds,
+		ObservedGeneration: s.ObservedGeneration,
+		Conditions:         storeConds,
 	})
 }
 
 // StatusPatcher adapts a typed Status mutator into the opaque-bytes
 // signature that v1alpha1store.PatchOpts.Status / Store.PatchStatus
 // expect. Callers that use the typed v1alpha1.Status schema wrap their
-// SetCondition logic here:
+// SetCondition / ObservedGeneration logic here:
 //
 //	store.PatchStatus(ctx, ns, name, version, v1alpha1.StatusPatcher(
 //	    func(s *v1alpha1.Status) {
+//	        s.ObservedGeneration = gen
 //	        s.SetCondition(v1alpha1.Condition{Type: "Ready", Status: v1alpha1.ConditionTrue})
 //	    },
 //	))
@@ -140,7 +154,7 @@ func StatusPatcher(mutate func(*Status)) func(current json.RawMessage) (json.Raw
 
 // UnmarshalStatusFromStorage is the read-side inverse of
 // MarshalStatusForStorage: decode a status JSONB payload back into a
-// live Status struct.
+// live Status struct, including the internal-only ObservedGeneration fields.
 func UnmarshalStatusFromStorage(data []byte, s *Status) error {
 	if len(data) == 0 {
 		*s = Status{}
@@ -155,7 +169,8 @@ func UnmarshalStatusFromStorage(data []byte, s *Status) error {
 		conds[i] = Condition(c)
 	}
 	*s = Status{
-		Conditions: conds,
+		ObservedGeneration: w.ObservedGeneration,
+		Conditions:         conds,
 	}
 	return nil
 }

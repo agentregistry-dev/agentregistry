@@ -21,9 +21,16 @@ const DefaultNamespace = "default"
 // ObjectMeta is the metadata block common to every resource.
 //
 // Namespace, Name, Labels, Annotations, and Tag are user-settable for
-// content-registry kinds. CreatedAt, UpdatedAt, and DeletionTimestamp are
-// server-managed. Version remains only for legacy infra/config kinds whose
-// storage still uses the old mutable (namespace, name, version) tuple.
+// content-registry kinds. Generation, CreatedAt, UpdatedAt, and
+// DeletionTimestamp are server-managed. Version remains only for legacy
+// infra/config kinds whose storage still uses the old mutable
+// (namespace, name, version) tuple.
+//
+// Generation is an internal coordination primitive that drives reconciler
+// convergence (paired with Status.ObservedGeneration). It is populated from the
+// database row and used by internal Go code, but is NOT emitted on the wire:
+// the JSON/YAML tags are `-`, so OpenAPI schemas don't reveal it and clients
+// can't set it on apply.
 //
 // Content-registry identity is (Namespace, Name, Tag). Users may supply
 // metadata.tag to pin manifests declaratively before applying anything to a
@@ -62,8 +69,12 @@ type ObjectMeta struct {
 	// Content-registry manifests must not include metadata.version.
 	Version string `json:"version,omitempty" yaml:"version,omitempty"`
 
-	CreatedAt time.Time `json:"createdAt,omitzero" yaml:"createdAt,omitempty"`
-	UpdatedAt time.Time `json:"updatedAt,omitzero" yaml:"updatedAt,omitempty"`
+	// Generation is server-managed and internal. Populated from the DB row for
+	// internal Go consumers (coordinators, status reconcilers); hidden from the
+	// wire.
+	Generation int64     `json:"-" yaml:"-"`
+	CreatedAt  time.Time `json:"createdAt,omitzero" yaml:"createdAt,omitempty"`
+	UpdatedAt  time.Time `json:"updatedAt,omitzero" yaml:"updatedAt,omitempty"`
 
 	// DeletionTimestamp is set by the Store when Delete is called. A non-nil
 	// DeletionTimestamp means the object is terminating; the row stays

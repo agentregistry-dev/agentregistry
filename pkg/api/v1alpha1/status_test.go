@@ -1,6 +1,8 @@
 package v1alpha1
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 )
@@ -72,7 +74,14 @@ func TestStatus_GetCondition(t *testing.T) {
 }
 
 func TestStatus_ConditionsRoundTrip(t *testing.T) {
-	s := Status{Conditions: []Condition{{Type: "Synced", Status: ConditionTrue}}}
+	s := Status{
+		ObservedGeneration: 7,
+		Conditions: []Condition{{
+			Type:               "Synced",
+			Status:             ConditionTrue,
+			ObservedGeneration: 7,
+		}},
+	}
 	data, err := MarshalStatusForStorage(s)
 	if err != nil {
 		t.Fatal(err)
@@ -83,6 +92,19 @@ func TestStatus_ConditionsRoundTrip(t *testing.T) {
 	}
 	if len(got.Conditions) != 1 {
 		t.Errorf("Conditions not round-tripped: got %d, want 1", len(got.Conditions))
+	}
+	if got.ObservedGeneration != 7 {
+		t.Errorf("ObservedGeneration not round-tripped: got %d, want 7", got.ObservedGeneration)
+	}
+	if got.Conditions[0].ObservedGeneration != 7 {
+		t.Errorf("Condition.ObservedGeneration not round-tripped: got %d, want 7", got.Conditions[0].ObservedGeneration)
+	}
+	wire, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(wire) == "" || strings.Contains(string(wire), "observedGeneration") {
+		t.Fatalf("observedGeneration must stay hidden from wire JSON: %s", string(wire))
 	}
 }
 

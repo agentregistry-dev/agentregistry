@@ -49,8 +49,8 @@ func TestInitAgentCmd_BasicScaffold(t *testing.T) {
 	metadata, ok := m["metadata"].(map[string]any)
 	require.True(t, ok, "metadata should be a map")
 	assert.Equal(t, "myagent", metadata["name"])
-	// metadata.version is system-assigned and must NOT appear in init output;
-	// the decoder rejects manifests that pre-set it.
+	// Content resources use metadata.tag, so metadata.version must NOT
+	// appear in init output; the decoder rejects manifests that pre-set it.
 	assert.NotContains(t, metadata, "version", "init output must omit metadata.version")
 
 	spec, ok := m["spec"].(map[string]any)
@@ -84,7 +84,7 @@ func TestInitAgentCmd_CustomFlags(t *testing.T) {
 
 	m := readAgentYAML(t, tmpDir, "mybot")
 	metadata := m["metadata"].(map[string]any)
-	// metadata.version is system-assigned and must never appear in init output.
+	// Content resources use metadata.tag; metadata.version must never appear in init output.
 	assert.NotContains(t, metadata, "version", "init output must omit metadata.version")
 
 	spec := m["spec"].(map[string]any)
@@ -315,7 +315,7 @@ func TestInitMCPCmd_BasicScaffold(t *testing.T) {
 
 	metadata := m["metadata"].(map[string]any)
 	assert.Equal(t, "myorg/myserver", metadata["name"])
-	// metadata.version is system-assigned and must NOT appear in init output.
+	// Content resources use metadata.tag; metadata.version must NOT appear in init output.
 	assert.NotContains(t, metadata, "version", "init output must omit metadata.version")
 
 	spec := m["spec"].(map[string]any)
@@ -347,7 +347,7 @@ func TestInitMCPCmd_CustomFlags(t *testing.T) {
 	m := readYAMLFile(t, filepath.Join(tmpDir, "myserver", "mcp.yaml"))
 	metadata := m["metadata"].(map[string]any)
 	assert.Equal(t, "myorg/myserver", metadata["name"])
-	// metadata.version is system-assigned and must never appear in init output.
+	// Content resources use metadata.tag; metadata.version must never appear in init output.
 	assert.NotContains(t, metadata, "version", "init output must omit metadata.version")
 
 	spec := m["spec"].(map[string]any)
@@ -431,7 +431,7 @@ func TestInitSkillCmd_BasicScaffold(t *testing.T) {
 
 	metadata := m["metadata"].(map[string]any)
 	assert.Equal(t, "myskill", metadata["name"])
-	// metadata.version is system-assigned and must NOT appear in init output.
+	// Content resources use metadata.tag; metadata.version must NOT appear in init output.
 	assert.NotContains(t, metadata, "version", "init output must omit metadata.version")
 
 	spec := m["spec"].(map[string]any)
@@ -455,7 +455,7 @@ func TestInitSkillCmd_CustomFlags(t *testing.T) {
 
 	m := readYAMLFile(t, filepath.Join(tmpDir, "myskill", "skill.yaml"))
 	metadata := m["metadata"].(map[string]any)
-	// metadata.version is system-assigned and must never appear in init output.
+	// Content resources use metadata.tag; metadata.version must never appear in init output.
 	assert.NotContains(t, metadata, "version", "init output must omit metadata.version")
 
 	spec := m["spec"].(map[string]any)
@@ -499,7 +499,7 @@ func TestInitPromptCmd_BasicScaffold(t *testing.T) {
 
 	metadata := m["metadata"].(map[string]any)
 	assert.Equal(t, "myprompt", metadata["name"])
-	// metadata.version is system-assigned and must NOT appear in init output.
+	// Content resources use metadata.tag; metadata.version must NOT appear in init output.
 	assert.NotContains(t, metadata, "version", "init output must omit metadata.version")
 
 	spec := m["spec"].(map[string]any)
@@ -524,7 +524,7 @@ func TestInitPromptCmd_CustomContent(t *testing.T) {
 
 	m := readYAMLFile(t, filepath.Join(tmpDir, "summarizer.yaml"))
 	metadata := m["metadata"].(map[string]any)
-	// metadata.version is system-assigned and must never appear in init output.
+	// Content resources use metadata.tag; metadata.version must never appear in init output.
 	assert.NotContains(t, metadata, "version", "init output must omit metadata.version")
 
 	spec := m["spec"].(map[string]any)

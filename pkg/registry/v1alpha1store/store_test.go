@@ -360,7 +360,7 @@ func TestStore_ListCursorStableUnderStatusChurn(t *testing.T) {
 	require.Equal(t, "beta", page1[1].Metadata.Name)
 
 	require.NoError(t, store.PatchStatus(ctx, testNS, "alpha", DefaultTag(), func(json.RawMessage) (json.RawMessage, error) {
-		return json.RawMessage(`{"version":1}`), nil
+		return json.RawMessage(`{"observedGeneration":1}`), nil
 	}))
 
 	page2, cursor2, err := store.List(ctx, ListOpts{Limit: 2, Cursor: cursor})

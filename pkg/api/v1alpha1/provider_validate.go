@@ -15,7 +15,7 @@ var KnownPlatforms = map[string]struct{}{
 // Validate runs Provider's structural checks.
 //
 // Provider is infra/config — it lives alongside Deployment, not in
-// the versioned-artifact set. Its spec describes a connection handle
+// the tagged-artifact set. Its spec describes a connection handle
 // to one execution target: platform identifier, platform-specific
 // config, and an optional telemetry endpoint. (namespace, name) is
 // the identity; metadata.version goes into the legacy 3-tuple PK and

@@ -721,23 +721,19 @@ func fetchAgentDescription(t *testing.T, regURL, name, version string) string {
 }
 
 // TestDeclarativeApply_Update verifies that applying an agent YAML with a
-// changed spec creates a new immutable version. Under the immutable-resource-
-// versioning contract, the prior version stays exactly as it was (v1 keeps
-// its original description) and the changed spec lands as v2 with the new
-// description.
+// changed spec replaces the same literal "latest" tag row.
 func TestDeclarativeApply_Update(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 
 	agentName := UniqueAgentName("declupdateagent")
-	v1, v2 := "1", "2"
+	tag := "latest"
 
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", v1, "--registry-url", regURL)
-		RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", v2, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", tag, "--registry-url", regURL)
 	})
 
-	// Step 1: Apply with "v1 description" — server assigns version 1.
+	// Step 1: Apply with "v1 description" to the default latest tag.
 	v1YAML := fmt.Sprintf(`
 apiVersion: ar.dev/v1alpha1
 kind: Agent
@@ -759,15 +755,15 @@ spec:
 	RequireSuccess(t, result)
 	RequireOutputContains(t, result, "Agent/"+agentName)
 	RequireOutputContains(t, result, "✓")
-	verifyAgentExists(t, regURL, agentName, v1)
+	verifyAgentExists(t, regURL, agentName, tag)
 
-	desc := fetchAgentDescription(t, regURL, agentName, v1)
+	desc := fetchAgentDescription(t, regURL, agentName, tag)
 	if desc != "v1 description" {
 		t.Errorf("expected description %q after first apply, got %q", "v1 description", desc)
 	}
 
-	// Step 2: Apply same agent with "v2 description" — spec changed,
-	// server bumps to version 2.
+	// Step 2: Apply same agent with "v2 description" — same tag, changed
+	// content, so the latest row is replaced.
 	v2YAML := fmt.Sprintf(`
 apiVersion: ar.dev/v1alpha1
 kind: Agent
@@ -788,16 +784,10 @@ spec:
 	result = RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
 
-	// Step 3: v2 carries the new description.
-	desc = fetchAgentDescription(t, regURL, agentName, v2)
+	// Step 3: latest carries the new description.
+	desc = fetchAgentDescription(t, regURL, agentName, tag)
 	if desc != "v2 description" {
-		t.Errorf("expected description %q at v2, got %q", "v2 description", desc)
-	}
-
-	// Step 4: v1 is immutable — its description must be unchanged.
-	desc = fetchAgentDescription(t, regURL, agentName, v1)
-	if desc != "v1 description" {
-		t.Errorf("v1 must remain immutable: expected %q at v1, got %q", "v1 description", desc)
+		t.Errorf("expected description %q at latest, got %q", "v2 description", desc)
 	}
 }
 

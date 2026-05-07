@@ -6,7 +6,7 @@
 --
 -- Schema mirrors the other tagged-artifact tables in 001: tag string,
 -- SHA-256 content_hash, replace-on-same-tag Upsert. The same (namespace,
--- name, updated_at DESC, tag) index serves "latest live row" queries.
+-- name, updated_at DESC, tag) index serves list-tags-by-newest-apply queries.
 --
 -- This migration only creates the table. Existing pre-v1alpha1 demo data is
 -- intentionally not translated; operators should start this API shape from a
@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS v1alpha1.remote_mcp_servers (
     namespace          VARCHAR(255) NOT NULL,
     name               VARCHAR(255) NOT NULL,
     tag                VARCHAR(255) NOT NULL,
+    generation         BIGINT       NOT NULL DEFAULT 1,
     labels             JSONB        NOT NULL DEFAULT '{}'::jsonb,
     annotations        JSONB        NOT NULL DEFAULT '{}'::jsonb,
     spec               JSONB        NOT NULL,
