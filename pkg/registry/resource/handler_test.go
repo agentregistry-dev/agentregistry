@@ -557,17 +557,18 @@ spec:
 
 	// Re-apply with the same logical identity succeeds — no
 	// "object is terminating" race since the row is fully removed.
-	// Versioned-artifact rows have no separate generation column; the
-	// row's identity-as-version is the integer assigned at insert time.
-	// A fresh create after hard-delete starts at version 1 again.
+	// The new row gets version=2: the tombstone preserves the
+	// high-water mark so the post-delete re-apply does NOT recycle
+	// version 1, even though no live rows remain. (Deployment pins
+	// like "agents/soft:1" stay pinned to the original spec.)
 	res = applyAgentYAML(t, api, createYAML)
 	require.Equal(t, arv0.ApplyStatusCreated, res.Status)
-	require.Equal(t, "1", res.Version,
-		"re-apply after hard-delete is a fresh insert at version 1")
+	require.Equal(t, "2", res.Version,
+		"re-apply after hard-delete resumes after the tombstone, not at v1")
 
-	row, err := store.Get(t.Context(), "default", "soft", "1")
+	row, err := store.Get(t.Context(), "default", "soft", "2")
 	require.NoError(t, err)
-	require.Equal(t, "1", row.Metadata.Version)
+	require.Equal(t, "2", row.Metadata.Version)
 }
 
 // TestResourceRegister_PostUpsertFailureLeavesPersistedRow pins the

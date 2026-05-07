@@ -116,11 +116,13 @@ func TestUpsert_ConcurrentSpecs_AssignsSequentialVersions(t *testing.T) {
 	require.Equal(t, []int{1, 2, 3, 4, 5}, versions)
 }
 
-// TestUpsert_AfterTotalDeletion_RestartsAtVersion1 verifies that once
-// every version row for (namespace, name) is removed, the next apply
-// starts numbering from 1 again. The hard-delete path leaves no
-// trailing state to anchor the next MAX(version) lookup against.
-func TestUpsert_AfterTotalDeletion_RestartsAtVersion1(t *testing.T) {
+// TestUpsert_AfterTotalDeletion_ResumesAfterTombstone verifies that
+// once every version row for (namespace, name) is removed, the next
+// apply numbers from tombstone.max_assigned + 1 — NOT 1. The
+// tombstone keeps the version sequence monotonic across delete cycles
+// so deployment pins like "agents/foo:1" never silently re-resolve to
+// a different spec after a delete-and-reapply.
+func TestUpsert_AfterTotalDeletion_ResumesAfterTombstone(t *testing.T) {
 	store := setupAgentStore(t)
 	ctx := context.Background()
 
@@ -133,7 +135,7 @@ func TestUpsert_AfterTotalDeletion_RestartsAtVersion1(t *testing.T) {
 
 	res, err := store.Upsert(ctx, agentObj("foo", "model-fresh", nil))
 	require.NoError(t, err)
-	require.Equal(t, 1, res.Version)
+	require.Equal(t, 4, res.Version, "next apply must resume after the high-water mark, not recycle v1")
 	require.Equal(t, v1alpha1store.UpsertCreated, res.Outcome)
 }
 

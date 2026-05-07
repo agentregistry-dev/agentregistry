@@ -371,16 +371,28 @@ func (s *Store) upsertVersioned(ctx context.Context, meta *v1alpha1.ObjectMeta, 
 			return ErrTerminating
 		}
 
-		// Branch 1: no prior row → INSERT at version 1.
+		// Branch 1: no prior row → INSERT at tombstone.max_assigned+1
+		// (1 if no tombstone has ever been recorded). The tombstone
+		// preserves the high-water mark across DeleteAllVersions, so
+		// a deleted-then-re-applied identity does NOT recycle versions
+		// that may already be referenced by deployment pins.
 		if !found {
+			tombstoneMax, err := s.readTombstone(ctx, tx, meta.Namespace, meta.Name)
+			if err != nil {
+				return fmt.Errorf("load tombstone: %w", err)
+			}
+			newVersion := tombstoneMax + 1
 			if _, err := tx.Exec(ctx,
 				fmt.Sprintf(`
 					INSERT INTO %s (namespace, name, version, labels, annotations, spec, spec_hash)
-					VALUES ($1, $2, 1, $3, $4, $5, $6)`, s.table),
-				meta.Namespace, meta.Name, incomingLabelsJSON, incomingAnnotationsJSON, []byte(specJSON), incomingHash); err != nil {
-				return fmt.Errorf("insert v1: %w", err)
+					VALUES ($1, $2, $3, $4, $5, $6, $7)`, s.table),
+				meta.Namespace, meta.Name, newVersion, incomingLabelsJSON, incomingAnnotationsJSON, []byte(specJSON), incomingHash); err != nil {
+				return fmt.Errorf("insert first version: %w", err)
 			}
-			result = UpsertResult{Version: 1, Outcome: UpsertCreated}
+			if err := s.writeTombstone(ctx, tx, meta.Namespace, meta.Name, newVersion); err != nil {
+				return fmt.Errorf("update tombstone: %w", err)
+			}
+			result = UpsertResult{Version: newVersion, Outcome: UpsertCreated}
 			return nil
 		}
 
@@ -413,6 +425,9 @@ func (s *Store) upsertVersioned(ctx context.Context, meta *v1alpha1.ObjectMeta, 
 			meta.Namespace, meta.Name, newVersion, incomingLabelsJSON, incomingAnnotationsJSON, []byte(specJSON), incomingHash); err != nil {
 			return fmt.Errorf("insert new version: %w", err)
 		}
+		if err := s.writeTombstone(ctx, tx, meta.Namespace, meta.Name, newVersion); err != nil {
+			return fmt.Errorf("update tombstone: %w", err)
+		}
 		result = UpsertResult{Version: newVersion, Outcome: UpsertCreated}
 		return nil
 	})
@@ -420,6 +435,42 @@ func (s *Store) upsertVersioned(ctx context.Context, meta *v1alpha1.ObjectMeta, 
 		return UpsertResult{}, err
 	}
 	return result, nil
+}
+
+// readTombstone returns the high-water mark for (s.table, namespace, name)
+// recorded in v1alpha1.version_tombstones. Returns 0 when no tombstone
+// row has ever been written. Used to resume version numbering after
+// DeleteAllVersions wipes the live rows.
+func (s *Store) readTombstone(ctx context.Context, tx pgx.Tx, namespace, name string) (int, error) {
+	var maxAssigned int
+	err := tx.QueryRow(ctx, `
+		SELECT max_assigned
+		FROM v1alpha1.version_tombstones
+		WHERE table_name=$1 AND namespace=$2 AND name=$3`,
+		s.table, namespace, name,
+	).Scan(&maxAssigned)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return maxAssigned, nil
+}
+
+// writeTombstone upserts the tombstone row keeping max_assigned monotonic.
+// Concurrent inserts of differing versions all converge on the highest
+// value via GREATEST(...). Never decremented; never deleted.
+func (s *Store) writeTombstone(ctx context.Context, tx pgx.Tx, namespace, name string, newVersion int) error {
+	_, err := tx.Exec(ctx, `
+		INSERT INTO v1alpha1.version_tombstones (table_name, namespace, name, max_assigned)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (table_name, namespace, name)
+		DO UPDATE SET max_assigned = GREATEST(v1alpha1.version_tombstones.max_assigned, EXCLUDED.max_assigned),
+		              updated_at = NOW()`,
+		s.table, namespace, name, newVersion,
+	)
+	return err
 }
 
 // upsertLegacy implements the older string-version, in-place semantics
