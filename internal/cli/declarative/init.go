@@ -121,28 +121,36 @@ Writes:
 				image = fmt.Sprintf("%s/%s:latest", registry, name)
 			}
 
-			vars := agentTemplateVars(name, initVersion, initDescription, initModelProvider, initModelName, image, plugin.SourceDir, projectDir)
-			if err := plugins.RenderTemplates(plugin, projectDir, vars); err != nil {
-				return fmt.Errorf("render templates: %w", err)
-			}
-
-			// Required env = plugin's infra keys + model provider's keys.
-			// arctl owns the provider→keys map (see modelenv.go) so plugins
-			// don't have to restate it. Default provider is gemini.
+			// Resolve provider + model name once, then thread the resolved
+			// values into templates, arctl.yaml, and agent.yaml so all three
+			// agree.
 			provider := initModelProvider
 			if provider == "" {
 				provider = "gemini"
 			}
+			modelName := initModelName
+			if modelName == "" {
+				modelName = defaultInitModelName(provider)
+			}
+
+			vars := agentTemplateVars(name, initVersion, initDescription, provider, modelName, image, plugin.SourceDir, projectDir)
+			if err := plugins.RenderTemplates(plugin, projectDir, vars); err != nil {
+				return fmt.Errorf("render templates: %w", err)
+			}
+
 			cfg := &buildconfig.Config{
 				Framework:     plugin.Framework,
 				Language:      plugin.Language,
 				ModelProvider: provider,
-				ModelName:     initModelName,
+				ModelName:     modelName,
 			}
 			if err := buildconfig.Write(projectDir, cfg); err != nil {
 				return fmt.Errorf("write arctl.yaml: %w", err)
 			}
 
+			// Required env = plugin's infra keys + model provider's keys.
+			// arctl owns the provider→keys map (see modelenv.go) so plugins
+			// don't have to restate it.
 			required := append([]string{}, plugin.Env.Required...)
 			required = append(required, ModelProviderEnvKeys(provider)...)
 
@@ -159,7 +167,7 @@ Writes:
 			// language/framework now live in arctl.yaml only. The declarative
 			// agent.yaml carries only canonical AgentSpec fields.
 			if err := writeDeclarativeAgentYAML(projectDir, name, initVersion, image,
-				initModelProvider, initModelName,
+				provider, modelName,
 				initDescription, initGit, initMCPs); err != nil {
 				return fmt.Errorf("write agent.yaml: %w", err)
 			}
@@ -185,6 +193,24 @@ Writes:
 	return cmd
 }
 
+// defaultInitModelName returns the default model name for a provider when
+// the user doesn't pass --model-name. Empty result means no default — the
+// caller leaves modelName blank and the user must fill it in later.
+func defaultInitModelName(provider string) string {
+	switch strings.ToLower(provider) {
+	case "openai", "agentgateway":
+		return "gpt-4o-mini"
+	case "anthropic":
+		return "claude-3-5-sonnet"
+	case "gemini":
+		return "gemini-2.5-flash"
+	case "azureopenai":
+		return "your-deployment-name"
+	default:
+		return ""
+	}
+}
+
 // agentTemplateVars returns the template-substitution vars for the agent
 // plugin's templates. The in-tree adk-python templates (vendored from the
 // legacy generator) reference fields beyond the canonical Phase-5 set,
@@ -192,13 +218,7 @@ Writes:
 // templates and trims this to the canonical set.
 func agentTemplateVars(name, version, description, modelProvider, modelName, image, pluginDir, projectDir string) map[string]any {
 	mp := strings.ToLower(modelProvider)
-	if mp == "" {
-		mp = "gemini"
-	}
 	mn := modelName
-	if mn == "" {
-		mn = "gemini-2.5-flash"
-	}
 	return map[string]any{
 		"Name":                  name,
 		"Version":               version,
