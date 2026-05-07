@@ -126,11 +126,6 @@ Writes:
 				return fmt.Errorf("render templates: %w", err)
 			}
 
-			cfg := &buildconfig.Config{Framework: plugin.Framework, Language: plugin.Language}
-			if err := buildconfig.Write(projectDir, cfg); err != nil {
-				return fmt.Errorf("write arctl.yaml: %w", err)
-			}
-
 			// Required env = plugin's infra keys + model provider's keys.
 			// arctl owns the provider→keys map (see modelenv.go) so plugins
 			// don't have to restate it. Default provider is gemini.
@@ -138,6 +133,16 @@ Writes:
 			if provider == "" {
 				provider = "gemini"
 			}
+			cfg := &buildconfig.Config{
+				Framework:     plugin.Framework,
+				Language:      plugin.Language,
+				ModelProvider: provider,
+				ModelName:     initModelName,
+			}
+			if err := buildconfig.Write(projectDir, cfg); err != nil {
+				return fmt.Errorf("write arctl.yaml: %w", err)
+			}
+
 			required := append([]string{}, plugin.Env.Required...)
 			required = append(required, ModelProviderEnvKeys(provider)...)
 

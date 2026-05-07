@@ -41,11 +41,12 @@ func TestInitAgent_WritesYAMLAndArctlAndDotEnv(t *testing.T) {
 	_, err = os.Stat(filepath.Join(projectDir, "agent.yaml"))
 	require.NoError(t, err)
 
-	// arctl.yaml written with framework + language
+	// arctl.yaml written with framework + language + default model fields
 	cfg, err := buildconfig.Read(projectDir)
 	require.NoError(t, err)
 	assert.Equal(t, "adk", cfg.Framework)
 	assert.Equal(t, "python", cfg.Language)
+	assert.Equal(t, "gemini", cfg.ModelProvider)
 
 	// .env written directly (no cp step needed)
 	_, err = os.Stat(filepath.Join(projectDir, ".env"))
@@ -55,6 +56,35 @@ func TestInitAgent_WritesYAMLAndArctlAndDotEnv(t *testing.T) {
 	gi, err := os.ReadFile(filepath.Join(projectDir, ".gitignore"))
 	require.NoError(t, err)
 	assert.Contains(t, string(gi), ".env")
+}
+
+func TestInitAgent_ModelProviderFlagFlowsToArctlYAML(t *testing.T) {
+	tmp := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmp))
+	defer func() { _ = os.Chdir(origDir) }()
+
+	cmd := declarative.NewInitCmd()
+	cmd.SetArgs([]string{
+		"agent", "openaibot",
+		"--framework", "adk", "--language", "python",
+		"--model-provider", "openai",
+		"--model-name", "gpt4",
+	})
+	require.NoError(t, cmd.Execute())
+
+	projectDir := filepath.Join(tmp, "openaibot")
+
+	cfg, err := buildconfig.Read(projectDir)
+	require.NoError(t, err)
+	assert.Equal(t, "openai", cfg.ModelProvider)
+	assert.Equal(t, "gpt4", cfg.ModelName)
+
+	// agent.yaml still mirrors model fields for the registry side
+	spec := readYAMLFile(t, filepath.Join(projectDir, "agent.yaml"))["spec"].(map[string]any)
+	assert.Equal(t, "openai", spec["modelProvider"])
+	assert.Equal(t, "gpt4", spec["modelName"])
 }
 
 // ---- init mcp ----
