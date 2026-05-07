@@ -19,6 +19,21 @@ type applyOpts struct {
 	Resolver          v1alpha1.ResolverFunc
 	RegistryValidator v1alpha1.RegistryValidatorFunc
 	PostUpsert        func(ctx context.Context, obj v1alpha1.Object) error
+	// InitialFinalizers, when non-nil, is called on every apply to
+	// compute the finalizer slice handed to Upsert. The store uses the
+	// result only on create — updates preserve existing finalizers — so
+	// callers should keep the implementation cheap and side-effect-free.
+	// Computing eagerly here (rather than deferring to a thunk inside
+	// Upsert) keeps the apply pipeline straight-line; the alternative
+	// would force the create-vs-update detection out of the FOR UPDATE
+	// transaction.
+	//
+	// Used by kinds whose teardown is owned by a reconciler — without
+	// atomic seeding, a concurrent DELETE arriving between Upsert
+	// commit and a subsequent PatchFinalizers call hits Store.Delete's
+	// "finalizers empty → hard-delete fast path" and orphans whatever
+	// the reconciler was going to clean up.
+	InitialFinalizers func(obj v1alpha1.Object) []string
 }
 
 // upsertResult is the outcome of a successful applyCore call.
@@ -145,6 +160,9 @@ func applyCore(
 	upsertOpts := v1alpha1store.UpsertOpts{Labels: meta.Labels}
 	if meta.Annotations != nil {
 		upsertOpts.Annotations = meta.Annotations
+	}
+	if opts.InitialFinalizers != nil {
+		upsertOpts.InitialFinalizers = opts.InitialFinalizers(obj)
 	}
 	up, err := store.Upsert(ctx, meta.Namespace, meta.Name, meta.Version, specJSON, upsertOpts)
 	if err != nil {

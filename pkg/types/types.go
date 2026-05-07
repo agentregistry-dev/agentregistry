@@ -66,6 +66,20 @@ type PostUpsert func(ctx context.Context, obj v1alpha1.Object) error
 // batch's per-doc delete hook.
 type PostDelete func(ctx context.Context, obj v1alpha1.Object) error
 
+// InitialFinalizers computes the finalizer slice seeded onto a row at
+// create time. Returning nil/empty leaves finalizers=[] (today's
+// default; no soft-delete protection). Returning a non-empty slice
+// blocks Store.Delete's hard-delete fast-path so the kind's reconciler
+// can own teardown.
+//
+// The callback is invoked on every apply because the apply pipeline
+// can't know "create vs update" without an extra round-trip — the
+// distinction happens inside Upsert under FOR UPDATE. The returned
+// slice is used only on create; updates preserve existing finalizers
+// regardless. Implementations should be cheap (a type assertion + a
+// field read) and side-effect-free.
+type InitialFinalizers func(obj v1alpha1.Object) []string
+
 // AppOptions contains configuration for the registry app.
 // All fields are optional and allow external developers to extend
 // functionality.
@@ -128,6 +142,15 @@ type AppOptions struct {
 
 	// PostDeletes mirror PostUpserts on the delete path.
 	PostDeletes map[string]PostDelete
+
+	// InitialFinalizers seeds finalizers atomically with row creation,
+	// per kind. Used by kinds whose teardown is owned by a reconciler
+	// driving external infrastructure: blocks Store.Delete's
+	// finalizer-empty hard-delete fast-path so the reconciler can drive
+	// cleanup before the row is purged. Missing keys leave new rows
+	// with finalizers=[] (today's behavior); existing rows preserve
+	// their finalizers across re-apply regardless.
+	InitialFinalizers map[string]InitialFinalizers
 
 	// V1Alpha1StoreTables registers additional v1alpha1 kinds with their
 	// backing PostgreSQL tables. Downstream builds that add their own
