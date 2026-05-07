@@ -191,6 +191,14 @@ var ErrInvalidExtraWhere = errors.New("v1alpha1 store: ExtraWhere / ExtraArgs pl
 // recreate").
 var ErrTerminating = errors.New("v1alpha1 store: object is terminating")
 
+// ErrPlanStale reports that an Apply call's UpsertPlan no longer
+// reflects the live state of the row — between Plan and Apply another
+// writer either created a new version, deleted the row, or shifted the
+// tombstone. The approver's intent (encoded in the plan) is no longer
+// safe to apply unchanged; the caller must re-Plan against the current
+// state and re-confirm with the user.
+var ErrPlanStale = errors.New("v1alpha1 store: plan is stale; re-plan and retry")
+
 // ListOpts controls paginated list queries.
 type ListOpts struct {
 	// Namespace narrows results to a specific namespace. Empty means "across
@@ -246,12 +254,71 @@ type listCursor struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
+// UpsertPlan describes the write that Upsert (or its callers) would
+// perform if applied right now. It is a snapshot — the actual Apply must
+// re-check the world under the advisory lock and return ErrPlanStale if
+// the state moved (different latest version, different latest hash, or
+// the row went terminating). Plans are intended for approval-staging
+// use cases: produce a Plan, persist it (alongside any human-review
+// metadata), and later hand it back to Apply once a reviewer signs off.
+//
+// The exported fields carry the full identity + decision needed to
+// replay the write. The unexported "witness" fields snapshot the live
+// state Plan saw and are checked by Apply for TOCTOU safety. Only Plans
+// produced by THIS process / this binary are safe to feed back into
+// Apply — cross-process or cross-version serialization is a follow-up
+// (it would require exporting the witness fields with a stable schema
+// guarantee).
+type UpsertPlan struct {
+	// Kind is the canonical Kind name attached to audit events fired by
+	// Apply. Equal to s.kindFor(obj) at Plan time so a future Apply does
+	// not need the original object back.
+	Kind string
+	// Namespace, Name pin the identity Plan describes.
+	Namespace string
+	Name      string
+	// Labels / Annotations are the canonical-form JSON the row will
+	// carry after Apply (matches what canonicalJSONMap would emit for
+	// the inbound metadata).
+	Labels      json.RawMessage
+	Annotations json.RawMessage
+	// Spec is the raw JSON spec to write. Apply does not re-marshal it.
+	Spec json.RawMessage
+	// SpecHash is the SHA-256 of Spec, computed once at Plan time.
+	SpecHash string
+	// Outcome is the predicted UpsertOutcome (Created / NoOp /
+	// LabelsUpdated). Apply executes the matching write.
+	Outcome UpsertOutcome
+	// Version is the proposed version Apply will INSERT at (Created)
+	// or the existing version it will leave in place (NoOp /
+	// LabelsUpdated).
+	Version int
+
+	// Witness fields snapshot the live state at Plan time. Apply
+	// re-reads the same fields under the advisory lock and rejects
+	// the call as ErrPlanStale if anything moved. Unexported because
+	// they're an internal TOCTOU guard, not part of the user contract.
+	witnessFound         bool
+	witnessLatestVersion int
+	witnessLatestHash    string
+	witnessTombstoneMax  int
+}
+
+// errPlanLegacy reports that Plan/Apply was called on a legacy
+// (deployments / providers) Store. The legacy upsert path uses
+// caller-supplied string versions and update-in-place semantics that
+// don't share the witness model the planning seam was designed
+// around. Routed back through Upsert (which dispatches to upsertLegacy)
+// when callers need legacy behaviour.
+var errPlanLegacy = errors.New("v1alpha1 store: Plan/Apply only supported for versioned-artifact stores")
+
 // Upsert applies obj into the Store. Behaviour depends on the table's
 // versioning mode:
 //
 //   - Versioned-artifact tables (agents, mcp_servers, etc.) follow
 //     hash-based append-only apply semantics:
-//   - new (namespace, name) → insert at version=1
+//   - new (namespace, name) → insert at version=1 (or
+//     tombstone.max_assigned+1 if any version was ever assigned)
 //   - same spec_hash as latest live row, same labels+annotations →
 //     no-op, return the latest version
 //   - same spec_hash, different labels or annotations → update labels /
@@ -267,37 +334,267 @@ type listCursor struct {
 // Upsert ignores obj.Metadata.Version on the versioned-artifact path; the
 // version is system-assigned. For the deployments path the metadata.version
 // string IS the row's identity and must be supplied by the caller.
+//
+// On the versioned-artifact path Upsert is a thin wrapper over
+// Plan + Apply: the plan is computed under an advisory lock that
+// auto-releases at the (read-only) Plan transaction's commit, then
+// Apply re-acquires the lock to execute the write. Concurrent writers
+// can race in between the two transactions; Upsert hides that by
+// retrying ErrPlanStale internally so its synchronous-apply contract
+// stays unchanged. Callers that need the plan visible before the write
+// (approval staging) should call Plan and Apply directly and handle
+// ErrPlanStale themselves.
 func (s *Store) Upsert(ctx context.Context, obj v1alpha1.Object) (UpsertResult, error) {
+	meta, specJSON, err := validateUpsertObject(obj)
+	if err != nil {
+		return UpsertResult{}, err
+	}
+	if s.legacy {
+		return s.upsertLegacy(ctx, meta, specJSON)
+	}
+	// Bound the retry: a single Upsert call must not loop indefinitely
+	// against a hot identity. upsertRetryBudget is generous enough that
+	// a real workload always converges; if it doesn't, we surface the
+	// staleness rather than pretending serialization holds.
+	for range upsertRetryBudget {
+		plan, err := s.planVersioned(ctx, obj, meta, specJSON)
+		if err != nil {
+			return UpsertResult{}, err
+		}
+		res, err := s.Apply(ctx, plan)
+		if errors.Is(err, ErrPlanStale) {
+			continue
+		}
+		return res, err
+	}
+	return UpsertResult{}, fmt.Errorf("v1alpha1 store: upsert exhausted %d retries against concurrent writers", upsertRetryBudget)
+}
+
+// upsertRetryBudget caps the Plan/Apply retry loop in Upsert. Picked
+// generously: real contention serialises through the advisory lock
+// during Plan, so back-to-back stales are unlikely. The bound exists
+// to fail loudly if a starvation bug ever drives the loop forever.
+const upsertRetryBudget = 8
+
+// Plan computes the write Upsert would perform for obj without
+// touching the row. It is the planning seam used by approval workflows:
+// produce a Plan, persist it as "pending approval", and once a reviewer
+// signs off feed it back through Apply. Plan is read-only at the row
+// level — the only durable side effect within its transaction is the
+// advisory-lock acquire/release, which auto-releases at commit.
+//
+// Returns errPlanLegacy on a legacy (Provider/Deployment) Store; that
+// path uses caller-supplied versions and update-in-place semantics that
+// do not match the witness-based TOCTOU model planning relies on.
+func (s *Store) Plan(ctx context.Context, obj v1alpha1.Object) (UpsertPlan, error) {
+	if s.legacy {
+		return UpsertPlan{}, errPlanLegacy
+	}
+	meta, specJSON, err := validateUpsertObject(obj)
+	if err != nil {
+		return UpsertPlan{}, err
+	}
+	return s.planVersioned(ctx, obj, meta, specJSON)
+}
+
+// Apply executes a plan produced by Plan. Apply re-acquires the
+// advisory lock for (namespace, name), re-reads the live state + the
+// tombstone, and rejects the call with ErrPlanStale if the witness
+// captured at Plan time no longer matches. On success Apply commits
+// the row mutation and (for UpsertCreated outcomes only) fires
+// auditor.ResourceVersionCreated AFTER the transaction commits.
+//
+// Apply does NOT validate the plan's payload — it trusts the caller
+// produced it via Plan. Tampering with plan.Spec / plan.SpecHash will
+// either short-circuit on a stale witness or write a poisoned row;
+// callers that persist plans across trust boundaries must sign or
+// otherwise integrity-check them.
+//
+// uid handling is intentionally deferred: the v1alpha1 schema uses a
+// gen_random_uuid() column DEFAULT, so Apply never threads a uid into
+// the INSERT. A future commit will plumb server-allocated uids through
+// Plan (snapshotted) and Apply (asserted) so approvers see the exact
+// uid that will be issued.
+func (s *Store) Apply(ctx context.Context, plan UpsertPlan) (UpsertResult, error) {
+	if s.legacy {
+		return UpsertResult{}, errPlanLegacy
+	}
+	if plan.Namespace == "" || plan.Name == "" {
+		return UpsertResult{}, errors.New("v1alpha1 store: plan namespace and name are required")
+	}
+
+	var result UpsertResult
+	err := runInTx(ctx, s.pool, func(tx pgx.Tx) error {
+		key := s.advisoryLockKey(s.table, plan.Namespace, plan.Name)
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, key); err != nil {
+			return fmt.Errorf("advisory lock: %w", err)
+		}
+
+		live, err := s.readPlanWitness(ctx, tx, plan.Namespace, plan.Name)
+		if err != nil {
+			return err
+		}
+
+		// Witness check: if any of the row + tombstone snapshot Plan saw
+		// has shifted, the plan's outcome / version is no longer the
+		// right answer for the current state. Reject and let the caller
+		// re-plan.
+		if !live.matches(plan) {
+			return ErrPlanStale
+		}
+		if live.found && live.deletion.Valid {
+			// Row went terminating since Plan — also stale. Surface as
+			// ErrPlanStale rather than ErrTerminating so the staged
+			// apply path treats it uniformly with "world moved".
+			return ErrPlanStale
+		}
+
+		switch plan.Outcome {
+		case UpsertNoOp:
+			result = UpsertResult{Version: plan.Version, Outcome: UpsertNoOp}
+			return nil
+
+		case UpsertLabelsUpdated:
+			if _, err := tx.Exec(ctx,
+				fmt.Sprintf(`
+					UPDATE %s
+					SET labels = $4, annotations = $5
+					WHERE namespace = $1 AND name = $2 AND version = $3`, s.table),
+				plan.Namespace, plan.Name, plan.Version, []byte(plan.Labels), []byte(plan.Annotations)); err != nil {
+				return fmt.Errorf("update labels: %w", err)
+			}
+			result = UpsertResult{Version: plan.Version, Outcome: UpsertLabelsUpdated}
+			return nil
+
+		case UpsertCreated:
+			if _, err := tx.Exec(ctx,
+				fmt.Sprintf(`
+					INSERT INTO %s (namespace, name, version, labels, annotations, spec, spec_hash)
+					VALUES ($1, $2, $3, $4, $5, $6, $7)`, s.table),
+				plan.Namespace, plan.Name, plan.Version,
+				[]byte(plan.Labels), []byte(plan.Annotations),
+				[]byte(plan.Spec), plan.SpecHash); err != nil {
+				// A unique-conflict on (namespace, name, version) means
+				// another writer raced us in after the witness check
+				// (rare — they would have had to acquire the same
+				// advisory lock — but pg's advisory locks are advisory
+				// only, and a direct-SQL writer could bypass them).
+				// Treat as stale so the caller re-plans.
+				return ErrPlanStale
+			}
+			if err := s.writeTombstone(ctx, tx, plan.Namespace, plan.Name, plan.Version); err != nil {
+				return fmt.Errorf("update tombstone: %w", err)
+			}
+			result = UpsertResult{Version: plan.Version, Outcome: UpsertCreated}
+			return nil
+
+		default:
+			return fmt.Errorf("v1alpha1 store: unknown plan outcome %d", plan.Outcome)
+		}
+	})
+	if err != nil {
+		return UpsertResult{}, err
+	}
+	// Audit fire happens AFTER tx commit, only for UpsertCreated. Same
+	// gate as the pre-Plan/Apply Upsert.
+	if result.Outcome == UpsertCreated {
+		s.auditor.ResourceVersionCreated(ctx, plan.Kind, plan.Namespace, plan.Name, result.Version)
+	}
+	return result, nil
+}
+
+// planWitness snapshots the row + tombstone state Plan / Apply observe
+// under the advisory lock. The same struct is populated identically by
+// both phases so the witness comparison is a structural equality check.
+type planWitness struct {
+	found         bool
+	latestVersion int
+	latestHash    string
+	latestLabels  []byte
+	latestAnnots  []byte
+	deletion      pgtype.Timestamptz
+	tombstoneMax  int
+}
+
+// matches reports whether the witness Apply just observed agrees with
+// the witness Plan recorded. Mismatches are TOCTOU races and yield
+// ErrPlanStale. We compare only the fields that drive the decision
+// (latest row version + hash, presence flag, tombstone high-water);
+// labels/annotations on the latest row don't matter because Apply
+// re-uses the labels/annotations from the plan itself.
+func (w planWitness) matches(plan UpsertPlan) bool {
+	if w.found != plan.witnessFound {
+		return false
+	}
+	if w.found {
+		if w.latestVersion != plan.witnessLatestVersion {
+			return false
+		}
+		if w.latestHash != plan.witnessLatestHash {
+			return false
+		}
+	}
+	return w.tombstoneMax == plan.witnessTombstoneMax
+}
+
+// readPlanWitness reads the latest-live-row snapshot + tombstone
+// high-water for (s.table, namespace, name) under the caller's tx.
+// Used by both Plan (to record the witness) and Apply (to validate
+// it). Caller must hold the advisory lock for this identity before
+// calling.
+func (s *Store) readPlanWitness(ctx context.Context, tx pgx.Tx, namespace, name string) (planWitness, error) {
+	var w planWitness
+	err := tx.QueryRow(ctx,
+		fmt.Sprintf(`
+			SELECT version, spec_hash, labels, annotations, deletion_timestamp
+			FROM %s
+			WHERE namespace=$1 AND name=$2
+			ORDER BY version DESC
+			LIMIT 1
+			FOR UPDATE`, s.table),
+		namespace, name,
+	).Scan(&w.latestVersion, &w.latestHash, &w.latestLabels, &w.latestAnnots, &w.deletion)
+	switch {
+	case err == nil:
+		w.found = true
+	case errors.Is(err, pgx.ErrNoRows):
+		w.found = false
+	default:
+		return planWitness{}, fmt.Errorf("load latest: %w", err)
+	}
+
+	// Always snapshot the tombstone (even when found) so Apply has the
+	// full state Plan saw. Concurrent applies that bump the tombstone
+	// will trip the witness check even if the live row's version stays
+	// the same (e.g., delete + reapply between Plan and Apply).
+	tombstoneMax, err := s.readTombstone(ctx, tx, namespace, name)
+	if err != nil {
+		return planWitness{}, fmt.Errorf("load tombstone: %w", err)
+	}
+	w.tombstoneMax = tombstoneMax
+	return w, nil
+}
+
+// validateUpsertObject pulls the per-call invariants out of Upsert /
+// Plan so both entrypoints share one definition of "valid object".
+// Returns the metadata pointer + marshalled spec bytes, leaving the
+// caller to dispatch on the Store's mode.
+func validateUpsertObject(obj v1alpha1.Object) (*v1alpha1.ObjectMeta, json.RawMessage, error) {
 	if obj == nil {
-		return UpsertResult{}, errors.New("v1alpha1 store: nil object")
+		return nil, nil, errors.New("v1alpha1 store: nil object")
 	}
 	meta := obj.GetMetadata()
 	if meta == nil || meta.Namespace == "" || meta.Name == "" {
-		return UpsertResult{}, errors.New("v1alpha1 store: namespace and name are required")
+		return nil, nil, errors.New("v1alpha1 store: namespace and name are required")
 	}
 	specJSON, err := obj.MarshalSpec()
 	if err != nil {
-		return UpsertResult{}, fmt.Errorf("v1alpha1 store: marshal spec: %w", err)
+		return nil, nil, fmt.Errorf("v1alpha1 store: marshal spec: %w", err)
 	}
 	if len(specJSON) == 0 {
-		return UpsertResult{}, errors.New("v1alpha1 store: spec is required")
+		return nil, nil, errors.New("v1alpha1 store: spec is required")
 	}
-
-	if !s.legacy {
-		res, err := s.upsertVersioned(ctx, meta, specJSON)
-		if err != nil {
-			return res, err
-		}
-		// Fire the audit event AFTER the transaction commits. If the tx
-		// rolls back (err != nil above) the event is suppressed. Branch 2
-		// outcomes (UpsertNoOp, UpsertLabelsUpdated) do not introduce a
-		// new immutable version, so they are not recorded.
-		if res.Outcome == UpsertCreated {
-			s.auditor.ResourceVersionCreated(ctx, s.kindFor(obj), meta.Namespace, meta.Name, res.Version)
-		}
-		return res, nil
-	}
-	return s.upsertLegacy(ctx, meta, specJSON)
+	return meta, specJSON, nil
 }
 
 // kindFor returns the canonical Kind name to attach to audit events.
@@ -311,130 +608,93 @@ func (s *Store) kindFor(obj v1alpha1.Object) string {
 	return obj.GetKind()
 }
 
-// upsertVersioned implements the hash-based append-only apply semantics
-// for versioned-artifact tables. See Upsert for the full state machine.
-func (s *Store) upsertVersioned(ctx context.Context, meta *v1alpha1.ObjectMeta, specJSON json.RawMessage) (UpsertResult, error) {
+// planVersioned is the inner helper shared by Plan and Upsert. It runs
+// the (lookup, decide) phase under an advisory lock and returns the
+// UpsertPlan describing the write Apply would perform. The transaction
+// is read-only at the row level — only the advisory lock changes
+// state, and it auto-releases at commit so concurrent planners
+// serialize without blocking the writer.
+func (s *Store) planVersioned(
+	ctx context.Context,
+	obj v1alpha1.Object,
+	meta *v1alpha1.ObjectMeta,
+	specJSON json.RawMessage,
+) (UpsertPlan, error) {
 	incomingHash := SpecHash(specJSON)
 	incomingLabelsJSON, err := canonicalJSONMap(meta.Labels)
 	if err != nil {
-		return UpsertResult{}, fmt.Errorf("v1alpha1 store: marshal labels: %w", err)
+		return UpsertPlan{}, fmt.Errorf("v1alpha1 store: marshal labels: %w", err)
 	}
 	incomingAnnotationsJSON, err := canonicalJSONMap(meta.Annotations)
 	if err != nil {
-		return UpsertResult{}, fmt.Errorf("v1alpha1 store: marshal annotations: %w", err)
+		return UpsertPlan{}, fmt.Errorf("v1alpha1 store: marshal annotations: %w", err)
 	}
 
-	var result UpsertResult
+	plan := UpsertPlan{
+		Kind:        s.kindFor(obj),
+		Namespace:   meta.Namespace,
+		Name:        meta.Name,
+		Labels:      json.RawMessage(incomingLabelsJSON),
+		Annotations: json.RawMessage(incomingAnnotationsJSON),
+		Spec:        specJSON,
+		SpecHash:    incomingHash,
+	}
+
 	err = runInTx(ctx, s.pool, func(tx pgx.Tx) error {
-		// Serialize concurrent applies for the same (namespace, name).
-		// `SELECT ... FOR UPDATE` is row-level and provides no gap-lock
-		// semantics: goroutines that see "no prior row" all proceed to
-		// INSERT v1, and even goroutines that block on an existing row
-		// see a stale view of MAX(version) after the lock releases.
-		// An advisory transaction lock serializes the entire
-		// (lookup, insert) decision per identity. The lock auto-releases
-		// at COMMIT/ROLLBACK because we use pg_advisory_xact_lock.
 		key := s.advisoryLockKey(s.table, meta.Namespace, meta.Name)
 		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, key); err != nil {
 			return fmt.Errorf("advisory lock: %w", err)
 		}
 
-		var (
-			latestVersion       int
-			latestHash          string
-			latestLabelsRaw     []byte
-			latestAnnotationRaw []byte
-			latestDeletionTS    pgtype.Timestamptz
-			found               bool
-		)
-		err := tx.QueryRow(ctx,
-			fmt.Sprintf(`
-				SELECT version, spec_hash, labels, annotations, deletion_timestamp
-				FROM %s
-				WHERE namespace=$1 AND name=$2
-				ORDER BY version DESC
-				LIMIT 1
-				FOR UPDATE`, s.table),
-			meta.Namespace, meta.Name).Scan(&latestVersion, &latestHash, &latestLabelsRaw, &latestAnnotationRaw, &latestDeletionTS)
-		switch {
-		case err == nil:
-			found = true
-		case errors.Is(err, pgx.ErrNoRows):
-			found = false
-		default:
-			return fmt.Errorf("load latest: %w", err)
+		w, err := s.readPlanWitness(ctx, tx, meta.Namespace, meta.Name)
+		if err != nil {
+			return err
 		}
 
-		// Reject mutations on terminating rows. Mirrors Kubernetes:
-		// `kubectl apply` on an object with deletionTimestamp returns 409.
-		if found && latestDeletionTS.Valid {
+		// Reject mutations on terminating rows the same way the pre-
+		// Plan/Apply Upsert did. Plan reports the error to the caller;
+		// Apply only sees plans we generated, so Apply's terminating
+		// check guards against the row going terminating between
+		// Plan and Apply.
+		if w.found && w.deletion.Valid {
 			return ErrTerminating
 		}
 
-		// Branch 1: no prior row → INSERT at tombstone.max_assigned+1
-		// (1 if no tombstone has ever been recorded). The tombstone
-		// preserves the high-water mark across DeleteAllVersions, so
-		// a deleted-then-re-applied identity does NOT recycle versions
-		// that may already be referenced by deployment pins.
-		if !found {
-			tombstoneMax, err := s.readTombstone(ctx, tx, meta.Namespace, meta.Name)
-			if err != nil {
-				return fmt.Errorf("load tombstone: %w", err)
-			}
-			newVersion := tombstoneMax + 1
-			if _, err := tx.Exec(ctx,
-				fmt.Sprintf(`
-					INSERT INTO %s (namespace, name, version, labels, annotations, spec, spec_hash)
-					VALUES ($1, $2, $3, $4, $5, $6, $7)`, s.table),
-				meta.Namespace, meta.Name, newVersion, incomingLabelsJSON, incomingAnnotationsJSON, []byte(specJSON), incomingHash); err != nil {
-				return fmt.Errorf("insert first version: %w", err)
-			}
-			if err := s.writeTombstone(ctx, tx, meta.Namespace, meta.Name, newVersion); err != nil {
-				return fmt.Errorf("update tombstone: %w", err)
-			}
-			result = UpsertResult{Version: newVersion, Outcome: UpsertCreated}
-			return nil
-		}
+		plan.witnessFound = w.found
+		plan.witnessLatestVersion = w.latestVersion
+		plan.witnessLatestHash = w.latestHash
+		plan.witnessTombstoneMax = w.tombstoneMax
 
-		// Branch 2: spec hash matches the latest live row.
-		if incomingHash == latestHash {
-			labelsEqual := equalJSONMap(latestLabelsRaw, incomingLabelsJSON)
-			annotationsEqual := equalJSONMap(latestAnnotationRaw, incomingAnnotationsJSON)
+		switch {
+		case !w.found:
+			// Branch 1: no prior row. Resume from tombstone+1 so deleted
+			// names don't recycle versions across delete cycles.
+			plan.Outcome = UpsertCreated
+			plan.Version = w.tombstoneMax + 1
+
+		case incomingHash == w.latestHash:
+			// Branch 2: hash match. Compare labels + annotations to
+			// decide between NoOp and LabelsUpdated.
+			labelsEqual := equalJSONMap(w.latestLabels, incomingLabelsJSON)
+			annotationsEqual := equalJSONMap(w.latestAnnots, incomingAnnotationsJSON)
 			if labelsEqual && annotationsEqual {
-				result = UpsertResult{Version: latestVersion, Outcome: UpsertNoOp}
-				return nil
+				plan.Outcome = UpsertNoOp
+			} else {
+				plan.Outcome = UpsertLabelsUpdated
 			}
-			if _, err := tx.Exec(ctx,
-				fmt.Sprintf(`
-					UPDATE %s
-					SET labels = $4, annotations = $5
-					WHERE namespace = $1 AND name = $2 AND version = $3`, s.table),
-				meta.Namespace, meta.Name, latestVersion, incomingLabelsJSON, incomingAnnotationsJSON); err != nil {
-				return fmt.Errorf("update labels: %w", err)
-			}
-			result = UpsertResult{Version: latestVersion, Outcome: UpsertLabelsUpdated}
-			return nil
-		}
+			plan.Version = w.latestVersion
 
-		// Branch 3: spec hash differs → append a new row at MAX(version)+1.
-		newVersion := latestVersion + 1
-		if _, err := tx.Exec(ctx,
-			fmt.Sprintf(`
-				INSERT INTO %s (namespace, name, version, labels, annotations, spec, spec_hash)
-				VALUES ($1, $2, $3, $4, $5, $6, $7)`, s.table),
-			meta.Namespace, meta.Name, newVersion, incomingLabelsJSON, incomingAnnotationsJSON, []byte(specJSON), incomingHash); err != nil {
-			return fmt.Errorf("insert new version: %w", err)
+		default:
+			// Branch 3: spec change → MAX(version)+1.
+			plan.Outcome = UpsertCreated
+			plan.Version = w.latestVersion + 1
 		}
-		if err := s.writeTombstone(ctx, tx, meta.Namespace, meta.Name, newVersion); err != nil {
-			return fmt.Errorf("update tombstone: %w", err)
-		}
-		result = UpsertResult{Version: newVersion, Outcome: UpsertCreated}
 		return nil
 	})
 	if err != nil {
-		return UpsertResult{}, err
+		return UpsertPlan{}, err
 	}
-	return result, nil
+	return plan, nil
 }
 
 // readTombstone returns the high-water mark for (s.table, namespace, name)
