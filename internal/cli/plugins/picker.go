@@ -38,7 +38,7 @@ func Pick(opts PickOpts) (*Plugin, error) {
 		return nil, fmt.Errorf("ambiguous plugin selection (need --framework/--language). Available: %s", listPlugins(candidates))
 	}
 
-	return interactivePick(opts.Type, candidates, opts.Framework, opts.Language)
+	return interactivePick(candidates, opts.Framework, opts.Language)
 }
 
 func listPlugins(plugins []*Plugin) string {
@@ -53,7 +53,7 @@ func listPlugins(plugins []*Plugin) string {
 // interactivePick filters candidates by any partial flags and presents a
 // bubbletea picker. The picker is shown even when only one candidate
 // remains, for consistency and discoverability (per design).
-func interactivePick(pluginType string, candidates []*Plugin, framework, language string) (*Plugin, error) {
+func interactivePick(candidates []*Plugin, framework, language string) (*Plugin, error) {
 	filtered := candidates[:0:0]
 	for _, p := range candidates {
 		if framework != "" && p.Framework != framework {
@@ -67,5 +67,5 @@ func interactivePick(pluginType string, candidates []*Plugin, framework, languag
 	if len(filtered) == 0 {
 		return nil, fmt.Errorf("no plugin matches the supplied flags")
 	}
-	return runPickerTUI(pluginType, filtered)
+	return runPickerTUI(filtered)
 }

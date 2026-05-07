@@ -14,10 +14,9 @@ import (
 var errPickCancelled = errors.New("plugin selection cancelled")
 
 // runPickerTUI presents candidates as a single selectable list and returns
-// the chosen plugin. The header reflects what the user is picking
-// ("agent" or "mcp"). The picker is intentionally always shown, even with
+// the chosen plugin. The picker is intentionally always shown, even with
 // one candidate, for consistency and discoverability (per design).
-func runPickerTUI(pluginType string, candidates []*Plugin) (*Plugin, error) {
+func runPickerTUI(candidates []*Plugin) (*Plugin, error) {
 	sorted := append([]*Plugin(nil), candidates...)
 	sort.Slice(sorted, func(i, j int) bool {
 		if sorted[i].Framework != sorted[j].Framework {
@@ -27,9 +26,8 @@ func runPickerTUI(pluginType string, candidates []*Plugin) (*Plugin, error) {
 	})
 
 	m := pickerModel{
-		pluginType: pluginType,
-		items:      sorted,
-		cursor:     0,
+		items:  sorted,
+		cursor: 0,
 	}
 	p := tea.NewProgram(m)
 	final, err := p.Run()
@@ -44,11 +42,10 @@ func runPickerTUI(pluginType string, candidates []*Plugin) (*Plugin, error) {
 }
 
 type pickerModel struct {
-	pluginType string
-	items      []*Plugin
-	cursor     int
-	cancelled  bool
-	done       bool
+	items     []*Plugin
+	cursor    int
+	cancelled bool
+	done      bool
 }
 
 func (m pickerModel) Init() tea.Cmd { return nil }
@@ -84,9 +81,9 @@ var (
 
 func (m pickerModel) View() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s %s\n\n", pickerHeaderStyle.Render("?"), pickerHeaderStyle.Render("Pick a "+m.pluginType+" framework:"))
+	fmt.Fprintf(&b, "%s %s\n\n", pickerHeaderStyle.Render("?"), pickerHeaderStyle.Render("Pick a framework:"))
 	for i, p := range m.items {
-		label := fmt.Sprintf("%s / %s", p.Framework, p.Language)
+		label := p.Framework
 		if p.Description != "" {
 			label = fmt.Sprintf("%s — %s", label, p.Description)
 		}
