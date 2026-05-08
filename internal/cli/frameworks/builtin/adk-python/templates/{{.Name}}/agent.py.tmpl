@@ -2,6 +2,7 @@ import random
 import os
 
 from google.adk import Agent
+from google.adk.tools.function_tool import FunctionTool
 from google.adk.tools.tool_context import ToolContext
 {{if eq .ModelProvider "agentgateway"}}
 from kagent.adk.models._openai import BaseOpenAI
@@ -87,9 +88,19 @@ root_agent = Agent(
     instruction=build_instruction("""
 {{.Instruction}}
     """),
+    # Wrap the bare functions with FunctionTool so the description survives
+    # the ADK → LiteLLM → Bedrock translation (Bedrock rejects tools with an
+    # empty description; ADK 1.25.1's automatic docstring extraction doesn't
+    # always propagate through that path).
     tools=[
-        roll_die,
-        check_prime,
+        FunctionTool(
+            func=roll_die,
+            description="Roll a die and record the outcome for later reference.",
+        ),
+        FunctionTool(
+            func=check_prime,
+            description="Check whether the provided numbers are prime.",
+        ),
     ] + (mcp_tools if mcp_tools else []),
 )
 
