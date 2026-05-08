@@ -24,15 +24,29 @@ import (
 // Tests should use NewInitCmd() for a fresh instance.
 var InitCmd = newInitCmd()
 
+// lookupOutputDir walks the cmd → parent chain to find the --output-dir
+// flag value. The flag is defined as persistent on the parent `init`
+// command; cobra normally merges it into child flag sets at Execute time,
+// but the kindless dispatch (top-level RunE → child.RunE directly) skips
+// that merge, so we walk explicitly.
+func lookupOutputDir(cmd *cobra.Command) string {
+	for c := cmd; c != nil; c = c.Parent() {
+		if f := c.Flags().Lookup("output-dir"); f != nil {
+			return f.Value.String()
+		}
+		if f := c.PersistentFlags().Lookup("output-dir"); f != nil {
+			return f.Value.String()
+		}
+	}
+	return ""
+}
+
 // resolveInitProjectPath returns the absolute path the new project should
 // occupy. If `--output-dir` is set on the parent init command, the project
 // goes under that directory; otherwise it falls under cwd. Either way the
 // path is made absolute so downstream code doesn't have to re-resolve.
 func resolveInitProjectPath(cmd *cobra.Command, projectName string) (string, error) {
-	outputDir, err := cmd.Flags().GetString("output-dir")
-	if err != nil {
-		return "", fmt.Errorf("reading output-dir flag: %w", err)
-	}
+	outputDir := lookupOutputDir(cmd)
 	if outputDir != "" {
 		base, err := filepath.Abs(outputDir)
 		if err != nil {
@@ -873,11 +887,9 @@ The generated file can be applied directly:
 			}
 
 			// Prompts are a single YAML file — no project directory. --output-dir
-			// (when set) becomes the parent dir for the file.
-			outputDir, err := cmd.Flags().GetString("output-dir")
-			if err != nil {
-				return fmt.Errorf("reading output-dir flag: %w", err)
-			}
+			// (when set) becomes the parent dir for the file. lookupOutputDir
+			// walks the parent chain so the kindless dispatch sees it.
+			outputDir := lookupOutputDir(cmd)
 			parent, err := filepath.Abs(outputDir) // "" → cwd
 			if err != nil {
 				return fmt.Errorf("resolving output-dir: %w", err)
