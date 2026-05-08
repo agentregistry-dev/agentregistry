@@ -49,10 +49,16 @@ async def check_prime(nums: list[int]) -> str:
 
 {{if eq .ModelProvider "agentgateway"}}
 def create_model():
-    """Use a model via Agentgateway."""
+    """Use a model via agentgateway (OpenAI-compatible local proxy).
+
+    Default base_url targets agentgateway's stated port (4000) reached via
+    `host.docker.internal` because this agent runs inside docker-compose
+    while the gateway typically runs on the host. Override either via env
+    if your gateway runs elsewhere (e.g. inside the same compose network).
+    """
     return BaseOpenAI(
         model="{{.ModelName}}", # Can be configured at the Gateway
-        base_url=os.environ.get("GATEWAY_API_BASE_URL", "http://localhost/v1"),
+        base_url=os.environ.get("GATEWAY_API_BASE_URL", "http://host.docker.internal:4000/v1"),
         api_key=os.environ.get("GATEWAY_API_KEY", "placeholder"), # Can be configured at the Gateway
     )
 {{else if eq .ModelProvider "gemini"}}
