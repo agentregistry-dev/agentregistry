@@ -1070,7 +1070,7 @@ func TestBatchApply_MultiResource(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	agentName := UniqueAgentName("batchagent")
-	agentVersion := "1"
+	agentVersion := defaultArtifactTag
 	providerName := "e2e-batch-prov-" + UniqueNameWithPrefix("prov")
 
 	// Pre-clean and register cleanup for both resources.
@@ -1129,7 +1129,7 @@ func TestBatchApply_Idempotent(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	agentName := UniqueAgentName("idempbatch")
-	agentVersion := "1"
+	agentVersion := defaultArtifactTag
 	providerName := "e2e-idemp-prov-" + UniqueNameWithPrefix("prov")
 
 	RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", agentVersion, "--registry-url", regURL)
@@ -1206,7 +1206,7 @@ func TestBatchApply_DriftRequiresForce(t *testing.T) {
 	tmpDir := t.TempDir()
 	agentName := UniqueAgentName("driftbatch")
 	agentImage := fmt.Sprintf("localhost:5001/%s:e2e", agentName)
-	agentVersion := "1"
+	agentVersion := defaultArtifactTag
 	providerID := "local"
 
 	t.Cleanup(func() {
@@ -1286,7 +1286,7 @@ func TestBatchApply_DeleteFile(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	agentName := UniqueAgentName("delbatch")
-	agentVersion := "1"
+	agentVersion := defaultArtifactTag
 
 	// Ensure clean state before the test.
 	RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", agentVersion, "--registry-url", regURL)
