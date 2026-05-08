@@ -11,8 +11,6 @@ import {
   Code,
   Cpu,
   Brain,
-  Languages,
-  Box,
   Clock,
   Github,
   ExternalLink,
@@ -63,8 +61,6 @@ export function AgentDetail({ agent, allVersions: allVersionsProp }: AgentDetail
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <h1 className="text-2xl font-bold truncate">{agentData.name}</h1>
-              <Badge variant="outline" className="text-sm">{agentData.framework}</Badge>
-              <Badge variant="secondary" className="text-sm">{agentData.language}</Badge>
             </div>
             {agentData.description && (
               <p className="text-[15px] text-muted-foreground">{agentData.description}</p>
@@ -136,20 +132,6 @@ export function AgentDetail({ agent, allVersions: allVersionsProp }: AgentDetail
             <section>
               <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">Details</h3>
               <div className="grid grid-cols-2 gap-4">
-                <div className="flex items-center gap-2.5">
-                  <Languages className="h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Language</p>
-                    <p className="text-[15px] font-medium">{agentData.language}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2.5">
-                  <Box className="h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Framework</p>
-                    <p className="text-[15px] font-medium">{agentData.framework}</p>
-                  </div>
-                </div>
                 <div className="flex items-center gap-2.5">
                   <Brain className="h-4 w-4 text-muted-foreground" />
                   <div>
