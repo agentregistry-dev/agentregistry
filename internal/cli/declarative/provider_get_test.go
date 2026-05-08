@@ -50,7 +50,6 @@ func providerFixture(name, platform string, config map[string]any) v1alpha1.Prov
 		Metadata: v1alpha1.ObjectMeta{
 			Namespace: v1alpha1.DefaultNamespace,
 			Name:      name,
-			Version:   "1.0.0",
 		},
 		Spec: v1alpha1.ProviderSpec{
 			Platform: platform,

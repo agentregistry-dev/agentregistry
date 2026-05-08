@@ -115,22 +115,8 @@ func applyCore(
 	meta := obj.GetMetadata()
 	kind := obj.GetKind()
 
-	mutated := false
 	if meta.UID != "" {
 		meta.UID = ""
-		mutated = true
-	}
-
-	// Mutable object stores may retain a hidden storage identity even though
-	// the public API exposes only namespace/name. Stamp that private identity
-	// before authz/staging/upsert so all downstream hooks see the same value.
-	beforeVersion := meta.Version
-	v1alpha1.DefaultMutableObjectIdentityIfMissing(obj)
-	meta = obj.GetMetadata()
-	if meta.Version != beforeVersion {
-		mutated = true
-	}
-	if mutated {
 		obj.SetMetadata(*meta)
 	}
 
@@ -176,7 +162,7 @@ func applyCore(
 			return upsertResult{}, &applyError{Stage: stageApproval, Err: err}
 		}
 		if staged.Staged {
-			return upsertResult{Tag: meta.Tag, Version: parseStorageIdentity(meta.Version), Staged: true}, nil
+			return upsertResult{Tag: meta.Tag, Version: parseStorageIdentity(store.MutableObjectIdentity()), Staged: true}, nil
 		}
 	}
 

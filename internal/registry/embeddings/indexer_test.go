@@ -293,7 +293,7 @@ func TestPayloadBuilderFor_RemoteMCPServer(t *testing.T) {
 		},
 	})
 	payload, err := payloadBuilderFor(v1alpha1.KindRemoteMCPServer)(&v1alpha1.RawObject{
-		Metadata: v1alpha1.ObjectMeta{Name: "remote-search", Version: "v2"},
+		Metadata: v1alpha1.ObjectMeta{Name: "remote-search", Tag: "v2"},
 		Spec:     spec,
 	})
 	require.NoError(t, err)

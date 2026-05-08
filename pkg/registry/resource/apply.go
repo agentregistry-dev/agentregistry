@@ -261,10 +261,8 @@ func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun
 			})
 		}
 	} else {
-		// Mutable object path: meta.Version is the hidden row identity
-		// supplied by the kind defaulter. DeleteCore here keeps the same
-		// authz + delete + PostDelete flow used by the URL handler.
-		if err := store.Delete(ctx, meta.Namespace, meta.Name, meta.Version); err != nil {
+		// Mutable object path: the Store owns the private row identity.
+		if err := store.Delete(ctx, meta.Namespace, meta.Name, store.MutableObjectIdentity()); err != nil {
 			return failResult(res, &applyError{
 				Stage:    stageDelete,
 				Err:      err,
@@ -308,10 +306,6 @@ func resolveBatchTarget(cfg ApplyConfig, obj v1alpha1.Object, verb string) (*v1a
 		meta.Namespace = v1alpha1.DefaultNamespace
 		obj.SetMetadata(*meta)
 	}
-
-	// Default mutable object stores' private row identity. Tagged-artifact
-	// kinds do not implement the interface and this call is a no-op for them.
-	v1alpha1.DefaultMutableObjectIdentityIfMissing(obj)
 
 	// Defense-in-depth: when any Authorizers are wired, a kind without
 	// an entry must DENY rather than silently allow. The enterprise H2

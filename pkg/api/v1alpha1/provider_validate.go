@@ -32,10 +32,6 @@ func (p *Provider) Validate() error {
 	return errs
 }
 
-// DefaultMutableObjectIdentity satisfies MutableObjectIdentityDefaulter.
-// Multi-version Provider is not a public concept.
-func (p *Provider) DefaultMutableObjectIdentity() string { return "1" }
-
 func knownPlatformNames() []string {
 	out := make([]string, 0, len(KnownPlatforms))
 	for k := range KnownPlatforms {

@@ -20,7 +20,7 @@ func TestAdapter_SatisfiesInterface(t *testing.T) {
 func TestAdapter_ApplyReportsReady(t *testing.T) {
 	a := New()
 	dep := &v1alpha1.Deployment{
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "d", Version: "v1"},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "d"},
 	}
 	res, err := a.Apply(context.Background(), types.ApplyInput{Deployment: dep})
 	require.NoError(t, err)
@@ -47,7 +47,7 @@ func TestAdapter_ApplyReportsReady(t *testing.T) {
 func TestAdapter_RemoveReportsRemovedCondition(t *testing.T) {
 	a := New()
 	dep := &v1alpha1.Deployment{
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "d", Version: "v1"},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "d"},
 	}
 	res, err := a.Remove(context.Background(), types.RemoveInput{Deployment: dep})
 	require.NoError(t, err)

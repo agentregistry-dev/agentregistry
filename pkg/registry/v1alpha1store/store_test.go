@@ -445,7 +445,7 @@ func TestStore_SeededProviders(t *testing.T) {
 
 	local, err := providers.GetLatest(ctx, "default", "local")
 	require.NoError(t, err)
-	require.Equal(t, "v1", local.Metadata.Version)
+	require.Equal(t, "v1", local.StorageIdentity)
 
 	var spec v1alpha1.ProviderSpec
 	require.NoError(t, json.Unmarshal(local.Spec, &spec))

@@ -41,13 +41,13 @@ func seedV1Alpha1Fixtures(t *testing.T) (map[string]*v1alpha1store.Store, *v1alp
 	require.NoError(t, err)
 
 	_, err = stores[v1alpha1.KindProvider].Upsert(ctx, &v1alpha1.Provider{
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "noop-provider", Version: "1"},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "noop-provider"},
 		Spec:     v1alpha1.ProviderSpec{Platform: noop.Platform},
 	})
 	require.NoError(t, err)
 
 	_, err = stores[v1alpha1.KindDeployment].Upsert(ctx, &v1alpha1.Deployment{
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-noop", Version: "1"},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-noop"},
 		Spec: v1alpha1.DeploymentSpec{
 			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather"},
 			ProviderRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindProvider, Name: "noop-provider"},
@@ -58,7 +58,7 @@ func seedV1Alpha1Fixtures(t *testing.T) (map[string]*v1alpha1store.Store, *v1alp
 
 	deployment := &v1alpha1.Deployment{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindDeployment},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-noop", Version: "1"},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-noop"},
 		Spec: v1alpha1.DeploymentSpec{
 			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather"},
 			ProviderRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindProvider, Name: "noop-provider"},
@@ -183,7 +183,7 @@ func TestCoordinator_Discover_ReturnsAdapterResults(t *testing.T) {
 	})
 
 	provider := &v1alpha1.Provider{
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "noop-provider", Version: "1"},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "noop-provider"},
 		Spec:     v1alpha1.ProviderSpec{Platform: noop.Platform},
 	}
 	results, err := coord.Discover(ctx, provider)

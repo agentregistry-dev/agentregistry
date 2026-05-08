@@ -271,7 +271,7 @@ func TestUpsert_AuditorNotCalledForMutableObjectKinds(t *testing.T) {
 
 	_, err := store.Upsert(ctx, &v1alpha1.Provider{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindProvider},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "p1", Version: "1"},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "p1"},
 		Spec:     v1alpha1.ProviderSpec{Platform: v1alpha1.PlatformLocal},
 	})
 	require.NoError(t, err)

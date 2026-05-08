@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
 // FindingsStore is the thin persistence wrapper around
@@ -132,7 +133,11 @@ func (s *FindingsStore) List(
 // v1alpha1.Object instead of the four identity strings.
 func (s *FindingsStore) ListByObject(ctx context.Context, obj v1alpha1.Object) ([]Finding, error) {
 	m := obj.GetMetadata()
-	return s.List(ctx, obj.GetKind(), m.Namespace, m.Name, m.Version)
+	identity := m.Tag
+	if identity == "" {
+		identity = v1alpha1store.DefaultMutableObjectIdentity()
+	}
+	return s.List(ctx, obj.GetKind(), m.Namespace, m.Name, identity)
 }
 
 // runInTx is a local copy of the database package helper; we don't

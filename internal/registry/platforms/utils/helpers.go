@@ -45,7 +45,7 @@ func SpecToPlatformMCPServer(
 	}
 	platformServer, err := TranslateMCPServer(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("translate mcp server %s@%s: %w", meta.Name, meta.Version, err)
+		return nil, fmt.Errorf("translate mcp server %s@%s: %w", meta.Name, meta.Tag, err)
 	}
 	if opts.Namespace != "" {
 		platformServer.Namespace = opts.Namespace
@@ -78,7 +78,7 @@ func SpecToPlatformRemoteMCPServer(
 	}
 	platformServer, err := TranslateRemoteMCPServer(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("translate remote mcp server %s@%s: %w", meta.Name, meta.Version, err)
+		return nil, fmt.Errorf("translate remote mcp server %s@%s: %w", meta.Name, meta.Tag, err)
 	}
 	if opts.Namespace != "" {
 		platformServer.Namespace = opts.Namespace
@@ -218,7 +218,7 @@ func SpecToPlatformAgent(
 	}
 	agent := &platformtypes.Agent{
 		Name:         agentMeta.Name,
-		Version:      agentMeta.Version,
+		Version:      agentMeta.Tag,
 		DeploymentID: opts.DeploymentID,
 		Deployment: platformtypes.AgentDeployment{
 			Image: image,

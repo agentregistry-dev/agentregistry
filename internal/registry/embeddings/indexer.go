@@ -228,7 +228,7 @@ func rowIdentity(row *v1alpha1.RawObject) string {
 	if row.Metadata.Tag != "" {
 		return row.Metadata.Tag
 	}
-	return row.Metadata.Version
+	return row.StorageIdentity
 }
 
 // DefaultBindings returns the KindBindings for every v1alpha1 built-in

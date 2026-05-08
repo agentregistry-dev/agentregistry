@@ -25,7 +25,7 @@ type rowScanner interface {
 // wire-form representations so callers can unmarshal into typed structs.
 //
 // tagged reflects the Store's private behavior and decides whether the identity
-// column should populate public metadata.tag or the hidden storage identity.
+// column should populate public metadata.tag or RawObject.StorageIdentity.
 // Tagged content queries emit a synthetic 0::bigint generation and '[]'::jsonb
 // finalizers so the column layout stays uniform across modes.
 //
@@ -76,7 +76,7 @@ func scanRow(row rowScanner, tagged bool) (*v1alpha1.RawObject, error) {
 // logic.
 //
 // Tagged mode populates Metadata.Tag with the row's identity. Mutable-object
-// mode keeps the private storage identity in Metadata.Version for internal
+// mode keeps the private row identity on RawObject.StorageIdentity for internal
 // follow-up operations; JSON/YAML encoding does not re-emit it.
 func decodeRow(
 	tagged bool,
@@ -116,17 +116,19 @@ func decodeRow(
 		UpdatedAt:         updatedAt,
 		DeletionTimestamp: deletionTimestamp,
 	}
-	if tagged {
-		meta.Tag = identity
-	} else {
-		meta.Version = identity
-	}
-
-	return &v1alpha1.RawObject{
+	raw := &v1alpha1.RawObject{
 		Metadata: meta,
 		Spec:     json.RawMessage(specJSON),
 		Status:   json.RawMessage(statusJSON),
-	}, nil
+	}
+	if tagged {
+		meta.Tag = identity
+		raw.Metadata = meta
+	} else {
+		raw.StorageIdentity = identity
+	}
+
+	return raw, nil
 }
 
 // runInTx executes fn within a read-committed transaction, committing on nil

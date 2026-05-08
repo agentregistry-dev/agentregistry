@@ -478,8 +478,8 @@ func registerApplyMutable[T v1alpha1.Object](api huma.API, cfg Config, newObj fu
 		}
 
 		// Stamp resolved public identity into metadata so applyCore sees the
-		// resolved namespace/name. The store will add its hidden mutable-object
-		// identity before persistence.
+		// resolved namespace/name. The store owns any private mutable-object
+		// backing-row identity.
 		meta.Namespace = ns
 		meta.Name = name
 		body.SetMetadata(*meta)
@@ -560,10 +560,7 @@ func runDeleteLatest[T v1alpha1.Object](ctx context.Context, cfg Config, newObj 
 	if err != nil {
 		return nil, huma.Error500InternalServerError("decode "+kind, err)
 	}
-	identity := row.Metadata.Version
-	if identity == "" {
-		identity = row.Metadata.Tag
-	}
+	identity := cfg.Store.RowIdentity(row)
 	dopts := deleteOpts{Authorize: cfg.Authorize}
 	if cfg.PostDelete != nil && !force {
 		dopts.PostDelete = cfg.PostDelete

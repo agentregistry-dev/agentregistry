@@ -21,7 +21,7 @@ func TestSpecToPlatformRemoteMCPServer_RemoteTransport(t *testing.T) {
 			}},
 		},
 	}
-	meta := v1alpha1.ObjectMeta{Namespace: "default", Name: "weather", Version: "1.0.0"}
+	meta := v1alpha1.ObjectMeta{Namespace: "default", Name: "weather", Tag: "1.0.0"}
 
 	got, err := SpecToPlatformRemoteMCPServer(context.Background(), meta, spec, RemoteMCPServerTranslateOpts{
 		DeploymentID: "dep-1",
@@ -59,7 +59,7 @@ func TestSpecToPlatformMCPServer_OCIPackage(t *testing.T) {
 			},
 		},
 	}
-	meta := v1alpha1.ObjectMeta{Namespace: "default", Name: "example", Version: "0.1.0"}
+	meta := v1alpha1.ObjectMeta{Namespace: "default", Name: "example", Tag: "0.1.0"}
 
 	got, err := SpecToPlatformMCPServer(context.Background(), meta, spec, MCPServerTranslateOpts{DeploymentID: "dep-2"})
 	if err != nil {
@@ -83,7 +83,7 @@ func TestSpecToPlatformMCPServer_NamespaceOptOverridesMeta(t *testing.T) {
 			},
 		},
 	}
-	meta := v1alpha1.ObjectMeta{Namespace: "team-a", Name: "example", Version: "1.0.0"}
+	meta := v1alpha1.ObjectMeta{Namespace: "team-a", Name: "example", Tag: "1.0.0"}
 
 	got, err := SpecToPlatformMCPServer(context.Background(), meta, spec, MCPServerTranslateOpts{
 		DeploymentID: "dep-3",
@@ -100,7 +100,7 @@ func TestSpecToPlatformMCPServer_NamespaceOptOverridesMeta(t *testing.T) {
 func TestSpecToPlatformAgent_ResolvesMCPServerRefs(t *testing.T) {
 	mcp := &v1alpha1.MCPServer{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindMCPServer},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "tools", Version: "1.0.0"},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "tools", Tag: "1.0.0"},
 		Spec: v1alpha1.MCPServerSpec{
 			Source: &v1alpha1.MCPServerSource{
 				Package: &v1alpha1.MCPPackage{
@@ -117,7 +117,7 @@ func TestSpecToPlatformAgent_ResolvesMCPServerRefs(t *testing.T) {
 		return mcp, nil
 	}
 
-	agentMeta := v1alpha1.ObjectMeta{Namespace: "default", Name: "alice", Version: "1.0.0"}
+	agentMeta := v1alpha1.ObjectMeta{Namespace: "default", Name: "alice", Tag: "1.0.0"}
 	agentSpec := v1alpha1.AgentSpec{
 		Source:        &v1alpha1.AgentSource{Image: "ghcr.io/example/alice:v1"},
 		ModelProvider: "openai",
@@ -170,7 +170,7 @@ func TestSpecToPlatformAgent_ResolvesMCPServerRefs(t *testing.T) {
 func TestSpecToPlatformAgent_ResolvesRemoteMCPServerHeaders(t *testing.T) {
 	remote := &v1alpha1.RemoteMCPServer{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindRemoteMCPServer},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "remote-tools", Version: "1.0.0"},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "remote-tools", Tag: "1.0.0"},
 		Spec: v1alpha1.RemoteMCPServerSpec{
 			Remote: v1alpha1.MCPTransport{
 				Type: "streamable-http",
@@ -188,7 +188,7 @@ func TestSpecToPlatformAgent_ResolvesRemoteMCPServerHeaders(t *testing.T) {
 
 	agent, servers, err := SpecToPlatformAgent(
 		context.Background(),
-		v1alpha1.ObjectMeta{Namespace: "default", Name: "alice", Version: "1.0.0"},
+		v1alpha1.ObjectMeta{Namespace: "default", Name: "alice", Tag: "1.0.0"},
 		v1alpha1.AgentSpec{
 			MCPServers: []v1alpha1.ResourceRef{
 				{Kind: v1alpha1.KindRemoteMCPServer, Name: "remote-tools", Version: "1.0.0"},
@@ -230,7 +230,7 @@ func TestSpecToPlatformAgent_NamespaceOptWinsOverMeta(t *testing.T) {
 		t.Fatalf("getter should not be called when no refs; got %+v", ref)
 		return nil, nil
 	}
-	agentMeta := v1alpha1.ObjectMeta{Namespace: "team-a", Name: "alice", Version: "1.0.0"}
+	agentMeta := v1alpha1.ObjectMeta{Namespace: "team-a", Name: "alice", Tag: "1.0.0"}
 	agent, _, err := SpecToPlatformAgent(context.Background(), agentMeta, v1alpha1.AgentSpec{}, AgentTranslateOpts{
 		DeploymentID: "dep-ns",
 		Namespace:    "kagent",
@@ -248,7 +248,7 @@ func TestSpecToPlatformAgent_DanglingRefPropagates(t *testing.T) {
 	getter := func(ctx context.Context, ref v1alpha1.ResourceRef) (v1alpha1.Object, error) {
 		return nil, v1alpha1.ErrDanglingRef
 	}
-	agentMeta := v1alpha1.ObjectMeta{Namespace: "default", Name: "alice", Version: "1.0.0"}
+	agentMeta := v1alpha1.ObjectMeta{Namespace: "default", Name: "alice", Tag: "1.0.0"}
 	agentSpec := v1alpha1.AgentSpec{
 		MCPServers: []v1alpha1.ResourceRef{
 			{Kind: v1alpha1.KindMCPServer, Name: "missing", Version: "1.0.0"},

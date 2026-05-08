@@ -53,37 +53,6 @@ type StructuralValidator interface {
 	Validate() error
 }
 
-// MutableObjectIdentityDefaulter is an optional capability for mutable
-// object kinds whose private storage table still needs a hidden row identity.
-// Provider and Deployment use a constant internal identity while exposing
-// public Kubernetes-like namespace/name semantics.
-//
-// Returning a non-empty constant ("1" by convention) is what gets stored in
-// the private backing row. Returning "" defers to the store's required
-// identity check.
-type MutableObjectIdentityDefaulter interface {
-	DefaultMutableObjectIdentity() string
-}
-
-// DefaultMutableObjectIdentityIfMissing stamps the kind's hidden storage
-// identity onto obj.Metadata.Version when it's empty and the kind opts in. The
-// field is private storage state and is not emitted in JSON/YAML responses.
-// Tagged artifact kinds do not implement this interface.
-func DefaultMutableObjectIdentityIfMissing(obj Object) {
-	meta := obj.GetMetadata()
-	if meta.Version != "" {
-		return
-	}
-	d, ok := obj.(MutableObjectIdentityDefaulter)
-	if !ok {
-		return
-	}
-	if def := d.DefaultMutableObjectIdentity(); def != "" {
-		meta.Version = def
-		obj.SetMetadata(*meta)
-	}
-}
-
 // RefResolver validates cross-resource references for an envelope.
 type RefResolver interface {
 	ResolveRefs(ctx context.Context, resolver ResolverFunc) error

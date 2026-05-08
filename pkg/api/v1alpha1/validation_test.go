@@ -131,7 +131,7 @@ func TestAgentResolveRefs_ReportsDangling(t *testing.T) {
 		return nil
 	}
 	a := &Agent{
-		Metadata: ObjectMeta{Namespace: "default", Name: "a", Version: "v1"},
+		Metadata: ObjectMeta{Namespace: "default", Name: "a", Tag: "v1"},
 		Spec: AgentSpec{
 			MCPServers: []ResourceRef{
 				{Kind: KindMCPServer, Name: "tools", Version: "v1"},
@@ -151,7 +151,7 @@ func TestAgentResolveRefs_InheritsNamespace(t *testing.T) {
 		return nil
 	}
 	a := &Agent{
-		Metadata: ObjectMeta{Namespace: "team-a", Name: "a", Version: "v1"},
+		Metadata: ObjectMeta{Namespace: "team-a", Name: "a", Tag: "v1"},
 		Spec: AgentSpec{
 			MCPServers: []ResourceRef{
 				// blank namespace should inherit Agent's "team-a"
@@ -275,7 +275,7 @@ func TestDeploymentResolveRefs_InheritsNamespace(t *testing.T) {
 
 func TestProviderValidate_OK(t *testing.T) {
 	p := &Provider{
-		Metadata: ObjectMeta{Namespace: "default", Name: "local", Version: "v1"},
+		Metadata: ObjectMeta{Namespace: "default", Name: "local"},
 		Spec:     ProviderSpec{Platform: PlatformLocal},
 	}
 	require.NoError(t, p.Validate())
@@ -283,7 +283,7 @@ func TestProviderValidate_OK(t *testing.T) {
 
 func TestProviderValidate_RejectsUnknownPlatform(t *testing.T) {
 	p := &Provider{
-		Metadata: ObjectMeta{Namespace: "default", Name: "custom", Version: "v1"},
+		Metadata: ObjectMeta{Namespace: "default", Name: "custom"},
 		Spec:     ProviderSpec{Platform: "heroku"},
 	}
 	err := p.Validate()
@@ -297,7 +297,7 @@ func TestProviderValidate_RejectsUnknownPlatform(t *testing.T) {
 
 func TestMCPServerValidate_OK(t *testing.T) {
 	m := &MCPServer{
-		Metadata: ObjectMeta{Namespace: "default", Name: "tools", Version: "v1"},
+		Metadata: ObjectMeta{Namespace: "default", Name: "tools", Tag: "v1"},
 		Spec: MCPServerSpec{
 			Title: "Tools",
 			Source: &MCPServerSource{
@@ -314,7 +314,7 @@ func TestMCPServerValidate_OK(t *testing.T) {
 
 func TestRemoteMCPServerValidate_RejectsBadRemote(t *testing.T) {
 	r := &RemoteMCPServer{
-		Metadata: ObjectMeta{Namespace: "default", Name: "tools", Version: "v1"},
+		Metadata: ObjectMeta{Namespace: "default", Name: "tools", Tag: "v1"},
 		Spec: RemoteMCPServerSpec{
 			Remote: MCPTransport{Type: "streamable-http"}, // missing URL
 		},

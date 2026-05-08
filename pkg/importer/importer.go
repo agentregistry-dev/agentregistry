@@ -309,9 +309,6 @@ func (i *Importer) importOne(ctx context.Context, source string, obj v1alpha1.Ob
 		return res
 	}
 
-	// Stamp mutable object stores' hidden row identity so non-upsert codepaths
-	// (findings.Replace) have a private identity to thread through.
-	v1alpha1.DefaultMutableObjectIdentityIfMissing(obj)
 	if store.IsTaggedArtifact() && meta.Tag == "" {
 		meta.Tag = v1alpha1store.DefaultTag()
 		obj.SetMetadata(*meta)
@@ -386,9 +383,9 @@ func (i *Importer) importOne(ctx context.Context, source string, obj v1alpha1.Ob
 	}
 	res.Tag = up.Tag
 	res.Version = up.Version
-	// findings.Replace needs the string row identity. Tagged-artifact
-	// kinds key by tag; legacy deployments key by the defaulted meta.Version.
-	findingsVersion := meta.Version
+	// findings.Replace needs the private row identity. Tagged-artifact
+	// kinds key by tag; mutable-object stores keep their identity in Store.
+	findingsVersion := store.MutableObjectIdentity()
 	if store.IsTaggedArtifact() {
 		findingsVersion = up.Tag
 	}

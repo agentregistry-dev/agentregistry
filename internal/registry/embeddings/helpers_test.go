@@ -14,7 +14,7 @@ import (
 )
 
 func TestBuildMCPServerEmbeddingPayload_StableAcrossRuns(t *testing.T) {
-	meta := v1alpha1.ObjectMeta{Namespace: "default", Name: "foo", Version: "v1"}
+	meta := v1alpha1.ObjectMeta{Namespace: "default", Name: "foo", Tag: "v1"}
 	spec := v1alpha1.MCPServerSpec{
 		Title:       "Foo",
 		Description: "demo server",

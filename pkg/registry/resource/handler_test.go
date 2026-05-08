@@ -734,7 +734,7 @@ func TestResourceRegister_IncludeTerminatingByDefault(t *testing.T) {
 	// its is_latest_version flag.
 	_, err := store.Upsert(t.Context(), &v1alpha1.Provider{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindProvider},
-		Metadata: v1alpha1.ObjectMeta{Namespace: testNamespace, Name: "draining", Version: "1"},
+		Metadata: v1alpha1.ObjectMeta{Namespace: testNamespace, Name: "draining"},
 		Spec:     v1alpha1.ProviderSpec{Platform: "noop"},
 	})
 	require.NoError(t, err)

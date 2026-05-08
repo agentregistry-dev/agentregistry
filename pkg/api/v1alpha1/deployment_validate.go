@@ -21,9 +21,6 @@ func (d *Deployment) Validate() error {
 	return errs
 }
 
-// DefaultMutableObjectIdentity satisfies MutableObjectIdentityDefaulter.
-func (d *Deployment) DefaultMutableObjectIdentity() string { return "1" }
-
 // ResolveRefs checks that TargetRef and ProviderRef both resolve. The
 // referenced objects must live in the referenced namespace; when
 // ref.Namespace is blank on the wire we inherit the Deployment's own

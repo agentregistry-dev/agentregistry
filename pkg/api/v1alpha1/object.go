@@ -72,10 +72,6 @@ type ObjectMeta struct {
 	// (Agent, MCPServer, RemoteMCPServer, Skill, Prompt).
 	Tag string `json:"tag,omitempty" yaml:"tag,omitempty"`
 
-	// Version is internal storage compatibility for mutable-object stores.
-	// It is not part of the public v1alpha1 metadata contract.
-	Version string `json:"-" yaml:"-"`
-
 	// Generation is server-managed and internal. Populated from the DB row for
 	// internal Go consumers (coordinators, status reconcilers); hidden from the
 	// wire.
@@ -139,4 +135,9 @@ type RawObject struct {
 	Metadata ObjectMeta      `json:"metadata" yaml:"metadata"`
 	Spec     json.RawMessage `json:"spec,omitempty" yaml:"spec,omitempty"`
 	Status   json.RawMessage `json:"status,omitempty" yaml:"status,omitempty"`
+
+	// StorageIdentity is private row identity returned by storage for internal
+	// follow-up operations such as cursors and mutable-object deletes. It is not
+	// part of the v1alpha1 object contract.
+	StorageIdentity string `json:"-" yaml:"-"`
 }

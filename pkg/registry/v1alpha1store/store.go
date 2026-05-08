@@ -36,6 +36,12 @@ const (
 	MutableObjectStore StoreBehavior = "MutableObjectStore"
 )
 
+const defaultMutableObjectIdentity = "1"
+
+// DefaultMutableObjectIdentity is the compatibility row identity used by
+// mutable-object tables that still retain a private version column.
+func DefaultMutableObjectIdentity() string { return defaultMutableObjectIdentity }
+
 // Store is the single generic persistence layer for every v1alpha1 kind.
 // One Store instance is bound to one table; callers construct one per kind
 // (v1alpha1.agents, v1alpha1.mcp_servers, etc.).
@@ -63,11 +69,12 @@ const (
 // to GetLatest/Get/List. GC (PurgeFinalized) removes rows where
 // deletion_timestamp IS NOT NULL AND finalizers = '[]' (deployments only).
 type Store struct {
-	pool     *pgxpool.Pool
-	table    string
-	behavior StoreBehavior
-	kind     string
-	auditor  types.Auditor
+	pool            *pgxpool.Pool
+	table           string
+	behavior        StoreBehavior
+	mutableIdentity string
+	kind            string
+	auditor         types.Auditor
 }
 
 // StoreOption configures an optional Store behaviour at construction
@@ -97,6 +104,14 @@ func WithKind(kind string) StoreOption {
 	return func(s *Store) { s.kind = kind }
 }
 
+// WithMutableObjectIdentity sets the private row identity used by
+// MutableObjectStore tables that still carry a version column. The default is
+// DefaultMutableObjectIdentity(); callers should only override it for
+// compatibility with pre-seeded rows.
+func WithMutableObjectIdentity(identity string) StoreOption {
+	return func(s *Store) { s.mutableIdentity = identity }
+}
+
 // NewStore constructs a tagged-artifact Store bound to a single table
 // (e.g. "v1alpha1.agents"). The table must exist in the schema; NewStore
 // does not validate it.
@@ -114,7 +129,7 @@ func NewStore(pool *pgxpool.Pool, table string, opts ...StoreOption) *Store {
 // public identity is namespace/name. The table may retain a private identity
 // column internally for compatibility with existing migrations.
 func NewMutableObjectStore(pool *pgxpool.Pool, table string, opts ...StoreOption) *Store {
-	s := &Store{pool: pool, table: table, behavior: MutableObjectStore, auditor: types.NoopAuditor}
+	s := &Store{pool: pool, table: table, behavior: MutableObjectStore, mutableIdentity: defaultMutableObjectIdentity, auditor: types.NoopAuditor}
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -131,6 +146,26 @@ func (s *Store) IsTaggedArtifact() bool {
 // behind public namespace/name semantics.
 func (s *Store) IsMutableObject() bool {
 	return s.behavior == MutableObjectStore
+}
+
+// MutableObjectIdentity returns the private backing-row identity used by
+// mutable-object stores. It is a storage compatibility detail, not public
+// v1alpha1 metadata.
+func (s *Store) MutableObjectIdentity() string {
+	return s.mutableIdentity
+}
+
+// RowIdentity returns the private row identity carried by a RawObject returned
+// from this Store. Tagged-artifact rows use metadata.tag; mutable-object rows
+// use RawObject.StorageIdentity.
+func (s *Store) RowIdentity(row *v1alpha1.RawObject) string {
+	if row == nil {
+		return ""
+	}
+	if s.behavior == TaggedArtifactStore {
+		return row.Metadata.Tag
+	}
+	return row.StorageIdentity
 }
 
 // UpsertOutcome categorises what an Upsert call did.
@@ -253,9 +288,8 @@ type listCursor struct {
 //
 // Status is never touched by Upsert — use PatchStatus for that.
 //
-// Upsert rejects public metadata.version on tagged artifacts and expects
-// mutable-object callers to have already defaulted the hidden row identity at
-// the API boundary.
+// Upsert derives mutable-object storage identity from Store configuration so
+// the v1alpha1 metadata contract stays free of private backing-row fields.
 func (s *Store) Upsert(ctx context.Context, obj v1alpha1.Object, opts ...UpsertOpts) (UpsertResult, error) {
 	if obj == nil {
 		return UpsertResult{}, errors.New("v1alpha1 store: nil object")
@@ -308,9 +342,6 @@ func (s *Store) kindFor(obj v1alpha1.Object) string {
 // upsertTagged implements the tag apply semantics for tagged artifact tables.
 // See Upsert for the full state machine.
 func (s *Store) upsertTagged(ctx context.Context, meta *v1alpha1.ObjectMeta, specJSON json.RawMessage) (UpsertResult, error) {
-	if meta.Version != "" {
-		return UpsertResult{}, errors.New("v1alpha1 store: content resources use metadata.tag, not metadata.version")
-	}
 	if meta.Tag == "" {
 		meta.Tag = DefaultTag()
 	}
@@ -410,11 +441,11 @@ func (s *Store) upsertTagged(ctx context.Context, meta *v1alpha1.ObjectMeta, spe
 }
 
 // upsertMutable implements in-place semantics for mutable-object tables. The
-// public API is namespace/name; meta.Version is a hidden storage identity
-// supplied by the boundary defaulter for tables that still have a version
-// column.
+// public API is namespace/name; Store owns the private row identity for tables
+// that still have a version column.
 func (s *Store) upsertMutable(ctx context.Context, meta *v1alpha1.ObjectMeta, specJSON json.RawMessage, opts UpsertOpts) (UpsertResult, error) {
-	if meta.Version == "" {
+	identity := s.mutableIdentity
+	if identity == "" {
 		return UpsertResult{}, errors.New("v1alpha1 store: hidden storage identity is required for mutable-object kinds")
 	}
 	labelsJSON, err := canonicalJSONMap(meta.Labels)
@@ -444,7 +475,7 @@ func (s *Store) upsertMutable(ctx context.Context, meta *v1alpha1.ObjectMeta, sp
 					FROM %s
 					WHERE namespace=$1 AND name=$2 AND version=$3
 					FOR UPDATE`, s.table),
-			meta.Namespace, meta.Name, meta.Version).Scan(&oldSpec, &oldGen, &oldFinalizers, &oldAnnotations, &oldLabels, &oldDeletion, &oldUID)
+			meta.Namespace, meta.Name, identity).Scan(&oldSpec, &oldGen, &oldFinalizers, &oldAnnotations, &oldLabels, &oldDeletion, &oldUID)
 		switch {
 		case err == nil:
 			found = true
@@ -504,7 +535,7 @@ func (s *Store) upsertMutable(ctx context.Context, meta *v1alpha1.ObjectMeta, sp
 					    finalizers  = EXCLUDED.finalizers
 					RETURNING uid::text
 				`, s.table),
-			meta.Namespace, meta.Name, meta.Version, newGen, labelsJSON, annotationsJSON, []byte(specJSON), finalizersJSON).Scan(&uid)
+			meta.Namespace, meta.Name, identity, newGen, labelsJSON, annotationsJSON, []byte(specJSON), finalizersJSON).Scan(&uid)
 		if err != nil {
 			return fmt.Errorf("upsert row: %w", err)
 		}
@@ -516,7 +547,7 @@ func (s *Store) upsertMutable(ctx context.Context, meta *v1alpha1.ObjectMeta, sp
 			return fmt.Errorf("recompute latest: %w", err)
 		}
 
-		v, _ := strconv.Atoi(meta.Version)
+		v, _ := strconv.Atoi(identity)
 		result = UpsertResult{Version: v, UID: uid, Generation: newGen, Outcome: outcome}
 		return nil
 	})
@@ -536,7 +567,7 @@ type PatchOpts struct {
 }
 
 // ApplyPatch atomically applies PatchOpts to the row at
-// (namespace, name, version) inside a single transaction. Columns whose
+// (namespace, name, identity) inside a single transaction. Columns whose
 // mutator is nil are left untouched. Returns pkgdb.ErrNotFound if the
 // row doesn't exist.
 //
@@ -550,6 +581,9 @@ func (s *Store) ApplyPatch(ctx context.Context, namespace, name, version string,
 	}
 	if patch.Finalizers != nil && s.behavior == TaggedArtifactStore {
 		return errors.New("v1alpha1 store: finalizers patching not supported on tagged-artifact tables")
+	}
+	if version == "" && s.behavior == MutableObjectStore {
+		version = s.mutableIdentity
 	}
 	return runInTx(ctx, s.pool, func(tx pgx.Tx) error {
 		statusJSON, annotationsJSON, finalizersJSON, err := s.loadPatchRow(ctx, tx, namespace, name, version)
@@ -1109,7 +1143,7 @@ func encodeListCursor(obj *v1alpha1.RawObject) (string, error) {
 		UpdatedAt: obj.Metadata.UpdatedAt,
 		Namespace: obj.Metadata.Namespace,
 		Name:      obj.Metadata.Name,
-		Identity:  obj.Metadata.Version,
+		Identity:  obj.StorageIdentity,
 	}
 	if obj.Metadata.Tag != "" {
 		cursor.Identity = obj.Metadata.Tag
@@ -1234,6 +1268,9 @@ func (s *Store) selectColumns() string {
 // identityArgs converts (ns, name, private identity) into the bind args used
 // by per-row queries.
 func (s *Store) identityArgs(namespace, name, identity string) ([]any, error) {
+	if identity == "" && s.behavior == MutableObjectStore {
+		identity = s.mutableIdentity
+	}
 	if identity == "" {
 		return nil, fmt.Errorf("v1alpha1 store: identity is required for table %s", s.table)
 	}
