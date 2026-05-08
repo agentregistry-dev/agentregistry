@@ -213,10 +213,10 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 // decoded body verbatim — batch callers expecting hook input matching
 // the persisted row should re-apply before deleting.
 //
-// Tagged-artifact identity is (namespace, name, tag). If metadata.tag is
-// omitted on a delete document, it defaults to the literal "latest" tag. The
-// mutable-object path keeps its single-row delete since those rows are
-// control-plane state rather than append-only tags.
+// Tagged-artifact batch delete uses logical identity: omitting metadata.tag
+// deletes every tag for (namespace, name); setting metadata.tag deletes that
+// exact tag. Mutable-object rows keep their single-row delete since those rows
+// are control-plane state rather than append-only tags.
 func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun bool) arv0.ApplyResult {
 	store, meta, ae := resolveBatchTarget(cfg, obj, "delete")
 	res := arv0.ApplyResult{
@@ -234,12 +234,6 @@ func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun
 		return res
 	}
 
-	if store.IsTaggedArtifact() {
-		if meta.Tag == "" {
-			meta.Tag = v1alpha1store.DefaultTag()
-		}
-	}
-
 	authz := batchAuthorize(cfg, obj.GetKind())
 	if authz != nil {
 		if err := authz(ctx, AuthorizeInput{
@@ -252,7 +246,13 @@ func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun
 	}
 
 	if store.IsTaggedArtifact() {
-		err := store.Delete(ctx, meta.Namespace, meta.Name, meta.Tag)
+		var err error
+		if meta.Tag == "" {
+			err = store.DeleteAllTags(ctx, meta.Namespace, meta.Name)
+		} else {
+			err = store.Delete(ctx, meta.Namespace, meta.Name, meta.Tag)
+			res.Tag = meta.Tag
+		}
 		if err != nil {
 			return failResult(res, &applyError{
 				Stage:    stageDelete,

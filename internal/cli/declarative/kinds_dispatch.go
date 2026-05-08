@@ -56,8 +56,8 @@ func listVersions(k *scheme.Kind, name string) ([]any, error) {
 	return k.ListVersions(context.Background(), name)
 }
 
-// deleteAllVersions soft-deletes every live tag for (kind, name) in one server
-// round-trip. Errors when the kind is not a taggable artifact.
+// deleteAllVersions soft-deletes every live tag for (kind, name). Errors when
+// the kind is not a taggable artifact.
 func deleteAllVersions(k *scheme.Kind, name string) error {
 	if k.DeleteAllVersions == nil {
 		return fmt.Errorf("--all-versions not supported for kind %q (resource is not taggable)", k.Kind)

@@ -65,10 +65,9 @@ func listVersionsAny[T v1alpha1.Object](ctx context.Context, kind, name string, 
 	return out, nil
 }
 
-// deleteAllVersionsAny lists every live tag and deletes each exact tag.
-// DELETE /v0/apply deliberately defaults an omitted tag to "latest" for
-// declarative delete files, so the imperative --all-versions alias cannot use
-// that endpoint without accidentally deleting only latest.
+// deleteAllVersionsAny lists every live tag and deletes each exact tag so the
+// imperative command can report tag-scoped failures while preserving the
+// declarative DELETE /v0/apply contract for file input.
 func deleteAllVersionsAny[T v1alpha1.Object](ctx context.Context, kind, name string, newObj func() T) error {
 	items, err := listVersionsAny(ctx, kind, name, newObj)
 	if err != nil {

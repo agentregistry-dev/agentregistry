@@ -185,7 +185,8 @@ type AuthorizeInput struct {
 	Namespace string
 	// Name is empty for list verbs.
 	Name string
-	// Tag is populated for tagged content resources.
+	// Tag is populated for exact tagged content resource operations.
+	// Batch delete leaves Tag empty when deleting every tag for a name.
 	Tag string
 	// Object is non-nil only when Verb == "apply"; it carries the decoded
 	// request body post-validation-stamping (path identity already merged
@@ -606,7 +607,7 @@ func runDelete[T v1alpha1.Object](ctx context.Context, cfg Config, newObj func()
 // from applyCore / deleteCore into the huma error shape the
 // single-resource handlers emit. Mirrors the per-stage HTTP-status
 // policy that used to be inlined in each closure.
-func mapApplyErrorToHuma(ae *applyError, kind, ns, name, version string) error {
+func mapApplyErrorToHuma(ae *applyError, kind, ns, name, identity string) error {
 	switch ae.Stage {
 	case stageAuth:
 		// Auth callbacks already return huma errors; propagate.
@@ -625,14 +626,14 @@ func mapApplyErrorToHuma(ae *applyError, kind, ns, name, version string) error {
 		if ae.Terminating {
 			return huma.Error409Conflict(fmt.Sprintf(
 				"%s %s/%s/%s is terminating; delete + re-apply once GC purges the row",
-				kind, ns, name, version))
+				kind, ns, name, identity))
 		}
 		return huma.Error500InternalServerError("upsert "+kind, ae.Err)
 	case stagePostUpsert:
 		return huma.Error500InternalServerError(kind+" post-upsert", ae.Err)
 	case stageDelete:
 		if ae.NotFound {
-			return mapNotFound(ae.Err, kind, ns, name, version)
+			return mapNotFound(ae.Err, kind, ns, name, identity)
 		}
 		return huma.Error500InternalServerError("delete "+kind, ae.Err)
 	case stagePostDelete:

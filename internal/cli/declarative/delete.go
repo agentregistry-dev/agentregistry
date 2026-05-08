@@ -82,9 +82,8 @@ func runDeclarativeDelete(cmd *cobra.Command, args []string) error {
 	return deleteResource(cmd, args[0], args[1], version, force)
 }
 
-// deleteAllVersionsResource removes every live tag of (kind, name) in
-// one server round-trip via DELETE /v0/apply. Errors cleanly when the
-// kind is not a taggable artifact.
+// deleteAllVersionsResource removes every live tag of (kind, name).
+// Errors cleanly when the kind is not a taggable artifact.
 func deleteAllVersionsResource(cmd *cobra.Command, typeName, name string) error {
 	k, err := scheme.Lookup(typeName)
 	if err != nil {

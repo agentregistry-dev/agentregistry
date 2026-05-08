@@ -14,6 +14,7 @@ import (
 
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
@@ -200,6 +201,97 @@ spec:
 	require.Equal(t, arv0.ApplyStatusCreated, out.Results[0].Status)
 	require.Equal(t, v1alpha1.KindDeployment, out.Results[1].Kind)
 	require.Equal(t, arv0.ApplyStatusCreated, out.Results[1].Status)
+}
+
+func TestRegisterDeleteApply_OmittedTagDeletesAllTags(t *testing.T) {
+	pool := v1alpha1store.NewTestPool(t)
+	agents := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+
+	_, api := humatest.New(t)
+	resource.RegisterApply(api, resource.ApplyConfig{
+		BasePrefix: "/v0",
+		Stores:     map[string]*v1alpha1store.Store{v1alpha1.KindAgent: agents},
+	})
+
+	_, err := agents.Upsert(t.Context(), &v1alpha1.Agent{
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "alice", Tag: "stable"},
+		Spec:     v1alpha1.AgentSpec{Title: "Stable Alice"},
+	})
+	require.NoError(t, err)
+	_, err = agents.Upsert(t.Context(), &v1alpha1.Agent{
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "alice"},
+		Spec:     v1alpha1.AgentSpec{Title: "Latest Alice"},
+	})
+	require.NoError(t, err)
+
+	yaml := []byte(`apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  namespace: default
+  name: alice
+`)
+	resp := api.Do(http.MethodDelete, "/v0/apply", "Content-Type: application/yaml", strings.NewReader(string(yaml)))
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+
+	var out struct {
+		Results []arv0.ApplyResult `json:"results"`
+	}
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+	require.Len(t, out.Results, 1)
+	require.Equal(t, arv0.ApplyStatusDeleted, out.Results[0].Status)
+	require.Empty(t, out.Results[0].Tag)
+	require.NotContains(t, resp.Body.String(), `"tag"`, "all-tag deletes should not report a single tag")
+
+	_, err = agents.Get(t.Context(), "default", "alice", "stable")
+	require.ErrorIs(t, err, pkgdb.ErrNotFound)
+	_, err = agents.Get(t.Context(), "default", "alice", v1alpha1store.DefaultTag())
+	require.ErrorIs(t, err, pkgdb.ErrNotFound)
+}
+
+func TestRegisterDeleteApply_TagDeletesOnlyExactTag(t *testing.T) {
+	pool := v1alpha1store.NewTestPool(t)
+	agents := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+
+	_, api := humatest.New(t)
+	resource.RegisterApply(api, resource.ApplyConfig{
+		BasePrefix: "/v0",
+		Stores:     map[string]*v1alpha1store.Store{v1alpha1.KindAgent: agents},
+	})
+
+	_, err := agents.Upsert(t.Context(), &v1alpha1.Agent{
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "alice", Tag: "stable"},
+		Spec:     v1alpha1.AgentSpec{Title: "Stable Alice"},
+	})
+	require.NoError(t, err)
+	_, err = agents.Upsert(t.Context(), &v1alpha1.Agent{
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "alice"},
+		Spec:     v1alpha1.AgentSpec{Title: "Latest Alice"},
+	})
+	require.NoError(t, err)
+
+	yaml := []byte(`apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  namespace: default
+  name: alice
+  tag: stable
+`)
+	resp := api.Do(http.MethodDelete, "/v0/apply", "Content-Type: application/yaml", strings.NewReader(string(yaml)))
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+
+	var out struct {
+		Results []arv0.ApplyResult `json:"results"`
+	}
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+	require.Len(t, out.Results, 1)
+	require.Equal(t, arv0.ApplyStatusDeleted, out.Results[0].Status)
+	require.Equal(t, "stable", out.Results[0].Tag)
+
+	_, err = agents.Get(t.Context(), "default", "alice", "stable")
+	require.ErrorIs(t, err, pkgdb.ErrNotFound)
+	latest, err := agents.Get(t.Context(), "default", "alice", v1alpha1store.DefaultTag())
+	require.NoError(t, err)
+	require.Equal(t, v1alpha1store.DefaultTag(), latest.Metadata.Tag)
 }
 
 // TestRegisterApply_DeniesKindWithNoAuthorizer pins the apply-side

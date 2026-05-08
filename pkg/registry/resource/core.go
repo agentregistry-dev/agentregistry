@@ -234,7 +234,9 @@ type deleteOpts struct {
 }
 
 // deleteCore runs Authorize → Store.Delete → PostDelete for a single
-// (kind, namespace, name, tag/version) tuple. Validation is intentionally
+// (kind, namespace, name, identity) tuple. For tagged artifact stores,
+// identity is metadata.tag; for mutable-object stores, identity is the hidden
+// storage row identity. Validation is intentionally
 // skipped — deleting a row should not require its spec to validate.
 //
 // Returns NotFound=true on the missing-row case so callers can map it
@@ -242,20 +244,24 @@ type deleteOpts struct {
 func deleteCore(
 	ctx context.Context,
 	store *v1alpha1store.Store,
-	kind, namespace, name, version string,
+	kind, namespace, name, identity string,
 	opts deleteOpts,
 ) *applyError {
 	if opts.Authorize != nil {
+		tag := ""
+		if store.IsTaggedArtifact() {
+			tag = identity
+		}
 		if err := opts.Authorize(ctx, AuthorizeInput{
 			Verb: "delete", Kind: kind,
-			Namespace: namespace, Name: name,
+			Namespace: namespace, Name: name, Tag: tag,
 			Object: opts.PreDeleteObject,
 		}); err != nil {
 			return &applyError{Stage: stageAuth, Err: err}
 		}
 	}
 
-	if err := store.Delete(ctx, namespace, name, version); err != nil {
+	if err := store.Delete(ctx, namespace, name, identity); err != nil {
 		return &applyError{
 			Stage:    stageDelete,
 			Err:      err,

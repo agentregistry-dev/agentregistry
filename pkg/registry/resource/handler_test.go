@@ -192,6 +192,38 @@ spec:
 	require.Empty(t, list.Items)
 }
 
+func TestResourceRegister_DeleteTaggedPassesTagToAuthorizer(t *testing.T) {
+	pool := v1alpha1store.NewTestPool(t)
+	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+	_, err := store.Upsert(t.Context(), &v1alpha1.Agent{
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "alice", Tag: "stable"},
+		Spec:     v1alpha1.AgentSpec{Title: "Stable Alice"},
+	})
+	require.NoError(t, err)
+
+	var seen resource.AuthorizeInput
+	_, api := humatest.New(t)
+	resource.Register[*v1alpha1.Agent](api, resource.Config{
+		Kind:       v1alpha1.KindAgent,
+		BasePrefix: "/v0",
+		Store:      store,
+		Authorize: func(_ context.Context, in resource.AuthorizeInput) error {
+			if in.Verb == "delete" {
+				seen = in
+			}
+			return nil
+		},
+	}, func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
+
+	resp := api.Delete("/v0/agents/alice/stable")
+	require.Equal(t, http.StatusNoContent, resp.Code, resp.Body.String())
+	require.Equal(t, "delete", seen.Verb)
+	require.Equal(t, v1alpha1.KindAgent, seen.Kind)
+	require.Equal(t, "default", seen.Namespace)
+	require.Equal(t, "alice", seen.Name)
+	require.Equal(t, "stable", seen.Tag)
+}
+
 func TestResourceRegister_AgentNamespaceIsolation(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
 	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
