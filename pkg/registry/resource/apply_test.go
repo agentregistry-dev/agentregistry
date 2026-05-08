@@ -170,7 +170,7 @@ func TestRegisterApply_MutableObjectResultsDoNotExposeVersion(t *testing.T) {
 kind: Provider
 metadata:
   namespace: default
-  name: local
+  name: local-test-provider
 spec:
   platform: local
 ---
@@ -186,7 +186,7 @@ spec:
     tag: stable
   providerRef:
     kind: Provider
-    name: local
+    name: local-test-provider
 `)
 	resp := api.Post("/v0/apply", "Content-Type: application/yaml", strings.NewReader(string(yaml)))
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
