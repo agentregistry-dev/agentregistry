@@ -1,7 +1,7 @@
 // Package utils hosts shared helpers used by both the local and kubernetes
 // platform adapters. The primary surface is TranslateMCPServer, which takes
 // a v1alpha1.MCPServerSpec plus runtime overrides and projects it onto the
-// platform-internal *platformtypes.MCPServer that adapters then dispatch.
+// platform-internal *runtimetypes.MCPServer that adapters then dispatch.
 //
 // Historically this translator operated on the upstream
 // modelcontextprotocol/registry apiv0.ServerJSON shape, with a projection
@@ -19,7 +19,7 @@ import (
 	"strconv"
 	"strings"
 
-	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
+	runtimetypes "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
@@ -59,7 +59,7 @@ type MCPServerRunRequest struct {
 // TranslateMCPServer maps a v1alpha1 MCPServerSpec onto the platform-internal
 // MCPServer. The kind only carries a bundled package — output is always
 // MCPServerType=local.
-func TranslateMCPServer(ctx context.Context, req *MCPServerRunRequest) (*platformtypes.MCPServer, error) {
+func TranslateMCPServer(ctx context.Context, req *MCPServerRunRequest) (*runtimetypes.MCPServer, error) {
 	if req == nil {
 		return nil, fmt.Errorf("mcp server run request is required")
 	}
@@ -88,7 +88,7 @@ type RemoteMCPServerRunRequest struct {
 // platform-internal MCPServer configured for remote transport. Header
 // overrides resolve against the remote's header input list with
 // required/default semantics matching the MCP spec.
-func TranslateRemoteMCPServer(_ context.Context, req *RemoteMCPServerRunRequest) (*platformtypes.MCPServer, error) {
+func TranslateRemoteMCPServer(_ context.Context, req *RemoteMCPServerRunRequest) (*runtimetypes.MCPServer, error) {
 	if req == nil {
 		return nil, fmt.Errorf("remote mcp server run request is required")
 	}
@@ -100,9 +100,9 @@ func TranslateRemoteMCPServer(_ context.Context, req *RemoteMCPServerRunRequest)
 	if err != nil {
 		return nil, err
 	}
-	headers := make([]platformtypes.HeaderValue, 0, len(headersMap))
+	headers := make([]runtimetypes.HeaderValue, 0, len(headersMap))
 	for k, v := range headersMap {
-		headers = append(headers, platformtypes.HeaderValue{Name: k, Value: v})
+		headers = append(headers, runtimetypes.HeaderValue{Name: k, Value: v})
 	}
 
 	u, err := parseURL(req.Spec.Remote.URL)
@@ -110,11 +110,11 @@ func TranslateRemoteMCPServer(_ context.Context, req *RemoteMCPServerRunRequest)
 		return nil, fmt.Errorf("failed to parse remote server url: %v", err)
 	}
 
-	return &platformtypes.MCPServer{
+	return &runtimetypes.MCPServer{
 		Name:          generateInternalName(req.Name),
 		DeploymentID:  req.DeploymentID,
-		MCPServerType: platformtypes.MCPServerTypeRemote,
-		Remote: &platformtypes.RemoteMCPTarget{
+		MCPServerType: runtimetypes.MCPServerTypeRemote,
+		Remote: &runtimetypes.RemoteMCPTarget{
 			Scheme:  u.scheme,
 			Host:    u.host,
 			Port:    u.port,
@@ -124,7 +124,7 @@ func TranslateRemoteMCPServer(_ context.Context, req *RemoteMCPServerRunRequest)
 	}, nil
 }
 
-// translateLocalMCPServer emits a platformtypes.MCPServer for package-based
+// translateLocalMCPServer emits a runtimetypes.MCPServer for package-based
 // local execution. Registry-type dispatch (npm / pypi / oci) picks the base
 // image and command; runtime + package arguments merge with overrides;
 // environment variables resolve required/default values. The transport
@@ -137,7 +137,7 @@ func translateLocalMCPServer(
 	deploymentID string,
 	envValues map[string]string,
 	argValues map[string]string,
-) (*platformtypes.MCPServer, error) {
+) (*runtimetypes.MCPServer, error) {
 	pkg := *spec.Source.Package
 
 	var args []string
@@ -187,30 +187,30 @@ func translateLocalMCPServer(
 	}
 
 	var (
-		transportType platformtypes.TransportType
-		httpTransport *platformtypes.HTTPTransport
+		transportType runtimetypes.TransportType
+		httpTransport *runtimetypes.HTTPTransport
 	)
 	switch pkg.Transport.Type {
 	case "stdio":
-		transportType = platformtypes.TransportTypeStdio
+		transportType = runtimetypes.TransportTypeStdio
 	default:
-		transportType = platformtypes.TransportTypeHTTP
+		transportType = runtimetypes.TransportTypeHTTP
 		u, err := parseURL(pkg.Transport.URL)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse transport url: %v", err)
 		}
-		httpTransport = &platformtypes.HTTPTransport{
+		httpTransport = &runtimetypes.HTTPTransport{
 			Port: u.port,
 			Path: u.path,
 		}
 	}
 
-	return &platformtypes.MCPServer{
+	return &runtimetypes.MCPServer{
 		Name:          generateInternalName(serverName),
 		DeploymentID:  deploymentID,
-		MCPServerType: platformtypes.MCPServerTypeLocal,
-		Local: &platformtypes.LocalMCPServer{
-			Deployment: platformtypes.MCPServerDeployment{
+		MCPServerType: runtimetypes.MCPServerTypeLocal,
+		Local: &runtimetypes.LocalMCPServer{
+			Deployment: runtimetypes.MCPServerDeployment{
 				Image: config.Image,
 				Cmd:   config.Command,
 				Args:  args,
@@ -266,7 +266,7 @@ func parseURL(rawURL string) (*parsedURL, error) {
 
 // BuildRemoteMCPURL constructs a well-formed URL from a RemoteMCPTarget,
 // handling IPv6 bracketing and standard-port omission.
-func BuildRemoteMCPURL(remote *platformtypes.RemoteMCPTarget) string {
+func BuildRemoteMCPURL(remote *runtimetypes.RemoteMCPTarget) string {
 	scheme := remote.Scheme
 	if scheme == "" {
 		scheme = "http"

@@ -24,16 +24,16 @@ These four kinds share the same endpoint shape. `{kind}` = `agent` | `server` | 
 | Get latest readme | `GET /v0/servers/{name}/readme` | `Read` on `server:{name}` | |
 | Get version readme | `GET /v0/servers/{name}/versions/{version}/readme` | `Read` on `server:{name}` | |
 
-## Providers
+## Runtimes
 
-**NOTE**: Keyed by `providerId`, not name. No edit endpoint is exposed (a DB-layer `UpdateProvider` method exists but no HTTP route calls it).
+**NOTE**: Keyed by `runtimeId`, not name. No edit endpoint is exposed (a DB-layer `UpdateRuntime` method exists but no HTTP route calls it).
 
 | Operation | HTTP | Required permissions | Notes |
 | --- | --- | --- | --- |
-| List | `GET /v0/providers` | none | Filtering is delegated to the provider implementation; the list boundary intentionally skips checks. |
-| Create | `POST /v0/providers` | `Publish` on `provider:{id}` | |
-| Get | `GET /v0/providers/{providerId}` | `Read` on `provider:{id}` | |
-| Delete | `DELETE /v0/providers/{providerId}` | `Read` + `Delete` on `provider:{id}` | Service resolves the provider before deletion, requiring `read`. |
+| List | `GET /v0/runtimes` | none | Filtering is delegated to the runtime implementation; the list boundary intentionally skips checks. |
+| Create | `POST /v0/runtimes` | `Publish` on `runtime:{id}` | |
+| Get | `GET /v0/runtimes/{runtimeId}` | `Read` on `runtime:{id}` | |
+| Delete | `DELETE /v0/runtimes/{runtimeId}` | `Read` + `Delete` on `runtime:{id}` | Service resolves the runtime before deletion, requiring `read`. |
 
 ## Deployments
 

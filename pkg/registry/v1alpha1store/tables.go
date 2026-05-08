@@ -21,7 +21,7 @@ var TableFor = map[string]string{
 	v1alpha1.KindRemoteMCPServer: "v1alpha1.remote_mcp_servers",
 	v1alpha1.KindSkill:           "v1alpha1.skills",
 	v1alpha1.KindPrompt:          "v1alpha1.prompts",
-	v1alpha1.KindProvider:        "v1alpha1.providers",
+	v1alpha1.KindRuntime:         "v1alpha1.runtimes",
 	v1alpha1.KindDeployment:      "v1alpha1.deployments",
 }
 

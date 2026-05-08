@@ -202,7 +202,7 @@ func TestDeploymentValidate_OK(t *testing.T) {
 		Metadata: ObjectMeta{Namespace: "default", Name: "prod", Version: "v1"},
 		Spec: DeploymentSpec{
 			TargetRef:    ResourceRef{Kind: KindAgent, Name: "alice", Version: "v1"},
-			ProviderRef:  ResourceRef{Kind: KindProvider, Name: "local", Version: "v1"},
+			RuntimeRef:   ResourceRef{Kind: KindRuntime, Name: "local", Version: "v1"},
 			DesiredState: DesiredStateDeployed,
 		},
 	}
@@ -213,24 +213,24 @@ func TestDeploymentValidate_RejectsBadTargetKind(t *testing.T) {
 	d := &Deployment{
 		Metadata: ObjectMeta{Namespace: "default", Name: "prod", Version: "v1"},
 		Spec: DeploymentSpec{
-			TargetRef:   ResourceRef{Kind: KindSkill, Name: "skill", Version: "v1"},
-			ProviderRef: ResourceRef{Kind: KindProvider, Name: "local", Version: "v1"},
+			TargetRef:  ResourceRef{Kind: KindSkill, Name: "skill", Version: "v1"},
+			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "local", Version: "v1"},
 		},
 	}
 	paths := failedFields(t, d.Validate())
 	require.Contains(t, paths, "spec.targetRef.kind")
 }
 
-func TestDeploymentValidate_RejectsBadProviderKind(t *testing.T) {
+func TestDeploymentValidate_RejectsBadRuntimeKind(t *testing.T) {
 	d := &Deployment{
 		Metadata: ObjectMeta{Namespace: "default", Name: "prod", Version: "v1"},
 		Spec: DeploymentSpec{
-			TargetRef:   ResourceRef{Kind: KindAgent, Name: "alice", Version: "v1"},
-			ProviderRef: ResourceRef{Kind: KindAgent, Name: "nope", Version: "v1"},
+			TargetRef:  ResourceRef{Kind: KindAgent, Name: "alice", Version: "v1"},
+			RuntimeRef: ResourceRef{Kind: KindAgent, Name: "nope", Version: "v1"},
 		},
 	}
 	paths := failedFields(t, d.Validate())
-	require.Contains(t, paths, "spec.providerRef.kind")
+	require.Contains(t, paths, "spec.runtimeRef.kind")
 }
 
 func TestDeploymentValidate_RejectsBadDesiredState(t *testing.T) {
@@ -238,7 +238,7 @@ func TestDeploymentValidate_RejectsBadDesiredState(t *testing.T) {
 		Metadata: ObjectMeta{Namespace: "default", Name: "prod", Version: "v1"},
 		Spec: DeploymentSpec{
 			TargetRef:    ResourceRef{Kind: KindAgent, Name: "alice", Version: "v1"},
-			ProviderRef:  ResourceRef{Kind: KindProvider, Name: "local", Version: "v1"},
+			RuntimeRef:   ResourceRef{Kind: KindRuntime, Name: "local", Version: "v1"},
 			DesiredState: "running",
 		},
 	}
@@ -255,8 +255,8 @@ func TestDeploymentResolveRefs_InheritsNamespace(t *testing.T) {
 	d := &Deployment{
 		Metadata: ObjectMeta{Namespace: "team-b", Name: "prod", Version: "v1"},
 		Spec: DeploymentSpec{
-			TargetRef:   ResourceRef{Kind: KindAgent, Name: "alice", Version: "v1"},
-			ProviderRef: ResourceRef{Kind: KindProvider, Name: "local", Version: "v1"},
+			TargetRef:  ResourceRef{Kind: KindAgent, Name: "alice", Version: "v1"},
+			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "local", Version: "v1"},
 		},
 	}
 	require.NoError(t, d.ResolveRefs(context.Background(), resolver))
@@ -266,23 +266,23 @@ func TestDeploymentResolveRefs_InheritsNamespace(t *testing.T) {
 }
 
 // -----------------------------------------------------------------------------
-// ProviderSpec
+// Runtime
 // -----------------------------------------------------------------------------
 
-func TestProviderValidate_OK(t *testing.T) {
-	p := &Provider{
+func TestRuntimeValidate_OK(t *testing.T) {
+	r := &Runtime{
 		Metadata: ObjectMeta{Namespace: "default", Name: "local", Version: "v1"},
-		Spec:     ProviderSpec{Platform: PlatformLocal},
+		Spec:     RuntimeSpec{Type: TypeLocal},
 	}
-	require.NoError(t, p.Validate())
+	require.NoError(t, r.Validate())
 }
 
-func TestProviderValidate_RejectsUnknownPlatform(t *testing.T) {
-	p := &Provider{
+func TestRuntimeValidate_RejectsUnknownType(t *testing.T) {
+	r := &Runtime{
 		Metadata: ObjectMeta{Namespace: "default", Name: "custom", Version: "v1"},
-		Spec:     ProviderSpec{Platform: "heroku"},
+		Spec:     RuntimeSpec{Type: "heroku"},
 	}
-	err := p.Validate()
+	err := r.Validate()
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "heroku")
 }

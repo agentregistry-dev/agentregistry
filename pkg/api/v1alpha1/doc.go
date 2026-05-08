@@ -1,7 +1,7 @@
 // Package v1alpha1 defines the Kubernetes-style API types for all agentregistry
 // resources.
 //
-// Every resource — Agent, MCPServer, Skill, Prompt, Deployment, Provider —
+// Every resource — Agent, MCPServer, Skill, Prompt, Deployment, Runtime —
 // uses the same envelope: apiVersion + kind + metadata + spec + status.
 // These types are the single wire/storage/API contract propagating from a YAML
 // manifest through the HTTP handler, Go client, service layer, and database
@@ -32,7 +32,7 @@ const (
 	KindSkill           = "Skill"
 	KindPrompt          = "Prompt"
 	KindDeployment      = "Deployment"
-	KindProvider        = "Provider"
+	KindRuntime         = "Runtime"
 )
 
 // BuiltinKinds is the stable ordered list of Kind names this package
@@ -47,7 +47,7 @@ var BuiltinKinds = []string{
 	KindRemoteMCPServer,
 	KindSkill,
 	KindPrompt,
-	KindProvider,
+	KindRuntime,
 	KindDeployment,
 }
 

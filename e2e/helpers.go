@@ -19,7 +19,7 @@ import (
 
 // localDeployComposeProject is the docker-compose project label the local
 // deploy adapter uses for its runtime containers. Tests that apply a
-// deployment with `providerId: local` use this to clean up after themselves.
+// deployment with `runtimeRef.name: local` use this to clean up after themselves.
 const localDeployComposeProject = "agentregistry_runtime"
 
 // registryURL is set during TestMain setup and used by all tests that need the registry.
@@ -297,8 +297,8 @@ func UniqueAgentName(prefix string) string {
 }
 
 // removeLocalDeployment tears down any docker-compose containers left behind
-// by a local-provider deployment. Idempotent — no-op when nothing matches.
-// Used in t.Cleanup from tests that apply deployments with `providerId: local`.
+// by a local-runtime deployment. Idempotent — no-op when nothing matches.
+// Used in t.Cleanup from tests that apply deployments with `runtimeRef.name: local`.
 // Survives even if the test's apply step failed before a deployment ran.
 func removeLocalDeployment(t *testing.T) {
 	t.Helper()

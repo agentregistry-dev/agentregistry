@@ -6,31 +6,31 @@ import (
 	"maps"
 	"strings"
 
-	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
+	runtimetypes "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
 
-// mergeAndApplyLocalPlatform loads the current docker-compose +
+// mergeAndApplyLocalRuntime loads the current docker-compose +
 // agent-gateway on-disk state, overlays (or strips, when remove=true) the
-// services + gateway routes produced by BuildLocalPlatformConfig, writes
+// services + gateway routes produced by BuildLocalRuntimeConfig, writes
 // the merged files back, and runs docker compose up/down accordingly.
 //
 // Shared between the v1alpha1 Apply path and any future incremental
 // reconciler — no ties to the v1alpha1 envelope type.
-func (a *localDeploymentAdapter) mergeAndApplyLocalPlatform(
+func (a *localDeploymentAdapter) mergeAndApplyLocalRuntime(
 	ctx context.Context,
-	config *platformtypes.LocalPlatformConfig,
+	config *runtimetypes.LocalRuntimeConfig,
 	remove bool,
 ) error {
 	if config == nil {
-		return runLocalComposeUp(ctx, a.platformDir, false)
+		return runLocalComposeUp(ctx, a.runtimeDir, false)
 	}
 
-	composeCfg, err := LoadLocalDockerComposeConfig(a.platformDir)
+	composeCfg, err := LoadLocalDockerComposeConfig(a.runtimeDir)
 	if err != nil {
 		return err
 	}
-	gatewayCfg, err := LoadLocalAgentGatewayConfig(a.platformDir, a.agentGatewayPort)
+	gatewayCfg, err := LoadLocalAgentGatewayConfig(a.runtimeDir, a.agentGatewayPort)
 	if err != nil {
 		return err
 	}
@@ -48,16 +48,16 @@ func (a *localDeploymentAdapter) mergeAndApplyLocalPlatform(
 
 	mergeAgentGatewayConfig(gatewayCfg, config.AgentGateway, targetNames, routeNames, remove, a.agentGatewayPort)
 
-	if err := WriteLocalPlatformFiles(a.platformDir, &platformtypes.LocalPlatformConfig{
+	if err := WriteLocalRuntimeFiles(a.runtimeDir, &runtimetypes.LocalRuntimeConfig{
 		DockerCompose: composeCfg,
 		AgentGateway:  gatewayCfg,
 	}, a.agentGatewayPort); err != nil {
 		return err
 	}
 	if len(composeCfg.Services) == 0 {
-		return runLocalComposeDown(ctx, a.platformDir, false)
+		return runLocalComposeDown(ctx, a.runtimeDir, false)
 	}
-	return runLocalComposeUp(ctx, a.platformDir, false)
+	return runLocalComposeUp(ctx, a.runtimeDir, false)
 }
 
 // removeLocalDeploymentArtifactsByID strips every compose service + gateway
@@ -70,11 +70,11 @@ func (a *localDeploymentAdapter) removeLocalDeploymentArtifactsByID(ctx context.
 		return fmt.Errorf("deployment id is required: %w", database.ErrInvalidInput)
 	}
 
-	composeCfg, err := LoadLocalDockerComposeConfig(a.platformDir)
+	composeCfg, err := LoadLocalDockerComposeConfig(a.runtimeDir)
 	if err != nil {
 		return err
 	}
-	gatewayCfg, err := LoadLocalAgentGatewayConfig(a.platformDir, a.agentGatewayPort)
+	gatewayCfg, err := LoadLocalAgentGatewayConfig(a.runtimeDir, a.agentGatewayPort)
 	if err != nil {
 		return err
 	}
@@ -87,25 +87,25 @@ func (a *localDeploymentAdapter) removeLocalDeploymentArtifactsByID(ctx context.
 
 	filterGatewayRoutesByDeploymentID(gatewayCfg, deploymentID)
 
-	if err := WriteLocalPlatformFiles(a.platformDir, &platformtypes.LocalPlatformConfig{
+	if err := WriteLocalRuntimeFiles(a.runtimeDir, &runtimetypes.LocalRuntimeConfig{
 		DockerCompose: composeCfg,
 		AgentGateway:  gatewayCfg,
 	}, a.agentGatewayPort); err != nil {
 		return err
 	}
 	if len(composeCfg.Services) == 0 {
-		return runLocalComposeDown(ctx, a.platformDir, false)
+		return runLocalComposeDown(ctx, a.runtimeDir, false)
 	}
-	return runLocalComposeUp(ctx, a.platformDir, false)
+	return runLocalComposeUp(ctx, a.runtimeDir, false)
 }
 
-func filterGatewayRoutesByDeploymentID(gatewayCfg *platformtypes.AgentGatewayConfig, deploymentID string) {
+func filterGatewayRoutesByDeploymentID(gatewayCfg *runtimetypes.AgentGatewayConfig, deploymentID string) {
 	listener := localAgentGatewayListener(gatewayCfg)
 	if listener == nil {
 		return
 	}
 
-	filteredRoutes := make([]platformtypes.LocalRoute, 0, len(listener.Routes))
+	filteredRoutes := make([]runtimetypes.LocalRoute, 0, len(listener.Routes))
 	for _, route := range listener.Routes {
 		filteredRoute, keep := filterGatewayRouteByDeploymentID(route, deploymentID)
 		if keep {
@@ -115,26 +115,26 @@ func filterGatewayRoutesByDeploymentID(gatewayCfg *platformtypes.AgentGatewayCon
 	listener.Routes = filteredRoutes
 }
 
-func localAgentGatewayListener(gatewayCfg *platformtypes.AgentGatewayConfig) *platformtypes.LocalListener {
+func localAgentGatewayListener(gatewayCfg *runtimetypes.AgentGatewayConfig) *runtimetypes.LocalListener {
 	if gatewayCfg == nil || len(gatewayCfg.Binds) == 0 || len(gatewayCfg.Binds[0].Listeners) == 0 {
 		return nil
 	}
 	return &gatewayCfg.Binds[0].Listeners[0]
 }
 
-func filterGatewayRouteByDeploymentID(route platformtypes.LocalRoute, deploymentID string) (platformtypes.LocalRoute, bool) {
+func filterGatewayRouteByDeploymentID(route runtimetypes.LocalRoute, deploymentID string) (runtimetypes.LocalRoute, bool) {
 	if route.RouteName == localMCPRouteName {
 		return filterMCPGatewayRouteTargets(route, deploymentID)
 	}
 	return route, !strings.Contains(route.RouteName, deploymentID)
 }
 
-func filterMCPGatewayRouteTargets(route platformtypes.LocalRoute, deploymentID string) (platformtypes.LocalRoute, bool) {
+func filterMCPGatewayRouteTargets(route runtimetypes.LocalRoute, deploymentID string) (runtimetypes.LocalRoute, bool) {
 	if len(route.Backends) == 0 || route.Backends[0].MCP == nil {
 		return route, false
 	}
 
-	filteredTargets := make([]platformtypes.MCPTarget, 0, len(route.Backends[0].MCP.Targets))
+	filteredTargets := make([]runtimetypes.MCPTarget, 0, len(route.Backends[0].MCP.Targets))
 	for _, target := range route.Backends[0].MCP.Targets {
 		if strings.Contains(target.Name, deploymentID) {
 			continue

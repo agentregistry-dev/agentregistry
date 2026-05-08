@@ -21,7 +21,7 @@ const (
 	mcpTable      = "v1alpha1.mcp_servers"
 	skillsTable   = "v1alpha1.skills"
 	promptsTable  = "v1alpha1.prompts"
-	provTable     = "v1alpha1.providers"
+	runtimesTable = "v1alpha1.runtimes"
 	deployTable   = "v1alpha1.deployments"
 	testScanner   = "test-scanner"
 	failedScanner = "failing-scanner"
@@ -37,7 +37,7 @@ func newTestImporter(t *testing.T, extra ...Scanner) (*Importer, *v1alpha1store.
 		v1alpha1.KindMCPServer:  v1alpha1store.NewStore(pool, mcpTable),
 		v1alpha1.KindSkill:      v1alpha1store.NewStore(pool, skillsTable),
 		v1alpha1.KindPrompt:     v1alpha1store.NewStore(pool, promptsTable),
-		v1alpha1.KindProvider:   v1alpha1store.NewStore(pool, provTable),
+		v1alpha1.KindRuntime:    v1alpha1store.NewStore(pool, runtimesTable),
 		v1alpha1.KindDeployment: v1alpha1store.NewStore(pool, deployTable),
 	}
 	findings := NewFindingsStore(pool)

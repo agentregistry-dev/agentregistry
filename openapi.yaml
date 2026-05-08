@@ -142,16 +142,16 @@ components:
           additionalProperties:
             type: string
           type: object
-        providerConfig:
+        runtimeConfig:
           additionalProperties: {}
           type: object
-        providerRef:
+        runtimeRef:
           $ref: '#/components/schemas/ResourceRef'
         targetRef:
           $ref: '#/components/schemas/ResourceRef'
       required:
       - targetRef
-      - providerRef
+      - runtimeRef
       type: object
     ErrorDetail:
       additionalProperties: false
@@ -283,12 +283,12 @@ components:
       required:
       - items
       type: object
-    ListOutputProviderBody:
+    ListOutputRemoteMCPServerBody:
       additionalProperties: false
       properties:
         items:
           items:
-            $ref: '#/components/schemas/Provider'
+            $ref: '#/components/schemas/RemoteMCPServer'
           type:
           - array
           - "null"
@@ -297,12 +297,12 @@ components:
       required:
       - items
       type: object
-    ListOutputRemoteMCPServerBody:
+    ListOutputRuntimeBody:
       additionalProperties: false
       properties:
         items:
           items:
-            $ref: '#/components/schemas/RemoteMCPServer'
+            $ref: '#/components/schemas/Runtime'
           type:
           - array
           - "null"
@@ -581,38 +581,6 @@ components:
         description:
           type: string
       type: object
-    Provider:
-      additionalProperties: false
-      properties:
-        apiVersion:
-          type: string
-        kind:
-          type: string
-        metadata:
-          $ref: '#/components/schemas/ObjectMeta'
-        spec:
-          $ref: '#/components/schemas/ProviderSpec'
-        status:
-          $ref: '#/components/schemas/Status'
-      required:
-      - metadata
-      - spec
-      - apiVersion
-      - kind
-      type: object
-    ProviderSpec:
-      additionalProperties: false
-      properties:
-        config:
-          additionalProperties: {}
-          type: object
-        platform:
-          type: string
-        telemetryEndpoint:
-          type: string
-      required:
-      - platform
-      type: object
     RemoteMCPServer:
       additionalProperties: false
       properties:
@@ -666,6 +634,38 @@ components:
       required:
       - kind
       - name
+      type: object
+    Runtime:
+      additionalProperties: false
+      properties:
+        apiVersion:
+          type: string
+        kind:
+          type: string
+        metadata:
+          $ref: '#/components/schemas/ObjectMeta'
+        spec:
+          $ref: '#/components/schemas/RuntimeSpec'
+        status:
+          $ref: '#/components/schemas/Status'
+      required:
+      - metadata
+      - spec
+      - apiVersion
+      - kind
+      type: object
+    RuntimeSpec:
+      additionalProperties: false
+      properties:
+        config:
+          additionalProperties: {}
+          type: object
+        telemetryEndpoint:
+          type: string
+        type:
+          type: string
+      required:
+      - type
       type: object
     Skill:
       additionalProperties: false
@@ -854,14 +854,13 @@ paths:
         required: true
         schema:
           type: string
-      - description: Skip provider-specific teardown and only remove the registry
-          record.
+      - description: Skip runtime-specific teardown and only remove the registry record.
         explode: false
         in: query
         name: force
         schema:
           default: false
-          description: Skip provider-specific teardown and only remove the registry
+          description: Skip runtime-specific teardown and only remove the registry
             record.
           type: boolean
       responses:
@@ -1129,14 +1128,13 @@ paths:
         required: true
         schema:
           type: string
-      - description: Skip provider-specific teardown and only remove the registry
-          record.
+      - description: Skip runtime-specific teardown and only remove the registry record.
         explode: false
         in: query
         name: force
         schema:
           default: false
-          description: Skip provider-specific teardown and only remove the registry
+          description: Skip runtime-specific teardown and only remove the registry
             record.
           type: boolean
       responses:
@@ -1355,14 +1353,13 @@ paths:
         required: true
         schema:
           type: string
-      - description: Skip provider-specific teardown and only remove the registry
-          record.
+      - description: Skip runtime-specific teardown and only remove the registry record.
         explode: false
         in: query
         name: force
         schema:
           default: false
-          description: Skip provider-specific teardown and only remove the registry
+          description: Skip runtime-specific teardown and only remove the registry
             record.
           type: boolean
       responses:
@@ -1581,14 +1578,13 @@ paths:
         required: true
         schema:
           type: string
-      - description: Skip provider-specific teardown and only remove the registry
-          record.
+      - description: Skip runtime-specific teardown and only remove the registry record.
         explode: false
         in: query
         name: force
         schema:
           default: false
-          description: Skip provider-specific teardown and only remove the registry
+          description: Skip runtime-specific teardown and only remove the registry
             record.
           type: boolean
       responses:
@@ -1674,212 +1670,6 @@ paths:
                 $ref: '#/components/schemas/ErrorModel'
           description: Error
       summary: Apply a Prompt (idempotent upsert)
-  /v0/providers:
-    get:
-      operationId: list-providers
-      parameters:
-      - description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
-        explode: false
-        in: query
-        name: namespace
-        schema:
-          description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
-          type: string
-      - description: Max items to return (default 50).
-        explode: false
-        in: query
-        name: limit
-        schema:
-          default: 50
-          description: Max items to return (default 50).
-          format: int64
-          type: integer
-      - description: Opaque pagination cursor.
-        explode: false
-        in: query
-        name: cursor
-        schema:
-          description: Opaque pagination cursor.
-          type: string
-      - description: 'Label selector: key=value,key2=value2.'
-        explode: false
-        in: query
-        name: labels
-        schema:
-          description: 'Label selector: key=value,key2=value2.'
-          type: string
-      - description: Only return rows with is_latest_version=true.
-        explode: false
-        in: query
-        name: latestOnly
-        schema:
-          description: Only return rows with is_latest_version=true.
-          type: boolean
-      - description: Include rows with a deletionTimestamp.
-        explode: false
-        in: query
-        name: includeTerminating
-        schema:
-          description: Include rows with a deletionTimestamp.
-          type: boolean
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ListOutputProviderBody'
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ErrorModel'
-          description: Error
-      summary: List Provider (scoped by ?namespace)
-  /v0/providers/{name}:
-    get:
-      operationId: get-latest-provider
-      parameters:
-      - description: Namespace (internal; defaults to 'default').
-        explode: false
-        in: query
-        name: namespace
-        schema:
-          description: Namespace (internal; defaults to 'default').
-          type: string
-      - in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Provider'
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ErrorModel'
-          description: Error
-      summary: Get the latest version of a Provider
-  /v0/providers/{name}/{version}:
-    delete:
-      operationId: delete-provider
-      parameters:
-      - description: Namespace (internal; defaults to 'default').
-        explode: false
-        in: query
-        name: namespace
-        schema:
-          description: Namespace (internal; defaults to 'default').
-          type: string
-      - in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      - in: path
-        name: version
-        required: true
-        schema:
-          type: string
-      - description: Skip provider-specific teardown and only remove the registry
-          record.
-        explode: false
-        in: query
-        name: force
-        schema:
-          default: false
-          description: Skip provider-specific teardown and only remove the registry
-            record.
-          type: boolean
-      responses:
-        "204":
-          description: No Content
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ErrorModel'
-          description: Error
-      summary: 'Delete a Provider (soft-delete: sets deletionTimestamp)'
-    get:
-      operationId: get-provider
-      parameters:
-      - description: Namespace (internal; defaults to 'default').
-        explode: false
-        in: query
-        name: namespace
-        schema:
-          description: Namespace (internal; defaults to 'default').
-          type: string
-      - in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      - in: path
-        name: version
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Provider'
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ErrorModel'
-          description: Error
-      summary: Get a Provider by name and version
-    put:
-      operationId: apply-provider
-      parameters:
-      - description: Namespace (internal; defaults to 'default').
-        explode: false
-        in: query
-        name: namespace
-        schema:
-          description: Namespace (internal; defaults to 'default').
-          type: string
-      - in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      - in: path
-        name: version
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Provider'
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Provider'
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ErrorModel'
-          description: Error
-      summary: Apply a Provider (idempotent upsert)
   /v0/remotemcpservers:
     get:
       operationId: list-remotemcpservers
@@ -1993,14 +1783,13 @@ paths:
         required: true
         schema:
           type: string
-      - description: Skip provider-specific teardown and only remove the registry
-          record.
+      - description: Skip runtime-specific teardown and only remove the registry record.
         explode: false
         in: query
         name: force
         schema:
           default: false
-          description: Skip provider-specific teardown and only remove the registry
+          description: Skip runtime-specific teardown and only remove the registry
             record.
           type: boolean
       responses:
@@ -2086,6 +1875,211 @@ paths:
                 $ref: '#/components/schemas/ErrorModel'
           description: Error
       summary: Apply a RemoteMCPServer (idempotent upsert)
+  /v0/runtimes:
+    get:
+      operationId: list-runtimes
+      parameters:
+      - description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
+        explode: false
+        in: query
+        name: namespace
+        schema:
+          description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
+          type: string
+      - description: Max items to return (default 50).
+        explode: false
+        in: query
+        name: limit
+        schema:
+          default: 50
+          description: Max items to return (default 50).
+          format: int64
+          type: integer
+      - description: Opaque pagination cursor.
+        explode: false
+        in: query
+        name: cursor
+        schema:
+          description: Opaque pagination cursor.
+          type: string
+      - description: 'Label selector: key=value,key2=value2.'
+        explode: false
+        in: query
+        name: labels
+        schema:
+          description: 'Label selector: key=value,key2=value2.'
+          type: string
+      - description: Only return rows with is_latest_version=true.
+        explode: false
+        in: query
+        name: latestOnly
+        schema:
+          description: Only return rows with is_latest_version=true.
+          type: boolean
+      - description: Include rows with a deletionTimestamp.
+        explode: false
+        in: query
+        name: includeTerminating
+        schema:
+          description: Include rows with a deletionTimestamp.
+          type: boolean
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListOutputRuntimeBody'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorModel'
+          description: Error
+      summary: List Runtime (scoped by ?namespace)
+  /v0/runtimes/{name}:
+    get:
+      operationId: get-latest-runtime
+      parameters:
+      - description: Namespace (internal; defaults to 'default').
+        explode: false
+        in: query
+        name: namespace
+        schema:
+          description: Namespace (internal; defaults to 'default').
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Runtime'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorModel'
+          description: Error
+      summary: Get the latest version of a Runtime
+  /v0/runtimes/{name}/{version}:
+    delete:
+      operationId: delete-runtime
+      parameters:
+      - description: Namespace (internal; defaults to 'default').
+        explode: false
+        in: query
+        name: namespace
+        schema:
+          description: Namespace (internal; defaults to 'default').
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: version
+        required: true
+        schema:
+          type: string
+      - description: Skip runtime-specific teardown and only remove the registry record.
+        explode: false
+        in: query
+        name: force
+        schema:
+          default: false
+          description: Skip runtime-specific teardown and only remove the registry
+            record.
+          type: boolean
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorModel'
+          description: Error
+      summary: 'Delete a Runtime (soft-delete: sets deletionTimestamp)'
+    get:
+      operationId: get-runtime
+      parameters:
+      - description: Namespace (internal; defaults to 'default').
+        explode: false
+        in: query
+        name: namespace
+        schema:
+          description: Namespace (internal; defaults to 'default').
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: version
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Runtime'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorModel'
+          description: Error
+      summary: Get a Runtime by name and version
+    put:
+      operationId: apply-runtime
+      parameters:
+      - description: Namespace (internal; defaults to 'default').
+        explode: false
+        in: query
+        name: namespace
+        schema:
+          description: Namespace (internal; defaults to 'default').
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: version
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Runtime'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Runtime'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorModel'
+          description: Error
+      summary: Apply a Runtime (idempotent upsert)
   /v0/skills:
     get:
       operationId: list-skills
@@ -2199,14 +2193,13 @@ paths:
         required: true
         schema:
           type: string
-      - description: Skip provider-specific teardown and only remove the registry
-          record.
+      - description: Skip runtime-specific teardown and only remove the registry record.
         explode: false
         in: query
         name: force
         schema:
           default: false
-          description: Skip provider-specific teardown and only remove the registry
+          description: Skip runtime-specific teardown and only remove the registry
             record.
           type: boolean
       responses:

@@ -29,8 +29,8 @@ export interface FlatDeployment {
   // Target (what's being deployed) — from spec.targetRef.
   serverName: string
   resourceType: "agent" | "mcp" | string
-  // Provider + lifecycle flags.
-  providerId: string
+  // Runtime + lifecycle flags.
+  runtimeId: string
   env?: Record<string, string>
   origin: "managed" | "discovered"
   status: FlatStatus
@@ -61,7 +61,7 @@ export function toFlatDeployment(d: Deployment): FlatDeployment {
     version,
     serverName: targetName,
     resourceType,
-    providerId: d.spec.providerRef.name,
+    runtimeId: d.spec.runtimeRef.name,
     env: d.spec.env,
     origin: d.metadata.annotations?.["agentregistry.solo.io/origin"] === "discovered"
       ? "discovered"

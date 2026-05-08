@@ -13,7 +13,7 @@
 -- the v1alpha1 schema or renames it to public.
 --
 -- Authoritative schema for spec + status JSONB is the Go type system under
--- pkg/api/v1alpha1 (Agent/MCPServer/Skill/Prompt/Provider/Deployment typed
+-- pkg/api/v1alpha1 (Agent/MCPServer/Skill/Prompt/Runtime/Deployment typed
 -- envelopes). Validation is enforced at the API boundary by
 -- (*Kind).Validate(); this layer does NOT add JSON schema CHECK constraints.
 
@@ -69,7 +69,7 @@ $$ LANGUAGE plpgsql;
 
 -- -----------------------------------------------------------------------------
 -- Per-kind tables: identical shape across agents, mcp_servers, skills,
--- prompts, providers, deployments.
+-- prompts, runtimes, deployments.
 --
 -- Columns:
 --   namespace, name, version      — composite identity (PK)
@@ -87,7 +87,7 @@ $$ LANGUAGE plpgsql;
 -- UID issuer: the Go store omits it from the INSERT column list on Upsert
 -- (the default fires on create) and keeps it out of the ON CONFLICT DO UPDATE
 -- SET list (so it is preserved across re-applies — Kubernetes-style read-only
--- metadata.uid). Direct-SQL inserts (the providers seed below, manual psql)
+-- metadata.uid). Direct-SQL inserts (the runtimes seed below, manual psql)
 -- get a valid UID without code changes.
 -- -----------------------------------------------------------------------------
 
@@ -192,7 +192,7 @@ CREATE INDEX IF NOT EXISTS v1alpha1_prompts_terminating    ON v1alpha1.prompts (
 CREATE OR REPLACE TRIGGER prompts_set_updated_at  BEFORE UPDATE ON v1alpha1.prompts  FOR EACH ROW EXECUTE FUNCTION v1alpha1.set_updated_at();
 CREATE OR REPLACE TRIGGER prompts_notify_status   AFTER  INSERT OR UPDATE OR DELETE ON v1alpha1.prompts  FOR EACH ROW EXECUTE FUNCTION v1alpha1.notify_status_change('v1alpha1_prompts_status');
 
-CREATE TABLE IF NOT EXISTS v1alpha1.providers (
+CREATE TABLE IF NOT EXISTS v1alpha1.runtimes (
     namespace          VARCHAR(255) NOT NULL,
     name               VARCHAR(255) NOT NULL,
     version            VARCHAR(255) NOT NULL,
@@ -209,13 +209,13 @@ CREATE TABLE IF NOT EXISTS v1alpha1.providers (
     updated_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     PRIMARY KEY (namespace, name, version)
 );
-CREATE UNIQUE INDEX IF NOT EXISTS v1alpha1_providers_latest_version  ON v1alpha1.providers (namespace, name) WHERE is_latest_version;
-CREATE INDEX IF NOT EXISTS v1alpha1_providers_labels_gin      ON v1alpha1.providers USING GIN (labels);
-CREATE INDEX IF NOT EXISTS v1alpha1_providers_spec_gin        ON v1alpha1.providers USING GIN (spec jsonb_path_ops);
-CREATE INDEX IF NOT EXISTS v1alpha1_providers_updated_at_desc ON v1alpha1.providers (updated_at DESC);
-CREATE INDEX IF NOT EXISTS v1alpha1_providers_terminating    ON v1alpha1.providers (deletion_timestamp) WHERE deletion_timestamp IS NOT NULL;
-CREATE OR REPLACE TRIGGER providers_set_updated_at  BEFORE UPDATE ON v1alpha1.providers  FOR EACH ROW EXECUTE FUNCTION v1alpha1.set_updated_at();
-CREATE OR REPLACE TRIGGER providers_notify_status   AFTER  INSERT OR UPDATE OR DELETE ON v1alpha1.providers  FOR EACH ROW EXECUTE FUNCTION v1alpha1.notify_status_change('v1alpha1_providers_status');
+CREATE UNIQUE INDEX IF NOT EXISTS v1alpha1_runtimes_latest_version  ON v1alpha1.runtimes (namespace, name) WHERE is_latest_version;
+CREATE INDEX IF NOT EXISTS v1alpha1_runtimes_labels_gin      ON v1alpha1.runtimes USING GIN (labels);
+CREATE INDEX IF NOT EXISTS v1alpha1_runtimes_spec_gin        ON v1alpha1.runtimes USING GIN (spec jsonb_path_ops);
+CREATE INDEX IF NOT EXISTS v1alpha1_runtimes_updated_at_desc ON v1alpha1.runtimes (updated_at DESC);
+CREATE INDEX IF NOT EXISTS v1alpha1_runtimes_terminating    ON v1alpha1.runtimes (deletion_timestamp) WHERE deletion_timestamp IS NOT NULL;
+CREATE OR REPLACE TRIGGER runtimes_set_updated_at  BEFORE UPDATE ON v1alpha1.runtimes  FOR EACH ROW EXECUTE FUNCTION v1alpha1.set_updated_at();
+CREATE OR REPLACE TRIGGER runtimes_notify_status   AFTER  INSERT OR UPDATE OR DELETE ON v1alpha1.runtimes  FOR EACH ROW EXECUTE FUNCTION v1alpha1.notify_status_change('v1alpha1_runtimes_status');
 
 CREATE TABLE IF NOT EXISTS v1alpha1.deployments (
     namespace          VARCHAR(255) NOT NULL,
@@ -243,12 +243,12 @@ CREATE OR REPLACE TRIGGER deployments_set_updated_at  BEFORE UPDATE ON v1alpha1.
 CREATE OR REPLACE TRIGGER deployments_notify_status   AFTER  INSERT OR UPDATE OR DELETE ON v1alpha1.deployments  FOR EACH ROW EXECUTE FUNCTION v1alpha1.notify_status_change('v1alpha1_deployments_status');
 
 -- -----------------------------------------------------------------------------
--- Seed: default providers so deployments can reference them out-of-the-box.
+-- Seed: default runtimes so deployments can reference them out-of-the-box.
 -- Seeded in the `default` namespace.
 -- -----------------------------------------------------------------------------
 
-INSERT INTO v1alpha1.providers (namespace, name, version, spec, is_latest_version)
+INSERT INTO v1alpha1.runtimes (namespace, name, version, spec, is_latest_version)
 VALUES
-    ('default', 'local',              'v1', '{"platform":"local"}'::jsonb,      true),
-    ('default', 'kubernetes-default', 'v1', '{"platform":"kubernetes"}'::jsonb, true)
+    ('default', 'local',              'v1', '{"type":"Local"}'::jsonb,      true),
+    ('default', 'kubernetes-default', 'v1', '{"type":"Kubernetes"}'::jsonb, true)
 ON CONFLICT (namespace, name, version) DO NOTHING;

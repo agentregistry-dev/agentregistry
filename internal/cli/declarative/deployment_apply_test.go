@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative"
-	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative"
+	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 )
 
 // deploymentYAMLBadTemplate is a minimally-valid declarative deployment that
@@ -23,8 +24,8 @@ spec:
     kind: Agent
     name: nonexistent-agent
     version: "0.1.0"
-  providerRef:
-    kind: Provider
+  runtimeRef:
+    kind: Runtime
     name: my-provider
 `
 

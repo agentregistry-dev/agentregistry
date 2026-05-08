@@ -315,14 +315,14 @@ export async function createPromptV0(opts: LegacyCreateOpts<PromptJson>): Promis
 // ----------------------------------------------------------------------------
 // deployServer: legacy imperative deploy endpoint replaced by declarative
 // Deployment upsert. Legacy body fields: {serverName, version, env,
-// providerId, resourceType}. Translate to a Deployment envelope.
+// runtimeId, resourceType}. Translate to a Deployment envelope.
 // ----------------------------------------------------------------------------
 
 export interface DeployServerBody {
   serverName: string
   version: string
   env?: Record<string, string>
-  providerId: string
+  runtimeId: string
   resourceType?: "agent" | "mcp" | string
 }
 
@@ -357,7 +357,7 @@ export async function deployServer(opts: { throwOnError?: true; body: DeployServ
       metadata: { namespace, name: deploymentName, version: opts.body.version },
       spec: {
         targetRef: { kind, name, namespace, version: opts.body.version },
-        providerRef: { kind: "Provider", name: opts.body.providerId, namespace },
+        runtimeRef: { kind: "Runtime", name: opts.body.runtimeId, namespace },
         env: opts.body.env,
       },
     },
