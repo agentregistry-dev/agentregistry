@@ -25,8 +25,8 @@ var providerRows = []modelProviderRow{
 	{"gemini", "Google Gemini"},
 	{"openai", "OpenAI"},
 	{"anthropic", "Anthropic Claude"},
-	{"bedrock", "AWS Bedrock"},
-	{"agentgateway", "Local agentgateway proxy"},
+	{"bedrock", "Amazon Bedrock"},
+	{"agentgateway", "Routes LLM calls through a local agentgateway proxy"},
 }
 
 // runModelProviderPicker presents the closed enum of supported providers
