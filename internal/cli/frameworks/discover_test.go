@@ -37,13 +37,13 @@ func TestDiscoverFromDir_SkipsNonDirs(t *testing.T) {
 	writeFile(t, filepath.Join(root, "stray.txt"), "not a framework")
 	frameworks, err := DiscoverFromDir(root)
 	require.NoError(t, err)
-	assert.Len(t, frameworks, 0)
+	assert.Empty(t, frameworks)
 }
 
 func TestDiscoverFromDir_MissingRoot(t *testing.T) {
 	frameworks, err := DiscoverFromDir("/nonexistent")
 	require.NoError(t, err)
-	assert.Len(t, frameworks, 0)
+	assert.Empty(t, frameworks)
 }
 
 func TestUserFrameworksDir_RespectsXDG(t *testing.T) {

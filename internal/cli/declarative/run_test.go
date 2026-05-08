@@ -95,4 +95,3 @@ func TestRun_DoesNotRequireAgentYAML(t *testing.T) {
 	cmd.SetArgs([]string{"--dry-run"})
 	require.NoError(t, cmd.Execute())
 }
-

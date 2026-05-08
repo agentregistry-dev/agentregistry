@@ -3,7 +3,7 @@ package frameworks
 import (
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -18,11 +18,11 @@ var errPickCancelled = errors.New("framework selection cancelled")
 // one candidate, for consistency and discoverability (per design).
 func runPickerTUI(candidates []*Framework) (*Framework, error) {
 	sorted := append([]*Framework(nil), candidates...)
-	sort.Slice(sorted, func(i, j int) bool {
-		if sorted[i].Framework != sorted[j].Framework {
-			return sorted[i].Framework < sorted[j].Framework
+	slices.SortFunc(sorted, func(a, b *Framework) int {
+		if a.Framework != b.Framework {
+			return strings.Compare(a.Framework, b.Framework)
 		}
-		return sorted[i].Language < sorted[j].Language
+		return strings.Compare(a.Language, b.Language)
 	})
 
 	m := pickerModel{

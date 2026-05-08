@@ -190,10 +190,10 @@ func buildViaFramework(out io.Writer, projectDir string, obj v1alpha1.Object, fl
 
 	image := resolveImage(flagImage, specImage, obj.GetMetadata().Name)
 	vars := map[string]any{
-		"Image":      image,
-		"ProjectDir": projectDir,
-		"Platform":   platform,
-		"FrameworkDir":  p.SourceDir,
+		"Image":        image,
+		"ProjectDir":   projectDir,
+		"Platform":     platform,
+		"FrameworkDir": p.SourceDir,
 	}
 
 	rendered, err := frameworks.RenderArgs(p.Build.Command, vars)

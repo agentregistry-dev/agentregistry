@@ -3,7 +3,7 @@ package frameworks
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -46,7 +46,7 @@ func listFrameworks(frameworks []*Framework) string {
 	for _, p := range frameworks {
 		parts = append(parts, fmt.Sprintf("%s/%s", p.Framework, p.Language))
 	}
-	sort.Strings(parts)
+	slices.Sort(parts)
 	return strings.Join(parts, ", ")
 }
 

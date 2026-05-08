@@ -2,7 +2,8 @@ package frameworks
 
 import (
 	"fmt"
-	"sort"
+	"slices"
+	"strings"
 )
 
 // Source identifies where a framework was loaded from. Earlier sources win on conflict.
@@ -29,7 +30,7 @@ func (s Source) String() string {
 
 type registryEntry struct {
 	framework *Framework
-	source Source
+	source    Source
 }
 
 type registryConflict struct {
@@ -104,7 +105,9 @@ func (r *Registry) ListByType(typ string) []*Framework {
 			out = append(out, e.framework)
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	slices.SortFunc(out, func(a, b *Framework) int {
+		return strings.Compare(a.Name, b.Name)
+	})
 	return out
 }
 

@@ -119,7 +119,6 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 
-		mcp.SetAPIClient(c)
 		cli.SetAPIClient(c)
 		declarative.SetAPIClient(c)
 		return nil

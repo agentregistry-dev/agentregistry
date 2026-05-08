@@ -32,10 +32,6 @@ components:
       properties:
         description:
           type: string
-        framework:
-          type: string
-        language:
-          type: string
         mcpServers:
           items:
             $ref: '#/components/schemas/ResourceRef'
@@ -46,18 +42,6 @@ components:
           type: string
         modelProvider:
           type: string
-        prompts:
-          items:
-            $ref: '#/components/schemas/ResourceRef'
-          type:
-          - array
-          - "null"
-        skills:
-          items:
-            $ref: '#/components/schemas/ResourceRef'
-          type:
-          - array
-          - "null"
         source:
           $ref: '#/components/schemas/AgentSource'
         title:

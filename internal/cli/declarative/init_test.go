@@ -50,7 +50,7 @@ func TestInitAgent_WritesYAMLAndArctlAndDotEnv(t *testing.T) {
 
 	// .env written directly (no cp step needed)
 	_, err = os.Stat(filepath.Join(projectDir, ".env"))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// .env should be gitignored so secrets aren't accidentally committed
 	gi, err := os.ReadFile(filepath.Join(projectDir, ".gitignore"))
@@ -76,7 +76,7 @@ func TestInitAgent_OutputDirFlag(t *testing.T) {
 
 	// Project lands under --output-dir, not cwd.
 	_, err = os.Stat(filepath.Join(out, "outdirbot", "arctl.yaml"))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	_, err = os.Stat(filepath.Join(tmp, "outdirbot"))
 	assert.True(t, os.IsNotExist(err), "project should NOT be in cwd")
 }

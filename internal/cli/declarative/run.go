@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -109,7 +110,7 @@ func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun, wat
 	// to mcp — arctl.yaml carries the framework but not the kind, so the
 	// framework's own `type` field is what tells us which lifecycle to run.
 	var (
-		p          *frameworks.Framework
+		p             *frameworks.Framework
 		frameworkType string
 	)
 	for _, t := range []string{"agent", "mcp"} {
@@ -150,10 +151,10 @@ func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun, wat
 	}
 
 	vars := map[string]any{
-		"ProjectDir": projectDir,
-		"FrameworkDir":  p.SourceDir,
-		"Image":      image,
-		"Port":       port,
+		"ProjectDir":   projectDir,
+		"FrameworkDir": p.SourceDir,
+		"Image":        image,
+		"Port":         port,
 	}
 
 	rendered, err := frameworks.RenderArgs(p.Run.Command, vars)
@@ -298,13 +299,7 @@ func runWithChat(out io.Writer, projectDir, agentName, frameworkName string, ren
 // unchanged — that's the sign of a non-compose framework runtime that we
 // don't yet know how to drive in chat mode.
 func composeUpDetachedArgs(rendered []string) []string {
-	hasBuild := false
-	for _, tok := range rendered {
-		if tok == "--build" {
-			hasBuild = true
-			break
-		}
-	}
+	hasBuild := slices.Contains(rendered, "--build")
 	out := make([]string, 0, len(rendered)+2)
 	replaced := false
 	for _, tok := range rendered {
@@ -328,7 +323,7 @@ func composeUpDetachedArgs(rendered []string) []string {
 // found.
 func composeDownArgs(rendered []string, projectDir string) []string {
 	args := []string{"docker", "compose"}
-	for i := 0; i < len(rendered); i++ {
+	for i := range rendered {
 		if rendered[i] == "-f" && i+1 < len(rendered) {
 			args = append(args, "-f", rendered[i+1])
 			return append(args, "down")
@@ -341,9 +336,9 @@ func composeDownArgs(rendered []string, projectDir string) []string {
 // mergeEnv flattens dotEnv into KEY=VALUE strings and appends overrides.
 //
 // Precedence (matches dotenv defaults across Node/Python/Ruby/Go ecosystems):
-//   1. --env CLI flags (highest, in `overrides`)
-//   2. Process env (the user's shell export)
-//   3. .env file (project default)
+//  1. --env CLI flags (highest, in `overrides`)
+//  2. Process env (the user's shell export)
+//  3. .env file (project default)
 //
 // Empty .env values are skipped — they are unfilled placeholders written
 // by `arctl init`. .env entries whose key already has a non-empty value

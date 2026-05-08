@@ -9,11 +9,6 @@ import (
 	"strings"
 )
 
-// errOverwriteDeclined is internal-only; the public surfaces print a
-// friendly line and return nil so "user said no" exits 0 (it's not an
-// error — they actively chose to keep their project).
-var errOverwriteDeclined = errors.New("aborted; nothing was changed")
-
 // errOverwriteHandled is a sentinel that means "we already handled this
 // (user declined); caller should exit cleanly without further work."
 // Cobra commands convert this to nil so the exit code is 0.

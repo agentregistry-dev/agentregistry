@@ -47,7 +47,7 @@ func promptText(label, defaultValue string, validate validator, out io.Writer, i
 // promptTextFallback is the non-TTY path: bufio + parenthetical default.
 func promptTextFallback(label, defaultValue string, validate validator, out io.Writer, in io.Reader) (string, error) {
 	r := bufio.NewReader(in)
-	for attempt := 0; attempt < 3; attempt++ {
+	for range 3 {
 		if defaultValue != "" {
 			fmt.Fprintf(out, "? %s (%s): ", label, defaultValue)
 		} else {

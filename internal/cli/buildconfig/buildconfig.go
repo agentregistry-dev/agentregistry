@@ -101,7 +101,7 @@ func EnsureGitignored(projectDir, entry string) error {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	for _, line := range strings.Split(existing, "\n") {
+	for line := range strings.SplitSeq(existing, "\n") {
 		if strings.TrimSpace(line) == entry {
 			return nil
 		}

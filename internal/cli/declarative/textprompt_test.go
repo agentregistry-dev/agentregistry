@@ -65,5 +65,5 @@ func TestPromptText_ValidatorThreeStrikesAborts(t *testing.T) {
 	v := func(s string) error { return errors.New("never ok") }
 	_, err := promptText("Name", "", v, out, strings.NewReader("a\nb\nc\nd\n"))
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, errTooManyAttempts))
+	assert.ErrorIs(t, err, errTooManyAttempts)
 }

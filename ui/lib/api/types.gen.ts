@@ -19,13 +19,9 @@ export type AgentSource = {
 
 export type AgentSpec = {
     description?: string;
-    framework?: string;
-    language?: string;
     mcpServers?: Array<ResourceRef> | null;
     modelName?: string;
     modelProvider?: string;
-    prompts?: Array<ResourceRef> | null;
-    skills?: Array<ResourceRef> | null;
     source?: AgentSource;
     title?: string;
 };

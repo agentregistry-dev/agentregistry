@@ -89,19 +89,9 @@ func ExecForeground(cmd Command, workDir string, vars map[string]any, extraEnv [
 
 func resolveArgv(cmd Command, vars map[string]any) ([]string, error) {
 	if cmd.Script != "" {
-		path := cmd.Script
-		if !filepath.IsAbs(path) {
-			// Script paths are relative to the framework's SourceDir, which the
-			// caller must include as FrameworkDir in vars.
-			raw, ok := vars["FrameworkDir"]
-			if !ok {
-				return nil, fmt.Errorf("framework script %q resolution requires FrameworkDir var", path)
-			}
-			frameworkDir, ok := raw.(string)
-			if !ok {
-				return nil, fmt.Errorf("framework script %q: FrameworkDir var must be string", path)
-			}
-			path = filepath.Join(frameworkDir, path)
+		path, err := resolveScriptPath(cmd.Script, vars)
+		if err != nil {
+			return nil, err
 		}
 		return []string{path}, nil
 	}
@@ -109,6 +99,23 @@ func resolveArgv(cmd Command, vars map[string]any) ([]string, error) {
 		return nil, fmt.Errorf("framework command is empty")
 	}
 	return RenderArgs(cmd.Command, vars)
+}
+
+// resolveScriptPath returns an absolute path for a framework script reference.
+// Relative paths are resolved against the FrameworkDir var supplied by the caller.
+func resolveScriptPath(script string, vars map[string]any) (string, error) {
+	if filepath.IsAbs(script) {
+		return script, nil
+	}
+	raw, ok := vars["FrameworkDir"]
+	if !ok {
+		return "", fmt.Errorf("framework script %q resolution requires FrameworkDir var", script)
+	}
+	frameworkDir, ok := raw.(string)
+	if !ok {
+		return "", fmt.Errorf("framework script %q: FrameworkDir var must be string", script)
+	}
+	return filepath.Join(frameworkDir, script), nil
 }
 
 func envFromVars(vars map[string]any) []string {
