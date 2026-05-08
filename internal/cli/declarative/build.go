@@ -39,9 +39,9 @@ func newBuildCmd() *cobra.Command {
 		Short: "Build a Docker image for a declarative resource project",
 		Long: `Build the Docker image for a project created with 'arctl init'.
 
-Reads arctl.yaml in the project directory to determine the (framework, language)
-framework and dispatches to that framework's build command. Image tag is taken from the
-declarative YAML's spec (or --image override).
+Reads arctl.yaml in the project directory to look up the matching framework
+by (framework, language) and dispatches to its build command. Image tag is taken
+from the declarative YAML's spec (or --image override).
 
 Supported kinds: Agent, MCPServer
 
@@ -162,9 +162,9 @@ func mcpSpecPackageIdentifier(obj v1alpha1.Object) string {
 	return ""
 }
 
-// buildViaFramework dispatches the build to the (framework, language) framework
-// declared in arctl.yaml. The framework's Build command is exec'd in the project
-// directory with template vars {Image, ProjectDir, Platform, FrameworkDir}.
+// buildViaFramework dispatches the build to the framework matching
+// (framework, language) in arctl.yaml. The framework's Build command is exec'd
+// in the project directory with template vars {Image, ProjectDir, Platform, FrameworkDir}.
 func buildViaFramework(out io.Writer, projectDir string, obj v1alpha1.Object, flagImage, platform string, push bool) error {
 	cfg, err := buildconfig.Read(projectDir)
 	if err != nil {

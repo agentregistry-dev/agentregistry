@@ -48,9 +48,9 @@ keep the old foreground-only behavior.
 For MCPServer kinds chat does not apply; the framework's run command runs
 in the foreground until interrupted.
 
-Reads arctl.yaml to determine the (framework, language) framework and
-dispatches to that framework's run command. Loads .env (if present) and
-validates that the framework's required env vars are set.`,
+Reads arctl.yaml to look up the matching framework by (framework, language)
+and dispatches to its run command. Loads .env (if present) and validates
+that the framework's required env vars are set.`,
 		Example: `  arctl run
   arctl run ./myagent
   arctl run -e FOO=bar -e BAZ=qux

@@ -14,10 +14,9 @@ func TestCommandTree(t *testing.T) {
 	// Top-level commands on the current (declarative) CLI surface.
 	// Phase 12 deleted the legacy `arctl agent run`, `arctl mcp run` and
 	// `arctl skill pull` subcommands; run/pull are now top-level. The
-	// agent/mcp/skill parents are kept as namespacing for the remaining
-	// surface (mcp add-tool today; nothing else).
+	// `agent` and `skill` parents had no surviving subcommands and were
+	// removed; `mcp` remains as namespacing for `mcp add-tool`.
 	expectedTopLevel := []string{
-		"agent",
 		"apply",
 		"build",
 		"configure",
@@ -28,7 +27,6 @@ func TestCommandTree(t *testing.T) {
 		"mcp",
 		"pull",
 		"run",
-		"skill",
 		"version",
 	}
 
@@ -50,12 +48,8 @@ func TestCommandTree(t *testing.T) {
 
 	// Verify subcommand counts for parent commands with surviving subcommands.
 	expectedSubcmdCounts := map[string]int{
-		// no surviving subcommands
-		"agent": 0,
 		// add-tool
 		"mcp": 1,
-		// no surviving subcommands
-		"skill": 0,
 	}
 
 	for _, cmd := range root.Commands() {
@@ -101,9 +95,7 @@ func TestHiddenCommands(t *testing.T) {
 		name       string
 		wantHidden bool
 	}{
-		{"agent", false},
 		{"mcp", false},
-		{"skill", false},
 		{"version", false},
 	}
 
