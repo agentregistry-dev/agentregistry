@@ -245,30 +245,19 @@ func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun
 		}
 	}
 
+	var err error
 	if store.IsTaggedArtifact() {
-		var err error
-		if meta.Tag == "" {
-			err = store.DeleteAllTags(ctx, meta.Namespace, meta.Name)
-		} else {
-			err = store.Delete(ctx, meta.Namespace, meta.Name, meta.Tag)
-			res.Tag = meta.Tag
-		}
-		if err != nil {
-			return failResult(res, &applyError{
-				Stage:    stageDelete,
-				Err:      err,
-				NotFound: errors.Is(err, pkgdb.ErrNotFound),
-			})
-		}
+		err = deleteTaggedBatch(ctx, store, meta, &res)
 	} else {
 		// Mutable object path: the Store owns the private row identity.
-		if err := store.Delete(ctx, meta.Namespace, meta.Name, store.MutableObjectIdentity()); err != nil {
-			return failResult(res, &applyError{
-				Stage:    stageDelete,
-				Err:      err,
-				NotFound: errors.Is(err, pkgdb.ErrNotFound),
-			})
-		}
+		err = store.Delete(ctx, meta.Namespace, meta.Name, store.MutableObjectIdentity())
+	}
+	if err != nil {
+		return failResult(res, &applyError{
+			Stage:    stageDelete,
+			Err:      err,
+			NotFound: errors.Is(err, pkgdb.ErrNotFound),
+		})
 	}
 
 	if hook := cfg.PostDeletes[obj.GetKind()]; hook != nil {
@@ -278,6 +267,14 @@ func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun
 	}
 	res.Status = arv0.ApplyStatusDeleted
 	return res
+}
+
+func deleteTaggedBatch(ctx context.Context, store *v1alpha1store.Store, meta v1alpha1.ObjectMeta, res *arv0.ApplyResult) error {
+	if meta.Tag == "" {
+		return store.DeleteAllTags(ctx, meta.Namespace, meta.Name)
+	}
+	res.Tag = meta.Tag
+	return store.Delete(ctx, meta.Namespace, meta.Name, meta.Tag)
 }
 
 // resolveBatchTarget looks up the per-kind store and applies the
