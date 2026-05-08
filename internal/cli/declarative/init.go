@@ -357,7 +357,7 @@ func defaultInitModelName(provider string) string {
 	case "openai", "agentgateway":
 		return "gpt-4o-mini"
 	case "anthropic":
-		return "claude-3-5-sonnet"
+		return "claude-sonnet-4-6"
 	case "gemini":
 		return "gemini-2.5-flash"
 	case "bedrock":
