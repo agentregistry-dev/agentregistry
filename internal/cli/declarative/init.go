@@ -24,6 +24,44 @@ import (
 // Tests should use NewInitCmd() for a fresh instance.
 var InitCmd = newInitCmd()
 
+// resolveInitProjectPath returns the absolute path the new project should
+// occupy. If `--output-dir` is set on the parent init command, the project
+// goes under that directory; otherwise it falls under cwd. Either way the
+// path is made absolute so downstream code doesn't have to re-resolve.
+func resolveInitProjectPath(cmd *cobra.Command, projectName string) (string, error) {
+	outputDir, err := cmd.Flags().GetString("output-dir")
+	if err != nil {
+		return "", fmt.Errorf("reading output-dir flag: %w", err)
+	}
+	if outputDir != "" {
+		base, err := filepath.Abs(outputDir)
+		if err != nil {
+			return "", fmt.Errorf("resolving output-dir: %w", err)
+		}
+		return filepath.Join(base, projectName), nil
+	}
+	abs, err := filepath.Abs(projectName)
+	if err != nil {
+		return "", fmt.Errorf("resolving project dir: %w", err)
+	}
+	return abs, nil
+}
+
+// displayPath returns the path the user sees in narration. When projectDir
+// is under cwd, returns a short relative path (`outdirbot`). When elsewhere
+// (e.g. via --output-dir to a sibling tree), returns the absolute path.
+func displayPath(projectDir string) string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return projectDir
+	}
+	rel, err := filepath.Rel(cwd, projectDir)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return projectDir
+	}
+	return rel
+}
+
 // NewInitCmd returns a new "init" cobra command.
 func NewInitCmd() *cobra.Command {
 	return newInitCmd()
@@ -71,6 +109,7 @@ Examples:
 			return fmt.Errorf("internal: no subcommand for kind %q", kind)
 		},
 	}
+	cmd.PersistentFlags().String("output-dir", "", "Parent directory under which the project is created. Defaults to the current directory.")
 	cmd.AddCommand(newInitAgentCmd())
 	cmd.AddCommand(newInitMCPCmd())
 	cmd.AddCommand(newInitSkillCmd())
@@ -134,11 +173,10 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 				name = typed
 			}
 
-			cwd, err := os.Getwd()
+			projectDir, err := resolveInitProjectPath(cmd, name)
 			if err != nil {
 				return err
 			}
-			projectDir := filepath.Join(cwd, name)
 
 			if err := handleExistingProjectDir(projectDir, cmd.OutOrStdout(), cmd.InOrStdin()); err != nil {
 				if errors.Is(err, errOverwriteHandled) {
@@ -249,15 +287,16 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 				return fmt.Errorf("write agent.yaml: %w", err)
 			}
 
+			disp := displayPath(projectDir)
 			fmt.Fprintf(cmd.OutOrStdout(), "✓ Created agent: %s (framework: %s, language: %s)\n", name, plugin.Framework, plugin.Language)
 			fmt.Fprintf(cmd.OutOrStdout(), "\n🚀 Next steps:\n")
 			fmt.Fprintf(cmd.OutOrStdout(), "  1. Run locally (optional):\n")
-			fmt.Fprintf(cmd.OutOrStdout(), "     arctl run %s\n", name)
+			fmt.Fprintf(cmd.OutOrStdout(), "     arctl run %s\n", disp)
 			if len(required) > 0 {
 				fmt.Fprintf(cmd.OutOrStdout(), "     (export %s in your shell or set it in .env first)\n", strings.Join(required, ", "))
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "  2. Publish to the registry:\n")
-			fmt.Fprintf(cmd.OutOrStdout(), "     arctl apply -f %s/agent.yaml\n", name)
+			fmt.Fprintf(cmd.OutOrStdout(), "     arctl apply -f %s/agent.yaml\n", disp)
 			return nil
 		},
 	}
@@ -529,11 +568,10 @@ Picks a framework + language interactively (or via --framework / --language).`,
 			}
 			projectName := parts[1]
 
-			cwd, err := os.Getwd()
+			projectDir, err := resolveInitProjectPath(cmd, projectName)
 			if err != nil {
 				return err
 			}
-			projectDir := filepath.Join(cwd, projectName)
 
 			if err := handleExistingProjectDir(projectDir, cmd.OutOrStdout(), cmd.InOrStdin()); err != nil {
 				if errors.Is(err, errOverwriteHandled) {
@@ -587,15 +625,16 @@ Picks a framework + language interactively (or via --framework / --language).`,
 				return err
 			}
 
+			disp := displayPath(projectDir)
 			fmt.Fprintf(cmd.OutOrStdout(), "✓ Created MCP server: %s (framework: %s, language: %s, port: %d)\n", full, plugin.Framework, plugin.Language, initPort)
 			fmt.Fprintf(cmd.OutOrStdout(), "\n🚀 Next steps:\n")
 			fmt.Fprintf(cmd.OutOrStdout(), "  1. Run locally (optional):\n")
-			fmt.Fprintf(cmd.OutOrStdout(), "     arctl run %s\n", projectName)
+			fmt.Fprintf(cmd.OutOrStdout(), "     arctl run %s\n", disp)
 			if len(plugin.Env.Required) > 0 {
 				fmt.Fprintf(cmd.OutOrStdout(), "     (export %s in your shell or set it in .env first)\n", strings.Join(plugin.Env.Required, ", "))
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "  2. Publish to the registry:\n")
-			fmt.Fprintf(cmd.OutOrStdout(), "     arctl apply -f %s/mcp.yaml\n", projectName)
+			fmt.Fprintf(cmd.OutOrStdout(), "     arctl apply -f %s/mcp.yaml\n", disp)
 			return nil
 		},
 	}
@@ -715,11 +754,10 @@ The generated skill.yaml can be applied directly:
 				return fmt.Errorf("invalid skill name: %w", err)
 			}
 
-			cwd, err := os.Getwd()
+			projectDir, err := resolveInitProjectPath(cmd, name)
 			if err != nil {
-				return fmt.Errorf("getting working directory: %w", err)
+				return err
 			}
-			projectDir := filepath.Join(cwd, name)
 
 			if err := handleExistingProjectDir(projectDir, cmd.OutOrStdout(), cmd.InOrStdin()); err != nil {
 				if errors.Is(err, errOverwriteHandled) {
@@ -740,11 +778,12 @@ The generated skill.yaml can be applied directly:
 				return fmt.Errorf("writing declarative skill.yaml: %w", err)
 			}
 
+			disp := displayPath(projectDir)
 			fmt.Fprintf(cmd.OutOrStdout(), "✓ Created skill: %s\n", name)
 			fmt.Fprintf(cmd.OutOrStdout(), "\n🚀 Next steps:\n")
-			fmt.Fprintf(cmd.OutOrStdout(), "  1. Edit %s/SKILL.md and references/ (optional)\n", name)
+			fmt.Fprintf(cmd.OutOrStdout(), "  1. Edit %s/SKILL.md and references/ (optional)\n", disp)
 			fmt.Fprintf(cmd.OutOrStdout(), "  2. Publish to the registry:\n")
-			fmt.Fprintf(cmd.OutOrStdout(), "     arctl apply -f %s/skill.yaml\n", name)
+			fmt.Fprintf(cmd.OutOrStdout(), "     arctl apply -f %s/skill.yaml\n", disp)
 			return nil
 		},
 	}
@@ -833,12 +872,22 @@ The generated file can be applied directly:
 				}
 			}
 
-			cwd, err := os.Getwd()
+			// Prompts are a single YAML file — no project directory. --output-dir
+			// (when set) becomes the parent dir for the file.
+			outputDir, err := cmd.Flags().GetString("output-dir")
 			if err != nil {
-				return fmt.Errorf("getting working directory: %w", err)
+				return fmt.Errorf("reading output-dir flag: %w", err)
 			}
-			// Prompts are just a YAML file — no project directory needed.
-			outPath := filepath.Join(cwd, name+".yaml")
+			parent, err := filepath.Abs(outputDir) // "" → cwd
+			if err != nil {
+				return fmt.Errorf("resolving output-dir: %w", err)
+			}
+			if outputDir != "" {
+				if err := os.MkdirAll(parent, 0o755); err != nil {
+					return fmt.Errorf("creating output dir: %w", err)
+				}
+			}
+			outPath := filepath.Join(parent, name+".yaml")
 
 			if err := handleExistingFile(outPath, cmd.OutOrStdout(), cmd.InOrStdin()); err != nil {
 				if errors.Is(err, errOverwriteHandled) {
@@ -851,11 +900,12 @@ The generated file can be applied directly:
 				return fmt.Errorf("writing declarative prompt.yaml: %w", err)
 			}
 
+			disp := displayPath(outPath)
 			fmt.Fprintf(cmd.OutOrStdout(), "✓ Created prompt: %s\n", name)
 			fmt.Fprintf(cmd.OutOrStdout(), "\n🚀 Next steps:\n")
-			fmt.Fprintf(cmd.OutOrStdout(), "  1. Edit %s.yaml (optional)\n", name)
+			fmt.Fprintf(cmd.OutOrStdout(), "  1. Edit %s (optional)\n", disp)
 			fmt.Fprintf(cmd.OutOrStdout(), "  2. Publish to the registry:\n")
-			fmt.Fprintf(cmd.OutOrStdout(), "     arctl apply -f %s.yaml\n", name)
+			fmt.Fprintf(cmd.OutOrStdout(), "     arctl apply -f %s\n", disp)
 			return nil
 		},
 	}

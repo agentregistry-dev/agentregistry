@@ -58,6 +58,29 @@ func TestInitAgent_WritesYAMLAndArctlAndDotEnv(t *testing.T) {
 	assert.Contains(t, string(gi), ".env")
 }
 
+func TestInitAgent_OutputDirFlag(t *testing.T) {
+	tmp := t.TempDir()
+	out := t.TempDir() // separate from cwd
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmp))
+	defer func() { _ = os.Chdir(origDir) }()
+
+	cmd := declarative.NewInitCmd()
+	cmd.SetArgs([]string{
+		"agent", "outdirbot",
+		"--framework", "adk", "--language", "python",
+		"--output-dir", out,
+	})
+	require.NoError(t, cmd.Execute())
+
+	// Project lands under --output-dir, not cwd.
+	_, err = os.Stat(filepath.Join(out, "outdirbot", "arctl.yaml"))
+	assert.NoError(t, err)
+	_, err = os.Stat(filepath.Join(tmp, "outdirbot"))
+	assert.True(t, os.IsNotExist(err), "project should NOT be in cwd")
+}
+
 func TestInitAgent_ModelProviderFlagFlowsToArctlYAML(t *testing.T) {
 	tmp := t.TempDir()
 	origDir, err := os.Getwd()
