@@ -424,7 +424,9 @@ func defaultInitModelName(provider string) string {
 	case "gemini":
 		return "gemini-2.5-flash"
 	case "bedrock":
-		return "anthropic.claude-haiku-4-5-20251001-v1:0"
+		// `us.` prefix selects AWS's US cross-region inference profile,
+		// which is required for Claude 4.x family on Bedrock in many regions.
+		return "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 	case "azureopenai":
 		return "your-deployment-name"
 	default:
