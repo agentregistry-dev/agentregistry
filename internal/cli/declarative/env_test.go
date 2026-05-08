@@ -24,12 +24,12 @@ func TestLoadDotEnv_Missing_ReturnsEmpty(t *testing.T) {
 	assert.Empty(t, env)
 }
 
-func TestValidateRequiredEnv_AllPresent(t *testing.T) {
-	require.NoError(t, ValidateRequiredEnv(map[string]string{"FOO": "bar"}, []string{"FOO"}))
+func TestValidateRequiredEnv_AllPresentInDotEnv(t *testing.T) {
+	require.NoError(t, ValidateRequiredEnv(map[string]string{"FOO": "bar"}, nil, []string{"FOO"}))
 }
 
 func TestValidateRequiredEnv_MissingErrs(t *testing.T) {
-	err := ValidateRequiredEnv(map[string]string{}, []string{"FOO", "BAR"})
+	err := ValidateRequiredEnv(map[string]string{}, nil, []string{"FOO", "BAR"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "FOO")
 	assert.Contains(t, err.Error(), "BAR")
@@ -39,7 +39,20 @@ func TestValidateRequiredEnv_MissingErrs(t *testing.T) {
 // as missing — the user hasn't filled it in yet.
 func TestValidateRequiredEnv_EmptyValueErrs(t *testing.T) {
 	t.Setenv("FOO", "") // ensure process env doesn't satisfy it
-	err := ValidateRequiredEnv(map[string]string{"FOO": ""}, []string{"FOO"})
+	err := ValidateRequiredEnv(map[string]string{"FOO": ""}, nil, []string{"FOO"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "FOO")
+}
+
+// --env CLI flags satisfy the requirement just like .env or process env.
+func TestValidateRequiredEnv_ExtraEnvSatisfies(t *testing.T) {
+	t.Setenv("FOO", "")
+	require.NoError(t, ValidateRequiredEnv(map[string]string{}, []string{"FOO=bar"}, []string{"FOO"}))
+}
+
+// Empty --env value (e.g. `--env FOO=`) does NOT satisfy.
+func TestValidateRequiredEnv_ExtraEnvEmptyValueDoesNotSatisfy(t *testing.T) {
+	t.Setenv("FOO", "")
+	err := ValidateRequiredEnv(map[string]string{}, []string{"FOO="}, []string{"FOO"})
+	require.Error(t, err)
 }

@@ -23,15 +23,30 @@ func LoadDotEnv(projectDir string) (map[string]string, error) {
 	return godotenv.Parse(strings.NewReader(string(data)))
 }
 
-// ValidateRequiredEnv returns an error listing every required key not in env.
-// A required key is also considered satisfied if it is set in the process env.
-// Empty string values are treated as missing — `arctl init` writes a `.env`
-// with empty placeholders, and an unfilled placeholder is not a satisfied var.
-func ValidateRequiredEnv(env map[string]string, required []string) error {
+// ValidateRequiredEnv returns an error listing every required key not in any
+// of: .env file map, --env CLI overrides, or the process env. Empty string
+// values are treated as missing — `arctl init` writes a `.env` with empty
+// placeholders, and an unfilled placeholder is not a satisfied var.
+//
+// extraEnv is the slice of `KEY=VALUE` strings from `--env`/`-e` flags, the
+// same shape mergeEnv consumes.
+func ValidateRequiredEnv(env map[string]string, extraEnv, required []string) error {
+	overrides := map[string]string{}
+	for _, kv := range extraEnv {
+		k, v, ok := strings.Cut(kv, "=")
+		if !ok {
+			continue
+		}
+		overrides[k] = v
+	}
+
 	var missing []string
 	for _, k := range required {
+		if v, ok := overrides[k]; ok && v != "" {
+			continue // --env satisfies it
+		}
 		if v, ok := env[k]; ok && v != "" {
-			continue
+			continue // .env satisfies it
 		}
 		if v := os.Getenv(k); v != "" {
 			continue // process env satisfies it

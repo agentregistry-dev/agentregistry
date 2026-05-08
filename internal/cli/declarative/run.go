@@ -137,7 +137,7 @@ func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun, wat
 	if pluginType == "agent" && cfg.ModelProvider != "" {
 		required = append(required, ModelProviderEnvKeys(cfg.ModelProvider)...)
 	}
-	if err := ValidateRequiredEnv(dotEnv, required); err != nil {
+	if err := ValidateRequiredEnv(dotEnv, extraEnv, required); err != nil {
 		return err
 	}
 
