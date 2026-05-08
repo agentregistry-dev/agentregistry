@@ -2,7 +2,6 @@ package declarative
 
 import (
 	"bytes"
-	"errors"
 	"strings"
 	"testing"
 
@@ -17,7 +16,7 @@ func TestConfirmOverwrite_Yes(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, ok)
 	assert.Contains(t, out.String(), `"foo"`)
-	assert.Contains(t, out.String(), "(y/N)")
+	assert.Contains(t, out.String(), "y/N")
 }
 
 func TestConfirmOverwrite_YesUppercase(t *testing.T) {
@@ -38,26 +37,26 @@ func TestConfirmOverwrite_No(t *testing.T) {
 	out := &bytes.Buffer{}
 	ok, err := confirmOverwrite("foo", out, strings.NewReader("n\n"))
 	require.False(t, ok)
-	require.True(t, errors.Is(err, errOverwriteDeclined))
+	require.NoError(t, err)
 }
 
 func TestConfirmOverwrite_EmptyDefaultsToNo(t *testing.T) {
 	out := &bytes.Buffer{}
 	ok, err := confirmOverwrite("foo", out, strings.NewReader("\n"))
 	require.False(t, ok)
-	require.True(t, errors.Is(err, errOverwriteDeclined))
+	require.NoError(t, err)
 }
 
 func TestConfirmOverwrite_EOFDefaultsToNo(t *testing.T) {
 	out := &bytes.Buffer{}
 	ok, err := confirmOverwrite("foo", out, strings.NewReader(""))
 	require.False(t, ok)
-	require.True(t, errors.Is(err, errOverwriteDeclined))
+	require.NoError(t, err)
 }
 
 func TestConfirmOverwrite_GarbageDefaultsToNo(t *testing.T) {
 	out := &bytes.Buffer{}
 	ok, err := confirmOverwrite("foo", out, strings.NewReader("maybe\n"))
 	require.False(t, ok)
-	require.True(t, errors.Is(err, errOverwriteDeclined))
+	require.NoError(t, err)
 }

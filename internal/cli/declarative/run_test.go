@@ -11,6 +11,7 @@ import (
 )
 
 func TestRun_DispatchesToPluginRunCommand(t *testing.T) {
+	t.Setenv("GOOGLE_API_KEY", "fake")
 	tmp := t.TempDir()
 	cwd, err := os.Getwd()
 	require.NoError(t, err)
@@ -37,6 +38,7 @@ func TestRun_DispatchesToPluginRunCommand(t *testing.T) {
 // the detached compose-up, readiness wait, chat launch, and teardown without
 // shelling out to docker.
 func TestRun_ChatDefault_DryRunNarratesFullLifecycle(t *testing.T) {
+	t.Setenv("GOOGLE_API_KEY", "fake")
 	tmp := t.TempDir()
 	cwd, err := os.Getwd()
 	require.NoError(t, err)
@@ -74,6 +76,7 @@ func TestRun_ChatDefault_DryRunNarratesFullLifecycle(t *testing.T) {
 // reads arctl.yaml only. Removing agent.yaml from a freshly inited project
 // must not break run.
 func TestRun_DoesNotRequireAgentYAML(t *testing.T) {
+	t.Setenv("GOOGLE_API_KEY", "fake")
 	tmp := t.TempDir()
 	cwd, err := os.Getwd()
 	require.NoError(t, err)

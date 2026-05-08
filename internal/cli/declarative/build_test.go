@@ -158,6 +158,7 @@ spec:
 // exercised here (no docker daemon assumption); the contract under test is that
 // init's output is what build expects to consume.
 func TestBuild_DispatchesViaPlugin(t *testing.T) {
+	t.Setenv("GOOGLE_API_KEY", "fake")
 	tmp := t.TempDir()
 	cwd, err := os.Getwd()
 	require.NoError(t, err)

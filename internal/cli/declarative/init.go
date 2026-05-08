@@ -141,6 +141,9 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 			projectDir := filepath.Join(cwd, name)
 
 			if err := handleExistingProjectDir(projectDir, cmd.OutOrStdout(), cmd.InOrStdin()); err != nil {
+				if errors.Is(err, errOverwriteHandled) {
+					return nil
+				}
 				return err
 			}
 
@@ -529,6 +532,9 @@ Picks a framework + language interactively (or via --framework / --language).`,
 			projectDir := filepath.Join(cwd, projectName)
 
 			if err := handleExistingProjectDir(projectDir, cmd.OutOrStdout(), cmd.InOrStdin()); err != nil {
+				if errors.Is(err, errOverwriteHandled) {
+					return nil
+				}
 				return err
 			}
 
@@ -708,6 +714,9 @@ The generated skill.yaml can be applied directly:
 			projectDir := filepath.Join(cwd, name)
 
 			if err := handleExistingProjectDir(projectDir, cmd.OutOrStdout(), cmd.InOrStdin()); err != nil {
+				if errors.Is(err, errOverwriteHandled) {
+					return nil
+				}
 				return err
 			}
 
@@ -824,6 +833,9 @@ The generated file can be applied directly:
 			outPath := filepath.Join(cwd, name+".yaml")
 
 			if err := handleExistingFile(outPath, cmd.OutOrStdout(), cmd.InOrStdin()); err != nil {
+				if errors.Is(err, errOverwriteHandled) {
+					return nil
+				}
 				return err
 			}
 
