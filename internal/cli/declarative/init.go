@@ -109,6 +109,10 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 			}
 			projectDir := filepath.Join(cwd, name)
 
+			if err := handleExistingProjectDir(projectDir, cmd.OutOrStdout(), cmd.InOrStdin()); err != nil {
+				return err
+			}
+
 			r, err := loadPluginRegistry(projectDir)
 			if err != nil {
 				return err
@@ -456,6 +460,10 @@ Picks a framework + language interactively (or via --framework / --language).`,
 			}
 			projectDir := filepath.Join(cwd, projectName)
 
+			if err := handleExistingProjectDir(projectDir, cmd.OutOrStdout(), cmd.InOrStdin()); err != nil {
+				return err
+			}
+
 			r, err := loadPluginRegistry(projectDir)
 			if err != nil {
 				return err
@@ -620,6 +628,10 @@ The generated skill.yaml can be applied directly:
 			}
 			projectDir := filepath.Join(cwd, name)
 
+			if err := handleExistingProjectDir(projectDir, cmd.OutOrStdout(), cmd.InOrStdin()); err != nil {
+				return err
+			}
+
 			if err := skilltemplates.NewGenerator().GenerateProject(skilltemplates.ProjectConfig{
 				ProjectName: name,
 				Directory:   projectDir,
@@ -711,6 +723,10 @@ The generated file can be applied directly:
 			}
 			// Prompts are just a YAML file — no project directory needed.
 			outPath := filepath.Join(cwd, name+".yaml")
+
+			if err := handleExistingFile(outPath, cmd.OutOrStdout(), cmd.InOrStdin()); err != nil {
+				return err
+			}
 
 			if err := writeDeclarativePromptYAML(outPath, name, initVersion, initDescription, initContent); err != nil {
 				return fmt.Errorf("writing declarative prompt.yaml: %w", err)
