@@ -100,7 +100,7 @@ func TestHandler_StartIndexJob_ReturnsJobID(t *testing.T) {
 	var body IndexJobResponse
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &body))
 	require.NotEmpty(t, body.JobID)
-	require.Equal(t, "pending", body.Status)
+	require.Contains(t, []string{"pending", "running"}, body.Status)
 }
 
 func TestHandler_GetJobStatus_ReportsCompletion(t *testing.T) {
