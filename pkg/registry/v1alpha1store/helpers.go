@@ -31,13 +31,14 @@ type rowScanner interface {
 //
 // Column order must match:
 //
-//	namespace, name, tag-or-version, generation, labels, annotations, spec, status,
+//	namespace, name, tag-or-version, uid, generation, labels, annotations, spec, status,
 //	deletion_timestamp, finalizers, created_at, updated_at
 func scanRow(row rowScanner, tagged bool) (*v1alpha1.RawObject, error) {
 	var (
 		namespace         string
 		name              string
 		identity          string
+		uid               string
 		generation        int64
 		labelsJSON        []byte
 		annotationsJSON   []byte
@@ -50,7 +51,7 @@ func scanRow(row rowScanner, tagged bool) (*v1alpha1.RawObject, error) {
 	)
 
 	if err := row.Scan(
-		&namespace, &name, &identity, &generation,
+		&namespace, &name, &identity, &uid, &generation,
 		&labelsJSON, &annotationsJSON, &specJSON, &statusJSON,
 		&deletionTimestamp, &finalizersJSON,
 		&createdAt, &updatedAt,
@@ -63,7 +64,7 @@ func scanRow(row rowScanner, tagged bool) (*v1alpha1.RawObject, error) {
 
 	return decodeRow(
 		tagged,
-		namespace, name, identity, generation,
+		namespace, name, identity, uid, generation,
 		labelsJSON, annotationsJSON, specJSON, statusJSON,
 		deletionTimestamp, finalizersJSON, createdAt, updatedAt,
 	)
@@ -78,7 +79,7 @@ func scanRow(row rowScanner, tagged bool) (*v1alpha1.RawObject, error) {
 // populates Metadata.Version for Provider/Deployment compatibility.
 func decodeRow(
 	tagged bool,
-	namespace, name, identity string,
+	namespace, name, identity, uid string,
 	generation int64,
 	labelsJSON, annotationsJSON, specJSON, statusJSON []byte,
 	deletionTimestamp *time.Time,
@@ -106,6 +107,7 @@ func decodeRow(
 	meta := v1alpha1.ObjectMeta{
 		Namespace:         namespace,
 		Name:              name,
+		UID:               uid,
 		Labels:            labels,
 		Annotations:       annotations,
 		Generation:        generation,

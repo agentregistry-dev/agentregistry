@@ -19,6 +19,7 @@ type applyOpts struct {
 	Resolver          v1alpha1.ResolverFunc
 	RegistryValidator v1alpha1.RegistryValidatorFunc
 	PostUpsert        func(ctx context.Context, obj v1alpha1.Object) error
+	InitialFinalizers func(obj v1alpha1.Object) []string
 	CreateStager      func(ctx context.Context, in CreateStagerInput) (CreateStagerResult, error)
 }
 
@@ -36,6 +37,8 @@ type upsertResult struct {
 	// Staged means a CreateStager handled the object outside production
 	// storage and no production upsert was attempted.
 	Staged bool
+	// UID is the server-managed row identity after production upsert.
+	UID string
 }
 
 // CreateStagerInput is handed to an optional enterprise create-approval
@@ -113,6 +116,12 @@ func applyCore(
 	meta := obj.GetMetadata()
 	kind := obj.GetKind()
 
+	mutated := false
+	if meta.UID != "" {
+		meta.UID = ""
+		mutated = true
+	}
+
 	// Stamp the legacy Deployment store's required string version
 	// (only the deployment Store reads meta.Version anymore — see
 	// v1alpha1.MetadataVersionDefaulter). Without this, a YAML manifest
@@ -121,8 +130,15 @@ func applyCore(
 	// still 3-tuple. Stamping here keeps the path uniform: every kind
 	// reaches Upsert with a non-empty meta.Version where the legacy
 	// path needs it.
+	beforeVersion := meta.Version
 	v1alpha1.DefaultMetadataVersionIfMissing(obj)
 	meta = obj.GetMetadata()
+	if meta.Version != beforeVersion {
+		mutated = true
+	}
+	if mutated {
+		obj.SetMetadata(*meta)
+	}
 
 	if opts.Authorize != nil {
 		if err := opts.Authorize(ctx, AuthorizeInput{
@@ -171,7 +187,11 @@ func applyCore(
 		}
 	}
 
-	up, err := store.Upsert(ctx, obj)
+	upsertOpts := v1alpha1store.UpsertOpts{}
+	if opts.InitialFinalizers != nil {
+		upsertOpts.InitialFinalizers = opts.InitialFinalizers(obj)
+	}
+	up, err := store.Upsert(ctx, obj, upsertOpts)
 	if err != nil {
 		return upsertResult{}, &applyError{
 			Stage:       stageUpsert,
@@ -184,9 +204,13 @@ func applyCore(
 		Tag:        up.Tag,
 		Version:    up.Version,
 		Generation: up.Generation,
+		UID:        up.UID,
 	}
 
 	if opts.PostUpsert != nil {
+		meta.Generation = up.Generation
+		meta.UID = up.UID
+		obj.SetMetadata(*meta)
 		if err := opts.PostUpsert(ctx, obj); err != nil {
 			return res, &applyError{Stage: stagePostUpsert, Err: err}
 		}

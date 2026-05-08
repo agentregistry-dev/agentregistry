@@ -112,6 +112,10 @@ type Config struct {
 	// and writes the terminal Removed condition.
 	PostDelete func(ctx context.Context, obj v1alpha1.Object) error
 
+	// InitialFinalizers, when non-nil, seeds finalizers atomically on create.
+	// Updates preserve existing finalizers.
+	InitialFinalizers func(obj v1alpha1.Object) []string
+
 	// CreateStager optionally intercepts validated create attempts before
 	// production Upsert. Enterprise builds use this for approval staging.
 	// nil preserves the normal OSS direct-write behavior.
@@ -538,6 +542,7 @@ func registerApplyLegacy[T v1alpha1.Object](api huma.API, cfg Config, newObj fun
 			Resolver:          cfg.Resolver,
 			RegistryValidator: cfg.RegistryValidator,
 			PostUpsert:        cfg.PostUpsert,
+			InitialFinalizers: cfg.InitialFinalizers,
 			CreateStager:      cfg.CreateStager,
 		}, false); ae != nil {
 			return nil, mapApplyErrorToHuma(ae, kind, ns, name, version)

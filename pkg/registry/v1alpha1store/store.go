@@ -149,10 +149,19 @@ type UpsertResult struct {
 	Tag string
 	// Version is populated only for the legacy Provider/Deployment path.
 	Version int
+	// UID is the server-managed row identity after the write.
+	UID string
 	// Generation is the server-managed row generation after the call.
 	Generation int64
 	// Outcome categorises what the call did. See UpsertOutcome constants.
 	Outcome UpsertOutcome
+}
+
+// UpsertOpts customizes create-time behavior for Store.Upsert.
+type UpsertOpts struct {
+	// InitialFinalizers is applied only on the create path for legacy mutable
+	// stores. Updates preserve existing finalizers.
+	InitialFinalizers []string
 }
 
 // ErrInvalidCursor reports that a list pagination cursor could not be parsed.
@@ -242,7 +251,7 @@ type listCursor struct {
 //
 // Upsert rejects obj.Metadata.Version on the tagged-artifact path; metadata.tag
 // is the identity. For the legacy path, metadata.version is the row identity.
-func (s *Store) Upsert(ctx context.Context, obj v1alpha1.Object) (UpsertResult, error) {
+func (s *Store) Upsert(ctx context.Context, obj v1alpha1.Object, opts ...UpsertOpts) (UpsertResult, error) {
 	if obj == nil {
 		return UpsertResult{}, errors.New("v1alpha1 store: nil object")
 	}
@@ -256,6 +265,11 @@ func (s *Store) Upsert(ctx context.Context, obj v1alpha1.Object) (UpsertResult, 
 	}
 	if len(specJSON) == 0 {
 		return UpsertResult{}, errors.New("v1alpha1 store: spec is required")
+	}
+
+	var opt UpsertOpts
+	if len(opts) > 0 {
+		opt = opts[0]
 	}
 
 	if !s.legacy {
@@ -272,7 +286,7 @@ func (s *Store) Upsert(ctx context.Context, obj v1alpha1.Object) (UpsertResult, 
 		}
 		return res, nil
 	}
-	return s.upsertLegacy(ctx, meta, specJSON)
+	return s.upsertLegacy(ctx, meta, specJSON, opt)
 }
 
 // kindFor returns the canonical Kind name to attach to audit events.
@@ -326,15 +340,16 @@ func (s *Store) upsertTagged(ctx context.Context, meta *v1alpha1.ObjectMeta, spe
 			existingHash       string
 			existingDeletionTS pgtype.Timestamptz
 			existingGeneration int64
+			existingUID        string
 			found              bool
 		)
 		err := tx.QueryRow(ctx,
 			fmt.Sprintf(`
-					SELECT content_hash, deletion_timestamp, generation
-					FROM %s
-					WHERE namespace=$1 AND name=$2 AND tag=$3
-					FOR UPDATE`, s.table),
-			meta.Namespace, meta.Name, meta.Tag).Scan(&existingHash, &existingDeletionTS, &existingGeneration)
+						SELECT content_hash, deletion_timestamp, generation, uid::text
+						FROM %s
+						WHERE namespace=$1 AND name=$2 AND tag=$3
+						FOR UPDATE`, s.table),
+			meta.Namespace, meta.Name, meta.Tag).Scan(&existingHash, &existingDeletionTS, &existingGeneration, &existingUID)
 		switch {
 		case err == nil:
 			found = true
@@ -351,32 +366,36 @@ func (s *Store) upsertTagged(ctx context.Context, meta *v1alpha1.ObjectMeta, spe
 		}
 
 		if !found {
-			if _, err := tx.Exec(ctx,
+			var uid string
+			if err := tx.QueryRow(ctx,
 				fmt.Sprintf(`
-					INSERT INTO %s (namespace, name, tag, labels, annotations, spec, content_hash)
-					VALUES ($1, $2, $3, $4, $5, $6, $7)`, s.table),
-				meta.Namespace, meta.Name, meta.Tag, incomingLabelsJSON, incomingAnnotationsJSON, []byte(specJSON), incomingHash); err != nil {
+						INSERT INTO %s (namespace, name, tag, labels, annotations, spec, content_hash)
+						VALUES ($1, $2, $3, $4, $5, $6, $7)
+						RETURNING uid::text`, s.table),
+				meta.Namespace, meta.Name, meta.Tag, incomingLabelsJSON, incomingAnnotationsJSON, []byte(specJSON), incomingHash).Scan(&uid); err != nil {
 				return fmt.Errorf("insert tag: %w", err)
 			}
-			result = UpsertResult{Tag: meta.Tag, Generation: 1, Outcome: UpsertCreated}
+			result = UpsertResult{Tag: meta.Tag, UID: uid, Generation: 1, Outcome: UpsertCreated}
 			return nil
 		}
 
 		if incomingHash == existingHash {
-			result = UpsertResult{Tag: meta.Tag, Generation: existingGeneration, Outcome: UpsertNoOp}
+			result = UpsertResult{Tag: meta.Tag, UID: existingUID, Generation: existingGeneration, Outcome: UpsertNoOp}
 			return nil
 		}
 
 		nextGeneration := existingGeneration + 1
-		if _, err := tx.Exec(ctx,
+		var uid string
+		if err := tx.QueryRow(ctx,
 			fmt.Sprintf(`
-					UPDATE %s
-					SET labels=$4, annotations=$5, spec=$6, content_hash=$7, generation=$8, status='{}'::jsonb, deletion_timestamp=NULL
-					WHERE namespace=$1 AND name=$2 AND tag=$3`, s.table),
-			meta.Namespace, meta.Name, meta.Tag, incomingLabelsJSON, incomingAnnotationsJSON, []byte(specJSON), incomingHash, nextGeneration); err != nil {
+						UPDATE %s
+						SET labels=$4, annotations=$5, spec=$6, content_hash=$7, generation=$8, status='{}'::jsonb, deletion_timestamp=NULL
+						WHERE namespace=$1 AND name=$2 AND tag=$3
+						RETURNING uid::text`, s.table),
+			meta.Namespace, meta.Name, meta.Tag, incomingLabelsJSON, incomingAnnotationsJSON, []byte(specJSON), incomingHash, nextGeneration).Scan(&uid); err != nil {
 			return fmt.Errorf("replace tag: %w", err)
 		}
-		result = UpsertResult{Tag: meta.Tag, Generation: nextGeneration, Outcome: UpsertReplaced}
+		result = UpsertResult{Tag: meta.Tag, UID: uid, Generation: nextGeneration, Outcome: UpsertReplaced}
 		return nil
 	})
 	if err != nil {
@@ -391,7 +410,7 @@ func (s *Store) upsertTagged(ctx context.Context, meta *v1alpha1.ObjectMeta, spe
 // (no generation today since the new outcome surface doesn't model
 // it), a differing spec replaces the row, and labels/annotations
 // always replace.
-func (s *Store) upsertLegacy(ctx context.Context, meta *v1alpha1.ObjectMeta, specJSON json.RawMessage) (UpsertResult, error) {
+func (s *Store) upsertLegacy(ctx context.Context, meta *v1alpha1.ObjectMeta, specJSON json.RawMessage, opts UpsertOpts) (UpsertResult, error) {
 	if meta.Version == "" {
 		return UpsertResult{}, errors.New("v1alpha1 store: version is required for legacy-mode kinds")
 	}
@@ -413,15 +432,16 @@ func (s *Store) upsertLegacy(ctx context.Context, meta *v1alpha1.ObjectMeta, spe
 			oldAnnotations []byte
 			oldLabels      []byte
 			oldDeletion    pgtype.Timestamptz
+			oldUID         string
 			found          bool
 		)
 		err := tx.QueryRow(ctx,
 			fmt.Sprintf(`
-				SELECT spec, generation, finalizers, annotations, labels, deletion_timestamp
-				FROM %s
-				WHERE namespace=$1 AND name=$2 AND version=$3
-				FOR UPDATE`, s.table),
-			meta.Namespace, meta.Name, meta.Version).Scan(&oldSpec, &oldGen, &oldFinalizers, &oldAnnotations, &oldLabels, &oldDeletion)
+					SELECT spec, generation, finalizers, annotations, labels, deletion_timestamp, uid::text
+					FROM %s
+					WHERE namespace=$1 AND name=$2 AND version=$3
+					FOR UPDATE`, s.table),
+			meta.Namespace, meta.Name, meta.Version).Scan(&oldSpec, &oldGen, &oldFinalizers, &oldAnnotations, &oldLabels, &oldDeletion, &oldUID)
 		switch {
 		case err == nil:
 			found = true
@@ -457,23 +477,36 @@ func (s *Store) upsertLegacy(ctx context.Context, meta *v1alpha1.ObjectMeta, spe
 
 		finalizersJSON := oldFinalizers
 		if !found {
-			finalizersJSON = []byte("[]")
+			if len(opts.InitialFinalizers) > 0 {
+				b, err := json.Marshal(opts.InitialFinalizers)
+				if err != nil {
+					return fmt.Errorf("marshal initial finalizers: %w", err)
+				}
+				finalizersJSON = b
+			} else {
+				finalizersJSON = []byte("[]")
+			}
 		}
 
-		_, err = tx.Exec(ctx,
+		var uid string
+		err = tx.QueryRow(ctx,
 			fmt.Sprintf(`
-				INSERT INTO %s (namespace, name, version, generation, labels, annotations, spec, finalizers)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+					INSERT INTO %s (namespace, name, version, generation, labels, annotations, spec, finalizers)
+					VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 				ON CONFLICT (namespace, name, version) DO UPDATE
 				SET generation  = EXCLUDED.generation,
-				    labels      = EXCLUDED.labels,
-				    annotations = EXCLUDED.annotations,
-				    spec        = EXCLUDED.spec,
-				    finalizers  = EXCLUDED.finalizers
-			`, s.table),
-			meta.Namespace, meta.Name, meta.Version, newGen, labelsJSON, annotationsJSON, []byte(specJSON), finalizersJSON)
+					    labels      = EXCLUDED.labels,
+					    annotations = EXCLUDED.annotations,
+					    spec        = EXCLUDED.spec,
+					    finalizers  = EXCLUDED.finalizers
+					RETURNING uid::text
+				`, s.table),
+			meta.Namespace, meta.Name, meta.Version, newGen, labelsJSON, annotationsJSON, []byte(specJSON), finalizersJSON).Scan(&uid)
 		if err != nil {
 			return fmt.Errorf("upsert row: %w", err)
+		}
+		if uid == "" {
+			uid = oldUID
 		}
 
 		if err := s.recomputeLatestDeployments(ctx, tx, meta.Namespace, meta.Name); err != nil {
@@ -481,7 +514,7 @@ func (s *Store) upsertLegacy(ctx context.Context, meta *v1alpha1.ObjectMeta, spe
 		}
 
 		v, _ := strconv.Atoi(meta.Version)
-		result = UpsertResult{Version: v, Generation: newGen, Outcome: outcome}
+		result = UpsertResult{Version: v, UID: uid, Generation: newGen, Outcome: outcome}
 		return nil
 	})
 	if err != nil {
@@ -1187,10 +1220,10 @@ func (s *Store) recomputeLatestDeployments(ctx context.Context, tx pgx.Tx, names
 // scanRow's column layout stays uniform.
 func (s *Store) selectColumns() string {
 	if !s.legacy {
-		return `namespace, name, tag, generation, labels, annotations, spec, status,
+		return `namespace, name, tag, uid::text, generation, labels, annotations, spec, status,
 		       deletion_timestamp, '[]'::jsonb AS finalizers, created_at, updated_at`
 	}
-	return `namespace, name, version, generation, labels, annotations, spec, status,
+	return `namespace, name, version, uid::text, generation, labels, annotations, spec, status,
 		       deletion_timestamp, finalizers, created_at, updated_at`
 }
 

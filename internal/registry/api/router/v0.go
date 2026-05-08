@@ -240,6 +240,7 @@ func registerKindRoutes(
 		Authorizers:       perKind.Authorizers,
 		PostUpserts:       perKind.PostUpserts,
 		PostDeletes:       perKind.PostDeletes,
+		InitialFinalizers: perKind.InitialFinalizers,
 		CreateStager:      createStager,
 	})
 	return types.ResourceRouteContext{
@@ -248,5 +249,6 @@ func registerKindRoutes(
 		RegistryValidator: registryValidator,
 		PostUpserts:       perKind.PostUpserts,
 		PostDeletes:       perKind.PostDeletes,
+		InitialFinalizers: perKind.InitialFinalizers,
 	}
 }

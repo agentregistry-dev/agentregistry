@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v3"
+	"sigs.k8s.io/yaml"
 )
 
 // writeDeclarativeYAML writes YAML content to a temp file and returns the path.

@@ -21,7 +21,7 @@ const DefaultNamespace = "default"
 // ObjectMeta is the metadata block common to every resource.
 //
 // Namespace, Name, Labels, Annotations, and Tag are user-settable for
-// content-registry kinds. Generation, CreatedAt, UpdatedAt, and
+// content-registry kinds. UID, Generation, CreatedAt, UpdatedAt, and
 // DeletionTimestamp are server-managed. Version remains only for legacy
 // infra/config kinds whose storage still uses the old mutable
 // (namespace, name, version) tuple.
@@ -42,6 +42,13 @@ const DefaultNamespace = "default"
 // apply and is stripped from responses when it equals "default" so the
 // multi-tenant surface stays hidden until we deliberately enable it.
 //
+// UID is a server-assigned UUID stamped at row creation and never mutated
+// afterwards — same contract as Kubernetes' metadata.uid. Public identity may
+// be reused across delete + recreate cycles; UID is not, so it disambiguates
+// "the row I observed earlier" from "a fresh row at the same identity". The
+// apply pipeline strips caller-supplied values before the store sees them, and
+// Postgres assigns the value via a column default.
+//
 // Labels vs Annotations (Kubernetes convention):
 //   - Labels are queryable: short key/value pairs, GIN-indexed, used for
 //     filtering + selection. Enforce the K8s label format.
@@ -58,6 +65,7 @@ const DefaultNamespace = "default"
 type ObjectMeta struct {
 	Namespace   string            `json:"namespace,omitempty" yaml:"namespace,omitempty"`
 	Name        string            `json:"name" yaml:"name"`
+	UID         string            `json:"uid,omitempty" yaml:"uid,omitempty"`
 	Labels      map[string]string `json:"labels,omitempty" yaml:"labels,omitempty"`
 	Annotations map[string]string `json:"annotations,omitempty" yaml:"annotations,omitempty"`
 

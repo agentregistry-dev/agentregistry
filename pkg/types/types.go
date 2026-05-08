@@ -98,6 +98,7 @@ type ResourceRouteContext struct {
 	RegistryValidator v1alpha1.RegistryValidatorFunc
 	PostUpserts       map[string]func(context.Context, v1alpha1.Object) error
 	PostDeletes       map[string]func(context.Context, v1alpha1.Object) error
+	InitialFinalizers map[string]func(v1alpha1.Object) []string
 }
 
 // Auditor receives audit events for state changes that the OSS layer
@@ -272,6 +273,10 @@ type AppOptions struct {
 	// behavior is a no-op; enterprise builds plug in a real audit sink.
 	// If nil, NoopAuditor is used.
 	Auditor Auditor
+
+	// InitialFinalizers seeds finalizers atomically on create for kinds
+	// whose external teardown must be protected from a concurrent delete.
+	InitialFinalizers map[string]func(v1alpha1.Object) []string
 }
 
 // Server represents the HTTP server and provides access to the Huma API

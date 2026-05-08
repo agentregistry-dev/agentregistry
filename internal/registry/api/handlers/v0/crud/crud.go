@@ -46,6 +46,9 @@ type PerKindHooks struct {
 	// PostDeletes run after a successful DELETE; see
 	// resource.Config.PostDelete. Mirrors PostUpserts above.
 	PostDeletes map[string]func(ctx context.Context, obj v1alpha1.Object) error
+	// InitialFinalizers seeds create-time finalizers per kind; see
+	// resource.Config.InitialFinalizers.
+	InitialFinalizers map[string]func(obj v1alpha1.Object) []string
 	// CreateStager optionally intercepts validated creates before the
 	// row reaches production storage. Enterprise approval mode wires this.
 	CreateStager func(ctx context.Context, in resource.CreateStagerInput) (resource.CreateStagerResult, error)
@@ -86,6 +89,7 @@ func Register(
 			ListFilter:        perKind.ListFilters[kind],
 			PostUpsert:        perKind.PostUpserts[kind],
 			PostDelete:        perKind.PostDeletes[kind],
+			InitialFinalizers: perKind.InitialFinalizers[kind],
 			CreateStager:      perKind.CreateStager,
 		}, true
 	}

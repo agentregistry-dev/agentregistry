@@ -15,7 +15,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/daemon"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
-	"gopkg.in/yaml.v3"
+	"sigs.k8s.io/yaml"
 )
 
 const (

@@ -61,6 +61,9 @@ type ApplyConfig struct {
 	// state.
 	PostDeletes map[string]func(ctx context.Context, obj v1alpha1.Object) error
 
+	// InitialFinalizers mirrors resource.Config.InitialFinalizers per kind.
+	InitialFinalizers map[string]func(obj v1alpha1.Object) []string
+
 	// CreateStager optionally intercepts validated create attempts before
 	// production Upsert. Enterprise builds use this to stage non-admin
 	// creates for approval while leaving OSS behavior unchanged.
@@ -171,6 +174,7 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 		Resolver:          cfg.Resolver,
 		RegistryValidator: cfg.RegistryValidator,
 		PostUpsert:        cfg.PostUpserts[obj.GetKind()],
+		InitialFinalizers: cfg.InitialFinalizers[obj.GetKind()],
 		CreateStager:      cfg.CreateStager,
 	}, dryRun)
 	if ae != nil {
