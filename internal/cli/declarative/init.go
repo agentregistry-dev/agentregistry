@@ -95,12 +95,23 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 		Example: `  arctl init agent myagent
   arctl init agent myagent --framework adk --language python
   arctl init agent myagent --local-mcp ../my-mcp`,
-		Args:         cobra.ExactArgs(1),
+		Args:         cobra.MaximumNArgs(1),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			name := args[0]
-			if err := validators.ValidateAgentName(name); err != nil {
-				return err
+			var name string
+			if len(args) == 1 {
+				name = args[0]
+				if err := validators.ValidateAgentName(name); err != nil {
+					return err
+				}
+			} else {
+				typed, err := promptText("Project name", "myagent",
+					func(s string) error { return validators.ValidateAgentName(s) },
+					cmd.OutOrStdout(), cmd.InOrStdin())
+				if err != nil {
+					return err
+				}
+				name = typed
 			}
 
 			cwd, err := os.Getwd()
@@ -462,10 +473,27 @@ NAME must be in namespace/name format (registry requirement).
 Picks a framework + language interactively (or via --framework / --language).`,
 		Example: `  arctl init mcp acme/my-mcp
   arctl init mcp acme/my-mcp --framework fastmcp --language python`,
-		Args:         cobra.ExactArgs(1),
+		Args:         cobra.MaximumNArgs(1),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			full := args[0]
+			var full string
+			if len(args) == 1 {
+				full = args[0]
+			} else {
+				typed, err := promptText("Project name", "myorg/mymcp",
+					func(s string) error {
+						parts := strings.SplitN(s, "/", 2)
+						if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+							return fmt.Errorf("name must be in namespace/name format")
+						}
+						return nil
+					},
+					cmd.OutOrStdout(), cmd.InOrStdin())
+				if err != nil {
+					return err
+				}
+				full = typed
+			}
 			parts := strings.SplitN(full, "/", 2)
 			if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 				return fmt.Errorf("name must be in namespace/name format (got %q)", full)
@@ -631,10 +659,21 @@ The generated skill.yaml can be applied directly:
   arctl apply -f NAME/skill.yaml`,
 		Example: `  arctl init skill my-skill
   arctl init skill my-skill --description "Text summarizer"`,
-		Args:         cobra.ExactArgs(1),
+		Args:         cobra.MaximumNArgs(1),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			name := args[0]
+			var name string
+			if len(args) == 1 {
+				name = args[0]
+			} else {
+				typed, err := promptText("Project name", "myskill",
+					func(s string) error { return validators.ValidateSkillName(s) },
+					cmd.OutOrStdout(), cmd.InOrStdin())
+				if err != nil {
+					return err
+				}
+				name = typed
+			}
 
 			if err := validators.ValidateSkillName(name); err != nil {
 				return fmt.Errorf("invalid skill name: %w", err)
@@ -725,14 +764,34 @@ The generated file can be applied directly:
   arctl apply -f my-prompt.yaml`,
 		Example: `  arctl init prompt my-prompt
   arctl init prompt my-prompt --description "System prompt for summarization"`,
-		Args:         cobra.ExactArgs(1),
+		Args:         cobra.MaximumNArgs(1),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			name := args[0]
+			var name string
+			if len(args) == 1 {
+				name = args[0]
+			} else {
+				typed, err := promptText("Project name", "myprompt",
+					func(s string) error { return validators.ValidateSkillName(s) },
+					cmd.OutOrStdout(), cmd.InOrStdin())
+				if err != nil {
+					return err
+				}
+				name = typed
+			}
 
 			// Prompt names follow the same DB constraint as skill names (^[a-zA-Z0-9_-]+$).
 			if err := validators.ValidateSkillName(name); err != nil {
 				return fmt.Errorf("invalid prompt name: %w", err)
+			}
+
+			// Content is the prompt's payload — prompt for it interactively
+			// when --content not supplied and a TTY is available.
+			if !cmd.Flags().Changed("content") && isatty() {
+				typed, perr := promptText("Content", initContent, nil, cmd.OutOrStdout(), cmd.InOrStdin())
+				if perr == nil {
+					initContent = typed
+				}
 			}
 
 			cwd, err := os.Getwd()
