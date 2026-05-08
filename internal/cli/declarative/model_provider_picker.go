@@ -26,7 +26,7 @@ var providerRows = []modelProviderRow{
 	{"openai", "OpenAI (gpt-*)"},
 	{"anthropic", "Anthropic (Claude)"},
 	{"bedrock", "AWS Bedrock (set AWS_* in your shell)"},
-	{"agentgateway", "Routes through a local agentgateway proxy (default http://host.docker.internal:4000/v1)"},
+	{"agentgateway", "Routes through a local agentgateway proxy"},
 }
 
 // runModelProviderPicker presents the closed enum of supported providers
