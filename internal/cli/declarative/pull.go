@@ -72,8 +72,8 @@ func pullResource(ctx context.Context, typ, name, version, outDir string) error 
 		if err != nil || obj == nil {
 			return fmt.Errorf("fetch agent %q: %w", name, err)
 		}
-		if obj.Spec.Source == nil || obj.Spec.Source.Repository == nil {
-			return fmt.Errorf("agent %q has no source repository", name)
+		if obj.Spec.Source == nil || obj.Spec.Source.Repository == nil || obj.Spec.Source.Repository.URL == "" {
+			return fmt.Errorf("agent %q has no source repository URL set", name)
 		}
 		repoURL = obj.Spec.Source.Repository.URL
 		subfolder = obj.Spec.Source.Repository.Subfolder
@@ -83,8 +83,8 @@ func pullResource(ctx context.Context, typ, name, version, outDir string) error 
 		if err != nil || obj == nil {
 			return fmt.Errorf("fetch mcp %q: %w", name, err)
 		}
-		if obj.Spec.Source == nil || obj.Spec.Source.Repository == nil {
-			return fmt.Errorf("mcp %q has no source repository", name)
+		if obj.Spec.Source == nil || obj.Spec.Source.Repository == nil || obj.Spec.Source.Repository.URL == "" {
+			return fmt.Errorf("mcp %q has no source repository URL set", name)
 		}
 		repoURL = obj.Spec.Source.Repository.URL
 		subfolder = obj.Spec.Source.Repository.Subfolder
@@ -94,8 +94,8 @@ func pullResource(ctx context.Context, typ, name, version, outDir string) error 
 		if err != nil || obj == nil {
 			return fmt.Errorf("fetch skill %q: %w", name, err)
 		}
-		if obj.Spec.Source == nil || obj.Spec.Source.Repository == nil {
-			return fmt.Errorf("skill %q has no source repository", name)
+		if obj.Spec.Source == nil || obj.Spec.Source.Repository == nil || obj.Spec.Source.Repository.URL == "" {
+			return fmt.Errorf("skill %q has no source repository URL set", name)
 		}
 		repoURL = obj.Spec.Source.Repository.URL
 		subfolder = obj.Spec.Source.Repository.Subfolder
