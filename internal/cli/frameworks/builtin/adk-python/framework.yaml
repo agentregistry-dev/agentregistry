@@ -13,4 +13,7 @@ env:
 build:
   command: ["docker", "build", "-t", "{{.Image}}", "{{.ProjectDir}}"]
 run:
-  command: ["docker", "compose", "-f", "{{.ProjectDir}}/docker-compose.yaml", "up"]
+  # `--build` so source/pyproject changes always pick up; docker layer cache
+  # makes the no-op case fast. Chat-mode rewrites this to `up -d --build` for
+  # detached lifecycle (composeUpDetachedArgs).
+  command: ["docker", "compose", "-f", "{{.ProjectDir}}/docker-compose.yaml", "up", "--build"]
