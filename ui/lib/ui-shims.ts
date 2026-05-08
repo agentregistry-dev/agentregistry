@@ -101,14 +101,14 @@ export interface PromptResponse {
 // strips "default" — fall back to "default" so legacy renderers keep
 // composing display IDs the same way.
 function inner<Spec extends object>(
-  meta: { name: string; namespace?: string; version?: string; annotations?: Record<string, string>; createdAt?: string },
+  meta: { name: string; namespace?: string; tag?: string; version?: string; annotations?: Record<string, string>; createdAt?: string },
   spec: Spec,
 ): LegacyInner<Spec> {
   return {
     ...spec,
     name: meta.name,
     namespace: meta.namespace ?? "default",
-    version: meta.version ?? "",
+    version: meta.tag ?? meta.version ?? "",
     publishedAt: meta.createdAt,
     _meta: meta.annotations ?? {},
   } as LegacyInner<Spec>
@@ -210,9 +210,9 @@ export async function listPromptsV0(opts?: LegacyListOpts): Promise<{
 
 // ----------------------------------------------------------------------------
 // Create-function shims. Legacy callers pass a flat `{name: "ns/name", version,
-// description, ...spec}` JSON; the regen'd apply* endpoints take a K8s
-// envelope plus `{namespace, name, version}` in the path. These helpers split
-// `name` into namespace/name, wrap the spec in an envelope, and call apply.
+// description, ...spec}` JSON. Treat that legacy version value as a tag, wrap
+// the spec in a K8s envelope, and apply the document through the shared
+// declarative endpoint.
 // ----------------------------------------------------------------------------
 
 export interface ServerJson extends McpServerSpec {
@@ -283,7 +283,7 @@ export async function createServerV0(opts: LegacyCreateOpts<ServerJson>): Promis
   const envelope: McpServer = {
     apiVersion: "ar.dev/v1alpha1",
     kind: "MCPServer",
-    metadata: { namespace, name, version: opts.body.version },
+    metadata: { namespace, name, tag: opts.body.version },
     spec,
   }
   await applySingleDoc(envelope)
@@ -298,7 +298,7 @@ export async function createSkillV0(opts: LegacyCreateOpts<SkillJson>): Promise<
   const envelope: Skill = {
     apiVersion: "ar.dev/v1alpha1",
     kind: "Skill",
-    metadata: { namespace, name, version: opts.body.version },
+    metadata: { namespace, name, tag: opts.body.version },
     spec,
   }
   await applySingleDoc(envelope)
@@ -313,7 +313,7 @@ export async function createPromptV0(opts: LegacyCreateOpts<PromptJson>): Promis
   const envelope: Prompt = {
     apiVersion: "ar.dev/v1alpha1",
     kind: "Prompt",
-    metadata: { namespace, name, version: opts.body.version },
+    metadata: { namespace, name, tag: opts.body.version },
     spec,
   }
   await applySingleDoc(envelope)
@@ -358,13 +358,13 @@ export async function deployServer(opts: { throwOnError?: true; body: DeployServ
   const deploymentName = `${name}-${kind.toLowerCase()}`
   const { data } = await applyDeploymentRaw({
     throwOnError: true,
-    path: { name: deploymentName, version: opts.body.version }, query: namespace !== "default" ? { namespace } : undefined,
+    path: { name: deploymentName }, query: namespace !== "default" ? { namespace } : undefined,
     body: {
       apiVersion: "ar.dev/v1alpha1",
       kind: "Deployment",
-      metadata: { namespace, name: deploymentName, version: opts.body.version },
+      metadata: { namespace, name: deploymentName },
       spec: {
-        targetRef: { kind, name, namespace, version: opts.body.version },
+        targetRef: { kind, name, namespace, tag: opts.body.version },
         providerRef: { kind: "Provider", name: opts.body.providerId, namespace },
         env: opts.body.env,
       },

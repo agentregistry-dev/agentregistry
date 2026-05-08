@@ -22,34 +22,38 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
+// StoreBehavior names the private persistence behavior used below the single
+// public v1alpha1 API shape.
+type StoreBehavior string
+
+const (
+	// TaggedArtifactStore keys immutable-ish registry artifacts by
+	// namespace/name/tag.
+	TaggedArtifactStore StoreBehavior = "TaggedArtifactStore"
+	// MutableObjectStore keys normal Kubernetes-like objects by namespace/name
+	// in the public API, using a hidden constant identity where old tables
+	// still need one.
+	MutableObjectStore StoreBehavior = "MutableObjectStore"
+)
+
 // Store is the single generic persistence layer for every v1alpha1 kind.
 // One Store instance is bound to one table; callers construct one per kind
 // (v1alpha1.agents, v1alpha1.mcp_servers, etc.).
 //
-// Store has two modes, picked at construction time:
+// Store has two private behaviors, picked at construction time:
 //
-//   - Tagged-artifact mode (the default; produced by NewStore).
+//   - TaggedArtifactStore (the default; produced by NewStore).
 //     Identity is (namespace, name, tag). Users may supply the tag
 //     declaratively; missing tags are filled with the literal "latest".
 //     Re-applying the same tag replaces the prior row atomically when the
 //     content changes. Used for agents, mcp_servers,
 //     remote_mcp_servers, skills, and prompts.
 //
-//   - Legacy-deployment mode (produced by NewDeploymentStore). Identity is
-//     (namespace, name, string version). Rows are mutable; re-applying
-//     the same (namespace, name, version) updates spec in place. Carries
-//     the legacy generation, finalizers, and is_latest_version columns.
-//     Used only for v1alpha1.deployments — Deployment is intentionally
-//     out of scope for the immutable-versioning redesign because it
-//     models lifecycle state ("deploy resource X to provider Y") rather
-//     than an artifact whose history is meaningful to readers.
-//
-// The legacy flag is set ONLY by NewDeploymentStore. The two constructors
-// are mutually exclusive — do not mix tables across modes; do not flip
-// the flag after construction. Adding new kinds means picking
-// tagged-artifact (the default) at registration time; the legacy branch exists
-// only to keep the deployments code path unforked while the rest of the system
-// migrates.
+//   - MutableObjectStore (produced by NewMutableObjectStore). Public
+//     identity is (namespace, name). Existing tables may retain a hidden
+//     constant version column internally, but that detail must not leak into
+//     routes, manifests, refs, or responses. Used for Provider/Deployment and
+//     downstream mutable/security/config kinds such as AccessPolicy.
 //
 // PatchStatus is disjoint from Upsert: it touches only status and
 // updated_at, never spec. Reconcilers use PatchStatus exclusively; apply
@@ -59,11 +63,11 @@ import (
 // to GetLatest/Get/List. GC (PurgeFinalized) removes rows where
 // deletion_timestamp IS NOT NULL AND finalizers = '[]' (deployments only).
 type Store struct {
-	pool    *pgxpool.Pool
-	table   string
-	legacy  bool
-	kind    string
-	auditor types.Auditor
+	pool     *pgxpool.Pool
+	table    string
+	behavior StoreBehavior
+	kind     string
+	auditor  types.Auditor
 }
 
 // StoreOption configures an optional Store behaviour at construction
@@ -97,26 +101,20 @@ func WithKind(kind string) StoreOption {
 // (e.g. "v1alpha1.agents"). The table must exist in the schema; NewStore
 // does not validate it.
 //
-// For the deployments table, use NewDeploymentStore — passing
-// "v1alpha1.deployments" here is a programming error (the row layout
-// differs and the wrong code path will be taken).
+// For mutable object tables, use NewMutableObjectStore.
 func NewStore(pool *pgxpool.Pool, table string, opts ...StoreOption) *Store {
-	s := &Store{pool: pool, table: table, legacy: false, auditor: types.NoopAuditor}
+	s := &Store{pool: pool, table: table, behavior: TaggedArtifactStore, auditor: types.NoopAuditor}
 	for _, opt := range opts {
 		opt(s)
 	}
 	return s
 }
 
-// NewDeploymentStore constructs a legacy-mode Store for the deployments
-// table. The table must exist in the schema; this constructor does not
-// validate it.
-//
-// Deployment is the only kind that opts into the legacy shape today; if
-// a future kind needs the same lifecycle-state semantics, plumb it
-// through here rather than re-introducing a table-name flip.
-func NewDeploymentStore(pool *pgxpool.Pool, table string, opts ...StoreOption) *Store {
-	s := &Store{pool: pool, table: table, legacy: true, auditor: types.NoopAuditor}
+// NewMutableObjectStore constructs a mutable-object Store for tables whose
+// public identity is namespace/name. The table may retain a private identity
+// column internally for compatibility with existing migrations.
+func NewMutableObjectStore(pool *pgxpool.Pool, table string, opts ...StoreOption) *Store {
+	s := &Store{pool: pool, table: table, behavior: MutableObjectStore, auditor: types.NoopAuditor}
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -124,9 +122,15 @@ func NewDeploymentStore(pool *pgxpool.Pool, table string, opts ...StoreOption) *
 }
 
 // IsTaggedArtifact reports whether the Store operates in tagged content mode.
-// Returns false for the legacy Provider/Deployment mode.
+// Returns false for mutable object stores.
 func (s *Store) IsTaggedArtifact() bool {
-	return !s.legacy
+	return s.behavior == TaggedArtifactStore
+}
+
+// IsMutableObject reports whether the Store hides its private row identity
+// behind public namespace/name semantics.
+func (s *Store) IsMutableObject() bool {
+	return s.behavior == MutableObjectStore
 }
 
 // UpsertOutcome categorises what an Upsert call did.
@@ -147,7 +151,8 @@ const (
 type UpsertResult struct {
 	// Tag is the content identity after the call for tagged-artifact tables.
 	Tag string
-	// Version is populated only for the legacy Provider/Deployment path.
+	// Version is populated only for mutable-object stores, where the public
+	// namespace/name identity may still map to a private storage version column.
 	Version int
 	// UID is the server-managed row identity after the write.
 	UID string
@@ -192,8 +197,8 @@ type ListOpts struct {
 	Limit int
 	// Cursor is an opaque pagination token. Empty starts from the beginning.
 	Cursor string
-	// LatestOnly restricts to the literal "latest" tag per (namespace, name).
-	// For the deployments table it consults the legacy is_latest_version flag.
+	// LatestOnly restricts to the literal "latest" tag per (namespace, name),
+	// or the private latest row for mutable-object stores.
 	LatestOnly bool
 	// IncludeTerminating includes rows with deletion_timestamp set. Default
 	// false — callers asking for "alive" rows shouldn't see terminating ones.
@@ -242,15 +247,15 @@ type listCursor struct {
 //   - new (namespace, name, tag) → insert the row
 //   - same tag and same canonical content hash → no-op
 //   - same tag and different content hash → replace the row in place
-//   - The legacy deployments table follows the older
-//     update-in-place semantics: rows are keyed by the caller-supplied
-//     string version and re-applied with the same spec do not bump
-//     anything; differing spec replaces the row.
+//   - Mutable-object tables follow Kubernetes-like update-in-place
+//     semantics behind public namespace/name identity. A hidden storage
+//     identity may exist only to satisfy existing table schemas.
 //
 // Status is never touched by Upsert — use PatchStatus for that.
 //
-// Upsert rejects obj.Metadata.Version on the tagged-artifact path; metadata.tag
-// is the identity. For the legacy path, metadata.version is the row identity.
+// Upsert rejects public metadata.version on tagged artifacts and expects
+// mutable-object callers to have already defaulted the hidden row identity at
+// the API boundary.
 func (s *Store) Upsert(ctx context.Context, obj v1alpha1.Object, opts ...UpsertOpts) (UpsertResult, error) {
 	if obj == nil {
 		return UpsertResult{}, errors.New("v1alpha1 store: nil object")
@@ -272,7 +277,7 @@ func (s *Store) Upsert(ctx context.Context, obj v1alpha1.Object, opts ...UpsertO
 		opt = opts[0]
 	}
 
-	if !s.legacy {
+	if s.behavior == TaggedArtifactStore {
 		res, err := s.upsertTagged(ctx, meta, specJSON)
 		if err != nil {
 			return res, err
@@ -286,7 +291,7 @@ func (s *Store) Upsert(ctx context.Context, obj v1alpha1.Object, opts ...UpsertO
 		}
 		return res, nil
 	}
-	return s.upsertLegacy(ctx, meta, specJSON, opt)
+	return s.upsertMutable(ctx, meta, specJSON, opt)
 }
 
 // kindFor returns the canonical Kind name to attach to audit events.
@@ -404,15 +409,13 @@ func (s *Store) upsertTagged(ctx context.Context, meta *v1alpha1.ObjectMeta, spe
 	return result, nil
 }
 
-// upsertLegacy implements the older string-version, in-place semantics
-// for the legacy tables (deployments, providers). The caller supplies
-// meta.Version explicitly; a re-apply with the same spec is a no-op
-// (no generation today since the new outcome surface doesn't model
-// it), a differing spec replaces the row, and labels/annotations
-// always replace.
-func (s *Store) upsertLegacy(ctx context.Context, meta *v1alpha1.ObjectMeta, specJSON json.RawMessage, opts UpsertOpts) (UpsertResult, error) {
+// upsertMutable implements in-place semantics for mutable-object tables. The
+// public API is namespace/name; meta.Version is a hidden storage identity
+// supplied by the boundary defaulter for tables that still have a version
+// column.
+func (s *Store) upsertMutable(ctx context.Context, meta *v1alpha1.ObjectMeta, specJSON json.RawMessage, opts UpsertOpts) (UpsertResult, error) {
 	if meta.Version == "" {
-		return UpsertResult{}, errors.New("v1alpha1 store: version is required for legacy-mode kinds")
+		return UpsertResult{}, errors.New("v1alpha1 store: hidden storage identity is required for mutable-object kinds")
 	}
 	labelsJSON, err := canonicalJSONMap(meta.Labels)
 	if err != nil {
@@ -509,7 +512,7 @@ func (s *Store) upsertLegacy(ctx context.Context, meta *v1alpha1.ObjectMeta, spe
 			uid = oldUID
 		}
 
-		if err := s.recomputeLatestDeployments(ctx, tx, meta.Namespace, meta.Name); err != nil {
+		if err := s.recomputeLatestMutable(ctx, tx, meta.Namespace, meta.Name); err != nil {
 			return fmt.Errorf("recompute latest: %w", err)
 		}
 
@@ -545,7 +548,7 @@ func (s *Store) ApplyPatch(ctx context.Context, namespace, name, version string,
 	if patch.Status == nil && patch.Annotations == nil && patch.Finalizers == nil {
 		return nil
 	}
-	if patch.Finalizers != nil && !s.legacy {
+	if patch.Finalizers != nil && s.behavior == TaggedArtifactStore {
 		return errors.New("v1alpha1 store: finalizers patching not supported on tagged-artifact tables")
 	}
 	return runInTx(ctx, s.pool, func(tx pgx.Tx) error {
@@ -593,11 +596,11 @@ func (s *Store) ApplyPatch(ctx context.Context, namespace, name, version string,
 }
 
 // loadPatchRow loads the columns ApplyPatch may mutate
-// (status, annotations, and on legacy stores finalizers) and returns
+// (status, annotations, and on mutable-object stores finalizers) and returns
 // pkgdb.ErrNotFound if no row matches. The finalizers payload is empty
-// for non-legacy stores.
+// for tagged-artifact stores.
 func (s *Store) loadPatchRow(ctx context.Context, tx pgx.Tx, namespace, name, version string) (statusJSON, annotationsJSON, finalizersJSON []byte, err error) {
-	if s.legacy {
+	if s.behavior == MutableObjectStore {
 		err = tx.QueryRow(ctx,
 			fmt.Sprintf(`
 				SELECT status, annotations, finalizers FROM %s
@@ -697,17 +700,18 @@ func (s *Store) PatchAnnotations(ctx context.Context, namespace, name, version s
 	return s.ApplyPatch(ctx, namespace, name, version, PatchOpts{Annotations: mutate})
 }
 
-// Get returns a single row by (namespace, name, tag/version), including
+// Get returns a single row by private row identity, including
 // terminating rows. Returns pkgdb.ErrNotFound if missing.
 //
-// identity is a tag for content tables and version for legacy tables.
+// identity is a tag for tagged-artifact stores and the hidden storage identity
+// for mutable-object stores.
 func (s *Store) Get(ctx context.Context, namespace, name, identity string) (*v1alpha1.RawObject, error) {
 	args, err := s.identityArgs(namespace, name, identity)
 	if err != nil {
 		return nil, err
 	}
 	col := "version"
-	if !s.legacy {
+	if s.behavior == TaggedArtifactStore {
 		col = "tag"
 	}
 	row := s.pool.QueryRow(ctx,
@@ -716,16 +720,16 @@ func (s *Store) Get(ctx context.Context, namespace, name, identity string) (*v1a
 			FROM %s
 			WHERE namespace=$1 AND name=$2 AND %s=$3`, s.selectColumns(), s.table, col),
 		args...)
-	return scanRow(row, !s.legacy)
+	return scanRow(row, s.behavior == TaggedArtifactStore)
 }
 
 // GetLatest returns the literal "latest" live tag for (namespace, name) on
-// tagged-artifact tables, or the is_latest_version row on the
-// deployments table. Returns pkgdb.ErrNotFound if no live version exists.
+// tagged-artifact tables, or the current live row for mutable-object stores.
+// Returns pkgdb.ErrNotFound if no live row exists.
 // Terminating rows are excluded.
 func (s *Store) GetLatest(ctx context.Context, namespace, name string) (*v1alpha1.RawObject, error) {
 	var query string
-	if !s.legacy {
+	if s.behavior == TaggedArtifactStore {
 		query = fmt.Sprintf(`
 			SELECT %s
 			FROM %s
@@ -742,34 +746,32 @@ func (s *Store) GetLatest(ctx context.Context, namespace, name string) (*v1alpha
 	return scanRow(row, false)
 }
 
-// Delete removes a single row. For deployments, the legacy soft-delete +
-// finalizer drain dance still applies. For tagged-artifact tables,
-// rows have no finalizers — Delete sets deletion_timestamp directly so
-// reads filtered on deletion_timestamp IS NULL stop returning the row;
-// PurgeFinalized hard-deletes terminating tagged-artifact rows on a
-// separate GC pass. Returns pkgdb.ErrNotFound if the row doesn't exist.
+// Delete removes a single row. Mutable-object stores may use soft-delete plus
+// finalizer drain. Tagged-artifact rows have no finalizers and are hard-deleted
+// immediately so name/tag can be reapplied without waiting for GC. Returns
+// pkgdb.ErrNotFound if the row doesn't exist.
 func (s *Store) Delete(ctx context.Context, namespace, name, identity string) error {
 	args, err := s.identityArgs(namespace, name, identity)
 	if err != nil {
 		return err
 	}
-	if !s.legacy {
-		return s.deleteVersioned(ctx, args)
+	if s.behavior == TaggedArtifactStore {
+		return s.deleteTagged(ctx, args)
 	}
-	return s.deleteLegacy(ctx, args)
+	return s.deleteMutable(ctx, args)
 }
 
 // ListTags returns every non-deleted tag row for (namespace,
 // name), ordered by most recently applied first. Tagged-artifact mode
-// only — the legacy deployments table doesn't model "list every
-// tag of a logical resource" and reports an error.
+// only — mutable-object stores do not model "list every tag of a logical
+// resource" and report an error.
 //
 // Returns an empty slice (no error) when no rows exist for the
 // identity: list semantics differ from the single-row Get path. The
 // HTTP layer surfaces empty results as 200 with `{"items": []}`.
 func (s *Store) ListTags(ctx context.Context, namespace, name string) ([]*v1alpha1.RawObject, error) {
-	if s.legacy {
-		return nil, errors.New("v1alpha1 store: ListTags is not supported on the legacy deployments table")
+	if s.behavior == MutableObjectStore {
+		return nil, errors.New("v1alpha1 store: ListTags is not supported on mutable-object stores")
 	}
 	if namespace == "" || name == "" {
 		return nil, errors.New("v1alpha1 store: namespace and name are required")
@@ -788,7 +790,7 @@ func (s *Store) ListTags(ctx context.Context, namespace, name string) ([]*v1alph
 
 	out := make([]*v1alpha1.RawObject, 0, 4)
 	for rows.Next() {
-		obj, err := scanRow(rows, !s.legacy)
+		obj, err := scanRow(rows, s.behavior == TaggedArtifactStore)
 		if err != nil {
 			return nil, err
 		}
@@ -806,12 +808,12 @@ func (s *Store) ListTags(ctx context.Context, namespace, name string) ([]*v1alph
 // a single tag unless they include metadata.tag. Returns pkgdb.ErrNotFound
 // when no row exists for (namespace, name).
 //
-// Calling on the legacy deployments Store is a programming error; the
-// per-kind Store hands deployment to the single-version Delete path
+// Calling on a mutable-object Store is a programming error; the per-kind Store
+// hands mutable objects to the single-row Delete path
 // instead.
 func (s *Store) DeleteAllTags(ctx context.Context, namespace, name string) error {
-	if s.legacy {
-		return errors.New("v1alpha1 store: DeleteAllTags is not supported on the legacy deployments table")
+	if s.behavior == MutableObjectStore {
+		return errors.New("v1alpha1 store: DeleteAllTags is not supported on mutable-object stores")
 	}
 	if namespace == "" || name == "" {
 		return errors.New("v1alpha1 store: namespace and name are required")
@@ -830,7 +832,7 @@ func (s *Store) DeleteAllTags(ctx context.Context, namespace, name string) error
 	return nil
 }
 
-func (s *Store) deleteVersioned(ctx context.Context, args []any) error {
+func (s *Store) deleteTagged(ctx context.Context, args []any) error {
 	return runInTx(ctx, s.pool, func(tx pgx.Tx) error {
 		var deletionTS pgtype.Timestamptz
 		err := tx.QueryRow(ctx,
@@ -860,7 +862,7 @@ func (s *Store) deleteVersioned(ctx context.Context, args []any) error {
 	})
 }
 
-func (s *Store) deleteLegacy(ctx context.Context, args []any) error {
+func (s *Store) deleteMutable(ctx context.Context, args []any) error {
 	return runInTx(ctx, s.pool, func(tx pgx.Tx) error {
 		var (
 			finalizersRaw []byte
@@ -890,7 +892,7 @@ func (s *Store) deleteLegacy(ctx context.Context, args []any) error {
 				args...); err != nil {
 				return fmt.Errorf("hard delete: %w", err)
 			}
-			return s.recomputeLatestDeployments(ctx, tx, args[0].(string), args[1].(string))
+			return s.recomputeLatestMutable(ctx, tx, args[0].(string), args[1].(string))
 		}
 
 		if deletionTS.Valid {
@@ -903,7 +905,7 @@ func (s *Store) deleteLegacy(ctx context.Context, args []any) error {
 			args...); err != nil {
 			return fmt.Errorf("mark terminating: %w", err)
 		}
-		return s.recomputeLatestDeployments(ctx, tx, args[0].(string), args[1].(string))
+		return s.recomputeLatestMutable(ctx, tx, args[0].(string), args[1].(string))
 	})
 }
 
@@ -926,7 +928,7 @@ func jsonArrayNonEmpty(raw []byte) (bool, error) {
 // Returns the number of rows purged.
 func (s *Store) PurgeFinalized(ctx context.Context) (int64, error) {
 	var query string
-	if !s.legacy {
+	if s.behavior == TaggedArtifactStore {
 		query = fmt.Sprintf(`DELETE FROM %s WHERE deletion_timestamp IS NOT NULL`, s.table)
 	} else {
 		query = fmt.Sprintf(`
@@ -960,7 +962,7 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 		where = append(where, fmt.Sprintf("namespace = $%d", len(args)))
 	}
 	if opts.LatestOnly {
-		if !s.legacy {
+		if s.behavior == TaggedArtifactStore {
 			args = append(args, DefaultTag())
 			where = append(where, fmt.Sprintf("tag = $%d", len(args)))
 		} else {
@@ -1025,7 +1027,7 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 
 	out := make([]*v1alpha1.RawObject, 0, limit)
 	for rows.Next() {
-		obj, err := scanRow(rows, !s.legacy)
+		obj, err := scanRow(rows, s.behavior == TaggedArtifactStore)
 		if err != nil {
 			return nil, "", err
 		}
@@ -1125,7 +1127,7 @@ type FindReferrersOpts struct {
 	// Namespace, when non-empty, restricts results to a single namespace.
 	Namespace string
 	// LatestOnly, when true, restricts to the literal "latest" tag per
-	// (namespace, name), or the legacy latest-version row for deployments.
+	// (namespace, name), or the private latest row for mutable-object stores.
 	LatestOnly bool
 	// IncludeTerminating, when true, keeps rows whose deletion_timestamp
 	// is set. Default (false) excludes them.
@@ -1148,7 +1150,7 @@ func (s *Store) FindReferrers(ctx context.Context, pathJSON json.RawMessage, opt
 		query += fmt.Sprintf(" AND namespace = $%d", len(args))
 	}
 	if opts.LatestOnly {
-		if !s.legacy {
+		if s.behavior == TaggedArtifactStore {
 			args = append(args, DefaultTag())
 			query += fmt.Sprintf(" AND tag = $%d", len(args))
 		} else {
@@ -1165,7 +1167,7 @@ func (s *Store) FindReferrers(ctx context.Context, pathJSON json.RawMessage, opt
 
 	out := make([]*v1alpha1.RawObject, 0, 8)
 	for rows.Next() {
-		obj, err := scanRow(rows, !s.legacy)
+		obj, err := scanRow(rows, s.behavior == TaggedArtifactStore)
 		if err != nil {
 			return nil, err
 		}
@@ -1174,11 +1176,11 @@ func (s *Store) FindReferrers(ctx context.Context, pathJSON json.RawMessage, opt
 	return out, rows.Err()
 }
 
-// recomputeLatestDeployments recomputes is_latest_version for the
-// deployments table only. Tagged-artifact tables have no
-// is_latest_version column — latest is updated_at ordering.
-func (s *Store) recomputeLatestDeployments(ctx context.Context, tx pgx.Tx, namespace, name string) error {
-	if !s.legacy {
+// recomputeLatestMutable recomputes is_latest_version for mutable-object
+// tables. Tagged-artifact tables have no is_latest_version column; latest is
+// the literal tag named by DefaultTag().
+func (s *Store) recomputeLatestMutable(ctx context.Context, tx pgx.Tx, namespace, name string) error {
+	if s.behavior == TaggedArtifactStore {
 		return nil
 	}
 	if _, err := tx.Exec(ctx,
@@ -1188,8 +1190,8 @@ func (s *Store) recomputeLatestDeployments(ctx context.Context, tx pgx.Tx, names
 		namespace, name); err != nil {
 		return fmt.Errorf("clear latest: %w", err)
 	}
-	// Pick the most recently updated non-terminating row; deployments
-	// version is a string and there's no semver convention here.
+	// Pick the most recently updated non-terminating row. The storage
+	// version is private and has no semantic ordering contract.
 	var winner string
 	err := tx.QueryRow(ctx,
 		fmt.Sprintf(`
@@ -1215,11 +1217,11 @@ func (s *Store) recomputeLatestDeployments(ctx context.Context, tx pgx.Tx, names
 }
 
 // selectColumns returns the column list emitted by Get/List/FindReferrers
-// queries. Deployments include legacy generation/finalizers columns;
-// tagged-artifact tables emit synthetic placeholders for them so
-// scanRow's column layout stays uniform.
+// queries. Mutable-object tables include generation/finalizers columns;
+// tagged-artifact tables emit synthetic placeholders for them so scanRow's
+// column layout stays uniform.
 func (s *Store) selectColumns() string {
-	if !s.legacy {
+	if s.behavior == TaggedArtifactStore {
 		return `namespace, name, tag, uid::text, generation, labels, annotations, spec, status,
 		       deletion_timestamp, '[]'::jsonb AS finalizers, created_at, updated_at`
 	}
@@ -1227,8 +1229,8 @@ func (s *Store) selectColumns() string {
 		       deletion_timestamp, finalizers, created_at, updated_at`
 }
 
-// identityArgs converts (ns, name, tag/version) into the bind args used by
-// per-row queries.
+// identityArgs converts (ns, name, private identity) into the bind args used
+// by per-row queries.
 func (s *Store) identityArgs(namespace, name, identity string) ([]any, error) {
 	if identity == "" {
 		return nil, fmt.Errorf("v1alpha1 store: identity is required for table %s", s.table)
@@ -1237,7 +1239,7 @@ func (s *Store) identityArgs(namespace, name, identity string) ([]any, error) {
 }
 
 func (s *Store) identityColumn() string {
-	if !s.legacy {
+	if s.behavior == TaggedArtifactStore {
 		return "tag"
 	}
 	return "version"
@@ -1276,7 +1278,7 @@ func equalJSONMap(existing, incoming []byte) bool {
 }
 
 // equalSpecJSON reports whether two JSON byte slices represent the same
-// canonical spec content. Used by the legacy deployments path to
+// canonical spec content. Used by the mutable-object path to
 // detect spec-no-op apply.
 func equalSpecJSON(existing []byte, incoming json.RawMessage) bool {
 	return SpecHash(existing) == SpecHash(incoming)

@@ -114,7 +114,7 @@ func TestGet_AllVersions_Agent_JSONOutput(t *testing.T) {
 }
 
 // (3) `arctl get deployment NAME --all-versions` errors cleanly because
-// deployments aren't versioned-artifact resources.
+// deployments are mutable namespace/name objects, not taggable artifacts.
 func TestGet_AllVersions_DeploymentRejected(t *testing.T) {
 	declarative.SetAPIClient(client.NewClient("http://127.0.0.1:1", ""))
 	t.Cleanup(func() { declarative.SetAPIClient(nil) })
@@ -128,8 +128,8 @@ func TestGet_AllVersions_DeploymentRejected(t *testing.T) {
 }
 
 // (3b) `arctl get provider NAME --all-versions` errors cleanly — Provider
-// is a legacy single-version-identity kind whose store has no /versions
-// endpoint. Pin the CLI surface so a future typedKind change can't
+// is a mutable namespace/name object whose store has no /tags endpoint.
+// Pin the CLI surface so a future typedKind change can't
 // silently re-expose --all-versions for Provider.
 func TestGet_AllVersions_ProviderRejected(t *testing.T) {
 	declarative.SetAPIClient(client.NewClient("http://127.0.0.1:1", ""))
@@ -157,7 +157,7 @@ func TestGet_AllVersions_RequiresName(t *testing.T) {
 }
 
 // (5) `arctl get all --all-versions` errors — the cross-kind list flow has
-// no notion of "all versions of every name".
+// no notion of "all tags of every name".
 func TestGet_AllVersions_RejectsGetAll(t *testing.T) {
 	cmd := declarative.NewGetCmd()
 	cmd.SetArgs([]string{"all", "--all-versions"})
@@ -212,7 +212,7 @@ func TestDelete_AllVersions_Agent_HitsApplyEndpoint(t *testing.T) {
 	assert.Contains(t, body, "apiVersion: ar.dev/v1alpha1")
 	assert.Contains(t, body, "kind: Agent")
 	assert.Contains(t, body, "name: acme/bot")
-	assert.Contains(t, out.String(), "all versions")
+	assert.Contains(t, out.String(), "all tags")
 }
 
 // (7) `arctl delete deployment NAME --all-versions` errors cleanly.

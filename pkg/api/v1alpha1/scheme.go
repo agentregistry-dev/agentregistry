@@ -145,9 +145,14 @@ func (s *Scheme) Decode(data []byte) (any, error) {
 }
 
 // IsContentRegistryKind reports whether a kind belongs to the tagged
-// content-registry bucket. Infra/config kinds (Provider, Deployment, etc.)
-// keep their legacy shape and accept user-supplied metadata.version.
+// content-registry bucket.
 func IsContentRegistryKind(kind string) bool {
+	return IsTaggedArtifactKind(kind)
+}
+
+// IsTaggedArtifactKind reports whether refs to kind may use tag pinning and
+// whether the private store behavior keys rows by namespace/name/tag.
+func IsTaggedArtifactKind(kind string) bool {
 	switch kind {
 	case KindAgent, KindMCPServer, KindRemoteMCPServer, KindSkill, KindPrompt:
 		return true
@@ -156,14 +161,10 @@ func IsContentRegistryKind(kind string) bool {
 	}
 }
 
-// rejectSystemMetadata fails the decode when a content-registry manifest sets
-// fields that are not part of the tagged declarative contract. Users choose
-// metadata.tag; metadata.version/generation are legacy or server-owned fields.
-//
-// Infra/config kinds (Provider, Deployment, etc.) keep their legacy
-// shape and accept user-supplied metadata.version /
-// metadata.generation, so this rejection only applies to
-// content-registry kinds.
+// rejectSystemMetadata fails the decode when a manifest sets fields that are
+// not part of the public v1alpha1 contract. Users may choose metadata.tag for
+// taggable artifacts; metadata.version and metadata.generation are not public
+// identity fields.
 func rejectSystemMetadata(data []byte) error {
 	var raw struct {
 		Kind     string         `yaml:"kind" json:"kind"`
@@ -173,11 +174,8 @@ func rejectSystemMetadata(data []byte) error {
 		// Defer the real parse error to the typed unmarshal below.
 		return nil
 	}
-	if !IsContentRegistryKind(raw.Kind) {
-		return nil
-	}
 	if _, ok := raw.Metadata["version"]; ok {
-		return errors.New("v1alpha1: content resources use metadata.tag; remove metadata.version from your manifest")
+		return errors.New("v1alpha1: metadata.version is not part of the public v1alpha1 contract; use metadata.tag only for taggable artifacts")
 	}
 	if _, ok := raw.Metadata["generation"]; ok {
 		return errors.New("v1alpha1: metadata.generation is system-managed; remove it from your manifest")

@@ -88,8 +88,8 @@ func runRun(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to resolve agent runtime manifest: %w", err)
 	}
-	version := agentModel.Metadata.Version
-	return runFromManifest(cmd.Context(), resolved, version, nil, envMap)
+	tag := agentModel.Metadata.Tag
+	return runFromManifest(cmd.Context(), resolved, tag, nil, envMap)
 }
 
 // runFromDirectory runs an agent from a local project directory. The on-disk

@@ -116,8 +116,8 @@ const maxVersionLen = 255
 
 // ValidateObjectMeta checks the namespace/name format and label shape.
 // Server-managed fields (CreatedAt, UpdatedAt, DeletionTimestamp) are ignored.
-// Content resources use metadata.tag for identity; legacy infra/config kinds
-// may still use metadata.version.
+// Content resources use metadata.tag for identity; mutable object kinds expose
+// only namespace/name.
 //
 // Both kinds with semantic version history (Agent, MCPServer, Skill,
 // Prompt) and unversioned kinds (Provider, Deployment) call this same
@@ -247,18 +247,15 @@ func validateRef(r ResourceRef, allowedKinds ...string) FieldErrors {
 	} else if !nameRegex.MatchString(r.Name) {
 		errs.Append("name", fmt.Errorf("%w: %q", ErrInvalidFormat, r.Name))
 	}
-	if r.Tag != "" && r.Version != "" {
-		errs.Append("tag", fmt.Errorf("%w: set tag or version, not both", ErrInvalidRef))
+	if r.Version != "" {
+		errs.Append("version", fmt.Errorf("%w: version is deprecated; use tag for taggable artifacts", ErrInvalidRef))
 	}
 	// Tag is optional on content refs — blank means "resolve to latest".
 	if r.Tag != "" {
-		if err := validateTag(r.Tag); err != nil {
+		if !IsTaggedArtifactKind(r.Kind) {
+			errs.Append("tag", fmt.Errorf("%w: kind %q does not support tag pinning", ErrInvalidRef, r.Kind))
+		} else if err := validateTag(r.Tag); err != nil {
 			errs.Append("tag", err)
-		}
-	}
-	if r.Version != "" {
-		if err := validateVersion(r.Version); err != nil {
-			errs.Append("version", err)
 		}
 	}
 	return errs

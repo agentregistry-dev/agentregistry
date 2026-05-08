@@ -14,12 +14,9 @@ var KnownPlatforms = map[string]struct{}{
 
 // Validate runs Provider's structural checks.
 //
-// Provider is infra/config — it lives alongside Deployment, not in
-// the tagged-artifact set. Its spec describes a connection handle
-// to one execution target: platform identifier, platform-specific
-// config, and an optional telemetry endpoint. (namespace, name) is
-// the identity; metadata.version goes into the legacy 3-tuple PK and
-// is pinned to a constant via DefaultMetadataVersion below.
+// Provider is infra/config — it lives alongside Deployment, not in the
+// tagged-artifact set. Its public identity is Kubernetes-like
+// (namespace, name); any private storage identity is hidden.
 func (p *Provider) Validate() error {
 	var errs FieldErrors
 	errs = append(errs, ValidateObjectMeta(p.Metadata)...)
@@ -35,13 +32,9 @@ func (p *Provider) Validate() error {
 	return errs
 }
 
-// DefaultMetadataVersion satisfies MetadataVersionDefaulter so YAML
-// manifests for Provider can omit metadata.version. The constant "1"
-// goes into the (namespace, name, version) PK; multi-version Provider
-// is not a concept we expose. (The bundled SQL seed inserts under
-// "v1" for legacy reasons — both rows coexist harmlessly under a
-// different version key.)
-func (p *Provider) DefaultMetadataVersion() string { return "1" }
+// DefaultMutableObjectIdentity satisfies MutableObjectIdentityDefaulter.
+// Multi-version Provider is not a public concept.
+func (p *Provider) DefaultMutableObjectIdentity() string { return "1" }
 
 func knownPlatformNames() []string {
 	out := make([]string, 0, len(KnownPlatforms))

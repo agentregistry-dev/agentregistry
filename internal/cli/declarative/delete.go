@@ -22,32 +22,31 @@ func NewDeleteCmd() *cobra.Command {
 func newDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete (TYPE NAME | -f FILE)",
-		Short: "Delete a registry resource version",
+		Short: "Delete a registry resource",
 		Long: `Delete a registry resource.
 
 File mode (declarative): reads resources from the YAML file and sends DELETE /v0/apply.
   arctl delete -f agent.yaml
 
-Explicit mode: specify type and name. --version is optional and defaults to the latest version.
-  arctl delete TYPE NAME [--version VERSION]
-
-For deployments, --version is required.
+Explicit mode: specify type and name. For taggable artifacts, --version is a
+deprecated alias for selecting a tag and defaults to latest.
+  arctl delete TYPE NAME [--version TAG]
 
 TYPE must be one of: agent, mcp, skill, prompt, deployment
 (plural and uppercase forms also accepted)`,
 		Example: `  arctl delete -f my-agent/agent.yaml
   arctl delete -f my-server/mcp.yaml
-  arctl delete agent acme/summarizer --version 1.0.0
+  arctl delete agent acme/summarizer --version stable
   arctl delete agent acme/summarizer --all-versions
-  arctl delete mcp acme/fetch --version 1.0.0
-  arctl delete deployment my-agent --version 1.0.0 --force`,
+  arctl delete mcp acme/fetch --version stable
+  arctl delete deployment my-agent --force`,
 		SilenceUsage: true,
 		RunE:         runDeclarativeDelete,
 	}
 	cmd.Flags().StringP("filename", "f", "", "YAML file to read resources from")
-	cmd.Flags().String("version", "", "Version to delete (defaults to the latest version; required for deployments)")
+	cmd.Flags().String("version", "", "Deprecated alias for tag to delete (taggable artifact kinds only; defaults to latest)")
 	cmd.Flags().Bool("force", false, "Skip provider-specific teardown and only remove the registry record (deployments only)")
-	cmd.Flags().Bool("all-versions", false, "Delete every version of NAME (versioned-artifact kinds only)")
+	cmd.Flags().Bool("all-versions", false, "Deprecated alias for deleting every tag of NAME (taggable artifact kinds only)")
 	return cmd
 }
 
@@ -83,9 +82,9 @@ func runDeclarativeDelete(cmd *cobra.Command, args []string) error {
 	return deleteResource(cmd, args[0], args[1], version, force)
 }
 
-// deleteAllVersionsResource removes every live version of (kind, name) in
+// deleteAllVersionsResource removes every live tag of (kind, name) in
 // one server round-trip via DELETE /v0/apply. Errors cleanly when the
-// kind is not a versioned-artifact.
+// kind is not a taggable artifact.
 func deleteAllVersionsResource(cmd *cobra.Command, typeName, name string) error {
 	k, err := scheme.Lookup(typeName)
 	if err != nil {
@@ -95,11 +94,11 @@ func deleteAllVersionsResource(cmd *cobra.Command, typeName, name string) error 
 		return fmt.Errorf("API client not initialized")
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "Deleting all versions of %s %s...\n", k.Kind, name)
+	fmt.Fprintf(cmd.OutOrStdout(), "Deleting all tags of %s %s...\n", k.Kind, name)
 	if err := deleteAllVersions(k, name); err != nil {
-		return fmt.Errorf("failed to delete all versions of %s %q: %w", k.Kind, name, err)
+		return fmt.Errorf("failed to delete all tags of %s %q: %w", k.Kind, name, err)
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "Deleted: %s/%s (all versions)\n", strings.ToLower(k.Kind), name)
+	fmt.Fprintf(cmd.OutOrStdout(), "Deleted: %s/%s (all tags)\n", strings.ToLower(k.Kind), name)
 	return nil
 }
 

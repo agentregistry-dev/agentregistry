@@ -17,9 +17,10 @@ import (
 )
 
 // Client is a lightweight API client for the agentregistry HTTP surface.
-// Every resource method speaks v1alpha1 at /v0/{plural}/{name}/{version}
-// with ?namespace=<ns> as an optional query param (namespace is hidden
-// from the user-facing API; empty / "default" are elided).
+// Resource methods speak v1alpha1 at /v0/{plural}/{name} plus
+// /v0/{plural}/{name}/{tag} for taggable artifacts, with ?namespace=<ns> as an
+// optional query param (namespace is hidden from the user-facing API; empty /
+// "default" are elided).
 type Client struct {
 	BaseURL    string
 	httpClient *http.Client
@@ -206,8 +207,8 @@ func namespaceQuery(namespace string) string {
 	return "?namespace=" + url.QueryEscape(namespace)
 }
 
-// Get returns the resource at (kind, namespace, name, version). Returns
-// ErrNotFound when the row doesn't exist.
+// Get returns the tagged-artifact resource at (kind, namespace, name, tag).
+// Mutable objects should use GetLatest/name-only semantics.
 func (c *Client) Get(ctx context.Context, kind, namespace, name, version string) (*v1alpha1.RawObject, error) {
 	path := fmt.Sprintf("/%s/%s/%s%s",
 		v1alpha1.PluralFor(kind),
@@ -240,9 +241,9 @@ func (c *Client) getRaw(ctx context.Context, path string) (*v1alpha1.RawObject, 
 }
 
 // ListTags returns every non-deleted tag row for (kind, namespace, name) by
-// GET'ing /v0/{plural}/{name}/tags. Server returns 404 for legacy kinds;
-// callers should branch on that. The endpoint is unpaginated server-side and
-// returns rows with the latest tag first.
+// GET'ing /v0/{plural}/{name}/tags. Mutable-object kinds do not expose this
+// endpoint; callers should branch on that. The endpoint is unpaginated
+// server-side and returns rows with the latest tag first.
 func (c *Client) ListTags(ctx context.Context, kind, namespace, name string) ([]v1alpha1.RawObject, error) {
 	path := fmt.Sprintf("/%s/%s/tags%s",
 		v1alpha1.PluralFor(kind),
@@ -316,7 +317,8 @@ type DeleteOpts struct {
 	Force bool
 }
 
-// Delete soft-deletes the (kind, namespace, name, version) row. Returns
+// Delete soft-deletes a row. When version is empty it uses the name-only
+// mutable-object route; otherwise it deletes the exact tag route. Returns
 // ErrNotFound when the row doesn't exist. See Store.Delete for the
 // soft-delete semantics (the row stays visible with DeletionTimestamp
 // set until the GC pass purges it).
@@ -333,11 +335,17 @@ func (c *Client) Delete(ctx context.Context, kind, namespace, name, version stri
 			q += "&force=true"
 		}
 	}
-	path := fmt.Sprintf("/%s/%s/%s%s",
+	path := fmt.Sprintf("/%s/%s%s",
 		v1alpha1.PluralFor(kind),
 		url.PathEscape(name),
-		url.PathEscape(version),
 		q)
+	if version != "" {
+		path = fmt.Sprintf("/%s/%s/%s%s",
+			v1alpha1.PluralFor(kind),
+			url.PathEscape(name),
+			url.PathEscape(version),
+			q)
+	}
 	req, err := c.newRequest(http.MethodDelete, path)
 	if err != nil {
 		return err

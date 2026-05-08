@@ -51,11 +51,11 @@ func listLatestAny[T v1alpha1.Object](ctx context.Context, kind string, newObj f
 	return out, nil
 }
 
-// listVersionsAny calls the typed ListVersionsOfName helper and erases the
-// concrete envelope type so the dispatch layer's `any`-based table
+// listVersionsAny preserves the older function name for dispatch wiring, but
+// lists artifact tags and erases the concrete envelope type so the table
 // printer can format the rows.
 func listVersionsAny[T v1alpha1.Object](ctx context.Context, kind, name string, newObj func() T) ([]any, error) {
-	items, err := client.ListVersionsOfName(ctx, apiClient, kind, v1alpha1.DefaultNamespace, name, newObj)
+	items, err := client.ListTagsOfName(ctx, apiClient, kind, v1alpha1.DefaultNamespace, name, newObj)
 	if err != nil {
 		return nil, err
 	}
@@ -67,10 +67,9 @@ func listVersionsAny[T v1alpha1.Object](ctx context.Context, kind, name string, 
 }
 
 // deleteAllVersionsAny issues a single DELETE /v0/apply with a minimal
-// envelope (apiVersion + kind + metadata.name) — the server's batch
-// path runs Store.DeleteAllVersions for versioned-artifact kinds. Returns
-// an error when any per-result failed, mirroring deleteFromFile's
-// failure surface.
+// envelope (apiVersion + kind + metadata.name) — the server's batch path
+// removes every tag for taggable artifact kinds. Returns an error when any
+// per-result failed, mirroring deleteFromFile's failure surface.
 func deleteAllVersionsAny(ctx context.Context, kind, name string) error {
 	body := fmt.Sprintf("apiVersion: %s\nkind: %s\nmetadata:\n  name: %s\n",
 		v1alpha1.GroupVersion, kind, name)
@@ -88,15 +87,15 @@ func deleteAllVersionsAny(ctx context.Context, kind, name string) error {
 }
 
 func deleteAny[T v1alpha1.Object](ctx context.Context, kind, name, version string, force bool, newObj func() T) error {
-	targetVersion := version
-	if targetVersion == "" {
+	targetTag := version
+	if targetTag == "" {
 		obj, err := client.GetTyped(ctx, apiClient, kind, v1alpha1.DefaultNamespace, name, "", newObj)
 		if err != nil {
 			return err
 		}
-		targetVersion = obj.GetMetadata().Version
+		targetTag = obj.GetMetadata().Tag
 	}
-	return apiClient.Delete(ctx, kind, v1alpha1.DefaultNamespace, name, targetVersion, client.DeleteOpts{Force: force})
+	return apiClient.Delete(ctx, kind, v1alpha1.DefaultNamespace, name, targetTag, client.DeleteOpts{Force: force})
 }
 
 func listDeploymentAny(ctx context.Context) ([]any, error) {
@@ -139,7 +138,7 @@ func deleteDeploymentByTarget(ctx context.Context, name, version string, force b
 		if dep == nil {
 			continue
 		}
-		if dep.TargetName == name && dep.TargetVersion == version {
+		if dep.TargetName == name && dep.TargetTag == version {
 			matches = append(matches, dep)
 		}
 	}
@@ -149,7 +148,7 @@ func deleteDeploymentByTarget(ctx context.Context, name, version string, force b
 
 	var errs []error
 	for _, dep := range matches {
-		if err := apiClient.Delete(ctx, v1alpha1.KindDeployment, dep.Namespace, dep.Name, dep.Version, client.DeleteOpts{Force: force}); err != nil {
+		if err := apiClient.Delete(ctx, v1alpha1.KindDeployment, dep.Namespace, dep.Name, "", client.DeleteOpts{Force: force}); err != nil {
 			errs = append(errs, fmt.Errorf("deleting %s (provider %s): %w", dep.ID, dep.ProviderID, err))
 		}
 	}
@@ -167,7 +166,7 @@ func deploymentToDocument(dep *cliCommon.DeploymentRecord) any {
 	}
 
 	// metadata is the Deployment row's identity, NOT the target's. Two
-	// deployments of the same target/version against different providers
+	// deployments of the same target/tag against different providers
 	// are distinct rows; collapsing them onto target identity here
 	// (previous behavior) made get-then-apply round-trips clobber the
 	// wrong row and made delete by metadata identity impossible.
@@ -183,13 +182,12 @@ func deploymentToDocument(dep *cliCommon.DeploymentRecord) any {
 		Metadata: v1alpha1.ObjectMeta{
 			Namespace: dep.Namespace,
 			Name:      dep.Name,
-			Version:   dep.Version,
 		},
 		Spec: v1alpha1.DeploymentSpec{
 			TargetRef: v1alpha1.ResourceRef{
-				Kind:    targetKind,
-				Name:    dep.TargetName,
-				Version: dep.TargetVersion,
+				Kind: targetKind,
+				Name: dep.TargetName,
+				Tag:  dep.TargetTag,
 			},
 			ProviderRef: v1alpha1.ResourceRef{
 				Kind: v1alpha1.KindProvider,
@@ -283,7 +281,7 @@ func deploymentRow(dep *cliCommon.DeploymentRecord) []string {
 	return []string{
 		dep.ID,
 		dep.TargetName,
-		dep.TargetVersion,
+		dep.TargetTag,
 		dep.ResourceType,
 		dep.ProviderID,
 		dep.Status,

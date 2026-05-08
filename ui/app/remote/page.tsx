@@ -97,7 +97,7 @@ function RemoteServerCard({ server }: { server: RemoteMcpServer }) {
         <CardTitle className="text-base">
           {server.spec.title || server.metadata.name}
           <Badge variant="outline" className="ml-2 align-middle text-xs">
-            v{server.metadata.version || "—"}
+            {server.metadata.tag || "latest"}
           </Badge>
         </CardTitle>
       </CardHeader>

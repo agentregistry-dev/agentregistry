@@ -137,7 +137,7 @@ func TestVersioning_ApplyAndIdempotency(t *testing.T) {
 
 // TestVersioning_MetadataVersionRejected pipes a manifest with
 // metadata.version set into `arctl apply -f -` and asserts the CLI rejects
-// it with the system-assigned-version error from the v1alpha1 decoder.
+// the legacy public field through the v1alpha1 decoder.
 func TestVersioning_MetadataVersionRejected(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()

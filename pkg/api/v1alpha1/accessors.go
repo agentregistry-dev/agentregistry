@@ -53,42 +53,32 @@ type StructuralValidator interface {
 	Validate() error
 }
 
-// MetadataVersionDefaulter is an optional capability for legacy-mode
-// kinds where the storage layer still requires a non-empty
-// metadata.version in its 3-tuple PK but the field carries no
-// semantic meaning on the wire — Provider and Deployment, both
-// infra/config that don't participate in immutable versioning. The
-// shared apply pipeline calls DefaultMetadataVersion when the request
-// body's metadata.version is empty, so YAML manifests for these
-// kinds don't have to carry a fabricated placeholder version.
-// Versioned-artifact kinds (Agent, MCPServer, RemoteMCPServer, Skill,
-// Prompt) ignore meta.Version entirely on the upsert path and do not
-// implement this interface.
+// MutableObjectIdentityDefaulter is an optional capability for mutable
+// object kinds whose private storage table still needs a hidden row identity.
+// Provider and Deployment use a constant internal identity while exposing
+// public Kubernetes-like namespace/name semantics.
 //
-// Returning a non-empty constant ("1" by convention) is what gets
-// stored in the (namespace, name, version) PK. Returning "" defers
-// to the standard "version required" validator.
-//
-// Pair with ValidateObjectMeta in the kind's Validate.
-type MetadataVersionDefaulter interface {
-	DefaultMetadataVersion() string
+// Returning a non-empty constant ("1" by convention) is what gets stored in
+// the private backing row. Returning "" defers to the store's required
+// identity check.
+type MutableObjectIdentityDefaulter interface {
+	DefaultMutableObjectIdentity() string
 }
 
-// DefaultMetadataVersionIfMissing stamps the kind's default version onto
-// obj.Metadata.Version when it's empty AND the kind opts in via the
-// MetadataVersionDefaulter interface. No-op for kinds that don't implement
-// the interface or that already have a version. Used by the legacy
-// deployment apply path; tagged-artifact kinds ignore meta.Version.
-func DefaultMetadataVersionIfMissing(obj Object) {
+// DefaultMutableObjectIdentityIfMissing stamps the kind's hidden storage
+// identity onto obj.Metadata.Version when it's empty and the kind opts in. The
+// field is private storage state and is not emitted in JSON/YAML responses.
+// Tagged artifact kinds do not implement this interface.
+func DefaultMutableObjectIdentityIfMissing(obj Object) {
 	meta := obj.GetMetadata()
 	if meta.Version != "" {
 		return
 	}
-	d, ok := obj.(MetadataVersionDefaulter)
+	d, ok := obj.(MutableObjectIdentityDefaulter)
 	if !ok {
 		return
 	}
-	if def := d.DefaultMetadataVersion(); def != "" {
+	if def := d.DefaultMutableObjectIdentity(); def != "" {
 		meta.Version = def
 		obj.SetMetadata(*meta)
 	}

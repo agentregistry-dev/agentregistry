@@ -46,15 +46,15 @@ func ResolvePromptRefs(prompts []v1alpha1.ResourceRef, verbose bool) ([]common.P
 	var resolved []common.PythonPrompt
 	for i, ref := range prompts {
 		promptName := strings.TrimSpace(ref.Name)
-		promptVersion := strings.TrimSpace(ref.Version)
-		if strings.EqualFold(promptVersion, "latest") {
-			promptVersion = ""
+		promptTag := strings.TrimSpace(ref.Tag)
+		if strings.EqualFold(promptTag, "latest") {
+			promptTag = ""
 		}
 		localName := agentmanifest.RefBasename(promptName)
 
 		if verbose {
-			fmt.Printf("[prompt-resolver] [%d] Resolving prompt %q (registryPromptName=%q version=%q)\n",
-				i, localName, promptName, promptVersion)
+			fmt.Printf("[prompt-resolver] [%d] Resolving prompt %q (registryPromptName=%q tag=%q)\n",
+				i, localName, promptName, promptTag)
 		}
 
 		promptResp, err := client.GetTyped(
@@ -63,7 +63,7 @@ func ResolvePromptRefs(prompts []v1alpha1.ResourceRef, verbose bool) ([]common.P
 			v1alpha1.KindPrompt,
 			v1alpha1.DefaultNamespace,
 			promptName,
-			promptVersion,
+			promptTag,
 			func() *v1alpha1.Prompt { return &v1alpha1.Prompt{} },
 		)
 		if err != nil {
@@ -74,8 +74,8 @@ func ResolvePromptRefs(prompts []v1alpha1.ResourceRef, verbose bool) ([]common.P
 		}
 
 		if verbose {
-			fmt.Printf("[prompt-resolver] [%d] Successfully resolved prompt %q (version=%q, content length=%d)\n",
-				i, localName, promptResp.Metadata.Version, len(promptResp.Spec.Content))
+			fmt.Printf("[prompt-resolver] [%d] Successfully resolved prompt %q (tag=%q, content length=%d)\n",
+				i, localName, promptResp.Metadata.Tag, len(promptResp.Spec.Content))
 		}
 
 		resolved = append(resolved, common.PythonPrompt{

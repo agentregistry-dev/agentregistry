@@ -121,25 +121,25 @@ func TestInitAgentCmd_MCPSkillPromptRefs(t *testing.T) {
 	mcp0 := mcps[0].(map[string]any)
 	assert.Equal(t, "MCPServer", mcp0["kind"])
 	assert.Equal(t, "acme/fetch", mcp0["name"])
-	assert.Equal(t, "1.0.0", mcp0["version"])
+	assert.Equal(t, "1.0.0", mcp0["tag"])
 	mcp1 := mcps[1].(map[string]any)
 	assert.Equal(t, "MCPServer", mcp1["kind"])
 	assert.Equal(t, "myorg/weather", mcp1["name"])
-	assert.Equal(t, "latest", mcp1["version"])
+	assert.Equal(t, "latest", mcp1["tag"])
 
 	skills := spec["skills"].([]any)
 	require.Len(t, skills, 1)
 	skill0 := skills[0].(map[string]any)
 	assert.Equal(t, "Skill", skill0["kind"])
 	assert.Equal(t, "summarize", skill0["name"])
-	assert.Equal(t, "2.0.0", skill0["version"])
+	assert.Equal(t, "2.0.0", skill0["tag"])
 
 	prompts := spec["prompts"].([]any)
 	require.Len(t, prompts, 1)
 	prompt0 := prompts[0].(map[string]any)
 	assert.Equal(t, "Prompt", prompt0["kind"])
 	assert.Equal(t, "system-prompt", prompt0["name"])
-	assert.Equal(t, "latest", prompt0["version"])
+	assert.Equal(t, "latest", prompt0["tag"])
 }
 
 func TestInitAgentCmd_GitRepository(t *testing.T) {

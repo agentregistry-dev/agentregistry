@@ -58,13 +58,13 @@ func TestRegisterDeploymentLogs_RespectsAuthorize(t *testing.T) {
 	// doesn't even need to exist for the deny path to be testable —
 	// the existence-leak via 404-vs-403 is exactly the kind of
 	// information disclosure this gate prevents.
-	resp := api.Get("/v0/deployments/secret/v1/logs")
+	resp := api.Get("/v0/deployments/secret/logs")
 	require.Equal(t, http.StatusForbidden, resp.Code, resp.Body.String())
 
 	// Allowed name without a seeded row → 404. Confirms the gate is
 	// not a deny-everything bug — non-denied requests reach the
 	// Store.Get and get the regular not-found response.
-	resp = api.Get("/v0/deployments/nonexistent/v1/logs")
+	resp = api.Get("/v0/deployments/nonexistent/logs")
 	require.Equal(t, http.StatusNotFound, resp.Code, resp.Body.String())
 }
 
@@ -91,7 +91,7 @@ func TestRegisterDeploymentLogs_NilAuthorizeAllowsThrough(t *testing.T) {
 		Authorize:   nil,
 	})
 
-	resp := api.Get("/v0/deployments/anything/v1/logs")
+	resp := api.Get("/v0/deployments/anything/logs")
 	require.Equal(t, http.StatusNotFound, resp.Code,
 		"nil Authorize must not 403 — must fall through to Store.Get and 404")
 }

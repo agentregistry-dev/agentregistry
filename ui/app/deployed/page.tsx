@@ -120,7 +120,6 @@ export default function DeployedPage() {
       await deleteDeployment({
         path: {
           name: serverToRemove.name,
-          version: serverToRemove.version,
         },
         query: serverToRemove.namespace && serverToRemove.namespace !== "default"
           ? { namespace: serverToRemove.namespace }

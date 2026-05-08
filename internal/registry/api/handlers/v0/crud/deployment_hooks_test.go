@@ -89,14 +89,14 @@ func TestDeploymentPut_TriggersAdapterApply(t *testing.T) {
 
 	body := v1alpha1.Deployment{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindDeployment},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-noop", Version: "1"},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-noop"},
 		Spec: v1alpha1.DeploymentSpec{
-			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Version: "1"},
-			ProviderRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindProvider, Name: "noop-provider", Version: "1"},
+			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Tag: "1"},
+			ProviderRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindProvider, Name: "noop-provider"},
 			DesiredState: v1alpha1.DesiredStateDeployed,
 		},
 	}
-	resp := api.Put("/v0/deployments/weather-noop/1", body)
+	resp := api.Put("/v0/deployments/weather-noop", body)
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 
 	// Response should reflect the PostUpsert status writes.
@@ -121,17 +121,17 @@ func TestDeploymentDelete_TriggersAdapterRemove(t *testing.T) {
 
 	body := v1alpha1.Deployment{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindDeployment},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-noop", Version: "1"},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-noop"},
 		Spec: v1alpha1.DeploymentSpec{
-			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Version: "1"},
-			ProviderRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindProvider, Name: "noop-provider", Version: "1"},
+			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Tag: "1"},
+			ProviderRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindProvider, Name: "noop-provider"},
 			DesiredState: v1alpha1.DesiredStateDeployed,
 		},
 	}
-	putResp := api.Put("/v0/deployments/weather-noop/1", body)
+	putResp := api.Put("/v0/deployments/weather-noop", body)
 	require.Equal(t, http.StatusOK, putResp.Code, putResp.Body.String())
 
-	delResp := api.Delete("/v0/deployments/weather-noop/1")
+	delResp := api.Delete("/v0/deployments/weather-noop")
 	require.Equal(t, http.StatusNoContent, delResp.Code, delResp.Body.String())
 
 	// Deployment carries no finalizers, so DELETE hard-deletes the row
@@ -148,16 +148,16 @@ func TestDeploymentLogs_EmptyForNoopAdapter(t *testing.T) {
 
 	body := v1alpha1.Deployment{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindDeployment},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-noop", Version: "1"},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-noop"},
 		Spec: v1alpha1.DeploymentSpec{
-			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Version: "1"},
-			ProviderRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindProvider, Name: "noop-provider", Version: "1"},
+			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Tag: "1"},
+			ProviderRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindProvider, Name: "noop-provider"},
 			DesiredState: v1alpha1.DesiredStateDeployed,
 		},
 	}
-	require.Equal(t, http.StatusOK, api.Put("/v0/deployments/weather-noop/1", body).Code)
+	require.Equal(t, http.StatusOK, api.Put("/v0/deployments/weather-noop", body).Code)
 
-	resp := api.Get("/v0/deployments/weather-noop/1/logs")
+	resp := api.Get("/v0/deployments/weather-noop/logs")
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	var body2 struct {
 		Lines []struct {

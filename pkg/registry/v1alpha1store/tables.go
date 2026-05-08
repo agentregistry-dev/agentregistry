@@ -31,10 +31,9 @@ var TableFor = map[string]string{
 // importer layers take — they never look up tables by string literal
 // themselves.
 //
-// KindDeployment and KindProvider are bound through NewDeploymentStore
-// (legacy mode) — both are infra/lifecycle state, not tagged
-// artifacts. Every other built-in kind uses NewStore
-// (tagged-artifact mode). Iterates v1alpha1.BuiltinKinds so
+// KindDeployment and KindProvider are bound through NewMutableObjectStore —
+// both are infra/lifecycle state, not tagged artifacts. Every other built-in
+// kind uses NewStore (tagged-artifact behavior). Iterates v1alpha1.BuiltinKinds so
 // registration order stays stable across builds (important for
 // OpenAPI output).
 //
@@ -56,7 +55,7 @@ func NewStores(pool *pgxpool.Pool, opts ...StoreOption) map[string]*Store {
 		// option chain).
 		kindOpts := append([]StoreOption{WithKind(kind)}, opts...)
 		if kind == v1alpha1.KindDeployment || kind == v1alpha1.KindProvider {
-			out[kind] = NewDeploymentStore(pool, table, kindOpts...)
+			out[kind] = NewMutableObjectStore(pool, table, kindOpts...)
 			continue
 		}
 		out[kind] = NewStore(pool, table, kindOpts...)

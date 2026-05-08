@@ -45,6 +45,14 @@ func registerAgent(api huma.API, store *v1alpha1store.Store) {
 	})
 }
 
+func registerProvider(api huma.API, store *v1alpha1store.Store) {
+	resource.Register[*v1alpha1.Provider](api, resource.Config{
+		Kind:       v1alpha1.KindProvider,
+		BasePrefix: "/v0",
+		Store:      store,
+	}, func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
+}
+
 // applyAgentYAML POSTs a single Agent document to /v0/apply and returns
 // the per-document ApplyResult. Used by the rewritten tests in this file
 // since direct PUT on a content-kind URL is no longer registered.
@@ -406,8 +414,8 @@ func TestResourceRegister_ListFilter(t *testing.T) {
 // longer registered for content-registry kinds (Agent, MCPServer,
 // RemoteMCPServer, Skill, Prompt). POST /v0/apply is the single
 // create/update entry point — user-controlled tags live in metadata.tag rather
-// than the URL segment of a direct PUT. Provider/Deployment
-// (legacy stores) still expose direct PUT.
+// than the URL segment of a direct PUT. Provider/Deployment mutable-object
+// stores still expose direct namespace/name PUT.
 //
 // The test issues a PUT against the agents handler and expects 405
 // (Method Not Allowed) — the path exists for GET / DELETE, but PUT is
@@ -442,6 +450,37 @@ func TestResourceRegister_PutNotRegisteredForContentKinds(t *testing.T) {
 	require.Equal(t, http.StatusMethodNotAllowed, rec.Code,
 		"raw PUT against content-registry kind must return 405; got %d body=%s",
 		rec.Code, rec.Body.String())
+}
+
+func TestResourceRegister_MutableObjectUsesNameOnlyRoute(t *testing.T) {
+	pool := v1alpha1store.NewTestPool(t)
+	store := v1alpha1store.NewMutableObjectStore(pool, "v1alpha1.providers")
+
+	_, api := humatest.New(t)
+	registerProvider(api, store)
+
+	provider := v1alpha1.Provider{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindProvider},
+		Metadata: v1alpha1.ObjectMeta{
+			Namespace: "default",
+			Name:      "local-test",
+		},
+		Spec: v1alpha1.ProviderSpec{Platform: v1alpha1.PlatformLocal},
+	}
+
+	resp := api.Put("/v0/providers/local-test", provider)
+	require.Equal(t, http.StatusCreated, resp.Code, resp.Body.String())
+	require.NotContains(t, resp.Body.String(), `"version"`, "mutable object response must not expose metadata.version")
+
+	resp = api.Get("/v0/providers/local-test")
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	require.NotContains(t, resp.Body.String(), `"version"`, "mutable object get must not expose metadata.version")
+
+	resp = api.Put("/v0/providers/local-test/1", provider)
+	require.Equal(t, http.StatusNotFound, resp.Code, "mutable object version route must not be registered")
+
+	resp = api.Delete("/v0/providers/local-test")
+	require.Equal(t, http.StatusNoContent, resp.Code, resp.Body.String())
 }
 
 func TestResourceRegister_ResolverDetectsDanglingRef(t *testing.T) {

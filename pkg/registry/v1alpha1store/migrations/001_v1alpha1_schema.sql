@@ -1,7 +1,8 @@
 -- v1alpha1 schema: every resource uses the same envelope (apiVersion +
 -- metadata + spec + status). Metadata fields are promoted to real columns;
 -- spec and status stay JSONB. Content resources use (namespace, name, tag);
--- Provider and Deployment keep legacy (namespace, name, version).
+-- Provider and Deployment use mutable-object storage (public namespace/name,
+-- private version identity).
 --
 -- Tagged-artifact tables (agents, mcp_servers, remote_mcp_servers, skills,
 -- prompts) store one mutable row per tag. The store fills omitted tags with the
@@ -13,9 +14,9 @@
 -- scope for the tagged-artifact redesign).
 --
 -- All tables live under the dedicated PostgreSQL schema `v1alpha1` so they
--- coexist with the legacy `public.agents`, `public.servers`, etc. during
+-- coexist with the older `public.agents`, `public.servers`, etc. during
 -- the incremental port. Callers using the new generic Store pass
--- schema-qualified table names (e.g. "v1alpha1.agents"); legacy
+-- schema-qualified table names (e.g. "v1alpha1.agents"); older
 -- postgres_*.go stores continue to read/write the unqualified public tables
 -- without conflict. Final cutover drops the old tables and either keeps
 -- the v1alpha1 schema or renames it to public.
@@ -28,7 +29,7 @@
 CREATE SCHEMA IF NOT EXISTS v1alpha1;
 
 -- -----------------------------------------------------------------------------
--- Shared helpers (schema-qualified so they don't collide with legacy triggers)
+-- Shared helpers (schema-qualified so they don't collide with older triggers)
 -- -----------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION v1alpha1.set_updated_at()

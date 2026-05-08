@@ -20,11 +20,10 @@ const DefaultNamespace = "default"
 
 // ObjectMeta is the metadata block common to every resource.
 //
-// Namespace, Name, Labels, Annotations, and Tag are user-settable for
-// content-registry kinds. UID, Generation, CreatedAt, UpdatedAt, and
-// DeletionTimestamp are server-managed. Version remains only for legacy
-// infra/config kinds whose storage still uses the old mutable
-// (namespace, name, version) tuple.
+// Namespace, Name, Labels, Annotations, and Tag are user-settable. Tag is
+// meaningful for content-registry kinds. UID, Generation, CreatedAt,
+// UpdatedAt, and DeletionTimestamp are server-managed. Version is an internal
+// storage compatibility field only and is never emitted as public metadata.
 //
 // Generation is an internal coordination primitive that drives reconciler
 // convergence (paired with Status.ObservedGeneration). It is populated from the
@@ -37,8 +36,8 @@ const DefaultNamespace = "default"
 // live server. When Tag is omitted, the store fills it with the literal
 // "latest" tag.
 //
-// Legacy identity at the database level is (Namespace, Name, Version).
-// Namespace is an internal detail today — it defaults to "default" on
+// Mutable-object kinds may still persist through private tables with a hidden
+// constant identity. Namespace is an internal detail today — it defaults to "default" on
 // apply and is stripped from responses when it equals "default" so the
 // multi-tenant surface stays hidden until we deliberately enable it.
 //
@@ -73,9 +72,9 @@ type ObjectMeta struct {
 	// (Agent, MCPServer, RemoteMCPServer, Skill, Prompt).
 	Tag string `json:"tag,omitempty" yaml:"tag,omitempty"`
 
-	// Version is the legacy Provider/Deployment Store's string identity.
-	// Content-registry manifests must not include metadata.version.
-	Version string `json:"version,omitempty" yaml:"version,omitempty"`
+	// Version is internal storage compatibility for mutable-object stores.
+	// It is not part of the public v1alpha1 metadata contract.
+	Version string `json:"-" yaml:"-"`
 
 	// Generation is server-managed and internal. Populated from the DB row for
 	// internal Go consumers (coordinators, status reconcilers); hidden from the
@@ -99,7 +98,7 @@ type objectMetaWire ObjectMeta
 // MarshalJSON strips Namespace when it equals DefaultNamespace so
 // responses don't leak the namespace surface while it remains hidden
 // from the user-facing API. Internal storage always carries the full
-// identity (ns, name, version); this only affects wire rendering.
+// identity; this only affects wire rendering.
 //
 // Inbound defaulting (empty → "default") happens at the apply /
 // import pipeline boundary (see resource.prepareApplyDoc and

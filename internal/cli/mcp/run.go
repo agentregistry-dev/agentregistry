@@ -48,7 +48,7 @@ For local projects, the server is automatically built before running. Use --no-b
 }
 
 func init() {
-	RunCmd.Flags().StringVar(&runVersion, "version", "", "Specify the version of the server to run")
+	RunCmd.Flags().StringVar(&runVersion, "version", "", "Deprecated alias for tag of the server to run")
 	RunCmd.Flags().BoolVar(&runInspector, "inspector", false, "Launch MCP Inspector to interact with the server")
 	RunCmd.Flags().BoolVarP(&runYes, "yes", "y", false, "Automatically accept all prompts (use default values)")
 	RunCmd.Flags().BoolVar(&runVerbose, "verbose", false, "Enable verbose logging")
@@ -134,7 +134,7 @@ func runMCPServerWithPlatform(ctx context.Context, server *v1alpha1.MCPServer) e
 		return fmt.Errorf("local platform config is required")
 	}
 
-	fmt.Printf("Starting MCP server: %s (version %s)...\n", server.Metadata.Name, server.Metadata.Version)
+	fmt.Printf("Starting MCP server: %s (tag %s)...\n", server.Metadata.Name, server.Metadata.Tag)
 
 	if err := localplatform.WriteLocalPlatformFiles(platformDir, cfg, agentGatewayPort); err != nil {
 		return fmt.Errorf("failed to write local platform files: %w", err)

@@ -8,15 +8,14 @@
 //	GET    {basePrefix}/{pluralKind}?namespace={ns}                   list
 //	GET    {basePrefix}/{pluralKind}/{name}?namespace={ns}            get latest
 //	GET    {basePrefix}/{pluralKind}/{name}/tags?namespace={ns}      list tags of one (tagged content kinds only)
-//	GET    {basePrefix}/{pluralKind}/{name}/{tag}?namespace={ns}     get exact tag/version
-//	PUT    {basePrefix}/{pluralKind}/{name}/{version}?namespace={ns} apply (idempotent upsert; legacy stores only — Provider/Deployment)
-//	DELETE {basePrefix}/{pluralKind}/{name}/{tag}?namespace={ns}     delete
+//	GET    {basePrefix}/{pluralKind}/{name}/{tag}?namespace={ns}     get exact tag (tagged content kinds only)
+//	PUT    {basePrefix}/{pluralKind}/{name}?namespace={ns}           apply mutable object (Provider/Deployment/config)
+//	DELETE {basePrefix}/{pluralKind}/{name}?namespace={ns}           delete mutable object
+//	DELETE {basePrefix}/{pluralKind}/{name}/{tag}?namespace={ns}     delete exact tag (tagged content kinds only)
 //
-// PUT is registered only for legacy stores (Provider, Deployment) where
-// the {version} URL segment is authoritative. Content-registry kinds
-// (Agent, MCPServer, RemoteMCPServer, Skill, Prompt) assign integer
-// tags declaratively and are written exclusively through
-// POST /v0/apply.
+// Direct PUT is registered only for mutable object stores. Content-registry
+// artifact kinds (Agent, MCPServer, RemoteMCPServer, Skill, Prompt) use
+// metadata.tag and are written through POST /v0/apply.
 package resource
 
 import (
@@ -58,7 +57,8 @@ type Config struct {
 	// "mcpservers"). If empty, defaults to strings.ToLower(Kind) + "s".
 	PluralKind string
 	// BasePrefix is the HTTP route prefix shared across kinds (e.g. "/v0").
-	// Routes extend it with `/{plural}/{name}/{version}`; namespace is
+	// Routes extend it with `/{plural}/{name}` and, for tagged artifacts,
+	// `/{plural}/{name}/{tag}`; namespace is
 	// carried as a query param (`?namespace={ns}`, default "default").
 	BasePrefix string
 	// Store is the v1alpha1store.Store bound to this kind's table. Callers
@@ -157,6 +157,17 @@ type Config struct {
 	// the placeholder + parameterization rules there before wiring a
 	// new caller.
 	ListFilter func(ctx context.Context, in AuthorizeInput) (extraWhere string, extraArgs []any, err error)
+
+	// IncludeTerminatingByDefault, when true, makes the list handler
+	// surface rows with deletion_timestamp set even if the caller
+	// hasn't passed ?includeTerminating=true. Used by kinds whose
+	// teardown is operator-observable so `arctl get` can
+	// show resources while finalizers are still draining.
+	//
+	// The ?includeTerminating query value is OR-ed with this flag, so
+	// the caller can still force inclusion but never exclusion when
+	// the kind has opted in.
+	IncludeTerminatingByDefault bool
 }
 
 // AuthorizeInput is the context passed to Config.Authorize on every handler
@@ -239,6 +250,12 @@ type deleteInput struct {
 	Force bool `query:"force" doc:"Skip provider-specific teardown and only remove the registry record." default:"false"`
 }
 
+type deleteMutableInput struct {
+	Namespace string `query:"namespace" doc:"Namespace (internal; defaults to 'default')."`
+	Name      string `path:"name"`
+	Force     bool   `query:"force" doc:"Skip provider-specific teardown and only remove the registry record." default:"false"`
+}
+
 type listInput struct {
 	// Namespace scopes the list. Empty / missing → "default";
 	// literal "all" → cross-namespace.
@@ -267,6 +284,12 @@ type putInput[T v1alpha1.Object] struct {
 	Namespace string `query:"namespace" doc:"Namespace (internal; defaults to 'default')."`
 	Name      string `path:"name"`
 	Tag       string `path:"tag"`
+	Body      T
+}
+
+type putMutableInput[T v1alpha1.Object] struct {
+	Namespace string `query:"namespace" doc:"Namespace (internal; defaults to 'default')."`
+	Name      string `path:"name"`
 	Body      T
 }
 
@@ -342,7 +365,7 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 	})
 
 	// List tags (name only; namespace via query). Tagged-artifact
-	// kinds only — the legacy deployments table has no concept of
+	// kinds only — mutable object stores have no concept of
 	// "every tag of a logical resource". Registered before the
 	// get-exact route below so the literal "tags" path segment
 	// wins over the `{tag}` capture in the underlying flow router
@@ -351,7 +374,16 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		registerListTags(api, cfg, newObj, kind, itemPath)
 	}
 
-	// Get exact (name, tag/version; namespace via query).
+	if cfg.Store.IsTaggedArtifact() {
+		registerGetTagged(api, cfg, newObj, kind, itemTagPath)
+		registerDeleteTagged(api, cfg, newObj, kind, itemTagPath)
+	} else {
+		registerApplyMutable(api, cfg, newObj, kind, itemPath)
+		registerDeleteMutable(api, cfg, newObj, kind, itemPath)
+	}
+}
+
+func registerGetTagged[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T, kind, itemTagPath string) {
 	huma.Register(api, huma.Operation{
 		OperationID: "get-" + strings.ToLower(kind),
 		Method:      http.MethodGet,
@@ -368,13 +400,7 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 			return nil, err
 		}
 		if cfg.Authorize != nil {
-			in := AuthorizeInput{Verb: "get", Kind: kind, Namespace: ns, Name: name}
-			if cfg.Store.IsTaggedArtifact() {
-				in.Tag = tag
-			} else {
-				in.Version = tag
-			}
-			if err := cfg.Authorize(ctx, in); err != nil {
+			if err := cfg.Authorize(ctx, AuthorizeInput{Verb: "get", Kind: kind, Namespace: ns, Name: name, Tag: tag}); err != nil {
 				return nil, err
 			}
 		}
@@ -387,67 +413,6 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 			return nil, huma.Error500InternalServerError("decode "+kind, err)
 		}
 		return &bodyOutput[T]{Body: obj}, nil
-	})
-
-	// Apply (upsert).
-	//
-	// Direct PUT on the per-kind item URL is only registered for legacy
-	// stores (Provider, Deployment) where the {tag} URL segment is
-	// authoritative. Content-registry kinds (Agent, MCPServer,
-	// RemoteMCPServer, Skill, Prompt) use metadata.tag, so direct PUT
-	// remains legacy-only — those
-	// kinds are written exclusively through POST /v0/apply.
-	if !cfg.Store.IsTaggedArtifact() {
-		registerApplyLegacy(api, cfg, newObj, kind, itemTagPath)
-	}
-
-	// Delete (soft).
-	huma.Register(api, huma.Operation{
-		OperationID:   "delete-" + strings.ToLower(kind),
-		Method:        http.MethodDelete,
-		Path:          itemTagPath,
-		Summary:       fmt.Sprintf("Delete a %s (soft-delete: sets deletionTimestamp)", kind),
-		DefaultStatus: http.StatusNoContent,
-	}, func(ctx context.Context, in *deleteInput) (*deleteOutput, error) {
-		ns := resolveNamespace(in.Namespace, false)
-		name, err := unescapePath("name", in.Name)
-		if err != nil {
-			return nil, err
-		}
-		tag, err := unescapePath("tag", in.Tag)
-		if err != nil {
-			return nil, err
-		}
-
-		// Pre-read so PostDelete has the final spec to work with.
-		// Skipped when no hook is registered or when the caller asked
-		// for ?force=true (skip provider teardown — orphan records /
-		// unreachable backends).
-		var preDelete v1alpha1.Object
-		runHook := cfg.PostDelete != nil && !in.Force
-		if runHook {
-			row, err := cfg.Store.Get(ctx, ns, name, tag)
-			if err != nil {
-				return nil, mapNotFound(err, kind, ns, name, tag)
-			}
-			obj, err := v1alpha1.EnvelopeFromRaw(newObj, row, kind)
-			if err != nil {
-				return nil, huma.Error500InternalServerError("decode "+kind, err)
-			}
-			preDelete = obj
-		}
-
-		dopts := deleteOpts{
-			Authorize:       cfg.Authorize,
-			PreDeleteObject: preDelete,
-		}
-		if runHook {
-			dopts.PostDelete = cfg.PostDelete
-		}
-		if ae := deleteCore(ctx, cfg.Store, kind, ns, name, tag, dopts); ae != nil {
-			return nil, mapApplyErrorToHuma(ae, kind, ns, name, tag)
-		}
-		return &deleteOutput{}, nil
 	})
 }
 
@@ -489,24 +454,17 @@ func registerListTags[T v1alpha1.Object](api huma.API, cfg Config, newObj func()
 	})
 }
 
-// registerApplyLegacy wires PUT /{name}/{version} for legacy
-// (non-tagged-artifact) stores where the URL {version} segment is
-// authoritative for the row identity. Content-registry kinds assign
-// metadata.tag and skip this route entirely.
-func registerApplyLegacy[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T, kind, itemVersionPath string) {
+// registerApplyMutable wires name-only PUT for mutable object stores.
+func registerApplyMutable[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T, kind, itemPath string) {
 	huma.Register(api, huma.Operation{
 		OperationID:   "apply-" + strings.ToLower(kind),
 		Method:        http.MethodPut,
-		Path:          itemVersionPath,
+		Path:          itemPath,
 		Summary:       fmt.Sprintf("Apply a %s (idempotent upsert)", kind),
 		DefaultStatus: http.StatusOK,
-	}, func(ctx context.Context, in *putInput[T]) (*bodyOutput[T], error) {
+	}, func(ctx context.Context, in *putMutableInput[T]) (*bodyOutput[T], error) {
 		ns := resolveNamespace(in.Namespace, false)
 		name, err := unescapePath("name", in.Name)
-		if err != nil {
-			return nil, err
-		}
-		version, err := unescapePath("version", in.Tag)
 		if err != nil {
 			return nil, err
 		}
@@ -527,14 +485,11 @@ func registerApplyLegacy[T v1alpha1.Object](api huma.API, cfg Config, newObj fun
 			return nil, huma.Error400BadRequest("metadata.name does not match path")
 		}
 
-		// Stamp resolved identity into metadata so applyCore sees the
-		// resolved values (clients may omit namespace/name in the body
-		// and rely on the path + query). PUT is registered for legacy
-		// stores only, so the URL {version} is authoritative for the
-		// row identity.
+		// Stamp resolved public identity into metadata so applyCore sees the
+		// resolved namespace/name. The store will add its hidden mutable-object
+		// identity before persistence.
 		meta.Namespace = ns
 		meta.Name = name
-		meta.Version = version
 		body.SetMetadata(*meta)
 
 		if _, ae := applyCore(ctx, cfg.Store, body, applyOpts{
@@ -545,17 +500,13 @@ func registerApplyLegacy[T v1alpha1.Object](api huma.API, cfg Config, newObj fun
 			InitialFinalizers: cfg.InitialFinalizers,
 			CreateStager:      cfg.CreateStager,
 		}, false); ae != nil {
-			return nil, mapApplyErrorToHuma(ae, kind, ns, name, version)
+			return nil, mapApplyErrorToHuma(ae, kind, ns, name, "")
 		}
 
 		// Read back so the response reflects the stored identity
 		// (assigned generation, default'd metadata) plus any status /
-		// annotation writes the PostUpsert hook performed. PUT is
-		// legacy-only, so the URL {version} segment is the row's PK
-		// identity. Failure to re-read after a successful apply
-		// degrades to a 500 rather than swallowing the already-
-		// persisted change silently.
-		row, err := cfg.Store.Get(ctx, ns, name, version)
+		// annotation writes the PostUpsert hook performed.
+		row, err := cfg.Store.GetLatest(ctx, ns, name)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("read back "+kind, err)
 		}
@@ -565,6 +516,99 @@ func registerApplyLegacy[T v1alpha1.Object](api huma.API, cfg Config, newObj fun
 		}
 		return &bodyOutput[T]{Body: obj}, nil
 	})
+}
+
+func registerDeleteTagged[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T, kind, itemTagPath string) {
+	registerDelete(api, cfg, newObj, kind, itemTagPath, true)
+}
+
+func registerDeleteMutable[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T, kind, itemPath string) {
+	registerDelete(api, cfg, newObj, kind, itemPath, false)
+}
+
+func registerDelete[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T, kind, path string, tagged bool) {
+	op := huma.Operation{
+		OperationID:   "delete-" + strings.ToLower(kind),
+		Method:        http.MethodDelete,
+		Path:          path,
+		Summary:       fmt.Sprintf("Delete a %s (soft-delete: sets deletionTimestamp)", kind),
+		DefaultStatus: http.StatusNoContent,
+	}
+	if tagged {
+		huma.Register(api, op, func(ctx context.Context, in *deleteInput) (*deleteOutput, error) {
+			ns := resolveNamespace(in.Namespace, false)
+			name, err := unescapePath("name", in.Name)
+			if err != nil {
+				return nil, err
+			}
+			identity, err := unescapePath("tag", in.Tag)
+			if err != nil {
+				return nil, err
+			}
+			return runDelete(ctx, cfg, newObj, kind, ns, name, identity, in.Force)
+		})
+		return
+	}
+	huma.Register(api, op, func(ctx context.Context, in *deleteMutableInput) (*deleteOutput, error) {
+		ns := resolveNamespace(in.Namespace, false)
+		name, err := unescapePath("name", in.Name)
+		if err != nil {
+			return nil, err
+		}
+		return runDeleteLatest(ctx, cfg, newObj, kind, ns, name, in.Force)
+	})
+}
+
+func runDeleteLatest[T v1alpha1.Object](ctx context.Context, cfg Config, newObj func() T, kind, ns, name string, force bool) (*deleteOutput, error) {
+	row, err := cfg.Store.GetLatest(ctx, ns, name)
+	if err != nil {
+		return nil, mapNotFound(err, kind, ns, name, "")
+	}
+	obj, err := v1alpha1.EnvelopeFromRaw(newObj, row, kind)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("decode "+kind, err)
+	}
+	identity := row.Metadata.Version
+	if identity == "" {
+		identity = row.Metadata.Tag
+	}
+	dopts := deleteOpts{Authorize: cfg.Authorize}
+	if cfg.PostDelete != nil && !force {
+		dopts.PostDelete = cfg.PostDelete
+		dopts.PreDeleteObject = obj
+	}
+	if ae := deleteCore(ctx, cfg.Store, kind, ns, name, identity, dopts); ae != nil {
+		return nil, mapApplyErrorToHuma(ae, kind, ns, name, identity)
+	}
+	return &deleteOutput{}, nil
+}
+
+func runDelete[T v1alpha1.Object](ctx context.Context, cfg Config, newObj func() T, kind, ns, name, identity string, force bool) (*deleteOutput, error) {
+	var preDelete v1alpha1.Object
+	runHook := cfg.PostDelete != nil && !force
+	if runHook {
+		row, err := cfg.Store.Get(ctx, ns, name, identity)
+		if err != nil {
+			return nil, mapNotFound(err, kind, ns, name, identity)
+		}
+		obj, err := v1alpha1.EnvelopeFromRaw(newObj, row, kind)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("decode "+kind, err)
+		}
+		preDelete = obj
+	}
+
+	dopts := deleteOpts{
+		Authorize:       cfg.Authorize,
+		PreDeleteObject: preDelete,
+	}
+	if runHook {
+		dopts.PostDelete = cfg.PostDelete
+	}
+	if ae := deleteCore(ctx, cfg.Store, kind, ns, name, identity, dopts); ae != nil {
+		return nil, mapApplyErrorToHuma(ae, kind, ns, name, identity)
+	}
+	return &deleteOutput{}, nil
 }
 
 // mapApplyErrorToHuma translates the stage-tagged applyError surface
@@ -629,7 +673,7 @@ func runList[T v1alpha1.Object](
 		Limit:              p.Limit,
 		Cursor:             p.Cursor,
 		LatestOnly:         p.LatestOnly,
-		IncludeTerminating: p.IncludeTerminating,
+		IncludeTerminating: p.IncludeTerminating || cfg.IncludeTerminatingByDefault,
 	}
 	if p.Labels != "" {
 		selector, err := parseLabelSelector(p.Labels)

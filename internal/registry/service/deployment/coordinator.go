@@ -199,7 +199,7 @@ func (c *Coordinator) resolveTarget(ctx context.Context, deployment *v1alpha1.De
 	}
 	obj, err := c.getter(ctx, ref)
 	if err != nil {
-		return nil, fmt.Errorf("resolve targetRef %s/%s@%s: %w", ref.Namespace, ref.Name, ref.Version, err)
+		return nil, fmt.Errorf("resolve targetRef %s/%s@%s: %w", ref.Namespace, ref.Name, ref.Tag, err)
 	}
 	if obj == nil {
 		return nil, fmt.Errorf("resolve targetRef %s/%s: nil object", ref.Namespace, ref.Name)
@@ -217,7 +217,7 @@ func (c *Coordinator) resolveProvider(ctx context.Context, deployment *v1alpha1.
 	}
 	obj, err := c.getter(ctx, ref)
 	if err != nil {
-		return nil, fmt.Errorf("resolve providerRef %s/%s@%s: %w", ref.Namespace, ref.Name, ref.Version, err)
+		return nil, fmt.Errorf("resolve providerRef %s/%s: %w", ref.Namespace, ref.Name, err)
 	}
 	provider, ok := obj.(*v1alpha1.Provider)
 	if !ok || provider == nil {

@@ -117,7 +117,7 @@ type SemanticListOpts struct {
 	// Namespace narrows to a specific namespace; blank = cross-namespace.
 	Namespace string
 	// LatestOnly restricts to the literal "latest" tag, or
-	// is_latest_version rows for legacy stores.
+	// is_latest_version rows for mutable-object stores.
 	LatestOnly bool
 	// IncludeTerminating includes rows with a set DeletionTimestamp.
 	IncludeTerminating bool
@@ -161,7 +161,7 @@ func (s *Store) SemanticList(ctx context.Context, opts SemanticListOpts) ([]sema
 		where = append(where, fmt.Sprintf("namespace = $%d", len(args)))
 	}
 	if opts.LatestOnly {
-		if !s.legacy {
+		if s.behavior == TaggedArtifactStore {
 			args = append(args, DefaultTag())
 			where = append(where, fmt.Sprintf("tag = $%d", len(args)))
 		} else {
@@ -214,7 +214,7 @@ func (s *Store) SemanticList(ctx context.Context, opts SemanticListOpts) ([]sema
 
 	out := make([]semantic.SemanticResult, 0, limit)
 	for rows.Next() {
-		obj, score, err := scanSemanticRow(rows, !s.legacy)
+		obj, score, err := scanSemanticRow(rows, s.behavior == TaggedArtifactStore)
 		if err != nil {
 			return nil, err
 		}
@@ -230,6 +230,7 @@ func scanSemanticRow(rows pgx.Rows, tagged bool) (*v1alpha1.RawObject, float32, 
 		namespace         string
 		name              string
 		identity          string
+		uid               string
 		generation        int64
 		labelsJSON        []byte
 		annotationsJSON   []byte
@@ -243,7 +244,7 @@ func scanSemanticRow(rows pgx.Rows, tagged bool) (*v1alpha1.RawObject, float32, 
 	)
 
 	if err := rows.Scan(
-		&namespace, &name, &identity, &generation,
+		&namespace, &name, &identity, &uid, &generation,
 		&labelsJSON, &annotationsJSON, &specJSON, &statusJSON,
 		&deletionTimestamp, &finalizersJSON,
 		&createdAt, &updatedAt,
@@ -254,7 +255,7 @@ func scanSemanticRow(rows pgx.Rows, tagged bool) (*v1alpha1.RawObject, float32, 
 
 	obj, err := decodeRow(
 		tagged,
-		namespace, name, identity, generation,
+		namespace, name, identity, uid, generation,
 		labelsJSON, annotationsJSON, specJSON, statusJSON,
 		deletionTimestamp, finalizersJSON, createdAt, updatedAt,
 	)

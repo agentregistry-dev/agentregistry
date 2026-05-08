@@ -18,16 +18,17 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
-// selectServerVersion handles server version selection logic with interactive prompts
+// selectServerVersion handles server tag selection logic with interactive prompts.
 // Returns the selected server or an error if not found or cancelled
 func selectServerVersion(resourceName, requestedVersion string, autoYes bool) (*v1alpha1.MCPServer, error) {
 	if apiClient == nil {
 		return nil, errors.New("API client not initialized")
 	}
 
-	// If a specific version was requested, try to get that version
+	// If a specific tag was requested, try to get that tag. The flag is
+	// still named --version for CLI compatibility.
 	if requestedVersion != "" && requestedVersion != "latest" {
-		fmt.Printf("Checking if MCP server '%s' version '%s' exists in registry...\n", resourceName, requestedVersion)
+		fmt.Printf("Checking if MCP server '%s' tag '%s' exists in registry...\n", resourceName, requestedVersion)
 		server, err := client.GetTyped(
 			context.Background(),
 			apiClient,
@@ -41,16 +42,16 @@ func selectServerVersion(resourceName, requestedVersion string, autoYes bool) (*
 			return nil, fmt.Errorf("error querying registry: %w", err)
 		}
 		if server == nil {
-			return nil, fmt.Errorf("MCP server '%s' version '%s' not found in registry", resourceName, requestedVersion)
+			return nil, fmt.Errorf("MCP server '%s' tag '%s' not found in registry", resourceName, requestedVersion)
 		}
 
-		fmt.Printf("✓ Found MCP server: %s (version %s)\n", server.Metadata.Name, server.Metadata.Version)
+		fmt.Printf("✓ Found MCP server: %s (tag %s)\n", server.Metadata.Name, server.Metadata.Tag)
 		return server, nil
 	}
 
-	// No specific version requested, check all versions
-	fmt.Printf("Checking for versions of MCP server '%s'...\n", resourceName)
-	allVersions, err := client.ListVersionsOfName(
+	// No specific tag requested, check all tags.
+	fmt.Printf("Checking for tags of MCP server '%s'...\n", resourceName)
+	allVersions, err := client.ListTagsOfName(
 		context.Background(),
 		apiClient,
 		v1alpha1.KindMCPServer,
@@ -66,21 +67,21 @@ func selectServerVersion(resourceName, requestedVersion string, autoYes bool) (*
 		return nil, fmt.Errorf("MCP server '%s' not found in registry. Use 'arctl get mcpservers' to see available servers", resourceName)
 	}
 
-	// If there are multiple versions, prompt the user (unless --yes is set)
+	// If there are multiple tags, prompt the user (unless --yes is set)
 	if len(allVersions) > 1 { //nolint:nestif
-		fmt.Printf("✓ Found %d version(s) of MCP server '%s':\n", len(allVersions), resourceName)
+		fmt.Printf("✓ Found %d tag(s) of MCP server '%s':\n", len(allVersions), resourceName)
 		for i, v := range allVersions {
 			marker := ""
 			if i == 0 {
 				marker = " (latest)"
 			}
-			fmt.Printf("  - %s%s\n", v.Metadata.Version, marker)
+			fmt.Printf("  - %s%s\n", v.Metadata.Tag, marker)
 		}
 
 		// Skip prompt if --yes flag is set
 		if !autoYes {
 			reader := bufio.NewReader(os.Stdin)
-			fmt.Print("Proceed with the latest version? [Y/n]: ")
+			fmt.Print("Proceed with the latest tag? [Y/n]: ")
 			response, err := reader.ReadString('\n')
 			if err != nil {
 				return nil, fmt.Errorf("error reading input: %w", err)
@@ -88,13 +89,13 @@ func selectServerVersion(resourceName, requestedVersion string, autoYes bool) (*
 
 			response = strings.TrimSpace(strings.ToLower(response))
 			if response != "" && response != "y" && response != "yes" {
-				return nil, fmt.Errorf("operation cancelled. To use a specific version, use: --version <version>")
+				return nil, fmt.Errorf("operation cancelled. To use a specific tag, use: --version <tag>")
 			}
 		} else {
-			fmt.Println("Auto-accepting latest version (--yes flag set)")
+			fmt.Println("Auto-accepting latest tag (--yes flag set)")
 		}
 	} else {
-		fmt.Printf("✓ Found MCP server: %s (version %s)\n", allVersions[0].Metadata.Name, allVersions[0].Metadata.Version)
+		fmt.Printf("✓ Found MCP server: %s (tag %s)\n", allVersions[0].Metadata.Name, allVersions[0].Metadata.Tag)
 	}
 
 	return allVersions[0], nil

@@ -73,7 +73,7 @@ spec:
 	if len(agent.Spec.MCPServers) != 1 ||
 		agent.Spec.MCPServers[0].Kind != KindMCPServer ||
 		agent.Spec.MCPServers[0].Name != "github-tools" ||
-		agent.Spec.MCPServers[0].Version != "0.2" {
+		agent.Spec.MCPServers[0].Tag != "0.2" {
 		t.Fatalf("mcpServers ref mismatch: %+v", agent.Spec.MCPServers)
 	}
 	if len(agent.Spec.Skills) != 1 || agent.Spec.Skills[0].Name != "code-review" {
@@ -219,12 +219,11 @@ func TestScheme_Decode_RejectsSystemMetadataForContentRegistryKinds(t *testing.T
 	}
 }
 
-// TestScheme_Decode_AcceptsSystemMetadataForInfraKinds pins the
-// inverse contract: infra/config kinds (Provider, Deployment) keep
-// their legacy main-branch shape and accept user-supplied
-// metadata.version / metadata.generation. Only the content-registry
-// bucket is subject to the system-assigned rejection.
-func TestScheme_Decode_AcceptsSystemMetadataForInfraKinds(t *testing.T) {
+// TestScheme_Decode_RejectsSystemMetadataForInfraKinds pins the unified public
+// contract: infra/config kinds (Provider, Deployment) also reject
+// metadata.version / metadata.generation instead of exposing their private
+// storage identity.
+func TestScheme_Decode_RejectsSystemMetadataForInfraKinds(t *testing.T) {
 	cases := map[string]string{
 		"Provider/version": `apiVersion: ar.dev/v1alpha1
 kind: Provider
@@ -251,7 +250,7 @@ spec:
   targetRef:
     kind: Agent
     name: summarizer
-    version: "1"
+    tag: "1"
   providerRef:
     kind: Provider
     name: local
@@ -266,7 +265,7 @@ spec:
   targetRef:
     kind: Agent
     name: summarizer
-    version: "1"
+    tag: "1"
   providerRef:
     kind: Provider
     name: local
@@ -275,8 +274,8 @@ spec:
 	}
 	for name, doc := range cases {
 		t.Run(name, func(t *testing.T) {
-			if _, err := Default.Decode([]byte(doc)); err != nil {
-				t.Fatalf("expected infra kind to accept system metadata, got %v", err)
+			if _, err := Default.Decode([]byte(doc)); err == nil {
+				t.Fatalf("expected public system metadata to be rejected")
 			}
 		})
 	}
@@ -389,16 +388,15 @@ func TestEncode_RoundTrip_YAML(t *testing.T) {
 	// but UnmarshalJSON intentionally does NOT re-stamp it, so callers
 	// like the importer can layer their own default on top.
 	//
-	// Metadata.Version is server-assigned (the decoder rejects
-	// user-supplied values) so the input here cannot set one. The
-	// equality check below therefore checks an empty-version envelope.
+	// Metadata.Version is a private storage identity (the decoder rejects
+	// user-supplied values), so the input here cannot set one.
 	original := &Agent{
 		TypeMeta: TypeMeta{APIVersion: GroupVersion, Kind: KindAgent},
 		Metadata: ObjectMeta{Name: "rt", Labels: map[string]string{"k": "v"}},
 		Spec: AgentSpec{
 			Title:      "Round Trip",
 			Source:     &AgentSource{Image: "img:tag"},
-			MCPServers: []ResourceRef{{Kind: KindMCPServer, Name: "mcp1", Version: "1"}},
+			MCPServers: []ResourceRef{{Kind: KindMCPServer, Name: "mcp1", Tag: "1"}},
 		},
 	}
 
@@ -423,14 +421,14 @@ func TestEncode_RoundTrip_YAML(t *testing.T) {
 }
 
 func TestEncode_RoundTrip_JSON(t *testing.T) {
-	// Metadata.Version is server-assigned (the decoder rejects
+	// Metadata.Version is a private storage identity (the decoder rejects
 	// user-supplied values). The input here therefore omits it; the
-	// legacy Deployment Store stamps it internally on apply.
+	// mutable-object store stamps it internally on apply.
 	original := &Deployment{
 		TypeMeta: TypeMeta{APIVersion: GroupVersion, Kind: KindDeployment},
 		Metadata: ObjectMeta{Name: "prod"},
 		Spec: DeploymentSpec{
-			TargetRef:    ResourceRef{Kind: KindAgent, Name: "x", Version: "1"},
+			TargetRef:    ResourceRef{Kind: KindAgent, Name: "x", Tag: "1"},
 			ProviderRef:  ResourceRef{Kind: KindProvider, Name: "local"},
 			DesiredState: DesiredStateDeployed,
 			Env:          map[string]string{"FOO": "bar"},

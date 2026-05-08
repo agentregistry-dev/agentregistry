@@ -7,7 +7,7 @@
 //
 // Scope: only the per-kind CRUD surface (`/v0/{plural}/{name}/{version}`).
 // Other v1alpha1 HTTP endpoints live in sibling packages — `/v0/import` in
-// importpipeline, `/v0/deployments/{name}/{version}/logs` in
+// importpipeline, `/v0/deployments/{name}/logs` in
 // deploymentlogs.
 //
 // First-party only: enterprise extension kinds (e.g. Role) do NOT

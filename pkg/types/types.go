@@ -41,7 +41,8 @@ type AuthorizeInput struct {
 	Name string
 	// Tag is the resource tag for content kinds; "" for list/get-latest.
 	Tag string
-	// Version is the legacy resource version; "" for list and get-latest.
+	// Version is the private storage identity for mutable-object rows; "" for
+	// list and get-latest.
 	Version string
 }
 
@@ -111,8 +112,8 @@ type ResourceRouteContext struct {
 // to log.
 type Auditor interface {
 	// ResourceTagCreated is invoked when Store.Upsert creates a new tag row
-	// for a content-registry kind. Provider and Deployment (legacy mode) do
-	// not produce this event.
+	// for a content-registry kind. Mutable-object kinds do not produce this
+	// event.
 	ResourceTagCreated(ctx context.Context, kind, namespace, name, tag string)
 }
 
@@ -205,11 +206,11 @@ type AppOptions struct {
 	// store map as any ExtraRoutes they register.
 	V1Alpha1StoreTables map[string]string
 
-	// V1Alpha1LegacyStoreKinds marks extra v1alpha1 kinds that use the legacy
-	// mutable (namespace, name, version) row shape instead of tagged content
-	// semantics. Downstream kinds such as AccessPolicy are v1alpha1-shaped but
-	// are control-plane policy, not content artifacts.
-	V1Alpha1LegacyStoreKinds map[string]bool
+	// V1Alpha1MutableStoreKinds marks extra v1alpha1 kinds that use mutable
+	// namespace/name object behavior instead of tagged artifact semantics.
+	// Downstream kinds such as AccessPolicy are v1alpha1-shaped but are
+	// control-plane policy, not content artifacts.
+	V1Alpha1MutableStoreKinds map[string]bool
 
 	// RegistryValidator overrides the per-package registry
 	// validator (the dispatcher consulted on apply / import to confirm

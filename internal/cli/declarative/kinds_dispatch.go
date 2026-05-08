@@ -27,9 +27,9 @@ func listItems(k *scheme.Kind) ([]any, error) {
 }
 
 // getItem fetches a single item by name for the given kind. Empty
-// version resolves the latest version; a non-empty version is passed
-// through to the per-kind closure (only meaningful for
-// content-registry kinds — runGet gates the CLI flag accordingly).
+// version resolves the latest tag; a non-empty version is a deprecated
+// tag-selection alias passed through to the per-kind closure (only meaningful
+// for taggable artifacts — runGet gates the CLI flag accordingly).
 func getItem(k *scheme.Kind, name, version string) (any, error) {
 	if k.Get == nil {
 		return nil, fmt.Errorf("get not supported for kind %q", k.Kind)
@@ -47,20 +47,20 @@ func deleteItem(k *scheme.Kind, name, version string, force bool) error {
 	return k.Delete(context.Background(), name, version, force)
 }
 
-// listVersions returns every live version for (kind, name). Errors when
-// the kind is not a versioned-artifact (e.g. legacy deployment).
+// listVersions returns every live tag for (kind, name). Errors when the kind
+// is not a taggable artifact (e.g. mutable Deployment/Provider).
 func listVersions(k *scheme.Kind, name string) ([]any, error) {
 	if k.ListVersions == nil {
-		return nil, fmt.Errorf("--all-versions not supported for kind %q (resource is not versioned)", k.Kind)
+		return nil, fmt.Errorf("--all-versions not supported for kind %q (resource is not taggable)", k.Kind)
 	}
 	return k.ListVersions(context.Background(), name)
 }
 
-// deleteAllVersions soft-deletes every live version for (kind, name) in
-// one server round-trip. Errors when the kind is not a versioned-artifact.
+// deleteAllVersions soft-deletes every live tag for (kind, name) in one server
+// round-trip. Errors when the kind is not a taggable artifact.
 func deleteAllVersions(k *scheme.Kind, name string) error {
 	if k.DeleteAllVersions == nil {
-		return fmt.Errorf("--all-versions not supported for kind %q (resource is not versioned)", k.Kind)
+		return fmt.Errorf("--all-versions not supported for kind %q (resource is not taggable)", k.Kind)
 	}
 	return k.DeleteAllVersions(context.Background(), name)
 }

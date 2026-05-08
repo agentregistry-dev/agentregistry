@@ -18,7 +18,7 @@ import (
 
 // deploymentTestServer builds an httptest.Server routing:
 //   - GET    /v0/deployments                → returns `list`
-//   - DELETE /v0/deployments/{name}/{ver}   → status 204 unless id is in `failIDs`, then 500
+//   - DELETE /v0/deployments/{name}         → status 204 unless id is in `failIDs`, then 500
 //
 // Captures every received DELETE id in order for assertions.
 func deploymentTestServer(t *testing.T, list []v1alpha1.Deployment, failIDs map[string]bool) (*httptest.Server, *[]string) {
@@ -42,11 +42,11 @@ func deploymentTestServer(t *testing.T, list []v1alpha1.Deployment, failIDs map[
 		}
 		path := strings.TrimPrefix(r.URL.Path, "/v0/deployments/")
 		parts := strings.Split(path, "/")
-		if len(parts) != 2 {
+		if len(parts) != 1 {
 			http.Error(w, `{"error":"bad delete path"}`, http.StatusBadRequest)
 			return
 		}
-		id := v1alpha1.DefaultNamespace + "/" + parts[0] + "/" + parts[1]
+		id := v1alpha1.DefaultNamespace + "/" + parts[0]
 		mu.Lock()
 		deleted = append(deleted, id)
 		mu.Unlock()
@@ -85,7 +85,7 @@ func TestDeploymentDelete_RemovesAllProviderMatchesForVersion(t *testing.T) {
 	cmd.SetArgs([]string{"deployment", "summarizer", "--version", "1.0.0"})
 	require.NoError(t, cmd.Execute())
 
-	assert.ElementsMatch(t, []string{"default/aws-v1/1.0.0", "default/gcp-v1/1.0.0"}, *deleted,
+	assert.ElementsMatch(t, []string{"default/aws-v1", "default/gcp-v1"}, *deleted,
 		"both provider variants of summarizer 1.0.0 should be deleted; nothing else")
 }
 
@@ -114,22 +114,22 @@ func TestDeploymentDelete_PartialFailure(t *testing.T) {
 		deploymentFixture("gcp-v1", "summarizer", "1.0.0", "my-gcp", "agent", "pending"),
 	}
 	// Fail the GCP delete only.
-	srv, deleted := deploymentTestServer(t, deployments, map[string]bool{"default/gcp-v1/1.0.0": true})
+	srv, deleted := deploymentTestServer(t, deployments, map[string]bool{"default/gcp-v1": true})
 	setupClientForServer(t, srv)
 
 	cmd := declarative.NewDeleteCmd()
 	cmd.SetArgs([]string{"deployment", "summarizer", "--version", "1.0.0"})
 	err := cmd.Execute()
 	require.Error(t, err, "partial failure must propagate")
-	assert.Contains(t, err.Error(), "default/gcp-v1/1.0.0", "error should identify which deployment failed")
+	assert.Contains(t, err.Error(), "default/gcp-v1", "error should identify which deployment failed")
 
 	// Both DELETEs should have been attempted — we don't stop on first failure.
-	assert.ElementsMatch(t, []string{"default/aws-v1/1.0.0", "default/gcp-v1/1.0.0"}, *deleted,
+	assert.ElementsMatch(t, []string{"default/aws-v1", "default/gcp-v1"}, *deleted,
 		"both matching deployments should be attempted even when one fails")
 }
 
-// (4) Guard against the earlier wildcard bug: empty --version must be rejected before
-// issuing any HTTP call, to prevent accidental bulk deletes across all versions.
+// (4) Guard against the earlier wildcard bug: empty --version must be rejected
+// before issuing any HTTP call, to prevent accidental bulk deployment deletes.
 func TestDeploymentDelete_RejectsEmptyVersion(t *testing.T) {
 	deployments := []v1alpha1.Deployment{
 		deploymentFixture("aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "pending"),

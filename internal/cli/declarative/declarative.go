@@ -65,9 +65,9 @@ func init() {
 		remoteMCPServerRow,
 	))
 
-	// Provider is registered manually because it is a legacy
-	// (single-version-identity) kind: the server's provider store does not
-	// expose /versions or DeleteAllVersions endpoints. Routing it through
+	// Provider is registered manually because it is a mutable namespace/name
+	// object: the server's provider store does not expose /tags or
+	// DeleteAllVersions endpoints. Routing it through
 	// typedKind would advertise --all-versions on its CLI surface and call
 	// endpoints that don't exist. The Get / Delete / List closures match
 	// what typedKind would otherwise produce; ListVersions /

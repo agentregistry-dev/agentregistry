@@ -28,7 +28,7 @@ If output-directory is not specified, it will be extracted to ./skills/<skill-na
 }
 
 func init() {
-	PullCmd.Flags().StringVar(&pullVersion, "version", "", "Version to pull (if not specified and multiple versions exist, you will be prompted)")
+	PullCmd.Flags().StringVar(&pullVersion, "version", "", "Deprecated alias for tag to pull (if not specified and multiple tags exist, you will be prompted)")
 }
 
 func runPull(cmd *cobra.Command, args []string) error {
@@ -48,8 +48,8 @@ func runPull(cmd *cobra.Command, args []string) error {
 
 	printer.PrintInfo(fmt.Sprintf("Pulling skill: %s", skillName))
 
-	// 1. Resolve which version to pull
-	version, err := resolveSkillVersion(cmd.Context(), skillName, pullVersion)
+	// 1. Resolve which tag to pull
+	tag, err := resolveSkillTag(cmd.Context(), skillName, pullVersion)
 	if err != nil {
 		return err
 	}
@@ -62,7 +62,7 @@ func runPull(cmd *cobra.Command, args []string) error {
 		v1alpha1.KindSkill,
 		v1alpha1.DefaultNamespace,
 		skillName,
-		version,
+		tag,
 		func() *v1alpha1.Skill { return &v1alpha1.Skill{} },
 	)
 	if err != nil {
@@ -70,10 +70,10 @@ func runPull(cmd *cobra.Command, args []string) error {
 	}
 
 	if skillResp == nil {
-		return fmt.Errorf("skill '%s' version '%s' not found in registry", skillName, version)
+		return fmt.Errorf("skill '%s' tag '%s' not found in registry", skillName, tag)
 	}
 
-	printer.PrintSuccess(fmt.Sprintf("Found skill: %s (version %s)", skillResp.Metadata.Name, skillResp.Metadata.Version))
+	printer.PrintSuccess(fmt.Sprintf("Found skill: %s (tag %s)", skillResp.Metadata.Name, skillResp.Metadata.Tag))
 
 	absOutputDir, err := filepath.Abs(outputDir)
 	if err != nil {
@@ -96,19 +96,19 @@ func runPull(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// resolveSkillVersion determines which version to pull.
-// If a version is explicitly provided, it is used directly.
-// If only one version exists, that version is selected automatically.
-// If multiple versions exist, the user is prompted to specify one.
+// resolveSkillTag determines which tag to pull.
+// If a tag is explicitly provided, it is used directly.
+// If only one tag exists, that tag is selected automatically.
+// If multiple tags exist, the user is prompted to specify one.
 //
 // ctx flows in from the cobra command so Ctrl-C / parent timeouts cancel
 // the registry list call cleanly.
-func resolveSkillVersion(ctx context.Context, skillName, requestedVersion string) (string, error) {
-	if requestedVersion != "" {
-		return requestedVersion, nil
+func resolveSkillTag(ctx context.Context, skillName, requestedTag string) (string, error) {
+	if requestedTag != "" {
+		return requestedTag, nil
 	}
 
-	versions, err := client.ListVersionsOfName(
+	tags, err := client.ListTagsOfName(
 		ctx,
 		apiClient,
 		v1alpha1.KindSkill,
@@ -117,27 +117,27 @@ func resolveSkillVersion(ctx context.Context, skillName, requestedVersion string
 		func() *v1alpha1.Skill { return &v1alpha1.Skill{} },
 	)
 	if err != nil {
-		return "", fmt.Errorf("failed to list skill versions: %w", err)
+		return "", fmt.Errorf("failed to list skill tags: %w", err)
 	}
 
-	if len(versions) == 0 {
+	if len(tags) == 0 {
 		return "", fmt.Errorf("skill '%s' not found in registry", skillName)
 	}
 
-	if len(versions) == 1 {
-		return versions[0].Metadata.Version, nil
+	if len(tags) == 1 {
+		return tags[0].Metadata.Tag, nil
 	}
 
-	printer.PrintError(fmt.Sprintf("skill '%s' has %d versions, please specify one with --version:", skillName, len(versions)))
-	for i, v := range versions {
+	printer.PrintError(fmt.Sprintf("skill '%s' has %d tags, please specify one with --version:", skillName, len(tags)))
+	for i, v := range tags {
 		latest := ""
 		if i == 0 {
 			latest = " (latest)"
 		}
-		printer.PrintInfo(fmt.Sprintf("  %s%s", v.Metadata.Version, latest))
+		printer.PrintInfo(fmt.Sprintf("  %s%s", v.Metadata.Tag, latest))
 	}
 
-	return "", fmt.Errorf("multiple versions available, specify one with --version")
+	return "", fmt.Errorf("multiple tags available, specify one with --version")
 }
 
 // pullFromGit clones a git repository and copies the skill files to the output directory.

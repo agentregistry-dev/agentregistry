@@ -135,7 +135,7 @@ func TestDeclarativeApply_AgentLifecycle(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	agentName := UniqueAgentName("declagent")
-	// Server assigns sequential integer versions; first apply → "1".
+	// Agent artifacts remain taggable; this test exercises the first explicit tag.
 	version := "1"
 
 	// Clean up any stale entry from a previous interrupted run.
@@ -1915,7 +1915,7 @@ spec:
 		t.Fatalf("expected .status.phase in get output, got:\n%s", result.Stdout)
 	}
 	if !strings.Contains(result.Stdout, "id:") {
-		t.Fatalf("expected .status.id (server-assigned UUID) in get output, got:\n%s", result.Stdout)
+		t.Fatalf("expected .status.id (server-generated UUID) in get output, got:\n%s", result.Stdout)
 	}
 
 	// Round-trip guarantee: apply the yaml we just fetched — the .status
@@ -1947,11 +1947,10 @@ spec:
   targetRef:
     kind: Agent
     name: %s
-    version: "1"
+    tag: latest
   providerRef:
     kind: Provider
     name: local
-    version: "1"
 `, missingName, missingName)
 	deployPath := writeDeclarativeYAML(t, tmpDir, "deployment.yaml", deployYAML)
 
@@ -2108,19 +2107,15 @@ spec:
 	}
 }
 
-// TestPrompt_MultipleVersions applies two prompt versions with distinct
-// content, asserts both are queryable by --version, deleting one leaves the
-// other intact. Covers the (name, version) composite-key behavior for prompts
-// — restores coverage from the deleted imperative TestPromptMultipleVersions.
-func TestPrompt_MultipleVersions(t *testing.T) {
+// TestPrompt_MultipleTags applies two prompt tags with distinct content,
+// asserts both are queryable by tag, and deleting one leaves the other intact.
+func TestPrompt_MultipleTags(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 	promptName := UniqueNameWithPrefix("e2emultivprompt")
-	// Server assigns sequential integer versions: first apply → "1",
-	// second apply → "2".
-	v1, v2 := "1", "2"
-	v1Content := "Version 1: You are a helpful assistant."
-	v2Content := "Version 2: You are an expert coding assistant."
+	v1, v2 := "stable", "expert"
+	v1Content := "Stable tag: You are a helpful assistant."
+	v2Content := "Expert tag: You are an expert coding assistant."
 
 	t.Cleanup(func() {
 		RunArctl(t, tmpDir, "delete", "prompt", promptName, "--version", v1, "--registry-url", regURL)
@@ -2129,39 +2124,38 @@ func TestPrompt_MultipleVersions(t *testing.T) {
 
 	// Apply v1 + v2 via declarative YAML.
 	for _, tc := range []struct {
-		version, content string
+		tag, content string
 	}{{v1, v1Content}, {v2, v2Content}} {
 		yaml := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
 kind: Prompt
 metadata:
   name: %s
+  tag: %s
 spec:
-  description: "multi-version prompt test"
+  description: "multi-tag prompt test"
   content: |
     %s
-`, promptName, tc.content)
-		path := writeDeclarativeYAML(t, tmpDir, fmt.Sprintf("p-%s.yaml", tc.version), yaml)
+`, promptName, tc.tag, tc.content)
+		path := writeDeclarativeYAML(t, tmpDir, fmt.Sprintf("p-%s.yaml", tc.tag), yaml)
 		result := RunArctl(t, tmpDir, "apply", "-f", path, "--registry-url", regURL)
 		RequireSuccess(t, result)
 		RequireOutputContains(t, result, "Prompt/"+promptName)
 	}
 
-	// Both versions queryable via HTTP (declarative `arctl get` has no
-	// --version flag — always returns latest — so we hit the per-version
-	// API path directly. Decode the JSON so content comparisons survive
+	// Both tags queryable via HTTP. Decode the JSON so content comparisons survive
 	// any future change to include quotes/escapes.
 	for _, tc := range []struct {
-		version, wantContent string
+		tag, wantContent string
 	}{{v1, v1Content}, {v2, v2Content}} {
-		resp := RegistryGet(t, resourceURL(regURL, "prompts", promptName, tc.version))
+		resp := RegistryGet(t, resourceURL(regURL, "prompts", promptName, tc.tag))
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("GET prompt %s@%s: expected 200, got %d: %s", promptName, tc.version, resp.StatusCode, body)
+			t.Fatalf("GET prompt %s@%s: expected 200, got %d: %s", promptName, tc.tag, resp.StatusCode, body)
 		}
 		var decoded struct {
 			Metadata struct {
-				Version string `json:"version"`
+				Tag string `json:"tag"`
 			} `json:"metadata"`
 			Spec struct {
 				Content string `json:"content"`
@@ -2170,12 +2164,12 @@ spec:
 		if err := json.Unmarshal(body, &decoded); err != nil {
 			t.Fatalf("decoding prompt response: %v\nbody: %s", err, body)
 		}
-		if decoded.Metadata.Version != tc.version {
-			t.Errorf("prompt %s: got version %q, want %q", promptName, decoded.Metadata.Version, tc.version)
+		if decoded.Metadata.Tag != tc.tag {
+			t.Errorf("prompt %s: got tag %q, want %q", promptName, decoded.Metadata.Tag, tc.tag)
 		}
 		if !strings.Contains(decoded.Spec.Content, tc.wantContent) {
 			t.Errorf("prompt %s@%s: expected %q in content, got %q",
-				promptName, tc.version, tc.wantContent, decoded.Spec.Content)
+				promptName, tc.tag, tc.wantContent, decoded.Spec.Content)
 		}
 	}
 
@@ -2265,67 +2259,61 @@ spec:
 	}
 }
 
-// TestSkill_DeletePromotesLatest asserts that when `is_latest` is being
-// maintained across multiple skill versions, deleting the current latest
-// promotes the next-highest version. Restores coverage from the deleted
-// imperative TestSkillDeletePromotesLatest.
-//
-// Contract: apply v1 → apply v2 (now latest) → delete v2 → v1 must be the
-// latest again (queryable without --version, served as the single result
-// when listing).
-func TestSkill_DeletePromotesLatest(t *testing.T) {
+// TestSkill_DeleteTaggedArtifactKeepsLatest asserts that deleting an explicit
+// non-latest tag does not disturb the literal latest tag.
+func TestSkill_DeleteTaggedArtifactKeepsLatest(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 	skillName := UniqueNameWithPrefix("e2epromoteskill")
-	// Server assigns sequential integer versions: first apply → "1",
-	// second apply → "2".
-	v1, v2 := "1", "2"
+	v1, v2 := "stable", "latest"
 
 	t.Cleanup(func() {
-		// Best-effort cleanup of both versions.
+		// Best-effort cleanup of both tags.
 		RunArctl(t, tmpDir, "delete", "skill", skillName, "--version", v1, "--registry-url", regURL)
 		RunArctl(t, tmpDir, "delete", "skill", skillName, "--version", v2, "--registry-url", regURL)
 	})
 
-	// Apply v1.
+	// Apply stable.
 	yamlV1 := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
 kind: Skill
 metadata:
   name: %s
+  tag: %s
 spec:
-  description: "skill v1 for delete-promotes-latest test"
-`, skillName)
+  description: "stable skill tag for delete test"
+`, skillName, v1)
 	RequireSuccess(t, RunArctl(t, tmpDir, "apply", "-f",
 		writeDeclarativeYAML(t, tmpDir, "skill-v1.yaml", yamlV1),
 		"--registry-url", regURL))
 
-	// Apply v2 — becomes latest.
+	// Apply literal latest.
 	yamlV2 := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
 kind: Skill
 metadata:
   name: %s
+  tag: %s
 spec:
-  description: "skill v2 for delete-promotes-latest test"
-`, skillName)
+  description: "latest skill tag for delete test"
+`, skillName, v2)
 	RequireSuccess(t, RunArctl(t, tmpDir, "apply", "-f",
 		writeDeclarativeYAML(t, tmpDir, "skill-v2.yaml", yamlV2),
 		"--registry-url", regURL))
 
-	// Without --version, get returns the latest — should be v2.
+	// Without --version, get returns the literal latest tag.
 	result := RunArctl(t, tmpDir, "get", "skill", skillName, "-o", "yaml", "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "version: "+v2)
+	RequireOutputContains(t, result, "tag: "+v2)
 
-	// Delete v2 — the latest marker should fall back to v1.
+	// Delete the stable tag — latest should remain.
 	RequireSuccess(t, RunArctl(t, tmpDir, "delete", "skill", skillName,
-		"--version", v2, "--registry-url", regURL))
+		"--version", v1, "--registry-url", regURL))
 
-	// Re-query without --version: expect v1 promoted to latest.
+	// Re-query without --version: expect latest to remain.
 	result = RunArctl(t, tmpDir, "get", "skill", skillName, "-o", "yaml", "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "version: "+v1)
-	if strings.Contains(result.Stdout, "version: "+v2) {
-		t.Errorf("v2 should be gone after delete, but appears in get output:\n%s", result.Stdout)
+	RequireOutputContains(t, result, "tag: "+v2)
+	if strings.Contains(result.Stdout, "tag: "+v1) {
+		t.Errorf("stable tag should be gone after delete, but appears in get output:\n%s", result.Stdout)
 	}
 }
 

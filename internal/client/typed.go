@@ -8,7 +8,7 @@ import (
 )
 
 // GetTyped fetches one resource and materializes its typed v1alpha1 envelope.
-// Empty version resolves the latest version for (kind, namespace, name).
+// Empty version resolves the latest tag for taggable resources.
 func GetTyped[T v1alpha1.Object](
 	ctx context.Context,
 	c *Client,
@@ -113,15 +113,4 @@ func ListTagsOfName[T v1alpha1.Object](
 		out = append(out, obj)
 	}
 	return out, nil
-}
-
-// ListVersionsOfName is a compatibility alias for callers that have not yet
-// renamed to tag terminology.
-func ListVersionsOfName[T v1alpha1.Object](
-	ctx context.Context,
-	c *Client,
-	kind, namespace, name string,
-	newObj func() T,
-) ([]T, error) {
-	return ListTagsOfName(ctx, c, kind, namespace, name, newObj)
 }

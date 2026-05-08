@@ -29,14 +29,13 @@ func deploymentFixture(metaName, targetName, version, providerID, resourceType, 
 		Metadata: v1alpha1.ObjectMeta{
 			Namespace: v1alpha1.DefaultNamespace,
 			Name:      metaName,
-			Version:   version,
 		},
 		Spec: v1alpha1.DeploymentSpec{
 			TargetRef: v1alpha1.ResourceRef{
 				Kind:      targetKind,
 				Namespace: v1alpha1.DefaultNamespace,
 				Name:      targetName,
-				Version:   version,
+				Tag:       version,
 			},
 			ProviderRef: v1alpha1.ResourceRef{
 				Kind:      v1alpha1.KindProvider,
@@ -112,11 +111,11 @@ func TestDeploymentGet_ReturnsFirstWhenMultipleShareName(t *testing.T) {
 	require.NoError(t, cmd.Execute())
 
 	// First match by list order is aws-v1; output should include its ID, not the others.
-	assert.Contains(t, out.String(), "default/aws-v1/1.0.0",
+	assert.Contains(t, out.String(), "default/aws-v1",
 		"first deployment for the name should be returned")
-	assert.NotContains(t, out.String(), "default/gcp-v1/1.0.0",
+	assert.NotContains(t, out.String(), "default/gcp-v1",
 		"only the first match is surfaced; subsequent matches are filtered out")
-	assert.NotContains(t, out.String(), "default/aws-v2/2.0.0",
+	assert.NotContains(t, out.String(), "default/aws-v2",
 		"other versions must not be surfaced when get returns first match")
 }
 
@@ -185,7 +184,7 @@ func TestDeploymentGet_YAMLOutputIncludesStatus(t *testing.T) {
 	assert.Contains(t, got, "apiVersion: ar.dev/v1alpha1")
 	assert.Contains(t, got, "kind: Deployment")
 	assert.Contains(t, got, "name: summarizer")
-	assert.Contains(t, got, "version: 1.0.0")
+	assert.Contains(t, got, "tag: 1.0.0")
 
 	// Spec block — declarative fields only.
 	assert.Contains(t, got, "providerRef:")
@@ -197,7 +196,7 @@ func TestDeploymentGet_YAMLOutputIncludesStatus(t *testing.T) {
 
 	// Status block — server-managed runtime state, available for debugging.
 	assert.Contains(t, got, "status:")
-	assert.Contains(t, got, "id: default/aws-v1/1.0.0")
+	assert.Contains(t, got, "id: default/aws-v1")
 	assert.Contains(t, got, "phase: deployed")
 	assert.Contains(t, got, "origin: managed")
 	assert.Contains(t, got, "remoteId: runtime-abc",

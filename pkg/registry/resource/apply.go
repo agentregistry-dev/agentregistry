@@ -35,13 +35,13 @@ type ApplyConfig struct {
 	Scheme *v1alpha1.Scheme
 	// Authorizers, when non-empty, gates each decoded document on apply
 	// against the same per-kind hook the generic resource handler
-	// consults at PUT /v0/{plural}/{name}/{version}. Without this,
+	// consults on direct mutable-object PUT. Without this,
 	// /v0/apply (the multi-doc batch endpoint arctl uses) bypasses the
 	// per-kind authz wired through crud.PerKindHooks. Missing keys
 	// authorize-allow (matches resource.Config.Authorize == nil).
 	//
 	// Each document gets its own AuthorizeInput (Verb="apply", Kind +
-	// Name + Version + Namespace from the decoded metadata) so the
+	// Name + Tag/hidden identity + Namespace from the decoded metadata) so the
 	// caller can deny per-resource. Errors fail the document; the rest
 	// of the batch continues — same per-doc isolation the upsert path
 	// already has.
@@ -202,8 +202,6 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 	}
 	if store.IsTaggedArtifact() {
 		res.Tag = up.Tag
-	} else {
-		res.Version = meta.Version
 	}
 	res.Generation = up.Generation
 	return res
@@ -217,8 +215,8 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 //
 // Tagged-artifact identity is (namespace, name, tag). If metadata.tag is
 // omitted on a delete document, it defaults to the literal "latest" tag. The
-// legacy deployment path keeps its single-version delete since deployment rows
-// are mutable rather than append-only.
+// mutable-object path keeps its single-row delete since those rows are
+// control-plane state rather than append-only tags.
 func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun bool) arv0.ApplyResult {
 	store, meta, ae := resolveBatchTarget(cfg, obj, "delete")
 	res := arv0.ApplyResult{
@@ -260,9 +258,8 @@ func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun
 			})
 		}
 	} else {
-		// Legacy deployment path: meta.Version is the row identity
-		// supplied by the caller (default "1" via the
-		// MetadataVersionDefaulter). DeleteCore here keeps the same
+		// Mutable object path: meta.Version is the hidden row identity
+		// supplied by the kind defaulter. DeleteCore here keeps the same
 		// authz + delete + PostDelete flow used by the URL handler.
 		if err := store.Delete(ctx, meta.Namespace, meta.Name, meta.Version); err != nil {
 			return failResult(res, &applyError{
@@ -309,14 +306,9 @@ func resolveBatchTarget(cfg ApplyConfig, obj v1alpha1.Object, verb string) (*v1a
 		obj.SetMetadata(*meta)
 	}
 
-	// Default the legacy Provider/Deployment store's required string
-	// version when the kind opts in via MetadataVersionDefaulter. The
-	// defaulter supplies "1" so the legacy delete path has a row
-	// identity to use when the manifest omits metadata.version.
-	// Tagged-artifact kinds reject metadata.version at decode time and ignore
-	// meta.Version entirely on the upsert/delete path, so they don't implement
-	// the interface and this call is a no-op for them.
-	v1alpha1.DefaultMetadataVersionIfMissing(obj)
+	// Default mutable object stores' private row identity. Tagged-artifact
+	// kinds do not implement the interface and this call is a no-op for them.
+	v1alpha1.DefaultMutableObjectIdentityIfMissing(obj)
 
 	// Defense-in-depth: when any Authorizers are wired, a kind without
 	// an entry must DENY rather than silently allow. The enterprise H2

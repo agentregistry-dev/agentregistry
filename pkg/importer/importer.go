@@ -309,11 +309,9 @@ func (i *Importer) importOne(ctx context.Context, source string, obj v1alpha1.Ob
 		return res
 	}
 
-	// Stamp the legacy deployment store's required string version so
-	// non-upsert codepaths (findings.Replace) have a row identity to
-	// thread through. Tagged-artifact kinds carry their string row identity
-	// via up.Tag once Upsert returns.
-	v1alpha1.DefaultMetadataVersionIfMissing(obj)
+	// Stamp mutable object stores' hidden row identity so non-upsert codepaths
+	// (findings.Replace) have a private identity to thread through.
+	v1alpha1.DefaultMutableObjectIdentityIfMissing(obj)
 	if store.IsTaggedArtifact() && meta.Tag == "" {
 		meta.Tag = v1alpha1store.DefaultTag()
 		obj.SetMetadata(*meta)

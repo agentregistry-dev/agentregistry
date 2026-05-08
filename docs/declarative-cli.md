@@ -10,18 +10,25 @@ arctl build summarizer/ --push      # optional: build and push Docker image
 arctl apply -f summarizer/agent.yaml
 ```
 
-## Versioning
+## Tags And Mutable Objects
 
-Versions are system-assigned monotonic integers. First `apply` of a new name produces `1`; re-applying the same spec is a no-op; a changed spec produces `2`, `3`, …. Older versions are immutable. Deleting every version frees the name.
+Agents, MCP servers, remote MCP servers, skills, and prompts are taggable artifacts. Set `metadata.tag` to publish a deterministic name you can reference from other manifests; if you omit it, the registry uses the literal `latest` tag.
+
+Providers and deployments are mutable control-plane objects. They use public namespace/name identity, not tags or versions.
 
 ```bash
 arctl get agent NAME                   # latest
-arctl get agent NAME --version 1       # specific
-arctl get agent NAME --all-versions    # history
+arctl get agent NAME --version stable  # deprecated alias for tag selection
+arctl get agent NAME --all-tags        # tag list
 
 arctl delete agent NAME                # latest
-arctl delete agent NAME --version 1    # specific
-arctl delete agent NAME --all-versions # frees the name
+arctl delete agent NAME --version stable # deprecated alias for tag selection
+arctl delete agent NAME --all-versions   # deprecated alias for deleting every tag
+
+arctl get provider NAME
+arctl delete provider NAME
+arctl get deployment NAME
+arctl delete deployment NAME --force
 ```
 
 ## Resources

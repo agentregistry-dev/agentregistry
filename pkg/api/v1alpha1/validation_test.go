@@ -70,11 +70,11 @@ func TestValidateObjectMeta_RejectsBadLabelKey(t *testing.T) {
 func TestAgentValidate_OK(t *testing.T) {
 	a := &Agent{
 		TypeMeta: TypeMeta{APIVersion: GroupVersion, Kind: KindAgent},
-		Metadata: ObjectMeta{Namespace: "default", Name: "alice", Version: "v1"},
+		Metadata: ObjectMeta{Namespace: "default", Name: "alice"},
 		Spec: AgentSpec{
 			Title: "Alice",
 			MCPServers: []ResourceRef{
-				{Kind: KindMCPServer, Name: "tools", Version: "v1"},
+				{Kind: KindMCPServer, Name: "tools", Tag: "v1"},
 			},
 		},
 	}
@@ -83,9 +83,9 @@ func TestAgentValidate_OK(t *testing.T) {
 
 func TestAgentValidate_RejectsWrongRefKind(t *testing.T) {
 	a := &Agent{
-		Metadata: ObjectMeta{Namespace: "default", Name: "a", Version: "v1"},
+		Metadata: ObjectMeta{Namespace: "default", Name: "a"},
 		Spec: AgentSpec{
-			MCPServers: []ResourceRef{{Kind: KindSkill, Name: "wrong", Version: "v1"}},
+			MCPServers: []ResourceRef{{Kind: KindSkill, Name: "wrong", Tag: "v1"}},
 		},
 	}
 	paths := failedFields(t, a.Validate())
@@ -94,7 +94,7 @@ func TestAgentValidate_RejectsWrongRefKind(t *testing.T) {
 
 func TestAgentValidate_AcceptsBlankOptionalFields(t *testing.T) {
 	a := &Agent{
-		Metadata: ObjectMeta{Namespace: "default", Name: "minimal", Version: "v1"},
+		Metadata: ObjectMeta{Namespace: "default", Name: "minimal"},
 		Spec:     AgentSpec{}, // everything blank
 	}
 	require.NoError(t, a.Validate())
@@ -102,7 +102,7 @@ func TestAgentValidate_AcceptsBlankOptionalFields(t *testing.T) {
 
 func TestAgentValidate_AccumulatesErrors(t *testing.T) {
 	a := &Agent{
-		Metadata: ObjectMeta{Namespace: "default", Name: "a", Version: "v1"},
+		Metadata: ObjectMeta{Namespace: "default", Name: "a"},
 		Spec: AgentSpec{
 			Title: "   ", // whitespace only
 		},
@@ -114,10 +114,10 @@ func TestAgentValidate_AccumulatesErrors(t *testing.T) {
 func TestAgentResolveRefs_OK(t *testing.T) {
 	resolver := func(ctx context.Context, ref ResourceRef) error { return nil }
 	a := &Agent{
-		Metadata: ObjectMeta{Namespace: "default", Name: "a", Version: "v1"},
+		Metadata: ObjectMeta{Namespace: "default", Name: "a"},
 		Spec: AgentSpec{
-			MCPServers: []ResourceRef{{Kind: KindMCPServer, Name: "tools", Version: "v1"}},
-			Skills:     []ResourceRef{{Kind: KindSkill, Name: "code-review", Version: "v1"}},
+			MCPServers: []ResourceRef{{Kind: KindMCPServer, Name: "tools", Tag: "v1"}},
+			Skills:     []ResourceRef{{Kind: KindSkill, Name: "code-review", Tag: "v1"}},
 		},
 	}
 	require.NoError(t, a.ResolveRefs(context.Background(), resolver))
@@ -168,7 +168,7 @@ func TestAgentResolveRefs_InheritsNamespace(t *testing.T) {
 }
 
 func TestAgentResolveRefs_NilResolverIsNoOp(t *testing.T) {
-	a := &Agent{Metadata: ObjectMeta{Namespace: "default", Name: "a", Version: "v1"}}
+	a := &Agent{Metadata: ObjectMeta{Namespace: "default", Name: "a"}}
 	require.NoError(t, a.ResolveRefs(context.Background(), nil))
 }
 
@@ -178,10 +178,10 @@ func TestAgentResolveRefs_NilResolverIsNoOp(t *testing.T) {
 
 func TestDeploymentValidate_OK(t *testing.T) {
 	d := &Deployment{
-		Metadata: ObjectMeta{Namespace: "default", Name: "prod", Version: "1"},
+		Metadata: ObjectMeta{Namespace: "default", Name: "prod"},
 		Spec: DeploymentSpec{
 			TargetRef:    ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
-			ProviderRef:  ResourceRef{Kind: KindProvider, Name: "local", Version: "1"},
+			ProviderRef:  ResourceRef{Kind: KindProvider, Name: "local"},
 			DesiredState: DesiredStateDeployed,
 		},
 	}
@@ -190,10 +190,10 @@ func TestDeploymentValidate_OK(t *testing.T) {
 
 func TestDeploymentValidate_RejectsBadTargetKind(t *testing.T) {
 	d := &Deployment{
-		Metadata: ObjectMeta{Namespace: "default", Name: "prod", Version: "1"},
+		Metadata: ObjectMeta{Namespace: "default", Name: "prod"},
 		Spec: DeploymentSpec{
 			TargetRef:   ResourceRef{Kind: KindSkill, Name: "skill", Tag: "stable"},
-			ProviderRef: ResourceRef{Kind: KindProvider, Name: "local", Version: "1"},
+			ProviderRef: ResourceRef{Kind: KindProvider, Name: "local"},
 		},
 	}
 	paths := failedFields(t, d.Validate())
@@ -202,10 +202,10 @@ func TestDeploymentValidate_RejectsBadTargetKind(t *testing.T) {
 
 func TestDeploymentValidate_RejectsBadProviderKind(t *testing.T) {
 	d := &Deployment{
-		Metadata: ObjectMeta{Namespace: "default", Name: "prod", Version: "1"},
+		Metadata: ObjectMeta{Namespace: "default", Name: "prod"},
 		Spec: DeploymentSpec{
 			TargetRef:   ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
-			ProviderRef: ResourceRef{Kind: KindAgent, Name: "nope", Version: "1"},
+			ProviderRef: ResourceRef{Kind: KindAgent, Name: "nope"},
 		},
 	}
 	paths := failedFields(t, d.Validate())
@@ -214,10 +214,10 @@ func TestDeploymentValidate_RejectsBadProviderKind(t *testing.T) {
 
 func TestDeploymentValidate_RejectsBadDesiredState(t *testing.T) {
 	d := &Deployment{
-		Metadata: ObjectMeta{Namespace: "default", Name: "prod", Version: "1"},
+		Metadata: ObjectMeta{Namespace: "default", Name: "prod"},
 		Spec: DeploymentSpec{
 			TargetRef:    ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
-			ProviderRef:  ResourceRef{Kind: KindProvider, Name: "local", Version: "1"},
+			ProviderRef:  ResourceRef{Kind: KindProvider, Name: "local"},
 			DesiredState: "running",
 		},
 	}
@@ -229,10 +229,10 @@ func TestDeploymentValidate_RejectsBadDesiredState(t *testing.T) {
 // the literal "latest" tag.
 func TestDeploymentValidate_AllowsEmptyTargetRefTag(t *testing.T) {
 	d := &Deployment{
-		Metadata: ObjectMeta{Namespace: "default", Name: "prod", Version: "1"},
+		Metadata: ObjectMeta{Namespace: "default", Name: "prod"},
 		Spec: DeploymentSpec{
 			TargetRef:   ResourceRef{Kind: KindAgent, Name: "alice"},
-			ProviderRef: ResourceRef{Kind: KindProvider, Name: "local", Version: "1"},
+			ProviderRef: ResourceRef{Kind: KindProvider, Name: "local"},
 		},
 	}
 	require.NoError(t, d.Validate())
@@ -240,10 +240,10 @@ func TestDeploymentValidate_AllowsEmptyTargetRefTag(t *testing.T) {
 
 func TestDeploymentValidate_RejectsBadTargetRefTag(t *testing.T) {
 	d := &Deployment{
-		Metadata: ObjectMeta{Namespace: "default", Name: "prod", Version: "1"},
+		Metadata: ObjectMeta{Namespace: "default", Name: "prod"},
 		Spec: DeploymentSpec{
 			TargetRef:   ResourceRef{Kind: KindAgent, Name: "alice", Tag: "bad tag"},
-			ProviderRef: ResourceRef{Kind: KindProvider, Name: "local", Version: "1"},
+			ProviderRef: ResourceRef{Kind: KindProvider, Name: "local"},
 		},
 	}
 	paths := failedFields(t, d.Validate())
@@ -257,10 +257,10 @@ func TestDeploymentResolveRefs_InheritsNamespace(t *testing.T) {
 		return nil
 	}
 	d := &Deployment{
-		Metadata: ObjectMeta{Namespace: "team-b", Name: "prod", Version: "1"},
+		Metadata: ObjectMeta{Namespace: "team-b", Name: "prod"},
 		Spec: DeploymentSpec{
 			TargetRef:   ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
-			ProviderRef: ResourceRef{Kind: KindProvider, Name: "local", Version: "1"},
+			ProviderRef: ResourceRef{Kind: KindProvider, Name: "local"},
 		},
 	}
 	require.NoError(t, d.ResolveRefs(context.Background(), resolver))

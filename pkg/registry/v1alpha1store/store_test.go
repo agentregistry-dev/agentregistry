@@ -438,9 +438,9 @@ func TestStore_FindReferrers(t *testing.T) {
 
 func TestStore_SeededProviders(t *testing.T) {
 	pool := NewTestPool(t)
-	// Provider is legacy-mode (string version, is_latest_version flag);
-	// use the NewDeploymentStore constructor.
-	providers := NewDeploymentStore(pool, "v1alpha1.providers")
+	// Provider is a mutable object (public namespace/name with a hidden
+	// storage identity and is_latest_version flag).
+	providers := NewMutableObjectStore(pool, "v1alpha1.providers")
 	ctx := context.Background()
 
 	local, err := providers.GetLatest(ctx, "default", "local")

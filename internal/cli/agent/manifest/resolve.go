@@ -46,14 +46,14 @@ func Resolve(ctx context.Context, apiClient *client.Client, agent *v1alpha1.Agen
 		case v1alpha1.KindMCPServer:
 			serverObj, err := client.GetTyped(
 				ctx, apiClient,
-				v1alpha1.KindMCPServer, v1alpha1.DefaultNamespace, ref.Name, ref.Version,
+				v1alpha1.KindMCPServer, v1alpha1.DefaultNamespace, ref.Name, ref.Tag,
 				func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} },
 			)
 			if err != nil {
-				return nil, fmt.Errorf("fetch MCP server %q (version %q): %w", ref.Name, ref.Version, err)
+				return nil, fmt.Errorf("fetch MCP server %q (tag %q): %w", ref.Name, ref.Tag, err)
 			}
 			if serverObj == nil {
-				return nil, fmt.Errorf("MCP server %q (version %q) not found in registry", ref.Name, ref.Version)
+				return nil, fmt.Errorf("MCP server %q (tag %q) not found in registry", ref.Name, ref.Tag)
 			}
 			entry, err := translateMCPServer(RefBasename(ref.Name), serverObj)
 			if err != nil {
@@ -63,14 +63,14 @@ func Resolve(ctx context.Context, apiClient *client.Client, agent *v1alpha1.Agen
 		case v1alpha1.KindRemoteMCPServer:
 			remoteObj, err := client.GetTyped(
 				ctx, apiClient,
-				v1alpha1.KindRemoteMCPServer, v1alpha1.DefaultNamespace, ref.Name, ref.Version,
+				v1alpha1.KindRemoteMCPServer, v1alpha1.DefaultNamespace, ref.Name, ref.Tag,
 				func() *v1alpha1.RemoteMCPServer { return &v1alpha1.RemoteMCPServer{} },
 			)
 			if err != nil {
-				return nil, fmt.Errorf("fetch RemoteMCPServer %q (version %q): %w", ref.Name, ref.Version, err)
+				return nil, fmt.Errorf("fetch RemoteMCPServer %q (tag %q): %w", ref.Name, ref.Tag, err)
 			}
 			if remoteObj == nil {
-				return nil, fmt.Errorf("RemoteMCPServer %q (version %q) not found in registry", ref.Name, ref.Version)
+				return nil, fmt.Errorf("RemoteMCPServer %q (tag %q) not found in registry", ref.Name, ref.Tag)
 			}
 			entry, err := translateRemoteMCPServerRef(RefBasename(ref.Name), remoteObj)
 			if err != nil {

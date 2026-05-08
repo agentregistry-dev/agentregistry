@@ -134,9 +134,8 @@ Supported languages:  python (for adk)`,
 				// Version here is the default version baked into the
 				// scaffolded source (e.g. as a runtime-advertised string in
 				// generated code). It is intentionally NOT written into
-				// agent.yaml's metadata.version — that field is system-
-				// assigned by the registry on apply and the decoder rejects
-				// pre-set values.
+				// agent.yaml's metadata.version — that field is not part of
+				// the public v1alpha1 contract and the decoder rejects it.
 				Version:               "0.1.0",
 				Description:           initDescription,
 				Image:                 image,
@@ -175,16 +174,16 @@ Supported languages:  python (for adk)`,
 	cmd.Flags().StringVar(&initModelName, "model-name", "gemini-2.5-flash", "Model name")
 	cmd.Flags().StringVar(&initImage, "image", "", "Docker image (default: localhost:5001/<name>:latest)")
 	cmd.Flags().StringVar(&initGit, "git", "", "Git repository URL (GitHub, GitLab, Bitbucket)")
-	cmd.Flags().StringArrayVar(&initMCPs, "mcp", nil, "Registry MCP server to reference: name[@version] (repeatable)")
-	cmd.Flags().StringArrayVar(&initSkills, "skill", nil, "Registry skill to reference: name[@version] (repeatable)")
-	cmd.Flags().StringArrayVar(&initPrompts, "prompt", nil, "Registry prompt to reference: name[@version] (repeatable)")
+	cmd.Flags().StringArrayVar(&initMCPs, "mcp", nil, "Registry MCP server to reference: name[@tag] (repeatable)")
+	cmd.Flags().StringArrayVar(&initSkills, "skill", nil, "Registry skill to reference: name[@tag] (repeatable)")
+	cmd.Flags().StringArrayVar(&initPrompts, "prompt", nil, "Registry prompt to reference: name[@tag] (repeatable)")
 
 	return cmd
 }
 
-// parseNameVersion splits "name@version" into (name, version).
-// If no @ is present, version defaults to "latest".
-// If the name part is empty (e.g. "@1.0.0"), the whole string is treated as the name.
+// parseNameVersion splits the compatibility "name@tag" syntax into
+// (name, tag). If no @ is present, tag defaults to "latest". If the name
+// part is empty (e.g. "@stable"), the whole string is treated as the name.
 func parseNameVersion(s string) (string, string) {
 	if i := strings.LastIndex(s, "@"); i > 0 {
 		return s[:i], s[i+1:]
@@ -193,8 +192,8 @@ func parseNameVersion(s string) (string, string) {
 }
 
 // writeDeclarativeAgentYAML writes agent.yaml in the ar.dev/v1alpha1 declarative format.
-// metadata.version is intentionally omitted: it is system-assigned by the registry
-// on apply, and the decoder rejects manifests that pre-set it.
+// metadata.version is intentionally omitted because it is not part of the
+// public v1alpha1 contract.
 func writeDeclarativeAgentYAML(projectDir, name, image, language, framework, modelProvider, modelName, description, gitURL string, mcps, skills, prompts []string) error {
 	desc := description
 	if desc == "" {
@@ -230,27 +229,27 @@ func writeDeclarativeAgentYAML(projectDir, name, image, language, framework, mod
 	for _, raw := range mcps {
 		serverName, mcpVer := parseNameVersion(raw)
 		agent.Spec.MCPServers = append(agent.Spec.MCPServers, v1alpha1.ResourceRef{
-			Kind:    v1alpha1.KindMCPServer,
-			Name:    serverName,
-			Version: mcpVer,
+			Kind: v1alpha1.KindMCPServer,
+			Name: serverName,
+			Tag:  mcpVer,
 		})
 	}
 
 	for _, raw := range skills {
 		skillName, skillVer := parseNameVersion(raw)
 		agent.Spec.Skills = append(agent.Spec.Skills, v1alpha1.ResourceRef{
-			Kind:    v1alpha1.KindSkill,
-			Name:    skillName,
-			Version: skillVer,
+			Kind: v1alpha1.KindSkill,
+			Name: skillName,
+			Tag:  skillVer,
 		})
 	}
 
 	for _, raw := range prompts {
 		promptName, promptVer := parseNameVersion(raw)
 		agent.Spec.Prompts = append(agent.Spec.Prompts, v1alpha1.ResourceRef{
-			Kind:    v1alpha1.KindPrompt,
-			Name:    promptName,
-			Version: promptVer,
+			Kind: v1alpha1.KindPrompt,
+			Name: promptName,
+			Tag:  promptVer,
 		})
 	}
 
@@ -386,9 +385,8 @@ Supported frameworks: fastmcp-python, mcp-go`,
 				// Version here is the default version baked into the
 				// scaffolded source (e.g. the mcp-go server's advertised
 				// Implementation.Version). It is intentionally NOT written
-				// into mcp.yaml's metadata.version — that field is system-
-				// assigned by the registry on apply and the decoder rejects
-				// pre-set values.
+				// into mcp.yaml's metadata.version — that field is not part
+				// of the public v1alpha1 contract and the decoder rejects it.
 				Version:     "0.1.0",
 				Description: initDescription,
 				Directory:   projectDir,
@@ -420,8 +418,8 @@ Supported frameworks: fastmcp-python, mcp-go`,
 }
 
 // writeDeclarativeMCPYAML writes mcp.yaml in the ar.dev/v1alpha1 declarative format.
-// metadata.version is intentionally omitted: it is system-assigned by the registry
-// on apply, and the decoder rejects manifests that pre-set it.
+// metadata.version is intentionally omitted because it is not part of the
+// public v1alpha1 contract.
 func writeDeclarativeMCPYAML(projectDir, name, image, description string) error {
 	nameParts := strings.SplitN(name, "/", 2)
 	shortName := nameParts[len(nameParts)-1]
@@ -519,8 +517,8 @@ The generated skill.yaml can be applied directly:
 }
 
 // writeDeclarativeSkillYAML writes skill.yaml in the ar.dev/v1alpha1 declarative format.
-// metadata.version is intentionally omitted: it is system-assigned by the registry
-// on apply, and the decoder rejects manifests that pre-set it.
+// metadata.version is intentionally omitted because it is not part of the
+// public v1alpha1 contract.
 func writeDeclarativeSkillYAML(projectDir, name, description string) error {
 	desc := description
 	if desc == "" {
@@ -604,8 +602,8 @@ The generated file can be applied directly:
 }
 
 // writeDeclarativePromptYAML writes <name>.yaml in the ar.dev/v1alpha1 declarative format.
-// metadata.version is intentionally omitted: it is system-assigned by the registry
-// on apply, and the decoder rejects manifests that pre-set it.
+// metadata.version is intentionally omitted because it is not part of the
+// public v1alpha1 contract.
 func writeDeclarativePromptYAML(path, name, description, content string) error {
 	desc := description
 	if desc == "" {

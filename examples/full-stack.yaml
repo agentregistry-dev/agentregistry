@@ -11,6 +11,7 @@ apiVersion: ar.dev/v1alpha1
 kind: MCPServer
 metadata:
   name: acme/fetch
+  tag: stable
 spec:
   title: Fetch Server
   description: "Fetches and extracts content from URLs"
@@ -26,6 +27,7 @@ apiVersion: ar.dev/v1alpha1
 kind: Skill
 metadata:
   name: summarize
+  tag: stable
 spec:
   title: Summarization
   category: nlp
@@ -35,6 +37,7 @@ apiVersion: ar.dev/v1alpha1
 kind: Prompt
 metadata:
   name: summarizer-system-prompt
+  tag: stable
 spec:
   description: "Default system prompt for summarization agents"
   content: |
@@ -57,12 +60,12 @@ spec:
   mcpServers:
     - kind: MCPServer
       name: acme/fetch
-      version: "1"
+      tag: stable
   skills:
     - kind: Skill
       name: summarize
-      version: "1"
+      tag: stable
   prompts:
     - kind: Prompt
       name: summarizer-system-prompt
-      version: "1"
+      tag: stable

@@ -151,6 +151,59 @@ spec:
 	require.Contains(t, out.Results[0].Error, "metadata.version")
 }
 
+func TestRegisterApply_MutableObjectResultsDoNotExposeVersion(t *testing.T) {
+	pool := v1alpha1store.NewTestPool(t)
+	providers := v1alpha1store.NewMutableObjectStore(pool, "v1alpha1.providers")
+	deployments := v1alpha1store.NewMutableObjectStore(pool, "v1alpha1.deployments")
+
+	_, api := humatest.New(t)
+	resource.RegisterApply(api, resource.ApplyConfig{
+		BasePrefix: "/v0",
+		Stores: map[string]*v1alpha1store.Store{
+			v1alpha1.KindProvider:   providers,
+			v1alpha1.KindDeployment: deployments,
+		},
+	})
+
+	yaml := []byte(`apiVersion: ar.dev/v1alpha1
+kind: Provider
+metadata:
+  namespace: default
+  name: local
+spec:
+  platform: local
+---
+apiVersion: ar.dev/v1alpha1
+kind: Deployment
+metadata:
+  namespace: default
+  name: summarizer
+spec:
+  targetRef:
+    kind: Agent
+    name: summarizer
+    tag: stable
+  providerRef:
+    kind: Provider
+    name: local
+`)
+	resp := api.Post("/v0/apply", "Content-Type: application/yaml", strings.NewReader(string(yaml)))
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	require.NotContains(t, resp.Body.String(), `"version"`, "mutable apply results must not expose hidden storage identity")
+
+	var out struct {
+		Results []arv0.ApplyResult `json:"results"`
+	}
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+	require.Len(t, out.Results, 2)
+	require.Equal(t, v1alpha1.KindProvider, out.Results[0].Kind)
+	require.Equal(t, arv0.ApplyStatusCreated, out.Results[0].Status)
+	require.Empty(t, out.Results[0].Version)
+	require.Equal(t, v1alpha1.KindDeployment, out.Results[1].Kind)
+	require.Equal(t, arv0.ApplyStatusCreated, out.Results[1].Status)
+	require.Empty(t, out.Results[1].Version)
+}
+
 // TestRegisterApply_DeniesKindWithNoAuthorizer pins the apply-side
 // fail-closed contract: when ApplyConfig.Authorizers is non-empty
 // (i.e. authz is wired) but the doc's kind has no entry, the doc

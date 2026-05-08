@@ -30,7 +30,7 @@ type upsertResult struct {
 	Outcome v1alpha1store.UpsertOutcome
 	// Tag is the content tag after apply for tagged artifact stores.
 	Tag string
-	// Version is used only by legacy Provider/Deployment stores.
+	// Version is used only as a private storage identity for mutable-object stores.
 	Version int
 	// Generation is the internal row generation after apply.
 	Generation int64
@@ -122,16 +122,11 @@ func applyCore(
 		mutated = true
 	}
 
-	// Stamp the legacy Deployment store's required string version
-	// (only the deployment Store reads meta.Version anymore — see
-	// v1alpha1.MetadataVersionDefaulter). Without this, a YAML manifest
-	// for an unversioned kind could pass Validate but fail at the
-	// store's `version != ""` check since the deployments-table PK is
-	// still 3-tuple. Stamping here keeps the path uniform: every kind
-	// reaches Upsert with a non-empty meta.Version where the legacy
-	// path needs it.
+	// Mutable object stores may retain a hidden storage identity even though
+	// the public API exposes only namespace/name. Stamp that private identity
+	// before authz/staging/upsert so all downstream hooks see the same value.
 	beforeVersion := meta.Version
-	v1alpha1.DefaultMetadataVersionIfMissing(obj)
+	v1alpha1.DefaultMutableObjectIdentityIfMissing(obj)
 	meta = obj.GetMetadata()
 	if meta.Version != beforeVersion {
 		mutated = true
@@ -183,7 +178,7 @@ func applyCore(
 			return upsertResult{}, &applyError{Stage: stageApproval, Err: err}
 		}
 		if staged.Staged {
-			return upsertResult{Tag: meta.Tag, Version: parseLegacyVersion(meta.Version), Staged: true}, nil
+			return upsertResult{Tag: meta.Tag, Version: parseStorageIdentity(meta.Version), Staged: true}, nil
 		}
 	}
 
@@ -218,7 +213,7 @@ func applyCore(
 	return res, nil
 }
 
-func parseLegacyVersion(version string) int {
+func parseStorageIdentity(version string) int {
 	var out int
 	for _, r := range version {
 		if r < '0' || r > '9' {

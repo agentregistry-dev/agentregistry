@@ -62,28 +62,28 @@ func TestGetCmd_RegistryDrivenColumnLookup(t *testing.T) {
 		"should fail at API client check, not kind lookup")
 }
 
-// TestProvider_NoAllVersionsSupport pins that Provider — a legacy,
-// single-version-identity kind — is registered without ListVersions /
+// TestProvider_NoAllVersionsSupport pins that Provider — a mutable
+// namespace/name object — is registered without ListVersions /
 // DeleteAllVersions closures. The dispatch layer rejects --all-versions
 // when those fields are nil, which is exactly the behavior we want for
-// Provider on this branch (its server store has no /versions endpoint).
+// Provider on this branch (its server store has no /tags endpoint).
 func TestProvider_NoAllVersionsSupport(t *testing.T) {
 	k, err := scheme.Lookup("provider")
 	require.NoError(t, err)
-	require.Nil(t, k.ListVersions, "Provider should not expose ListVersions (legacy kind)")
-	require.Nil(t, k.DeleteAllVersions, "Provider should not expose DeleteAllVersions (legacy kind)")
+	require.Nil(t, k.ListVersions, "Provider should not expose ListVersions (mutable object kind)")
+	require.Nil(t, k.DeleteAllVersions, "Provider should not expose DeleteAllVersions (mutable object kind)")
 }
 
 // TestDeployment_NoAllVersionsSupport is the symmetric assertion for
-// Deployment — also a legacy single-version-identity kind. Already
+// Deployment — also a mutable namespace/name object. Already
 // covered by TestGet_AllVersions_DeploymentRejected at the CLI surface
 // but pinning it at the registry shape level guards against an
 // accidental ListVersions wiring regression.
 func TestDeployment_NoAllVersionsSupport(t *testing.T) {
 	k, err := scheme.Lookup("deployment")
 	require.NoError(t, err)
-	require.Nil(t, k.ListVersions, "Deployment should not expose ListVersions (legacy kind)")
-	require.Nil(t, k.DeleteAllVersions, "Deployment should not expose DeleteAllVersions (legacy kind)")
+	require.Nil(t, k.ListVersions, "Deployment should not expose ListVersions (mutable object kind)")
+	require.Nil(t, k.DeleteAllVersions, "Deployment should not expose DeleteAllVersions (mutable object kind)")
 }
 
 // versionGetServer serves GET /v0/agents/{name}/{version} (specific
@@ -136,7 +136,7 @@ func versionGetServer(t *testing.T, latest, specific v1alpha1.Agent) (*httptest.
 	return srv, &captured
 }
 
-// TestGet_Version_FetchesSpecificVersion verifies the legacy --version flag
+// TestGet_Version_FetchesSpecificVersion verifies the deprecated --version flag
 // still fetches the exact tag endpoint and renders that tag's envelope.
 func TestGet_Version_FetchesSpecificVersion(t *testing.T) {
 	v1 := agentVersionFixture("acme/bot", "1")
@@ -156,7 +156,7 @@ func TestGet_Version_FetchesSpecificVersion(t *testing.T) {
 	assert.Equal(t, "1", got.Metadata.Tag, "expected tag 1 envelope")
 	assert.Equal(t, "v1", got.Spec.Description, "expected v1's spec description")
 
-	// At least one served call should be the specific-version path.
+	// At least one served call should be the exact-tag path.
 	require.NotEmpty(t, *captured)
 	hitSpecific := false
 	for _, p := range *captured {
@@ -165,7 +165,7 @@ func TestGet_Version_FetchesSpecificVersion(t *testing.T) {
 			hitSpecific = true
 		}
 	}
-	assert.True(t, hitSpecific, "expected GET to specific-version path, got %v", *captured)
+	assert.True(t, hitSpecific, "expected GET to exact-tag path, got %v", *captured)
 }
 
 // TestGet_Version_DefaultsToLatest verifies that omitting --version still
@@ -208,8 +208,8 @@ func TestGet_Version_MutuallyExclusiveWithAllVersions(t *testing.T) {
 }
 
 // TestGet_Version_NotSupportedForProvider pins that --version is rejected
-// for legacy single-version-identity kinds (Provider, Deployment) before
-// any client dispatch happens.
+// for mutable namespace/name kinds (Provider, Deployment) before any client
+// dispatch happens.
 func TestGet_Version_NotSupportedForProvider(t *testing.T) {
 	declarative.SetAPIClient(client.NewClient("http://127.0.0.1:1", ""))
 	t.Cleanup(func() { declarative.SetAPIClient(nil) })

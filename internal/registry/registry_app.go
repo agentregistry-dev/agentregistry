@@ -105,7 +105,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	if registryValidator == nil {
 		registryValidator = registries.Dispatcher
 	}
-	stores, importer := buildStoresAndImporter(pool, registryValidator, options.V1Alpha1StoreTables, options.V1Alpha1LegacyStoreKinds, options.Auditor)
+	stores, importer := buildStoresAndImporter(pool, registryValidator, options.V1Alpha1StoreTables, options.V1Alpha1MutableStoreKinds, options.Auditor)
 
 	slog.Info("starting agentregistry", "version", version.Version, "commit", version.GitCommit)
 
@@ -181,7 +181,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	return nil
 }
 
-func buildStoresAndImporter(pool *pgxpool.Pool, registryValidator v1alpha1.RegistryValidatorFunc, extraStoreTables map[string]string, legacyExtraKinds map[string]bool, auditor types.Auditor) (map[string]*v1alpha1store.Store, *pkgimporter.Importer) {
+func buildStoresAndImporter(pool *pgxpool.Pool, registryValidator v1alpha1.RegistryValidatorFunc, extraStoreTables map[string]string, mutableExtraKinds map[string]bool, auditor types.Auditor) (map[string]*v1alpha1store.Store, *pkgimporter.Importer) {
 	if auditor == nil {
 		auditor = types.NoopAuditor
 	}
@@ -192,8 +192,8 @@ func buildStoresAndImporter(pool *pgxpool.Pool, registryValidator v1alpha1.Regis
 			continue
 		}
 		opts := []v1alpha1store.StoreOption{v1alpha1store.WithKind(kind), v1alpha1store.WithAuditor(auditor)}
-		if legacyExtraKinds[kind] {
-			stores[kind] = v1alpha1store.NewDeploymentStore(pool, table, opts...)
+		if mutableExtraKinds[kind] {
+			stores[kind] = v1alpha1store.NewMutableObjectStore(pool, table, opts...)
 			continue
 		}
 		stores[kind] = v1alpha1store.NewStore(pool, table, opts...)

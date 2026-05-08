@@ -218,7 +218,7 @@ func setupAgentStoreWithAuditor(t *testing.T, a types.Auditor) *v1alpha1store.St
 func setupProviderStoreWithAuditor(t *testing.T, a types.Auditor) *v1alpha1store.Store {
 	t.Helper()
 	pool := v1alpha1store.NewTestPool(t)
-	return v1alpha1store.NewDeploymentStore(pool, "v1alpha1.providers",
+	return v1alpha1store.NewMutableObjectStore(pool, "v1alpha1.providers",
 		v1alpha1store.WithKind(v1alpha1.KindProvider),
 		v1alpha1store.WithAuditor(a),
 	)
@@ -261,11 +261,10 @@ func TestUpsert_AuditorCalledOnUpsertCreated(t *testing.T) {
 	require.Equal(t, "stable", auditor.Events()[1].Tag)
 }
 
-// TestUpsert_AuditorNotCalledForLegacyKinds verifies the legacy
-// (Provider/Deployment) upsert path does not fire ResourceTagCreated — those
-// kinds model lifecycle state and are out of scope for the tag-creation audit
-// event.
-func TestUpsert_AuditorNotCalledForLegacyKinds(t *testing.T) {
+// TestUpsert_AuditorNotCalledForMutableObjectKinds verifies the
+// Provider/Deployment upsert path does not fire ResourceTagCreated; those kinds
+// model lifecycle state and are out of scope for tag-creation audit events.
+func TestUpsert_AuditorNotCalledForMutableObjectKinds(t *testing.T) {
 	auditor := &typestest.RecordingAuditor{}
 	store := setupProviderStoreWithAuditor(t, auditor)
 	ctx := context.Background()
@@ -276,5 +275,5 @@ func TestUpsert_AuditorNotCalledForLegacyKinds(t *testing.T) {
 		Spec:     v1alpha1.ProviderSpec{Platform: v1alpha1.PlatformLocal},
 	})
 	require.NoError(t, err)
-	require.Empty(t, auditor.Events(), "legacy kinds must not emit ResourceTagCreated")
+	require.Empty(t, auditor.Events(), "mutable-object kinds must not emit ResourceTagCreated")
 }

@@ -7,12 +7,10 @@ import (
 
 // Validate runs Deployment's structural checks.
 //
-// Deployment is unversioned: it's a runtime binding ("deploy resource X
-// to provider Y"). The thing being deployed carries its own tag via
-// spec.targetRef.tag; when that tag is omitted, reference resolution uses
-// the literal "latest" tag. The Deployment row's own metadata.version doesn't
-// track anything observable. (namespace, name) is the identity; callers pin
-// metadata.version to a constant ("1").
+// Deployment is unversioned: it's a runtime binding ("deploy resource X to
+// provider Y"). The thing being deployed carries its own tag via
+// spec.targetRef.tag; when that tag is omitted, reference resolution uses the
+// literal "latest" tag. Deployment's public identity is (namespace, name).
 func (d *Deployment) Validate() error {
 	var errs FieldErrors
 	errs = append(errs, ValidateObjectMeta(d.Metadata)...)
@@ -23,12 +21,8 @@ func (d *Deployment) Validate() error {
 	return errs
 }
 
-// DefaultMetadataVersion satisfies MetadataVersionDefaulter so YAML
-// manifests for Deployment can omit metadata.version. The constant
-// "1" goes into the (namespace, name, version) PK; the thing being deployed
-// carries its own semantic identity via spec.targetRef.tag, defaulting to the
-// literal "latest" tag when omitted.
-func (d *Deployment) DefaultMetadataVersion() string { return "1" }
+// DefaultMutableObjectIdentity satisfies MutableObjectIdentityDefaulter.
+func (d *Deployment) DefaultMutableObjectIdentity() string { return "1" }
 
 // ResolveRefs checks that TargetRef and ProviderRef both resolve. The
 // referenced objects must live in the referenced namespace; when
