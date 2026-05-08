@@ -965,6 +965,8 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 		if s.behavior == TaggedArtifactStore {
 			args = append(args, DefaultTag())
 			where = append(where, fmt.Sprintf("tag = $%d", len(args)))
+		} else if opts.IncludeTerminating {
+			where = append(where, "(is_latest_version OR deletion_timestamp IS NOT NULL)")
 		} else {
 			where = append(where, "is_latest_version")
 		}

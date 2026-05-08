@@ -23,6 +23,8 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+const defaultArtifactTag = "latest"
+
 // writeDeclarativeYAML writes YAML content to a temp file and returns the path.
 func writeDeclarativeYAML(t *testing.T, dir, filename, content string) string {
 	t.Helper()
@@ -135,8 +137,7 @@ func TestDeclarativeApply_AgentLifecycle(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	agentName := UniqueAgentName("declagent")
-	// Agent artifacts remain taggable; this test exercises the first explicit tag.
-	version := "1"
+	version := defaultArtifactTag
 
 	// Clean up any stale entry from a previous interrupted run.
 	RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", version, "--registry-url", regURL)
@@ -219,7 +220,7 @@ func TestDeclarativeApply_MCPServer(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	serverName := "e2e-test/" + UniqueNameWithPrefix("decl-mcp")
-	version := "1"
+	version := defaultArtifactTag
 
 	// Clean up any stale entry.
 	RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
@@ -255,7 +256,7 @@ func TestDeclarativeApply_MultiDoc(t *testing.T) {
 
 	serverName := "e2e-test/" + UniqueNameWithPrefix("decl-multi-mcp")
 	agentName := UniqueAgentName("declmultiagent")
-	version := "1"
+	version := defaultArtifactTag
 
 	// Clean up.
 	RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
@@ -305,7 +306,7 @@ func TestDeclarativeApply_DryRun(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	agentName := UniqueAgentName("decldryrun")
-	version := "1"
+	version := defaultArtifactTag
 
 	agentYAML := fmt.Sprintf(`
 apiVersion: ar.dev/v1alpha1
@@ -355,7 +356,7 @@ func TestDeclarativeInit_Agent(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	name := UniqueAgentName("initagent")
-	version := "1"
+	version := defaultArtifactTag
 
 	t.Cleanup(func() {
 		RunArctl(t, tmpDir, "delete", "agent", name, "--version", version, "--registry-url", regURL)
@@ -437,7 +438,7 @@ func TestDeclarativeInit_Skill(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	name := UniqueNameWithPrefix("initskill")
-	version := "1"
+	version := defaultArtifactTag
 
 	t.Cleanup(func() {
 		RunArctl(t, tmpDir, "delete", "skill", name, "--version", version, "--registry-url", regURL)
@@ -474,7 +475,7 @@ func TestDeclarativeInit_Prompt(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	name := UniqueNameWithPrefix("initprompt")
-	version := "1"
+	version := defaultArtifactTag
 
 	t.Cleanup(func() {
 		RunArctl(t, tmpDir, "delete", "prompt", name, "--version", version, "--registry-url", regURL)
@@ -652,7 +653,7 @@ func TestDeclarativeApply_Idempotent(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	agentName := UniqueAgentName("declidempagent")
-	version := "1"
+	version := defaultArtifactTag
 
 	t.Cleanup(func() {
 		RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", version, "--registry-url", regURL)
@@ -800,7 +801,7 @@ func TestDeclarativeApply_MCPServer_Idempotent(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	serverName := "e2e-test/" + UniqueNameWithPrefix("decl-mcp-idemp")
-	version := "1"
+	version := defaultArtifactTag
 
 	RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
 	t.Cleanup(func() {
@@ -839,7 +840,7 @@ func TestDeclarativeApply_Skill_Idempotent(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	skillName := UniqueNameWithPrefix("decl-skill-idemp")
-	version := "1"
+	version := defaultArtifactTag
 
 	RunArctl(t, tmpDir, "delete", "skill", skillName, "--version", version, "--registry-url", regURL)
 	t.Cleanup(func() {
@@ -881,7 +882,7 @@ func TestDeclarativeApply_Prompt_Idempotent(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	promptName := UniqueNameWithPrefix("decl-prompt-idemp")
-	version := "1"
+	version := defaultArtifactTag
 
 	RunArctl(t, tmpDir, "delete", "prompt", promptName, "--version", version, "--registry-url", regURL)
 	t.Cleanup(func() {
@@ -1327,7 +1328,7 @@ func TestDeclarative_MCPRoundTrip(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	serverName := "e2e-test/" + UniqueNameWithPrefix("mcp-rt")
-	version := "1"
+	version := defaultArtifactTag
 
 	RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
 	t.Cleanup(func() {
@@ -1395,7 +1396,7 @@ func TestDeclarative_SkillRoundTrip(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	skillName := UniqueNameWithPrefix("skill-rt")
-	version := "1"
+	version := defaultArtifactTag
 
 	RunArctl(t, tmpDir, "delete", "skill", skillName, "--version", version, "--registry-url", regURL)
 	t.Cleanup(func() {
@@ -1470,7 +1471,7 @@ func TestDeclarative_PromptRoundTrip(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	promptName := UniqueNameWithPrefix("prompt-rt")
-	version := "1"
+	version := defaultArtifactTag
 
 	RunArctl(t, tmpDir, "delete", "prompt", promptName, "--version", version, "--registry-url", regURL)
 	t.Cleanup(func() {
@@ -1549,7 +1550,7 @@ func TestDeclarative_DeleteFileMultiKind(t *testing.T) {
 	mcpName := "e2e-test/" + UniqueNameWithPrefix("delmulti-mcp")
 	skillName := UniqueNameWithPrefix("delmulti-skill")
 	promptName := UniqueNameWithPrefix("delmulti-prompt")
-	version := "1"
+	version := defaultArtifactTag
 
 	// Pre-clean and post-clean via the same declarative command.
 	cleanup := func() {
@@ -1783,14 +1784,14 @@ func TestDeclarativeInit_AgentWithRefs(t *testing.T) {
 		t.Fatalf("spec missing or wrong type in generated agent.yaml: %v", m["spec"])
 	}
 
-	// The v1alpha1 scaffolder emits ResourceRef entries: {kind, name, version}.
+	// The v1alpha1 scaffolder emits ResourceRef entries: {kind, name, tag}.
 	// mcpServers — two registry refs, @version parsed correctly.
 	mcps, ok := spec["mcpServers"].([]any)
 	if !ok || len(mcps) != 2 {
 		t.Fatalf("expected 2 mcpServers, got %v", spec["mcpServers"])
 	}
 	for i, expected := range []struct {
-		name, version string
+		name, tag string
 	}{
 		{"acme/fetch", "1.0.0"},
 		{"acme/time", "2.0.0"},
@@ -1802,18 +1803,18 @@ func TestDeclarativeInit_AgentWithRefs(t *testing.T) {
 		if entry["name"] != expected.name {
 			t.Errorf("mcpServers[%d]: name expected %q, got %v", i, expected.name, entry["name"])
 		}
-		if entry["version"] != expected.version {
-			t.Errorf("mcpServers[%d]: version expected %q, got %v", i, expected.version, entry["version"])
+		if entry["tag"] != expected.tag {
+			t.Errorf("mcpServers[%d]: tag expected %q, got %v", i, expected.tag, entry["tag"])
 		}
 	}
 
-	// skills — two entries; second uses default version "latest".
+	// skills — two entries; second uses default tag "latest".
 	skills, ok := spec["skills"].([]any)
 	if !ok || len(skills) != 2 {
 		t.Fatalf("expected 2 skills, got %v", spec["skills"])
 	}
 	for i, expected := range []struct {
-		name, version string
+		name, tag string
 	}{
 		{"summarize", "1.0.0"},
 		{"refine", "latest"},
@@ -1825,12 +1826,12 @@ func TestDeclarativeInit_AgentWithRefs(t *testing.T) {
 		if entry["name"] != expected.name {
 			t.Errorf("skills[%d]: name expected %q, got %v", i, expected.name, entry["name"])
 		}
-		if entry["version"] != expected.version {
-			t.Errorf("skills[%d]: version expected %q, got %v", i, expected.version, entry["version"])
+		if entry["tag"] != expected.tag {
+			t.Errorf("skills[%d]: tag expected %q, got %v", i, expected.tag, entry["tag"])
 		}
 	}
 
-	// prompts — one entry with explicit version.
+	// prompts — one entry with explicit tag.
 	prompts, ok := spec["prompts"].([]any)
 	if !ok || len(prompts) != 1 {
 		t.Fatalf("expected 1 prompt, got %v", spec["prompts"])
@@ -1842,8 +1843,8 @@ func TestDeclarativeInit_AgentWithRefs(t *testing.T) {
 	if entry["name"] != "sys-prompt" {
 		t.Errorf("prompts[0]: name expected %q, got %v", "sys-prompt", entry["name"])
 	}
-	if entry["version"] != "1.0.0" {
-		t.Errorf("prompts[0]: version expected %q, got %v", "1.0.0", entry["version"])
+	if entry["tag"] != "1.0.0" {
+		t.Errorf("prompts[0]: tag expected %q, got %v", "1.0.0", entry["tag"])
 	}
 }
 
@@ -1865,7 +1866,7 @@ func TestDeploymentGet_YAMLIncludesStatus(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 	agentName := UniqueAgentName("e2estatus")
-	version := "1"
+	version := defaultArtifactTag
 	// Local-provider deploys pull from localhost:5001 (the daemon's private
 	// registry). Scaffold → build+push so the image resolves at deploy time.
 	agentImage := fmt.Sprintf("localhost:5001/%s:e2e", agentName)
@@ -1974,7 +1975,7 @@ func TestMCPServer_PackagesShape(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 	serverName := "user/" + UniqueNameWithPrefix("e2epkg")
-	version := "1"
+	version := defaultArtifactTag
 
 	t.Cleanup(func() {
 		RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
@@ -2030,7 +2031,7 @@ func TestRemoteMCPServer_RemoteShape(t *testing.T) {
 	// be the reverse-DNS of the remote URL host. URL below is
 	// https://mcp.example.com/mcp → host mcp.example.com → namespace com.example.mcp.
 	serverName := "com.example.mcp/" + UniqueNameWithPrefix("e2erem")
-	version := "1"
+	version := defaultArtifactTag
 
 	t.Cleanup(func() {
 		RunArctl(t, tmpDir, "delete", "remote-mcp", serverName, "--version", version, "--registry-url", regURL)
@@ -2072,7 +2073,7 @@ func TestMCPServer_RepositoryShape(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 	serverName := "repo/" + UniqueNameWithPrefix("e2erepo")
-	version := "1"
+	version := defaultArtifactTag
 
 	t.Cleanup(func() {
 		RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
@@ -2201,7 +2202,7 @@ func TestPrompt_ContentIntegrity(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 	promptName := UniqueNameWithPrefix("e2econtent")
-	version := "1"
+	version := defaultArtifactTag
 	// Distinctive content with special characters that could trip YAML
 	// encoding: multi-line, unicode, leading-whitespace-sensitive list.
 	expectedLines := []string{
