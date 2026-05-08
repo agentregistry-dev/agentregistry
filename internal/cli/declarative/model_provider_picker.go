@@ -22,11 +22,11 @@ type modelProviderRow struct {
 // providerEnvKeys (see modelenv.go); kept in lockstep manually because the
 // description text is presentation-only.
 var providerRows = []modelProviderRow{
-	{"gemini", "Google Gemini (default)"},
-	{"openai", "OpenAI (gpt-*)"},
-	{"anthropic", "Anthropic (Claude)"},
-	{"bedrock", "AWS Bedrock (set AWS_* in your shell)"},
-	{"agentgateway", "Routes through a local agentgateway proxy"},
+	{"gemini", "Google Gemini"},
+	{"openai", "OpenAI"},
+	{"anthropic", "Anthropic Claude"},
+	{"bedrock", "AWS Bedrock"},
+	{"agentgateway", "Local agentgateway proxy"},
 }
 
 // runModelProviderPicker presents the closed enum of supported providers
