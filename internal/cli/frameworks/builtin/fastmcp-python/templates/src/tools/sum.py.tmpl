@@ -7,7 +7,7 @@ Each tool file should contain a function decorated with @mcp.tool().
 from core.server import mcp
 
 
-@mcp.tool()
+@mcp.tool(description="Add two numbers together. Use this tool when you need to sum or add two numbers.")
 def sum(a: float | int, b: float | int) -> float | int:
     """Add two numbers together. Use this tool when you need to sum or add two numbers.
 
