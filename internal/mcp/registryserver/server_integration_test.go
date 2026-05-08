@@ -24,8 +24,8 @@ func TestMCPListServers_HappyPath(t *testing.T) {
 	const (
 		serverNamespace = "default"
 		serverName      = "echo"
-		serverVersion   = "1"
 	)
+	serverTag := v1alpha1store.DefaultTag()
 	_, err := stores[v1alpha1.KindMCPServer].Upsert(ctx, &v1alpha1.MCPServer{
 		Metadata: v1alpha1.ObjectMeta{Namespace: serverNamespace, Name: serverName},
 		Spec: v1alpha1.MCPServerSpec{
@@ -78,13 +78,13 @@ func TestMCPListServers_HappyPath(t *testing.T) {
 	assert.Equal(t, v1alpha1.GroupVersion, got.APIVersion)
 	assert.Equal(t, v1alpha1.KindMCPServer, got.Kind)
 	assert.Equal(t, serverName, got.Metadata.Name)
-	assert.Equal(t, serverVersion, got.Metadata.Version)
+	assert.Equal(t, serverTag, got.Metadata.Tag)
 	assert.Equal(t, "Echo test server", got.Spec.Description)
 
 	// get_server returns a single v1alpha1 envelope.
 	getRes, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "get_server",
-		Arguments: map[string]any{"name": serverName, "version": serverVersion},
+		Arguments: map[string]any{"name": serverName, "tag": serverTag},
 	})
 	require.NoError(t, err, "call get_server")
 	require.NotNil(t, getRes.StructuredContent)

@@ -91,7 +91,7 @@ func TestDeploymentPut_TriggersAdapterApply(t *testing.T) {
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindDeployment},
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-noop"},
 		Spec: v1alpha1.DeploymentSpec{
-			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Tag: "1"},
+			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Tag: v1alpha1store.DefaultTag()},
 			ProviderRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindProvider, Name: "noop-provider"},
 			DesiredState: v1alpha1.DesiredStateDeployed,
 		},
@@ -123,7 +123,7 @@ func TestDeploymentDelete_TriggersAdapterRemove(t *testing.T) {
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindDeployment},
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-noop"},
 		Spec: v1alpha1.DeploymentSpec{
-			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Tag: "1"},
+			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Tag: v1alpha1store.DefaultTag()},
 			ProviderRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindProvider, Name: "noop-provider"},
 			DesiredState: v1alpha1.DesiredStateDeployed,
 		},
@@ -150,7 +150,7 @@ func TestDeploymentLogs_EmptyForNoopAdapter(t *testing.T) {
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindDeployment},
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-noop"},
 		Spec: v1alpha1.DeploymentSpec{
-			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Tag: "1"},
+			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Tag: v1alpha1store.DefaultTag()},
 			ProviderRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindProvider, Name: "noop-provider"},
 			DesiredState: v1alpha1.DesiredStateDeployed,
 		},

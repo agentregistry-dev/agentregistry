@@ -687,6 +687,7 @@ spec:
 func TestResourceRegister_IncludeTerminatingByDefault(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
 	store := v1alpha1store.NewMutableObjectStore(pool, "v1alpha1.providers")
+	const testNamespace = "terminating-test"
 
 	_, api := humatest.New(t)
 	resource.Register[*v1alpha1.Provider](api, resource.Config{
@@ -701,14 +702,14 @@ func TestResourceRegister_IncludeTerminatingByDefault(t *testing.T) {
 	// its is_latest_version flag.
 	_, err := store.Upsert(t.Context(), &v1alpha1.Provider{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindProvider},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "draining", Version: "1"},
+		Metadata: v1alpha1.ObjectMeta{Namespace: testNamespace, Name: "draining", Version: "1"},
 		Spec:     v1alpha1.ProviderSpec{Platform: "noop"},
 	})
 	require.NoError(t, err)
 
-	require.NoError(t, store.PatchFinalizers(t.Context(), "default", "draining", "1",
+	require.NoError(t, store.PatchFinalizers(t.Context(), testNamespace, "draining", "1",
 		func([]string) []string { return []string{"finalizer.example.com"} }))
-	require.NoError(t, store.Delete(t.Context(), "default", "draining", "1"))
+	require.NoError(t, store.Delete(t.Context(), testNamespace, "draining", "1"))
 
 	var list struct {
 		Items      []v1alpha1.Provider `json:"items"`
@@ -717,7 +718,7 @@ func TestResourceRegister_IncludeTerminatingByDefault(t *testing.T) {
 
 	// Plain LIST with no ?includeTerminating still returns the terminating
 	// row because the kind opted in via IncludeTerminatingByDefault.
-	resp := api.Get("/v0/providers")
+	resp := api.Get("/v0/providers?namespace=" + testNamespace)
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &list))
 	require.Len(t, list.Items, 1)
@@ -729,7 +730,7 @@ func TestResourceRegister_IncludeTerminatingByDefault(t *testing.T) {
 	// predicate to "(is_latest_version OR deletion_timestamp IS NOT NULL)"
 	// so the terminating row still appears even though its
 	// is_latest_version was cleared by recomputeLatest.
-	resp = api.Get("/v0/providers?latestOnly=true")
+	resp = api.Get("/v0/providers?namespace=" + testNamespace + "&latestOnly=true")
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &list))
 	require.Len(t, list.Items, 1)
