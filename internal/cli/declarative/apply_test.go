@@ -74,7 +74,7 @@ func writeTempYAML(t *testing.T, content string) string {
 // TestApplyPostsToBatchEndpoint verifies that apply sends POST to /v0/apply.
 func TestApplyPostsToBatchEndpoint(t *testing.T) {
 	results := []arv0.ApplyResult{
-		{Kind: "agent", Name: "acme/bot", Version: "1.0.0", Status: arv0.ApplyStatusConfigured},
+		{Kind: "agent", Name: "acme/bot", Tag: "1.0.0", Status: arv0.ApplyStatusConfigured},
 	}
 	srv, captured := newApplyTestServer(t, results)
 	setupApplyClient(t, srv)
@@ -93,7 +93,7 @@ func TestApplyPostsToBatchEndpoint(t *testing.T) {
 // TestApplyPrintsPerResourceStatus verifies stdout contains per-resource lines.
 func TestApplyPrintsPerResourceStatus(t *testing.T) {
 	results := []arv0.ApplyResult{
-		{Kind: "agent", Name: "a", Version: "1.0", Status: arv0.ApplyStatusConfigured},
+		{Kind: "agent", Name: "a", Tag: "1.0", Status: arv0.ApplyStatusConfigured},
 		{Kind: "deployment", Name: "x", Status: arv0.ApplyStatusFailed, Error: "drift detected"},
 	}
 	srv, _ := newApplyTestServer(t, results)
@@ -131,7 +131,7 @@ func TestApplyReturnsErrorOnAnyFailure(t *testing.T) {
 // TestApplyDryRunFlag verifies --dry-run sets ?dryRun=true on the request.
 func TestApplyDryRunFlag(t *testing.T) {
 	results := []arv0.ApplyResult{
-		{Kind: "agent", Name: "acme/bot", Version: "1.0.0", Status: arv0.ApplyStatusDryRun},
+		{Kind: "agent", Name: "acme/bot", Tag: "1.0.0", Status: arv0.ApplyStatusDryRun},
 	}
 	srv, captured := newApplyTestServer(t, results)
 	setupApplyClient(t, srv)
@@ -186,8 +186,8 @@ spec:
 // and reports the status returned by the server (created/configured).
 func TestApplyDryRunOutputAnnotated(t *testing.T) {
 	results := []arv0.ApplyResult{
-		{Kind: "agent", Name: "acme/bot", Version: "1.0.0", Status: arv0.ApplyStatusCreated},
-		{Kind: "skill", Name: "my-skill", Version: "2.0.0", Status: arv0.ApplyStatusConfigured},
+		{Kind: "agent", Name: "acme/bot", Tag: "1.0.0", Status: arv0.ApplyStatusCreated},
+		{Kind: "skill", Name: "my-skill", Tag: "2.0.0", Status: arv0.ApplyStatusConfigured},
 	}
 	srv, _ := newApplyTestServer(t, results)
 	setupApplyClient(t, srv)

@@ -198,10 +198,8 @@ spec:
 	require.Len(t, out.Results, 2)
 	require.Equal(t, v1alpha1.KindProvider, out.Results[0].Kind)
 	require.Equal(t, arv0.ApplyStatusCreated, out.Results[0].Status)
-	require.Empty(t, out.Results[0].Version)
 	require.Equal(t, v1alpha1.KindDeployment, out.Results[1].Kind)
 	require.Equal(t, arv0.ApplyStatusCreated, out.Results[1].Status)
-	require.Empty(t, out.Results[1].Version)
 }
 
 // TestRegisterApply_DeniesKindWithNoAuthorizer pins the apply-side

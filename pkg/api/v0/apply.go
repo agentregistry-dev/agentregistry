@@ -9,10 +9,6 @@ type ApplyResult struct {
 	Namespace  string `json:"namespace,omitempty"`
 	Name       string `json:"name"`
 	Tag        string `json:"tag,omitempty"`
-	// Version is retained only for old in-process callers/tests. It is not part
-	// of the public apply response because mutable-object storage identities are
-	// hidden behind namespace/name.
-	Version string `json:"-"`
 	// Status is one of: created, configured, unchanged, deleted,
 	// dry-run, failed. Matches kubectl-style apply output.
 	Status string `json:"status"`

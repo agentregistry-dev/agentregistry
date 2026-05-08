@@ -34,11 +34,10 @@ spec:
 func TestDeploymentApply_InvalidTemplateRefSurfaces(t *testing.T) {
 	results := []arv0.ApplyResult{
 		{
-			Kind:    "deployment",
-			Name:    "nonexistent-agent",
-			Version: "0.1.0",
-			Status:  arv0.ApplyStatusFailed,
-			Error:   `agent "nonexistent-agent" version "0.1.0" not found`,
+			Kind:   "deployment",
+			Name:   "nonexistent-agent",
+			Status: arv0.ApplyStatusFailed,
+			Error:  `agent "nonexistent-agent" version "0.1.0" not found`,
 		},
 	}
 	srv, _ := newApplyTestServer(t, results)

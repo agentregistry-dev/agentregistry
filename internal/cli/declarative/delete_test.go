@@ -46,7 +46,7 @@ func setupDeleteClient(t *testing.T, srv *httptest.Server) {
 // TestDeleteFileModeUsesDeleteApplyEndpoint verifies that -f sends DELETE to /v0/apply.
 func TestDeleteFileModeUsesDeleteApplyEndpoint(t *testing.T) {
 	results := []arv0.ApplyResult{
-		{Kind: "agent", Name: "acme/bot", Version: "1.0.0", Status: arv0.ApplyStatusDeleted},
+		{Kind: "agent", Name: "acme/bot", Tag: "1.0.0", Status: arv0.ApplyStatusDeleted},
 	}
 	srv, captured := newDeleteTestServer(t, results)
 	setupDeleteClient(t, srv)
@@ -65,7 +65,7 @@ func TestDeleteFileModeUsesDeleteApplyEndpoint(t *testing.T) {
 // TestDeleteFileModeReportsResults verifies that per-resource results are printed.
 func TestDeleteFileModeReportsResults(t *testing.T) {
 	results := []arv0.ApplyResult{
-		{Kind: "agent", Name: "acme/bot", Version: "1.0.0", Status: arv0.ApplyStatusDeleted},
+		{Kind: "agent", Name: "acme/bot", Tag: "1.0.0", Status: arv0.ApplyStatusDeleted},
 	}
 	srv, _ := newDeleteTestServer(t, results)
 	setupDeleteClient(t, srv)
