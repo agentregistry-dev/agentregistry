@@ -80,6 +80,9 @@ var (
 )
 
 func (m pickerModel) View() string {
+	if m.done || m.cancelled {
+		return ""
+	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s %s\n\n", pickerHeaderStyle.Render("?"), pickerHeaderStyle.Render("Pick a framework:"))
 	frameworkCount := map[string]int{}

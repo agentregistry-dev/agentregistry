@@ -142,6 +142,9 @@ var (
 )
 
 func (m textinputModel) View() string {
+	if m.done || m.cancelled {
+		return ""
+	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s %s\n%s\n",
 		tiHeaderStyle.Render("?"),

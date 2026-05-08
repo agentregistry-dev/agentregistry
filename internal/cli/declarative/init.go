@@ -249,11 +249,15 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 				return fmt.Errorf("write agent.yaml: %w", err)
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "✓ Created %s/ (framework: %s, language: %s)\n", name, plugin.Framework, plugin.Language)
-			fmt.Fprintf(cmd.OutOrStdout(), "  next: cd %s && arctl run\n", name)
+			fmt.Fprintf(cmd.OutOrStdout(), "✓ Created agent: %s (framework: %s, language: %s)\n", name, plugin.Framework, plugin.Language)
+			fmt.Fprintf(cmd.OutOrStdout(), "\n🚀 Next steps:\n")
+			fmt.Fprintf(cmd.OutOrStdout(), "  1. Run locally (optional):\n")
+			fmt.Fprintf(cmd.OutOrStdout(), "     arctl run %s\n", name)
 			if len(required) > 0 {
-				fmt.Fprintf(cmd.OutOrStdout(), "        (export %s in your shell or set it in .env first)\n", strings.Join(required, ", "))
+				fmt.Fprintf(cmd.OutOrStdout(), "     (export %s in your shell or set it in .env first)\n", strings.Join(required, ", "))
 			}
+			fmt.Fprintf(cmd.OutOrStdout(), "  2. Publish to the registry:\n")
+			fmt.Fprintf(cmd.OutOrStdout(), "     arctl apply -f %s/agent.yaml\n", name)
 			return nil
 		},
 	}
@@ -583,11 +587,15 @@ Picks a framework + language interactively (or via --framework / --language).`,
 				return err
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "✓ Created %s/ (framework: %s, language: %s)\n", projectName, plugin.Framework, plugin.Language)
-			fmt.Fprintf(cmd.OutOrStdout(), "  next: cd %s && arctl run\n", projectName)
+			fmt.Fprintf(cmd.OutOrStdout(), "✓ Created MCP server: %s (framework: %s, language: %s, port: %d)\n", full, plugin.Framework, plugin.Language, initPort)
+			fmt.Fprintf(cmd.OutOrStdout(), "\n🚀 Next steps:\n")
+			fmt.Fprintf(cmd.OutOrStdout(), "  1. Run locally (optional):\n")
+			fmt.Fprintf(cmd.OutOrStdout(), "     arctl run %s\n", projectName)
 			if len(plugin.Env.Required) > 0 {
-				fmt.Fprintf(cmd.OutOrStdout(), "        (export %s in your shell or set it in .env first)\n", strings.Join(plugin.Env.Required, ", "))
+				fmt.Fprintf(cmd.OutOrStdout(), "     (export %s in your shell or set it in .env first)\n", strings.Join(plugin.Env.Required, ", "))
 			}
+			fmt.Fprintf(cmd.OutOrStdout(), "  2. Publish to the registry:\n")
+			fmt.Fprintf(cmd.OutOrStdout(), "     arctl apply -f %s/mcp.yaml\n", projectName)
 			return nil
 		},
 	}
@@ -732,11 +740,11 @@ The generated skill.yaml can be applied directly:
 				return fmt.Errorf("writing declarative skill.yaml: %w", err)
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "✓ Successfully created skill: %s\n", name)
+			fmt.Fprintf(cmd.OutOrStdout(), "✓ Created skill: %s\n", name)
 			fmt.Fprintf(cmd.OutOrStdout(), "\n🚀 Next steps:\n")
-			fmt.Fprintf(cmd.OutOrStdout(), "  1. cd %s\n", name)
-			fmt.Fprintf(cmd.OutOrStdout(), "  2. Publish the skill to the registry:\n")
-			fmt.Fprintf(cmd.OutOrStdout(), "     arctl apply -f skill.yaml\n")
+			fmt.Fprintf(cmd.OutOrStdout(), "  1. Edit %s/SKILL.md and references/ (optional)\n", name)
+			fmt.Fprintf(cmd.OutOrStdout(), "  2. Publish to the registry:\n")
+			fmt.Fprintf(cmd.OutOrStdout(), "     arctl apply -f %s/skill.yaml\n", name)
 			return nil
 		},
 	}
@@ -843,10 +851,10 @@ The generated file can be applied directly:
 				return fmt.Errorf("writing declarative prompt.yaml: %w", err)
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "✓ Successfully created prompt: %s\n", name)
+			fmt.Fprintf(cmd.OutOrStdout(), "✓ Created prompt: %s\n", name)
 			fmt.Fprintf(cmd.OutOrStdout(), "\n🚀 Next steps:\n")
-			fmt.Fprintf(cmd.OutOrStdout(), "  1. Edit %s.yaml if needed\n", name)
-			fmt.Fprintf(cmd.OutOrStdout(), "  2. Publish the prompt to the registry:\n")
+			fmt.Fprintf(cmd.OutOrStdout(), "  1. Edit %s.yaml (optional)\n", name)
+			fmt.Fprintf(cmd.OutOrStdout(), "  2. Publish to the registry:\n")
 			fmt.Fprintf(cmd.OutOrStdout(), "     arctl apply -f %s.yaml\n", name)
 			return nil
 		},

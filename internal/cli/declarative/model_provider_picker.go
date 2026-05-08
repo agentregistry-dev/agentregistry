@@ -82,6 +82,9 @@ var (
 )
 
 func (m modelProviderModel) View() string {
+	if m.done || m.cancelled {
+		return ""
+	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s %s\n\n", mpHeaderStyle.Render("?"), mpHeaderStyle.Render("Pick a model provider:"))
 	for i, row := range providerRows {

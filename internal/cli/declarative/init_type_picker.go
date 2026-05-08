@@ -78,6 +78,9 @@ var (
 )
 
 func (m initTypeModel) View() string {
+	if m.done || m.cancelled {
+		return ""
+	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s %s\n\n", tpHeaderStyle.Render("?"), tpHeaderStyle.Render("What kind of resource?"))
 	for i, row := range initTypeRows {

@@ -81,6 +81,9 @@ var (
 )
 
 func (m confirmPickerModel) View() string {
+	if m.done || m.cancelled {
+		return ""
+	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s %s\n\n", cpHeaderStyle.Render("?"), cpHeaderStyle.Render(m.prompt))
 	for i, row := range m.rows {
