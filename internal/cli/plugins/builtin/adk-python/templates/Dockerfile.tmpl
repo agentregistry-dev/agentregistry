@@ -14,6 +14,12 @@ COPY .python-version .python-version
 
 RUN uv sync
 
+# Make the project package importable. The kagent-adk runtime calls
+# `importlib.import_module("{{.Name}}")` to load the agent for lifespan; with
+# only `WORKDIR /app` and source at `/app/{{.Name}}/`, Python won't find it
+# unless /app is on sys.path.
+ENV PYTHONPATH=/app
+
 ENV OTEL_SERVICE_NAME={{.Name}}
 
 CMD ["{{.Name}}"]
