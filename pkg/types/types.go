@@ -41,9 +41,6 @@ type AuthorizeInput struct {
 	Name string
 	// Tag is the resource tag for content kinds; "" for list/get-latest.
 	Tag string
-	// Version is the private storage identity for mutable-object rows; "" for
-	// list and get-latest.
-	Version string
 }
 
 // Authorizer gates a single resource handler invocation. Return
@@ -77,7 +74,6 @@ type CreateStagerInput struct {
 	Namespace string
 	Name      string
 	Tag       string
-	Version   string
 	Object    v1alpha1.Object
 	Store     any
 }

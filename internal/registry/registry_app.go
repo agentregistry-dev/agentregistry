@@ -247,7 +247,6 @@ func buildRouteOptions(
 				Namespace: in.Namespace,
 				Name:      in.Name,
 				Tag:       in.Tag,
-				Version:   in.Version,
 				Object:    in.Object,
 				Store:     in.Store,
 			})
@@ -291,7 +290,7 @@ func crudPerKindHooks(options types.AppOptions) crud.PerKindHooks {
 			hooks.Authorizers[kind] = func(ctx context.Context, in resource.AuthorizeInput) error {
 				return f(ctx, types.AuthorizeInput{
 					Verb: in.Verb, Kind: in.Kind, Namespace: in.Namespace,
-					Name: in.Name, Tag: in.Tag, Version: in.Version,
+					Name: in.Name, Tag: in.Tag,
 				})
 			}
 		}
@@ -303,7 +302,7 @@ func crudPerKindHooks(options types.AppOptions) crud.PerKindHooks {
 			hooks.ListFilters[kind] = func(ctx context.Context, in resource.AuthorizeInput) (string, []any, error) {
 				return f(ctx, types.AuthorizeInput{
 					Verb: in.Verb, Kind: in.Kind, Namespace: in.Namespace,
-					Name: in.Name, Tag: in.Tag, Version: in.Version,
+					Name: in.Name, Tag: in.Tag,
 				})
 			}
 		}

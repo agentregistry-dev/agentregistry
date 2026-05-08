@@ -51,7 +51,6 @@ type CreateStagerInput struct {
 	Namespace string
 	Name      string
 	Tag       string
-	Version   string
 	Object    v1alpha1.Object
 	Store     *v1alpha1store.Store
 }
@@ -138,7 +137,7 @@ func applyCore(
 	if opts.Authorize != nil {
 		if err := opts.Authorize(ctx, AuthorizeInput{
 			Verb: "apply", Kind: kind,
-			Namespace: meta.Namespace, Name: meta.Name, Tag: meta.Tag, Version: meta.Version,
+			Namespace: meta.Namespace, Name: meta.Name, Tag: meta.Tag,
 			Object: obj,
 		}); err != nil {
 			return upsertResult{}, &applyError{Stage: stageAuth, Err: err}
@@ -170,7 +169,6 @@ func applyCore(
 			Namespace: meta.Namespace,
 			Name:      meta.Name,
 			Tag:       meta.Tag,
-			Version:   meta.Version,
 			Object:    obj,
 			Store:     store,
 		})
@@ -250,7 +248,7 @@ func deleteCore(
 	if opts.Authorize != nil {
 		if err := opts.Authorize(ctx, AuthorizeInput{
 			Verb: "delete", Kind: kind,
-			Namespace: namespace, Name: name, Version: version,
+			Namespace: namespace, Name: name,
 			Object: opts.PreDeleteObject,
 		}); err != nil {
 			return &applyError{Stage: stageAuth, Err: err}

@@ -136,8 +136,8 @@ type Config struct {
 	//
 	// The hook is called after path parsing and — for apply — after the
 	// body decodes, but before any validation or store I/O. For list +
-	// cross-namespace list, Name and Version are empty; for get-latest,
-	// Version is empty; Object is non-nil only for apply.
+	// cross-namespace list, Name and Tag are empty; for get-latest,
+	// Tag is empty; Object is non-nil only for apply.
 	Authorize func(ctx context.Context, in AuthorizeInput) error
 
 	// ListFilter is optional; when set, list handlers consult it before
@@ -185,8 +185,6 @@ type AuthorizeInput struct {
 	Namespace string
 	// Name is empty for list verbs.
 	Name string
-	// Version is empty for list or get-latest.
-	Version string
 	// Tag is populated for tagged content resources.
 	Tag string
 	// Object is non-nil only when Verb == "apply"; it carries the decoded

@@ -234,11 +234,17 @@ func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun
 		return res
 	}
 
+	if store.IsTaggedArtifact() {
+		if meta.Tag == "" {
+			meta.Tag = v1alpha1store.DefaultTag()
+		}
+	}
+
 	authz := batchAuthorize(cfg, obj.GetKind())
 	if authz != nil {
 		if err := authz(ctx, AuthorizeInput{
 			Verb: "delete", Kind: obj.GetKind(),
-			Namespace: meta.Namespace, Name: meta.Name,
+			Namespace: meta.Namespace, Name: meta.Name, Tag: meta.Tag,
 			Object: obj,
 		}); err != nil {
 			return failResult(res, &applyError{Stage: stageAuth, Err: err})
@@ -246,9 +252,6 @@ func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun
 	}
 
 	if store.IsTaggedArtifact() {
-		if meta.Tag == "" {
-			meta.Tag = v1alpha1store.DefaultTag()
-		}
 		err := store.Delete(ctx, meta.Namespace, meta.Name, meta.Tag)
 		if err != nil {
 			return failResult(res, &applyError{

@@ -110,7 +110,7 @@ func Register(api huma.API, cfg Config) {
 				meta := obj.GetMetadata()
 				return authz(ctx, resource.AuthorizeInput{
 					Verb: "apply", Kind: kind,
-					Namespace: meta.Namespace, Name: meta.Name, Version: meta.Version,
+					Namespace: meta.Namespace, Name: meta.Name, Tag: meta.Tag,
 					Object: obj,
 				})
 			}
