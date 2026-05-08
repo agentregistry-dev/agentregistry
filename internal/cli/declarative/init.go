@@ -48,8 +48,28 @@ Examples:
   arctl init mcp acme/my-server
   arctl init mcp acme/my-server --framework fastmcp --language python
   arctl init skill my-skill
-  arctl init prompt my-prompt`,
+  arctl init prompt my-prompt
+  arctl init                                    # interactive: picker for kind`,
 		SilenceUsage: true,
+		Args:         cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Kindless wizard: pick a resource type, then dispatch into that
+			// subcommand's RunE with no args (which fires its own name prompt
+			// and any other interactive flows).
+			if !isatty() {
+				return cmd.Help()
+			}
+			kind, err := runInitTypePicker()
+			if err != nil {
+				return err
+			}
+			for _, c := range cmd.Commands() {
+				if c.Name() == kind {
+					return c.RunE(c, []string{})
+				}
+			}
+			return fmt.Errorf("internal: no subcommand for kind %q", kind)
+		},
 	}
 	cmd.AddCommand(newInitAgentCmd())
 	cmd.AddCommand(newInitMCPCmd())
