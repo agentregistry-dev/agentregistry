@@ -139,14 +139,32 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 
 			// Resolve provider + model name once, then thread the resolved
 			// values into templates, arctl.yaml, and agent.yaml so all three
-			// agree.
+			// agree. Provider comes from --model-provider flag; otherwise the
+			// interactive picker if a TTY is available; otherwise "gemini".
+			// User-cancel propagates as an error; TTY-unavailable falls back
+			// silently so tests and headless runs continue to work.
 			provider := initModelProvider
+			if provider == "" && isatty() {
+				picked, perr := runModelProviderPicker()
+				if errors.Is(perr, errProviderPickCancelled) {
+					return perr
+				}
+				if perr == nil {
+					provider = picked
+				}
+			}
 			if provider == "" {
 				provider = "gemini"
 			}
 			modelName := initModelName
 			if modelName == "" {
 				modelName = defaultInitModelName(provider)
+				if isatty() {
+					typed, perr := promptText("Model name", modelName, nil, cmd.OutOrStdout(), cmd.InOrStdin())
+					if perr == nil {
+						modelName = typed
+					}
+				}
 			}
 
 			vars := agentTemplateVars(name, initVersion, initDescription, provider, modelName, image, plugin.SourceDir, projectDir)
