@@ -275,7 +275,7 @@ func (c *Coordinator) persistApplyResult(ctx context.Context, deployment *v1alph
 			return annotations
 		}
 	}
-	if err := store.ApplyPatch(ctx, deployment.Metadata.Namespace, deployment.Metadata.Name, store.MutableObjectIdentity(), patch); err != nil {
+	if err := store.ApplyPatch(ctx, deployment.Metadata.Namespace, deployment.Metadata.Name, "", patch); err != nil {
 		return fmt.Errorf("persist apply result: %w", err)
 	}
 	return nil
@@ -310,7 +310,7 @@ func (c *Coordinator) persistRemoveResult(ctx context.Context, deployment *v1alp
 	if patch.Status == nil && patch.Annotations == nil {
 		return nil
 	}
-	if err := store.ApplyPatch(ctx, deployment.Metadata.Namespace, deployment.Metadata.Name, store.MutableObjectIdentity(), patch); err != nil {
+	if err := store.ApplyPatch(ctx, deployment.Metadata.Namespace, deployment.Metadata.Name, "", patch); err != nil {
 		if errors.Is(err, pkgdb.ErrNotFound) {
 			// Row already hard-deleted (finalizer-free fast path) — no
 			// place to record the Removed condition. Adapter teardown

@@ -41,7 +41,7 @@ type ApplyConfig struct {
 	// authorize-allow (matches resource.Config.Authorize == nil).
 	//
 	// Each document gets its own AuthorizeInput (Verb="apply", Kind +
-	// Name + Tag/hidden identity + Namespace from the decoded metadata) so the
+	// Name + Tag + Namespace from the decoded metadata) so the
 	// caller can deny per-resource. Errors fail the document; the rest
 	// of the batch continues — same per-doc isolation the upsert path
 	// already has.
@@ -92,10 +92,10 @@ type applyOutput struct {
 // (when Resolver is set), runs registry + uniqueness checks, and
 // Upserts via the kind-matched Store.
 //
-// DELETE: for each document, calls Store.Delete on the (namespace,
-// name, version) triple — soft-delete semantics (sets deletionTimestamp,
-// finalizers own hard-deletion). Validation still runs so clients get
-// the same error surface as apply.
+// DELETE: for each document, calls Store.Delete on the named resource. Tagged
+// artifacts use metadata.tag when supplied; omitted tag deletes all tags for
+// that namespace/name. Mutable objects delete by namespace/name. Validation
+// still runs so clients get the same error surface as apply.
 //
 // Both endpoints always return 200 with a per-document Results slice;
 // document-level failures are surfaced as Status="failed" entries and
@@ -249,8 +249,7 @@ func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun
 	if store.IsTaggedArtifact() {
 		err = deleteTaggedBatch(ctx, store, meta, &res)
 	} else {
-		// Mutable object path: the Store owns the private row identity.
-		err = store.Delete(ctx, meta.Namespace, meta.Name, store.MutableObjectIdentity())
+		err = store.Delete(ctx, meta.Namespace, meta.Name, "")
 	}
 	if err != nil {
 		return failResult(res, &applyError{

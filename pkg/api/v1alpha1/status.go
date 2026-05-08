@@ -132,7 +132,7 @@ func MarshalStatusForStorage(s Status) ([]byte, error) {
 // expect. Callers that use the typed v1alpha1.Status schema wrap their
 // SetCondition / ObservedGeneration logic here:
 //
-//	store.PatchStatus(ctx, ns, name, version, v1alpha1.StatusPatcher(
+//	store.PatchStatus(ctx, ns, name, tag, v1alpha1.StatusPatcher(
 //	    func(s *v1alpha1.Status) {
 //	        s.ObservedGeneration = gen
 //	        s.SetCondition(v1alpha1.Condition{Type: "Ready", Status: v1alpha1.ConditionTrue})

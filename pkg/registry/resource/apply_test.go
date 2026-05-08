@@ -190,7 +190,7 @@ spec:
 `)
 	resp := api.Post("/v0/apply", "Content-Type: application/yaml", strings.NewReader(string(yaml)))
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
-	require.NotContains(t, resp.Body.String(), `"version"`, "mutable apply results must not expose hidden storage identity")
+	require.NotContains(t, resp.Body.String(), `"version"`, "mutable apply results must not expose storage-only identity")
 
 	var out struct {
 		Results []arv0.ApplyResult `json:"results"`

@@ -1,8 +1,7 @@
 -- v1alpha1 schema: every resource uses the same envelope (apiVersion +
 -- metadata + spec + status). Metadata fields are promoted to real columns;
 -- spec and status stay JSONB. Content resources use (namespace, name, tag);
--- Provider and Deployment use mutable-object storage (public namespace/name,
--- private version identity).
+-- Provider and Deployment use mutable-object storage (namespace/name).
 --
 -- Tagged-artifact tables (agents, mcp_servers, remote_mcp_servers, skills,
 -- prompts) store one mutable row per tag. The store fills omitted tags with the
@@ -10,8 +9,7 @@
 -- "Latest" is a normal tag value, not the most recently applied live tag.
 --
 -- Providers and Deployments are not tagged-artifact rows — they're
--- infra/lifecycle state and keep the older string-version shape (out of
--- scope for the tagged-artifact redesign).
+-- infra/lifecycle state keyed directly by namespace/name.
 --
 -- All tables live under the dedicated PostgreSQL schema `v1alpha1` so they
 -- coexist with the older `public.agents`, `public.servers`, etc. during
@@ -45,7 +43,7 @@ $$ LANGUAGE plpgsql;
 -- reconcilers subscribe to status-only events so they observe reconciliation
 -- convergence without being woken up by idempotent re-applies.
 --
--- Payload: {"op": "INSERT|UPDATE|DELETE", "id": "<namespace>/<name>/<tag-or-version>"}
+-- Payload: {"op": "INSERT|UPDATE|DELETE", "id": "<namespace>/<name>[/<tag>]"}
 CREATE OR REPLACE FUNCTION v1alpha1.notify_status_change()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -59,7 +57,8 @@ BEGIN
         op := 'DELETE';
         payload := json_build_object(
             'op', op,
-            'id', OLD.namespace || '/' || OLD.name || '/' || COALESCE(to_jsonb(OLD)->>'tag', to_jsonb(OLD)->>'version'));
+            'id', OLD.namespace || '/' || OLD.name ||
+                COALESCE('/' || (to_jsonb(OLD)->>'tag'), ''));
         PERFORM pg_notify(channel, payload::text);
         RETURN OLD;
     ELSE
@@ -70,7 +69,8 @@ BEGIN
     END IF;
     payload := json_build_object(
         'op', op,
-        'id', NEW.namespace || '/' || NEW.name || '/' || COALESCE(to_jsonb(NEW)->>'tag', to_jsonb(NEW)->>'version'));
+        'id', NEW.namespace || '/' || NEW.name ||
+            COALESCE('/' || (to_jsonb(NEW)->>'tag'), ''));
     PERFORM pg_notify(channel, payload::text);
     RETURN NEW;
 END;
@@ -198,8 +198,7 @@ CREATE OR REPLACE TRIGGER prompts_notify_status   AFTER  INSERT OR UPDATE OR DEL
 
 -- -----------------------------------------------------------------------------
 -- Providers and Deployments: lifecycle/infra state, NOT tagged artifacts.
--- Both retain the pre-tagging shape (string version, generation,
--- finalizers, is_latest_version). Provider belongs with Deployment as
+-- Both use Kubernetes-like mutable storage. Provider belongs with Deployment as
 -- infra/config — the actual tagged artifacts that get deployed are
 -- Agents/MCPServers/Skills/Prompts/RemoteMCPServers.
 -- -----------------------------------------------------------------------------
@@ -207,21 +206,18 @@ CREATE OR REPLACE TRIGGER prompts_notify_status   AFTER  INSERT OR UPDATE OR DEL
 CREATE TABLE IF NOT EXISTS v1alpha1.providers (
     namespace          VARCHAR(255) NOT NULL,
     name               VARCHAR(255) NOT NULL,
-    version            VARCHAR(255) NOT NULL,
     uid                UUID         NOT NULL DEFAULT gen_random_uuid(),
     generation         BIGINT       NOT NULL DEFAULT 1,
     labels             JSONB        NOT NULL DEFAULT '{}'::jsonb,
     annotations        JSONB        NOT NULL DEFAULT '{}'::jsonb,
     spec               JSONB        NOT NULL,
     status             JSONB        NOT NULL DEFAULT '{}'::jsonb,
-    is_latest_version  BOOLEAN      NOT NULL DEFAULT false,
     deletion_timestamp TIMESTAMPTZ,
     finalizers         JSONB        NOT NULL DEFAULT '[]'::jsonb,
     created_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (namespace, name, version)
+    PRIMARY KEY (namespace, name)
 );
-CREATE UNIQUE INDEX IF NOT EXISTS v1alpha1_providers_latest_version  ON v1alpha1.providers (namespace, name) WHERE is_latest_version;
 CREATE INDEX IF NOT EXISTS v1alpha1_providers_labels_gin      ON v1alpha1.providers USING GIN (labels);
 CREATE INDEX IF NOT EXISTS v1alpha1_providers_spec_gin        ON v1alpha1.providers USING GIN (spec jsonb_path_ops);
 CREATE INDEX IF NOT EXISTS v1alpha1_providers_updated_at_desc ON v1alpha1.providers (updated_at DESC);
@@ -232,21 +228,18 @@ CREATE OR REPLACE TRIGGER providers_notify_status   AFTER  INSERT OR UPDATE OR D
 CREATE TABLE IF NOT EXISTS v1alpha1.deployments (
     namespace          VARCHAR(255) NOT NULL,
     name               VARCHAR(255) NOT NULL,
-    version            VARCHAR(255) NOT NULL,
     uid                UUID         NOT NULL DEFAULT gen_random_uuid(),
     generation         BIGINT       NOT NULL DEFAULT 1,
     labels             JSONB        NOT NULL DEFAULT '{}'::jsonb,
     annotations        JSONB        NOT NULL DEFAULT '{}'::jsonb,
     spec               JSONB        NOT NULL,
     status             JSONB        NOT NULL DEFAULT '{}'::jsonb,
-    is_latest_version  BOOLEAN      NOT NULL DEFAULT false,
     deletion_timestamp TIMESTAMPTZ,
     finalizers         JSONB        NOT NULL DEFAULT '[]'::jsonb,
     created_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (namespace, name, version)
+    PRIMARY KEY (namespace, name)
 );
-CREATE UNIQUE INDEX IF NOT EXISTS v1alpha1_deployments_latest_version  ON v1alpha1.deployments (namespace, name) WHERE is_latest_version;
 CREATE INDEX IF NOT EXISTS v1alpha1_deployments_labels_gin      ON v1alpha1.deployments USING GIN (labels);
 CREATE INDEX IF NOT EXISTS v1alpha1_deployments_spec_gin        ON v1alpha1.deployments USING GIN (spec jsonb_path_ops);
 CREATE INDEX IF NOT EXISTS v1alpha1_deployments_updated_at_desc ON v1alpha1.deployments (updated_at DESC);
@@ -259,8 +252,8 @@ CREATE OR REPLACE TRIGGER deployments_notify_status   AFTER  INSERT OR UPDATE OR
 -- Seeded in the `default` namespace.
 -- -----------------------------------------------------------------------------
 
-INSERT INTO v1alpha1.providers (namespace, name, version, spec, is_latest_version)
+INSERT INTO v1alpha1.providers (namespace, name, spec)
 VALUES
-    ('default', 'local',              'v1', '{"platform":"local"}'::jsonb,      true),
-    ('default', 'kubernetes-default', 'v1', '{"platform":"kubernetes"}'::jsonb, true)
-ON CONFLICT (namespace, name, version) DO NOTHING;
+    ('default', 'local',              '{"platform":"local"}'::jsonb),
+    ('default', 'kubernetes-default', '{"platform":"kubernetes"}'::jsonb)
+ON CONFLICT (namespace, name) DO NOTHING;

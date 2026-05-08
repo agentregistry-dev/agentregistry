@@ -560,14 +560,13 @@ func runDeleteLatest[T v1alpha1.Object](ctx context.Context, cfg Config, newObj 
 	if err != nil {
 		return nil, huma.Error500InternalServerError("decode "+kind, err)
 	}
-	identity := cfg.Store.RowIdentity(row)
 	dopts := deleteOpts{Authorize: cfg.Authorize}
 	if cfg.PostDelete != nil && !force {
 		dopts.PostDelete = cfg.PostDelete
 		dopts.PreDeleteObject = obj
 	}
-	if ae := deleteCore(ctx, cfg.Store, kind, ns, name, identity, dopts); ae != nil {
-		return nil, mapApplyErrorToHuma(ae, kind, ns, name, identity)
+	if ae := deleteCore(ctx, cfg.Store, kind, ns, name, "", dopts); ae != nil {
+		return nil, mapApplyErrorToHuma(ae, kind, ns, name, "")
 	}
 	return &deleteOutput{}, nil
 }

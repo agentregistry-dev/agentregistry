@@ -22,8 +22,8 @@ const DefaultNamespace = "default"
 //
 // Namespace, Name, Labels, Annotations, and Tag are user-settable. Tag is
 // meaningful for content-registry kinds. UID, Generation, CreatedAt,
-// UpdatedAt, and DeletionTimestamp are server-managed. Version is an internal
-// storage compatibility field only and is never emitted as public metadata.
+// UpdatedAt, and DeletionTimestamp are server-managed. Version is not part of
+// metadata; content resources use Tag and mutable resources use Namespace/Name.
 //
 // Generation is an internal coordination primitive that drives reconciler
 // convergence (paired with Status.ObservedGeneration). It is populated from the
@@ -36,10 +36,11 @@ const DefaultNamespace = "default"
 // live server. When Tag is omitted, the store fills it with the literal
 // "latest" tag.
 //
-// Mutable-object kinds may still persist through private tables with a hidden
-// constant identity. Namespace is an internal detail today — it defaults to "default" on
-// apply and is stripped from responses when it equals "default" so the
-// multi-tenant surface stays hidden until we deliberately enable it.
+// Mutable-object kinds (Provider, Deployment, AccessPolicy in downstream
+// builds) use Namespace/Name as their full identity. Namespace is an internal
+// detail today — it defaults to "default" on apply and is stripped from
+// responses when it equals "default" so the multi-tenant surface stays hidden
+// until we deliberately enable it.
 //
 // UID is a server-assigned UUID stamped at row creation and never mutated
 // afterwards — same contract as Kubernetes' metadata.uid. Public identity may
@@ -110,9 +111,8 @@ func (m ObjectMeta) MarshalJSON() ([]byte, error) {
 }
 
 // NamespaceOrDefault returns m.Namespace, or DefaultNamespace when the
-// field is empty. Use when building display strings / ids that should
-// read "default/<name>/<version>" even though the wire has elided the
-// namespace.
+// field is empty. Use when building display strings / ids that should include
+// the effective namespace even though the wire has elided the default namespace.
 func (m ObjectMeta) NamespaceOrDefault() string {
 	if m.Namespace == "" {
 		return DefaultNamespace
@@ -135,9 +135,4 @@ type RawObject struct {
 	Metadata ObjectMeta      `json:"metadata" yaml:"metadata"`
 	Spec     json.RawMessage `json:"spec,omitempty" yaml:"spec,omitempty"`
 	Status   json.RawMessage `json:"status,omitempty" yaml:"status,omitempty"`
-
-	// StorageIdentity is private row identity returned by storage for internal
-	// follow-up operations such as cursors and mutable-object deletes. It is not
-	// part of the v1alpha1 object contract.
-	StorageIdentity string `json:"-" yaml:"-"`
 }

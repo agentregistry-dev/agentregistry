@@ -5,7 +5,8 @@ package v1alpha1
 // Deployment's metadata.name is independent from the thing it deploys
 // (Spec.TemplateRef), so multiple Deployments can target the same Agent or
 // MCPServer with different user-chosen names, providers, and configs. Identity
-// follows the same (name, version) composite-PK model as every other kind.
+// is namespace/name; the deployed content is pinned separately through
+// spec.targetRef.tag.
 type Deployment struct {
 	TypeMeta `json:",inline" yaml:",inline"`
 	Metadata ObjectMeta     `json:"metadata" yaml:"metadata"`

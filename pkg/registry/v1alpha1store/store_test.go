@@ -340,7 +340,7 @@ func TestStore_ListRejectsInvalidCursor(t *testing.T) {
 }
 
 // TestStore_ListCursorStableUnderStatusChurn exercises the
-// reason List orders by (namespace, name, tag/version, updated_at) ASC
+// reason List orders by stable resource identity before updated_at.
 // rather than updated_at DESC: a row whose updated_at moves under a
 // concurrent PatchStatus must not jump pages or get returned twice.
 func TestStore_ListCursorStableUnderStatusChurn(t *testing.T) {
@@ -438,14 +438,12 @@ func TestStore_FindReferrers(t *testing.T) {
 
 func TestStore_SeededProviders(t *testing.T) {
 	pool := NewTestPool(t)
-	// Provider is a mutable object (public namespace/name with a hidden
-	// storage identity and is_latest_version flag).
+	// Provider is a mutable object keyed by namespace/name.
 	providers := NewMutableObjectStore(pool, "v1alpha1.providers")
 	ctx := context.Background()
 
 	local, err := providers.GetLatest(ctx, "default", "local")
 	require.NoError(t, err)
-	require.Equal(t, "v1", local.StorageIdentity)
 
 	var spec v1alpha1.ProviderSpec
 	require.NoError(t, json.Unmarshal(local.Spec, &spec))
@@ -489,7 +487,7 @@ func TestStore_NotifyPayloadDiscreteFields(t *testing.T) {
 		Op        string `json:"op"`
 		Namespace string `json:"namespace"`
 		Name      string `json:"name"`
-		Tag       string `json:"version"`
+		Tag       string `json:"tag"`
 	}
 	require.NoError(t, json.Unmarshal([]byte(notif.Payload), &payload),
 		"payload must be JSON with discrete (namespace, name, tag) fields")

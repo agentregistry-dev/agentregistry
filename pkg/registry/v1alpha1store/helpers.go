@@ -24,14 +24,15 @@ type rowScanner interface {
 // queries) into a v1alpha1.RawObject. Spec and Status are retained as their
 // wire-form representations so callers can unmarshal into typed structs.
 //
-// tagged reflects the Store's private behavior and decides whether the identity
-// column should populate public metadata.tag or RawObject.StorageIdentity.
+// tagged reflects the Store's private behavior and decides whether the scanned
+// identity column should populate public metadata.tag. Mutable-object queries
+// emit an empty synthetic value to keep the column layout uniform.
 // Tagged content queries emit a synthetic 0::bigint generation and '[]'::jsonb
 // finalizers so the column layout stays uniform across modes.
 //
 // Column order must match:
 //
-//	namespace, name, tag-or-version, uid, generation, labels, annotations, spec, status,
+//	namespace, name, tag-or-empty, uid, generation, labels, annotations, spec, status,
 //	deletion_timestamp, finalizers, created_at, updated_at
 func scanRow(row rowScanner, tagged bool) (*v1alpha1.RawObject, error) {
 	var (
@@ -76,8 +77,7 @@ func scanRow(row rowScanner, tagged bool) (*v1alpha1.RawObject, error) {
 // logic.
 //
 // Tagged mode populates Metadata.Tag with the row's identity. Mutable-object
-// mode keeps the private row identity on RawObject.StorageIdentity for internal
-// follow-up operations; JSON/YAML encoding does not re-emit it.
+// rows have no tag.
 func decodeRow(
 	tagged bool,
 	namespace, name, identity, uid string,
@@ -124,8 +124,6 @@ func decodeRow(
 	if tagged {
 		meta.Tag = identity
 		raw.Metadata = meta
-	} else {
-		raw.StorageIdentity = identity
 	}
 
 	return raw, nil

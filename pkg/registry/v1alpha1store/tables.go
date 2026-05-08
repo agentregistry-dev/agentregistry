@@ -55,9 +55,6 @@ func NewStores(pool *pgxpool.Pool, opts ...StoreOption) map[string]*Store {
 		// option chain).
 		kindOpts := append([]StoreOption{WithKind(kind)}, opts...)
 		if kind == v1alpha1.KindProvider {
-			// Seeded providers use "v1" in the backing table. Keep that
-			// compatibility detail in Store construction, not ObjectMeta.
-			kindOpts = append([]StoreOption{WithKind(kind), WithMutableObjectIdentity("v1")}, opts...)
 			out[kind] = NewMutableObjectStore(pool, table, kindOpts...)
 			continue
 		}

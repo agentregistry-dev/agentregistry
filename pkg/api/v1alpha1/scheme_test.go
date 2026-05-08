@@ -388,8 +388,8 @@ func TestEncode_RoundTrip_YAML(t *testing.T) {
 	// but UnmarshalJSON intentionally does NOT re-stamp it, so callers
 	// like the importer can layer their own default on top.
 	//
-	// Private storage identity is not ObjectMeta; the decoder rejects
-	// user-supplied metadata.version.
+	// Version is not ObjectMeta; the decoder rejects user-supplied
+	// metadata.version.
 	original := &Agent{
 		TypeMeta: TypeMeta{APIVersion: GroupVersion, Kind: KindAgent},
 		Metadata: ObjectMeta{Name: "rt", Labels: map[string]string{"k": "v"}},
@@ -421,8 +421,8 @@ func TestEncode_RoundTrip_YAML(t *testing.T) {
 }
 
 func TestEncode_RoundTrip_JSON(t *testing.T) {
-	// Private storage identity is not ObjectMeta. The mutable-object store
-	// owns any backing-row identity needed for persistence.
+	// Deployment identity is namespace/name. The decoder must not introduce
+	// metadata.version state during a JSON round trip.
 	original := &Deployment{
 		TypeMeta: TypeMeta{APIVersion: GroupVersion, Kind: KindDeployment},
 		Metadata: ObjectMeta{Name: "prod"},

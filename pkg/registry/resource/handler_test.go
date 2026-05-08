@@ -714,8 +714,8 @@ spec:
 // TestResourceRegister_IncludeTerminatingByDefault pins the opt-in
 // behavior: a kind registered with IncludeTerminatingByDefault=true
 // surfaces terminating rows on plain LIST (no ?includeTerminating=true
-// needed), and the OR-ing with ?latestOnly=true still returns terminating
-// rows even though recomputeLatest has cleared is_latest_version on them.
+// needed), and ?latestOnly=true remains a no-op for mutable objects because
+// namespace/name is already unique.
 func TestResourceRegister_IncludeTerminatingByDefault(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
 	store := v1alpha1store.NewMutableObjectStore(pool, "v1alpha1.providers")
@@ -730,8 +730,7 @@ func TestResourceRegister_IncludeTerminatingByDefault(t *testing.T) {
 	}, func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
 
 	// Seed a row, attach a finalizer, then soft-delete so the row goes
-	// terminating (deletion_timestamp set) and recomputeLatest clears
-	// its is_latest_version flag.
+	// terminating (deletion_timestamp set).
 	_, err := store.Upsert(t.Context(), &v1alpha1.Provider{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindProvider},
 		Metadata: v1alpha1.ObjectMeta{Namespace: testNamespace, Name: "draining"},
@@ -739,9 +738,9 @@ func TestResourceRegister_IncludeTerminatingByDefault(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.NoError(t, store.PatchFinalizers(t.Context(), testNamespace, "draining", "1",
+	require.NoError(t, store.PatchFinalizers(t.Context(), testNamespace, "draining", "",
 		func([]string) []string { return []string{"finalizer.example.com"} }))
-	require.NoError(t, store.Delete(t.Context(), testNamespace, "draining", "1"))
+	require.NoError(t, store.Delete(t.Context(), testNamespace, "draining", ""))
 
 	var list struct {
 		Items      []v1alpha1.Provider `json:"items"`
@@ -758,10 +757,8 @@ func TestResourceRegister_IncludeTerminatingByDefault(t *testing.T) {
 	require.NotNil(t, list.Items[0].Metadata.DeletionTimestamp,
 		"opt-in default must surface the deletionTimestamp so operators see in-flight teardown")
 
-	// LatestOnly OR-ed with the default-on flag: store widens the
-	// predicate to "(is_latest_version OR deletion_timestamp IS NOT NULL)"
-	// so the terminating row still appears even though its
-	// is_latest_version was cleared by recomputeLatest.
+	// LatestOnly is a no-op for mutable objects, so the terminating row remains
+	// visible because the kind opted into IncludeTerminatingByDefault.
 	resp = api.Get("/v0/providers?namespace=" + testNamespace + "&latestOnly=true")
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &list))

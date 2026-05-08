@@ -15,8 +15,7 @@ var KnownPlatforms = map[string]struct{}{
 // Validate runs Provider's structural checks.
 //
 // Provider is infra/config — it lives alongside Deployment, not in the
-// tagged-artifact set. Its public identity is Kubernetes-like
-// (namespace, name); any private storage identity is hidden.
+// tagged-artifact set. Its identity is Kubernetes-like (namespace, name).
 func (p *Provider) Validate() error {
 	var errs FieldErrors
 	errs = append(errs, ValidateObjectMeta(p.Metadata)...)

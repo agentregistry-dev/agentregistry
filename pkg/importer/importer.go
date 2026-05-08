@@ -101,8 +101,6 @@ type ImportResult struct {
 
 	// Tag is the content tag after Upsert.
 	Tag string `json:"tag,omitempty"`
-	// Version is populated only for legacy Provider/Deployment imports.
-	Version int `json:"version,omitempty"`
 }
 
 const (
@@ -364,31 +362,14 @@ func (i *Importer) importOne(ctx context.Context, source string, obj v1alpha1.Ob
 	}
 	switch up.Outcome {
 	case v1alpha1store.UpsertCreated:
-		if store.IsTaggedArtifact() {
-			res.Status = ImportStatusCreated
-		} else {
-			// Distinguish a true first-version create from a subsequent
-			// version bump using the integer version: v1 is a fresh create,
-			// anything higher is an update of an existing logical resource.
-			if up.Version == 1 {
-				res.Status = ImportStatusCreated
-			} else {
-				res.Status = ImportStatusUpdated
-			}
-		}
+		res.Status = ImportStatusCreated
 	case v1alpha1store.UpsertReplaced:
 		res.Status = ImportStatusUpdated
 	default:
 		res.Status = ImportStatusUnchanged
 	}
 	res.Tag = up.Tag
-	res.Version = up.Version
-	// findings.Replace needs the private row identity. Tagged-artifact
-	// kinds key by tag; mutable-object stores keep their identity in Store.
-	findingsVersion := store.MutableObjectIdentity()
-	if store.IsTaggedArtifact() {
-		findingsVersion = up.Tag
-	}
+	findingsVersion := up.Tag
 
 	i.writeFindings(ctx, obj, opts, pendingFindings, &res, findingsVersion)
 	return res

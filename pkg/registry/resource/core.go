@@ -30,8 +30,6 @@ type upsertResult struct {
 	Outcome v1alpha1store.UpsertOutcome
 	// Tag is the content tag after apply for tagged artifact stores.
 	Tag string
-	// Version is used only as a private storage identity for mutable-object stores.
-	Version int
 	// Generation is the internal row generation after apply.
 	Generation int64
 	// Staged means a CreateStager handled the object outside production
@@ -162,7 +160,7 @@ func applyCore(
 			return upsertResult{}, &applyError{Stage: stageApproval, Err: err}
 		}
 		if staged.Staged {
-			return upsertResult{Tag: meta.Tag, Version: parseStorageIdentity(store.MutableObjectIdentity()), Staged: true}, nil
+			return upsertResult{Tag: meta.Tag, Staged: true}, nil
 		}
 	}
 
@@ -181,7 +179,6 @@ func applyCore(
 	res := upsertResult{
 		Outcome:    up.Outcome,
 		Tag:        up.Tag,
-		Version:    up.Version,
 		Generation: up.Generation,
 		UID:        up.UID,
 	}
@@ -197,17 +194,6 @@ func applyCore(
 	return res, nil
 }
 
-func parseStorageIdentity(version string) int {
-	var out int
-	for _, r := range version {
-		if r < '0' || r > '9' {
-			return 0
-		}
-		out = out*10 + int(r-'0')
-	}
-	return out
-}
-
 // deleteOpts threads the per-kind dependencies into deleteCore. As with
 // applyOpts, every field is optional. PreDeleteObject is the object
 // passed to PostDelete; callers fill it from a fresh Store.Get
@@ -219,10 +205,9 @@ type deleteOpts struct {
 	PreDeleteObject v1alpha1.Object
 }
 
-// deleteCore runs Authorize → Store.Delete → PostDelete for a single
-// (kind, namespace, name, identity) tuple. For tagged artifact stores,
-// identity is metadata.tag; for mutable-object stores, identity is the hidden
-// storage row identity. Validation is intentionally
+// deleteCore runs Authorize → Store.Delete → PostDelete for a single resource.
+// For tagged artifact stores, identity is metadata.tag; mutable-object stores
+// delete by namespace/name and ignore identity. Validation is intentionally
 // skipped — deleting a row should not require its spec to validate.
 //
 // Returns NotFound=true on the missing-row case so callers can map it
