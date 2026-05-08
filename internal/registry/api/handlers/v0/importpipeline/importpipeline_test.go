@@ -83,19 +83,19 @@ func TestRegisterImport_Create(t *testing.T) {
 
 	var out struct {
 		Results []struct {
-			Status  string `json:"status"`
-			Kind    string `json:"kind"`
-			Name    string `json:"name"`
-			Version int    `json:"version"`
+			Status string `json:"status"`
+			Kind   string `json:"kind"`
+			Name   string `json:"name"`
+			Tag    string `json:"tag"`
 		} `json:"results"`
 	}
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
 	require.Len(t, out.Results, 1)
 	require.Equal(t, "created", out.Results[0].Status)
 	require.Equal(t, "Agent", out.Results[0].Kind)
-	require.EqualValues(t, 1, out.Results[0].Version)
+	require.Equal(t, "latest", out.Results[0].Tag)
 
-	obj, err := agents.Get(context.Background(), "default", "alice", "1")
+	obj, err := agents.Get(context.Background(), "default", "alice", "latest")
 	require.NoError(t, err)
 	require.Equal(t, "alice", obj.Metadata.Name)
 }
@@ -119,12 +119,12 @@ func TestRegisterImport_EnrichInvokesScanners(t *testing.T) {
 	require.Equal(t, 1, sc.calls)
 
 	// Annotation landed on the row.
-	obj, err := agents.Get(context.Background(), "default", "alice", "1")
+	obj, err := agents.Get(context.Background(), "default", "alice", "latest")
 	require.NoError(t, err)
 	require.Equal(t, "clean", obj.Metadata.Annotations["security.agentregistry.solo.io/fake-status"])
 
 	// Finding landed in the side table.
-	fs, err := findings.List(context.Background(), v1alpha1.KindAgent, "default", "alice", "1")
+	fs, err := findings.List(context.Background(), v1alpha1.KindAgent, "default", "alice", "latest")
 	require.NoError(t, err)
 	require.Len(t, fs, 1)
 	require.Equal(t, "FAKE-1", fs[0].ID)
@@ -170,7 +170,7 @@ func TestRegisterImport_DryRunDoesNotWrite(t *testing.T) {
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
 	require.Equal(t, "dry-run", out.Results[0].Status)
 
-	_, err := agents.Get(context.Background(), "default", "alice", "1")
+	_, err := agents.Get(context.Background(), "default", "alice", "latest")
 	require.Error(t, err) // not found
 }
 
@@ -269,10 +269,10 @@ spec:
 	require.Equal(t, "created", out.Results[1].Status)
 
 	// Denied row was NOT persisted.
-	_, err = agents.Get(context.Background(), "default", "secret", "1")
+	_, err = agents.Get(context.Background(), "default", "secret", "latest")
 	require.Error(t, err)
 	// Allowed row IS persisted.
-	row, err := agents.Get(context.Background(), "default", "ok", "1")
+	row, err := agents.Get(context.Background(), "default", "ok", "latest")
 	require.NoError(t, err)
 	require.Equal(t, "ok", row.Metadata.Name)
 }
@@ -334,7 +334,7 @@ spec:
 		"missing-authorizer must fail closed when Authorizers is non-empty")
 
 	// Row is NOT persisted.
-	_, err = stores[v1alpha1.KindMCPServer].Get(context.Background(), "default", "anything", "1")
+	_, err = stores[v1alpha1.KindMCPServer].Get(context.Background(), "default", "anything", "latest")
 	require.Error(t, err)
 }
 

@@ -686,38 +686,38 @@ spec:
 // rows even though recomputeLatest has cleared is_latest_version on them.
 func TestResourceRegister_IncludeTerminatingByDefault(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+	store := v1alpha1store.NewMutableObjectStore(pool, "v1alpha1.providers")
 
 	_, api := humatest.New(t)
-	resource.Register[*v1alpha1.Agent](api, resource.Config{
-		Kind:                        v1alpha1.KindAgent,
+	resource.Register[*v1alpha1.Provider](api, resource.Config{
+		Kind:                        v1alpha1.KindProvider,
 		BasePrefix:                  "/v0",
 		Store:                       store,
 		IncludeTerminatingByDefault: true,
-	}, func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
+	}, func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
 
 	// Seed a row, attach a finalizer, then soft-delete so the row goes
 	// terminating (deletion_timestamp set) and recomputeLatest clears
 	// its is_latest_version flag.
-	_, err := store.Upsert(t.Context(), &v1alpha1.Agent{
-		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "draining", Tag: "v1"},
-		Spec:     v1alpha1.AgentSpec{Title: "Draining"},
+	_, err := store.Upsert(t.Context(), &v1alpha1.Provider{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindProvider},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "draining", Version: "1"},
+		Spec:     v1alpha1.ProviderSpec{Platform: "noop"},
 	})
 	require.NoError(t, err)
 
-	require.NoError(t, store.PatchFinalizers(t.Context(), "default", "draining", "v1",
+	require.NoError(t, store.PatchFinalizers(t.Context(), "default", "draining", "1",
 		func([]string) []string { return []string{"finalizer.example.com"} }))
-	require.NoError(t, store.Delete(t.Context(), "default", "draining", "v1"))
+	require.NoError(t, store.Delete(t.Context(), "default", "draining", "1"))
 
 	var list struct {
-		Items      []v1alpha1.Agent `json:"items"`
-		NextCursor string           `json:"nextCursor,omitempty"`
+		Items      []v1alpha1.Provider `json:"items"`
+		NextCursor string              `json:"nextCursor,omitempty"`
 	}
 
 	// Plain LIST with no ?includeTerminating still returns the terminating
 	// row because the kind opted in via IncludeTerminatingByDefault.
-	resp := api.Get("/v0/agents")
+	resp := api.Get("/v0/providers")
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &list))
 	require.Len(t, list.Items, 1)
@@ -729,7 +729,7 @@ func TestResourceRegister_IncludeTerminatingByDefault(t *testing.T) {
 	// predicate to "(is_latest_version OR deletion_timestamp IS NOT NULL)"
 	// so the terminating row still appears even though its
 	// is_latest_version was cleared by recomputeLatest.
-	resp = api.Get("/v0/agents?latestOnly=true")
+	resp = api.Get("/v0/providers?latestOnly=true")
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &list))
 	require.Len(t, list.Items, 1)

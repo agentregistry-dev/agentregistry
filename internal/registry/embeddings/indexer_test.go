@@ -178,7 +178,7 @@ func TestIndexer_DryRunSkipsStoreWrites(t *testing.T) {
 	require.Equal(t, 1, provider.calls)
 
 	// Metadata stays nil because no write landed.
-	meta, err := agents.GetEmbeddingMetadata(ctx, testNS, "foo", "1")
+	meta, err := agents.GetEmbeddingMetadata(ctx, testNS, "foo", "latest")
 	require.NoError(t, err)
 	require.Nil(t, meta)
 }

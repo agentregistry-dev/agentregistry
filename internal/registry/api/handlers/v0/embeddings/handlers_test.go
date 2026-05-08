@@ -149,7 +149,7 @@ func TestHandler_GetJobStatus_ReportsCompletion(t *testing.T) {
 	require.Equal(t, 2, status.Result.PerKind[v1alpha1.KindAgent].Skipped)
 
 	// Row-side sanity check: embeddings persisted.
-	meta, err := store.GetEmbeddingMetadata(context.Background(), "default", "one", "1")
+	meta, err := store.GetEmbeddingMetadata(context.Background(), "default", "one", "latest")
 	require.NoError(t, err)
 	require.NotNil(t, meta)
 	require.Equal(t, "fake", meta.Provider)
