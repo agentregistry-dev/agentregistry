@@ -54,11 +54,16 @@ func NewStore(pool *pgxpool.Pool, table string) *Store {
 
 // UpsertResult describes what happened on Upsert. SpecChanged is true when
 // the incoming spec bytes differ from the existing row's spec (or when the
-// row didn't exist). Generation reflects the final stored value.
+// row didn't exist). Generation reflects the final stored value. UID is the
+// row's metadata.uid as observed after the write — Postgres assigns it via
+// a column default on first insert and preserves it across re-applies, so
+// callers can treat this as the authoritative server-side identity even on
+// the no-op update path.
 type UpsertResult struct {
 	Created     bool
 	SpecChanged bool
 	Generation  int64
+	UID         string
 }
 
 // ErrInvalidCursor reports that a list pagination cursor could not be parsed.
@@ -95,7 +100,11 @@ type ListOpts struct {
 	// Cursor is an opaque pagination token. Empty starts from the beginning.
 	Cursor string
 	// LatestOnly restricts to rows where is_latest_version=true (one per
-	// (namespace, name)).
+	// (namespace, name)). When combined with IncludeTerminating=true, the
+	// predicate widens to "latest live row OR any terminating row" because
+	// recomputeLatest clears is_latest_version on terminating rows; in that
+	// mode the one-per-(namespace, name) guarantee no longer holds — multiple
+	// concurrently-terminating versions of the same name can all surface.
 	LatestOnly bool
 	// IncludeTerminating includes rows with deletion_timestamp set. Default
 	// false — callers asking for "alive" rows shouldn't see terminating ones.
@@ -151,9 +160,21 @@ type listCursor struct {
 // row post-apply; nil means "leave existing annotations unchanged",
 // while an explicit empty map means "clear all annotations". Used by
 // controllers that add annotations out-of-band with user applies.
+//
+// InitialFinalizers is applied only on the create path (when no row
+// exists yet at the supplied (namespace, name, version)). On update,
+// existing finalizers are preserved as before — InitialFinalizers is
+// ignored. This is the atomic seam for kinds whose teardown is owned
+// by a reconciler driving external infrastructure: the finalizer must
+// exist from the moment the row is visible to a concurrent DELETE,
+// otherwise Delete's "finalizers empty → hard-delete fast path" can
+// drop the row before the reconciler ever sees it and orphan whatever
+// the reconciler was responsible for cleaning up. Mutating finalizers
+// on existing rows still goes through PatchFinalizers.
 type UpsertOpts struct {
-	Labels      map[string]string
-	Annotations map[string]string
+	Labels            map[string]string
+	Annotations       map[string]string
+	InitialFinalizers []string
 }
 
 // Upsert writes the given object under its (namespace, name, version). On
@@ -234,14 +255,21 @@ func (s *Store) Upsert(ctx context.Context, namespace, name, version string, spe
 		}
 		res.Generation = newGen
 
-		// Finalizers preserved verbatim from the existing row (or `[]`
-		// for new rows). The public Upsert API has no `Finalizers`
-		// option anymore — the column is retained for the future
-		// orphan-reconciler hook only. PatchFinalizers (still exported)
-		// is the sole way to mutate it.
+		// Finalizers preserved verbatim from the existing row on
+		// update; on create, opts.InitialFinalizers seeds the column
+		// (defaulting to `[]` when unset). PatchFinalizers remains the
+		// sole way to mutate finalizers on an existing row.
 		finalizersJSON := oldFinalizersRaw
 		if !found {
-			finalizersJSON = []byte("[]")
+			if len(opts.InitialFinalizers) > 0 {
+				b, err := json.Marshal(opts.InitialFinalizers)
+				if err != nil {
+					return fmt.Errorf("marshal initial finalizers: %w", err)
+				}
+				finalizersJSON = b
+			} else {
+				finalizersJSON = []byte("[]")
+			}
 		}
 
 		// Annotation handling: nil preserves existing,
@@ -258,7 +286,14 @@ func (s *Store) Upsert(ctx context.Context, namespace, name, version string, spe
 			annotationsJSON = a
 		}
 
-		_, err = tx.Exec(ctx,
+		// `uid` is intentionally absent from both the INSERT column list
+		// and the ON CONFLICT DO UPDATE SET list: the column default
+		// (gen_random_uuid()) fires on create, and conflict-update
+		// preserves the existing value — Kubernetes-style read-only
+		// metadata.uid. RETURNING uid::text feeds back whichever path
+		// won so UpsertResult always carries the authoritative value.
+		var uid string
+		err = tx.QueryRow(ctx,
 			fmt.Sprintf(`
 				INSERT INTO %s (namespace, name, version, generation, labels, annotations, spec, finalizers)
 				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -268,11 +303,13 @@ func (s *Store) Upsert(ctx context.Context, namespace, name, version string, spe
 				    annotations = EXCLUDED.annotations,
 				    spec        = EXCLUDED.spec,
 				    finalizers  = EXCLUDED.finalizers
+				RETURNING uid::text
 			`, s.table),
-			namespace, name, version, newGen, labelsJSON, annotationsJSON, []byte(specJSON), finalizersJSON)
+			namespace, name, version, newGen, labelsJSON, annotationsJSON, []byte(specJSON), finalizersJSON).Scan(&uid)
 		if err != nil {
 			return fmt.Errorf("upsert row: %w", err)
 		}
+		res.UID = uid
 
 		if err := s.recomputeLatest(ctx, tx, namespace, name); err != nil {
 			return fmt.Errorf("recompute latest: %w", err)
@@ -463,7 +500,7 @@ func (s *Store) PatchAnnotations(ctx context.Context, namespace, name, version s
 func (s *Store) Get(ctx context.Context, namespace, name, version string) (*v1alpha1.RawObject, error) {
 	row := s.pool.QueryRow(ctx,
 		fmt.Sprintf(`
-			SELECT namespace, name, version, generation, labels, annotations, spec, status,
+			SELECT namespace, name, version, uid::text, generation, labels, annotations, spec, status,
 			       deletion_timestamp, finalizers, created_at, updated_at
 			FROM %s
 			WHERE namespace=$1 AND name=$2 AND version=$3`, s.table),
@@ -477,7 +514,7 @@ func (s *Store) Get(ctx context.Context, namespace, name, version string) (*v1al
 func (s *Store) GetLatest(ctx context.Context, namespace, name string) (*v1alpha1.RawObject, error) {
 	row := s.pool.QueryRow(ctx,
 		fmt.Sprintf(`
-			SELECT namespace, name, version, generation, labels, annotations, spec, status,
+			SELECT namespace, name, version, uid::text, generation, labels, annotations, spec, status,
 			       deletion_timestamp, finalizers, created_at, updated_at
 			FROM %s
 			WHERE namespace=$1 AND name=$2 AND is_latest_version`, s.table),
@@ -591,7 +628,10 @@ func (s *Store) PurgeFinalized(ctx context.Context) (int64, error) {
 // List returns rows filtered by opts, ordered by updated_at DESC with
 // stable identity tie-breakers. A pagination cursor is returned when
 // more rows are available; pass it back via ListOpts.Cursor to continue.
-// Terminating rows are excluded unless IncludeTerminating is true.
+// Terminating rows are excluded unless IncludeTerminating is true. When
+// LatestOnly and IncludeTerminating are both true, results contain the
+// live latest row plus any terminating rows for each (namespace, name)
+// — see ListOpts.LatestOnly for the rationale.
 func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject, string, error) {
 	limit := opts.Limit
 	if limit <= 0 {
@@ -606,7 +646,17 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 		where = append(where, fmt.Sprintf("namespace = $%d", len(args)))
 	}
 	if opts.LatestOnly {
-		where = append(where, "is_latest_version")
+		if opts.IncludeTerminating {
+			// recomputeLatest clears is_latest_version on terminating
+			// rows, so a strict "is_latest_version" filter would hide
+			// them even with IncludeTerminating=true. Widen the predicate
+			// to "the live latest row OR any terminating row" so kinds
+			// whose teardown is operator-observable can
+			// surface in-flight teardown alongside healthy rows.
+			where = append(where, "(is_latest_version OR deletion_timestamp IS NOT NULL)")
+		} else {
+			where = append(where, "is_latest_version")
+		}
 	}
 	if !opts.IncludeTerminating {
 		where = append(where, "deletion_timestamp IS NULL")
@@ -650,7 +700,7 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 	}
 
 	query := fmt.Sprintf(`
-		SELECT namespace, name, version, generation, labels, annotations, spec, status,
+		SELECT namespace, name, version, uid::text, generation, labels, annotations, spec, status,
 		       deletion_timestamp, finalizers, created_at, updated_at
 		FROM %s`, s.table)
 	if len(where) > 0 {
@@ -823,7 +873,7 @@ type FindReferrersOpts struct {
 func (s *Store) FindReferrers(ctx context.Context, pathJSON json.RawMessage, opts FindReferrersOpts) ([]*v1alpha1.RawObject, error) {
 	args := []any{[]byte(pathJSON)}
 	query := fmt.Sprintf(`
-		SELECT namespace, name, version, generation, labels, annotations, spec, status,
+		SELECT namespace, name, version, uid::text, generation, labels, annotations, spec, status,
 		       deletion_timestamp, finalizers, created_at, updated_at
 		FROM %s
 		WHERE spec @> $1::jsonb`, s.table)

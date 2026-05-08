@@ -21,11 +21,11 @@ export type AgentSpec = {
     description?: string;
     framework?: string;
     language?: string;
-    mcpServers?: Array<ResourceRef>;
+    mcpServers?: Array<ResourceRef> | null;
     modelName?: string;
     modelProvider?: string;
-    prompts?: Array<ResourceRef>;
-    skills?: Array<ResourceRef>;
+    prompts?: Array<ResourceRef> | null;
+    skills?: Array<ResourceRef> | null;
     source?: AgentSource;
     title?: string;
 };
@@ -41,7 +41,7 @@ export type ApplyResult = {
 };
 
 export type ApplyResultsResponse = {
-    results: Array<ApplyResult>;
+    results: Array<ApplyResult> | null;
 };
 
 export type Condition = {
@@ -95,7 +95,7 @@ export type ErrorModel = {
     /**
      * Optional list of individual error details
      */
-    errors?: Array<ErrorDetail>;
+    errors?: Array<ErrorDetail> | null;
     /**
      * A URI reference that identifies the specific occurrence of the problem.
      */
@@ -126,42 +126,42 @@ export type HealthBody = {
 };
 
 export type ListOutputAgentBody = {
-    items: Array<Agent>;
+    items: Array<Agent> | null;
     nextCursor?: string;
 };
 
 export type ListOutputDeploymentBody = {
-    items: Array<Deployment>;
+    items: Array<Deployment> | null;
     nextCursor?: string;
 };
 
 export type ListOutputMcpServerBody = {
-    items: Array<McpServer>;
+    items: Array<McpServer> | null;
     nextCursor?: string;
 };
 
 export type ListOutputPromptBody = {
-    items: Array<Prompt>;
+    items: Array<Prompt> | null;
     nextCursor?: string;
 };
 
 export type ListOutputProviderBody = {
-    items: Array<Provider>;
+    items: Array<Provider> | null;
     nextCursor?: string;
 };
 
 export type ListOutputRemoteMcpServerBody = {
-    items: Array<RemoteMcpServer>;
+    items: Array<RemoteMcpServer> | null;
     nextCursor?: string;
 };
 
 export type ListOutputSkillBody = {
-    items: Array<Skill>;
+    items: Array<Skill> | null;
     nextCursor?: string;
 };
 
 export type McpArgument = {
-    choices?: Array<string>;
+    choices?: Array<string> | null;
     default?: string;
     description?: string;
     format?: string;
@@ -179,7 +179,7 @@ export type McpArgument = {
 };
 
 export type McpInputVariable = {
-    choices?: Array<string>;
+    choices?: Array<string> | null;
     default?: string;
     description?: string;
     format?: string;
@@ -190,7 +190,7 @@ export type McpInputVariable = {
 };
 
 export type McpKeyValueInput = {
-    choices?: Array<string>;
+    choices?: Array<string> | null;
     default?: string;
     description?: string;
     format?: string;
@@ -205,13 +205,13 @@ export type McpKeyValueInput = {
 };
 
 export type McpPackage = {
-    environmentVariables?: Array<McpKeyValueInput>;
+    environmentVariables?: Array<McpKeyValueInput> | null;
     fileSha256?: string;
     identifier: string;
-    packageArguments?: Array<McpArgument>;
+    packageArguments?: Array<McpArgument> | null;
     registryBaseUrl?: string;
     registryType: string;
-    runtimeArguments?: Array<McpArgument>;
+    runtimeArguments?: Array<McpArgument> | null;
     runtimeHint?: string;
     transport: McpTransport;
     version?: string;
@@ -237,7 +237,7 @@ export type McpServerSpec = {
 };
 
 export type McpTransport = {
-    headers?: Array<McpKeyValueInput>;
+    headers?: Array<McpKeyValueInput> | null;
     type: string;
     url?: string;
 };
@@ -253,6 +253,7 @@ export type ObjectMeta = {
     };
     name: string;
     namespace?: string;
+    uid?: string;
     updatedAt?: string;
     version?: string;
 };
@@ -338,7 +339,7 @@ export type SkillSpec = {
 };
 
 export type Status = {
-    conditions?: Array<Condition>;
+    conditions?: Array<Condition> | null;
 };
 
 export type VersionBody = {

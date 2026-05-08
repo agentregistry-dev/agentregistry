@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"regexp"
 	"testing"
 	"time"
 
@@ -14,6 +15,11 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
+
+// uuidPattern matches the canonical 8-4-4-4-12 textual UUID Postgres
+// emits for `uid::text`. Sufficient for assertion: the column type is
+// already UUID, so we only need to confirm the wire shape.
+var uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 const testTable = "v1alpha1.agents"
 const testNS = "default"
@@ -244,6 +250,83 @@ func TestStore_DeleteWithFinalizersSoftDeletes(t *testing.T) {
 	require.True(t, res.Created)
 }
 
+// readFinalizers reads the current finalizers slice for a row through
+// PatchFinalizers's identity mutator. RawObject doesn't expose the
+// finalizers column directly (there's no public Get accessor), and
+// PatchFinalizers is the only typed read path that doesn't require a
+// raw SQL query.
+func readFinalizers(t *testing.T, ctx context.Context, store *Store, ns, name, version string) []string {
+	t.Helper()
+	var got []string
+	require.NoError(t, store.PatchFinalizers(ctx, ns, name, version, func(current []string) []string {
+		got = append([]string(nil), current...)
+		return current
+	}))
+	return got
+}
+
+// TestStore_UpsertSeedsInitialFinalizers pins the atomic seam used by
+// kinds whose teardown is owned by a reconciler: passing
+// InitialFinalizers on the create path of Upsert writes the row with
+// the finalizer in the same transaction as the spec, so a concurrent
+// DELETE arriving before any out-of-band PatchFinalizers can't take
+// the hard-delete fast path and skip the reconciler's cleanup.
+func TestStore_UpsertSeedsInitialFinalizers(t *testing.T) {
+	pool := NewTestPool(t)
+	store := NewStore(pool, testTable)
+	ctx := context.Background()
+
+	const finalizer = "finalizer.example.com/teardown"
+	res, err := store.Upsert(ctx, testNS, "foo", "v1", mustSpec(t, v1alpha1.AgentSpec{}), UpsertOpts{
+		InitialFinalizers: []string{finalizer},
+	})
+	require.NoError(t, err)
+	require.True(t, res.Created)
+
+	// The freshly-written row carries the seeded finalizer.
+	require.Equal(t, []string{finalizer}, readFinalizers(t, ctx, store, testNS, "foo", "v1"))
+
+	// Delete now takes the soft-delete branch (because the row is
+	// already finalized) — without InitialFinalizers it would hard-
+	// delete and orphan whatever the reconciler was supposed to clean
+	// up.
+	require.NoError(t, store.Delete(ctx, testNS, "foo", "v1"))
+	row, err := store.Get(ctx, testNS, "foo", "v1")
+	require.NoError(t, err)
+	require.NotNil(t, row.Metadata.DeletionTimestamp, "finalizer-seeded row must soft-delete, not hard-delete")
+}
+
+// TestStore_UpsertInitialFinalizersIgnoredOnUpdate pins the contract:
+// InitialFinalizers seeds the row only on the create path. A subsequent
+// Upsert against the same identity must not overwrite finalizers that
+// were attached out-of-band (or seeded earlier), since updates are not
+// the authoritative finalizer-mutation seam — PatchFinalizers is.
+func TestStore_UpsertInitialFinalizersIgnoredOnUpdate(t *testing.T) {
+	pool := NewTestPool(t)
+	store := NewStore(pool, testTable)
+	ctx := context.Background()
+
+	const seeded = "finalizer.example.com/teardown"
+	_, err := store.Upsert(ctx, testNS, "foo", "v1", mustSpec(t, v1alpha1.AgentSpec{}), UpsertOpts{
+		InitialFinalizers: []string{seeded},
+	})
+	require.NoError(t, err)
+
+	// Re-apply with a different InitialFinalizers slice + a spec change
+	// to force the update branch. Existing finalizers must be preserved
+	// untouched.
+	res, err := store.Upsert(ctx, testNS, "foo", "v1", mustSpec(t, v1alpha1.AgentSpec{Title: "updated"}), UpsertOpts{
+		InitialFinalizers: []string{"different.example.com/never-applied"},
+	})
+	require.NoError(t, err)
+	require.False(t, res.Created)
+	require.True(t, res.SpecChanged)
+
+	require.Equal(t, []string{seeded},
+		readFinalizers(t, ctx, store, testNS, "foo", "v1"),
+		"update path must not overwrite finalizers; PatchFinalizers is the only mutation seam")
+}
+
 // TestStore_UpsertRejectsTerminatingRow guards the Kubernetes-style
 // invariant: once a row is soft-deleted, it cannot be mutated in place via
 // Upsert. Pre-fix behavior was a silent partial-update (ON CONFLICT bumped
@@ -375,6 +458,36 @@ func TestStore_List(t *testing.T) {
 	withTerm, _, err := store.List(ctx, ListOpts{IncludeTerminating: true})
 	require.NoError(t, err)
 	require.Len(t, withTerm, 3)
+}
+
+func TestStore_ListLatestOnlyIncludeTerminating(t *testing.T) {
+	pool := NewTestPool(t)
+	store := NewStore(pool, testTable)
+	ctx := context.Background()
+
+	_, err := store.Upsert(ctx, testNS, "foo", "v1.0.0", mustSpec(t, v1alpha1.AgentSpec{Title: "v1"}), UpsertOpts{})
+	require.NoError(t, err)
+	_, err = store.Upsert(ctx, testNS, "foo", "v2.0.0", mustSpec(t, v1alpha1.AgentSpec{Title: "v2"}), UpsertOpts{})
+	require.NoError(t, err)
+
+	// Soft-delete the older version via the finalizer path so it goes
+	// terminating and recomputeLatest clears is_latest_version on it.
+	require.NoError(t, store.PatchFinalizers(ctx, testNS, "foo", "v1.0.0",
+		func([]string) []string { return []string{"finalizer.example.com"} }))
+	require.NoError(t, store.Delete(ctx, testNS, "foo", "v1.0.0"))
+
+	// LatestOnly without IncludeTerminating: only the live latest (v2).
+	live, _, err := store.List(ctx, ListOpts{LatestOnly: true})
+	require.NoError(t, err)
+	require.Len(t, live, 1)
+	require.Equal(t, "v2.0.0", live[0].Metadata.Version)
+
+	// LatestOnly + IncludeTerminating: live latest plus the terminating row.
+	combined, _, err := store.List(ctx, ListOpts{LatestOnly: true, IncludeTerminating: true})
+	require.NoError(t, err)
+	require.Len(t, combined, 2)
+	versions := []string{combined[0].Metadata.Version, combined[1].Metadata.Version}
+	require.ElementsMatch(t, []string{"v1.0.0", "v2.0.0"}, versions)
 }
 
 func TestStore_ListExtraWhereRebasesPlaceholders(t *testing.T) {
@@ -712,4 +825,81 @@ func TestStore_LatestVersionTieBreakDeterministic(t *testing.T) {
 	}
 	// `version DESC` tie-break → snapshot-b comes out on top.
 	require.Equal(t, "snapshot-b", winners[0], "version DESC tie-break should prefer 'snapshot-b'")
+}
+
+// TestStore_UpsertAssignsUID pins the create-side of the metadata.uid
+// contract: Postgres' column default fires on first insert, the RETURNING
+// clause surfaces the assigned value to the caller, and a follow-up Get
+// reads back the same UID.
+func TestStore_UpsertAssignsUID(t *testing.T) {
+	pool := NewTestPool(t)
+	store := NewStore(pool, testTable)
+	ctx := context.Background()
+
+	res, err := store.Upsert(ctx, testNS, "uid-create", "v1", mustSpec(t, v1alpha1.AgentSpec{Title: "first"}), UpsertOpts{})
+	require.NoError(t, err)
+	require.True(t, res.Created)
+	require.Regexp(t, uuidPattern, res.UID, "UpsertResult.UID must be a canonical UUID")
+
+	obj, err := store.Get(ctx, testNS, "uid-create", "v1")
+	require.NoError(t, err)
+	require.Equal(t, res.UID, obj.Metadata.UID, "Get must surface the same UID Upsert returned")
+}
+
+// TestStore_UpsertPreservesUIDAcrossUpdates pins the immutability half:
+// the UID column lives outside the ON CONFLICT SET list, so neither a
+// no-op re-apply (same spec) nor a spec-changing re-apply may rotate it.
+// This is the Kubernetes-style read-only metadata.uid behavior — once
+// observed by a controller, the UID stays stable for the row's lifetime.
+func TestStore_UpsertPreservesUIDAcrossUpdates(t *testing.T) {
+	pool := NewTestPool(t)
+	store := NewStore(pool, testTable)
+	ctx := context.Background()
+
+	first, err := store.Upsert(ctx, testNS, "uid-stable", "v1", mustSpec(t, v1alpha1.AgentSpec{Title: "first"}), UpsertOpts{})
+	require.NoError(t, err)
+	require.NotEmpty(t, first.UID)
+
+	// No-op re-apply — generation stays at 1, UID must not change.
+	noop, err := store.Upsert(ctx, testNS, "uid-stable", "v1", mustSpec(t, v1alpha1.AgentSpec{Title: "first"}), UpsertOpts{})
+	require.NoError(t, err)
+	require.False(t, noop.SpecChanged)
+	require.Equal(t, first.UID, noop.UID, "no-op upsert must preserve UID")
+
+	// Spec-changing re-apply — generation bumps, UID still must not change.
+	bumped, err := store.Upsert(ctx, testNS, "uid-stable", "v1", mustSpec(t, v1alpha1.AgentSpec{Title: "second"}), UpsertOpts{})
+	require.NoError(t, err)
+	require.True(t, bumped.SpecChanged)
+	require.EqualValues(t, 2, bumped.Generation)
+	require.Equal(t, first.UID, bumped.UID, "spec-changing upsert must preserve UID")
+
+	obj, err := store.Get(ctx, testNS, "uid-stable", "v1")
+	require.NoError(t, err)
+	require.Equal(t, first.UID, obj.Metadata.UID, "Get must keep returning the original UID")
+}
+
+// TestStore_UpsertGeneratesFreshUIDAfterRecreate is the whole reason UID
+// exists: (namespace, name, version) is reusable across delete +
+// recreate, so without UID, a controller that observed the original row
+// can't tell when it has been replaced. The recreated row must carry a
+// new UID so observers can detect the boundary.
+func TestStore_UpsertGeneratesFreshUIDAfterRecreate(t *testing.T) {
+	pool := NewTestPool(t)
+	store := NewStore(pool, testTable)
+	ctx := context.Background()
+
+	first, err := store.Upsert(ctx, testNS, "uid-recreate", "v1", mustSpec(t, v1alpha1.AgentSpec{Title: "v1-first"}), UpsertOpts{})
+	require.NoError(t, err)
+	require.NotEmpty(t, first.UID)
+
+	// Finalizer-free hard-delete (matches the fast path Delete now takes
+	// for kinds without finalizers — see TestStore_DeleteFinalizerFreeHardDeletes).
+	require.NoError(t, store.Delete(ctx, testNS, "uid-recreate", "v1"))
+
+	second, err := store.Upsert(ctx, testNS, "uid-recreate", "v1", mustSpec(t, v1alpha1.AgentSpec{Title: "v1-second"}), UpsertOpts{})
+	require.NoError(t, err)
+	require.True(t, second.Created, "post-delete upsert is a fresh create")
+	require.NotEmpty(t, second.UID)
+	require.NotEqual(t, first.UID, second.UID,
+		"recreated row must carry a new UID so observers can distinguish it from the deleted predecessor")
 }

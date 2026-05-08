@@ -209,5 +209,6 @@ func registerKindRoutes(api huma.API, basePrefix string, stores Stores, coord *d
 		Authorizers:       perKind.Authorizers,
 		PostUpserts:       perKind.PostUpserts,
 		PostDeletes:       perKind.PostDeletes,
+		InitialFinalizers: perKind.InitialFinalizers,
 	})
 }

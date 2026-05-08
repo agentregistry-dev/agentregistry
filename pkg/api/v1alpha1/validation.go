@@ -200,9 +200,6 @@ func validateWebsiteURL(u string) error {
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrInvalidURL, err)
 	}
-	if parsed.Scheme != "https" {
-		return fmt.Errorf("%w: scheme must be https, got %q", ErrInvalidURL, parsed.Scheme)
-	}
 	if parsed.Host == "" {
 		return fmt.Errorf("%w: host is empty", ErrInvalidURL)
 	}
@@ -220,7 +217,7 @@ func validateTitle(title string) error {
 	return nil
 }
 
-// validateRepository: optional; when set, URL must parse as https.
+// validateRepository validates the Repository object
 func validateRepository(r *Repository) FieldErrors {
 	var errs FieldErrors
 	if r == nil {

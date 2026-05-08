@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
-	"gopkg.in/yaml.v3"
+	"sigs.k8s.io/yaml"
 )
 
 // APIVersion is the canonical apiVersion string for arctl declarative YAML files.
@@ -32,7 +32,9 @@ func IsEnvelopeYAML(data []byte) bool {
 
 // DecodeBytes parses one or more declarative YAML documents into typed
 // v1alpha1.Object envelopes. Returns an error if any document has an
-// unknown kind or fails to decode.
+// unknown Scheme kind or fails to decode. Kinds do not need a CLI dispatch
+// entry here: downstream builds can register server-side-only kinds with
+// v1alpha1.Default and still use `arctl apply -f`.
 //
 // Status is reset to nil before returning so `arctl get -o yaml | apply
 // -f -` stays apply-safe even when the source YAML contained
@@ -47,9 +49,6 @@ func DecodeBytes(b []byte) ([]v1alpha1.Object, error) {
 		obj, ok := item.(v1alpha1.Object)
 		if !ok {
 			return nil, fmt.Errorf("scheme: decoded value does not implement v1alpha1.Object: %T", item)
-		}
-		if _, err := Lookup(obj.GetKind()); err != nil {
-			return nil, err
 		}
 		if err := obj.UnmarshalStatus(nil); err != nil {
 			return nil, fmt.Errorf("reset status: %w", err)

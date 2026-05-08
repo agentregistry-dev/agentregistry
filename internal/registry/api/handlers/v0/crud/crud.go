@@ -46,6 +46,11 @@ type PerKindHooks struct {
 	// PostDeletes run after a successful DELETE; see
 	// resource.Config.PostDelete. Mirrors PostUpserts above.
 	PostDeletes map[string]func(ctx context.Context, obj v1alpha1.Object) error
+	// InitialFinalizers seed finalizers atomically with row creation;
+	// see resource.Config.InitialFinalizers. Used by kinds whose
+	// teardown is owned by a reconciler driving external
+	// infrastructure.
+	InitialFinalizers map[string]func(obj v1alpha1.Object) []string
 }
 
 // Register wires the namespace-scoped + cross-namespace list endpoints
@@ -83,6 +88,7 @@ func Register(
 			ListFilter:        perKind.ListFilters[kind],
 			PostUpsert:        perKind.PostUpserts[kind],
 			PostDelete:        perKind.PostDeletes[kind],
+			InitialFinalizers: perKind.InitialFinalizers[kind],
 		}, true
 	}
 

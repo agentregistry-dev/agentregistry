@@ -58,6 +58,15 @@ type ApplyConfig struct {
 	// soft-deletes the row but never tears down the platform adapter
 	// state.
 	PostDeletes map[string]func(ctx context.Context, obj v1alpha1.Object) error
+
+	// InitialFinalizers mirrors resource.Config.InitialFinalizers per
+	// kind. Without it, /v0/apply on a kind whose teardown is
+	// reconciler-owned creates rows with finalizers=[] and a concurrent
+	// DELETE between Upsert commit and any post-upsert finalizer write
+	// hits Store.Delete's "finalizers empty → hard-delete fast path",
+	// orphaning whatever the reconciler was going to clean up. Missing
+	// keys leave the row's finalizers empty (today's behavior).
+	InitialFinalizers map[string]func(obj v1alpha1.Object) []string
 }
 
 // applyInput receives a raw multi-doc YAML stream. RawBody keeps bytes
@@ -165,6 +174,7 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 		Resolver:          cfg.Resolver,
 		RegistryValidator: cfg.RegistryValidator,
 		PostUpsert:        cfg.PostUpserts[obj.GetKind()],
+		InitialFinalizers: cfg.InitialFinalizers[obj.GetKind()],
 	}, dryRun)
 	if ae != nil {
 		return failResult(res, ae)
@@ -243,6 +253,10 @@ func resolveBatchTarget(cfg ApplyConfig, obj v1alpha1.Object, verb string) (*v1a
 	// Default namespace before authorize/applyCore see it. The handler.go
 	// PUT path stamps namespace from the URL; the batch path has only the
 	// YAML body to look at, so default explicitly here.
+	//
+	// metadata.uid is stripped centrally inside applyCore so the single
+	// PUT path benefits from the same sanitization — no need to repeat it
+	// here.
 	if meta.Namespace == "" {
 		meta.Namespace = v1alpha1.DefaultNamespace
 		obj.SetMetadata(*meta)

@@ -75,17 +75,6 @@ func TestRemoteMCPServer_Validate(t *testing.T) {
 			wantSub: "spec.remote.url",
 		},
 		{
-			name: "non-https rejected",
-			obj: RemoteMCPServer{
-				Metadata: ObjectMeta{Namespace: "default", Name: "weather", Version: "1"},
-				Spec: RemoteMCPServerSpec{
-					Remote: MCPTransport{Type: "streamable-http", URL: "http://example.test/mcp"},
-				},
-			},
-			wantErr: true,
-			wantSub: "spec.remote.url",
-		},
-		{
 			name: "empty remote",
 			obj: RemoteMCPServer{
 				Metadata: ObjectMeta{Namespace: "default", Name: "weather", Version: "1"},
