@@ -85,9 +85,16 @@ Picks a framework + language interactively (or via --framework / --language).
 Writes:
   - agent.yaml — v1alpha1 envelope
   - arctl.yaml — local build config (framework + language)
-  - .env — env vars the chosen plugin needs (gitignored)`,
+  - .env — env vars the chosen plugin needs (gitignored)
+
+To wire a sibling arctl-init'd MCP project for local dev, pass --local-mcp.
+For an MCP at an arbitrary URL (remote, or local-not-arctl), edit .env after
+init and add an MCP_SERVERS_CONFIG entry, e.g.:
+
+  MCP_SERVERS_CONFIG=[{"name":"my-remote","url":"https://mcp.example.com/sse"}]`,
 		Example: `  arctl init agent myagent
-  arctl init agent myagent --framework adk --language python`,
+  arctl init agent myagent --framework adk --language python
+  arctl init agent myagent --local-mcp ../my-mcp`,
 		Args:         cobra.ExactArgs(1),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
