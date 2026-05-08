@@ -14,20 +14,6 @@ COPY .python-version .python-version
 
 RUN uv sync
 
-# kagent-adk ships its own venv at /.kagent/.venv with google-adk (no extras).
-# Importlib loads our agent module against THAT venv, not /app/.venv. For
-# providers that import LiteLLM (openai/anthropic/bedrock/azureopenai),
-# google-adk's `[extensions]` extra is required there, not just in /app/.venv.
-{{- if ne .ModelProvider "gemini"}}
-RUN /.kagent/.venv/bin/pip install --upgrade --quiet 'google-adk[extensions]==1.32.0'
-{{- end}}
-
-# Make the project package importable. The kagent-adk runtime calls
-# `importlib.import_module("{{.Name}}")` to load the agent for lifespan; with
-# only `WORKDIR /app` and source at `/app/{{.Name}}/`, Python won't find it
-# unless /app is on sys.path.
-ENV PYTHONPATH=/app
-
 ENV OTEL_SERVICE_NAME={{.Name}}
 
 CMD ["{{.Name}}"]

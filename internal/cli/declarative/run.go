@@ -298,11 +298,21 @@ func runWithChat(out io.Writer, projectDir, agentName, frameworkName string, ren
 // unchanged — that's the sign of a non-compose framework runtime that we
 // don't yet know how to drive in chat mode.
 func composeUpDetachedArgs(rendered []string) []string {
+	hasBuild := false
+	for _, tok := range rendered {
+		if tok == "--build" {
+			hasBuild = true
+			break
+		}
+	}
 	out := make([]string, 0, len(rendered)+2)
 	replaced := false
 	for _, tok := range rendered {
 		if !replaced && tok == "up" {
-			out = append(out, "up", "-d", "--build")
+			out = append(out, "up", "-d")
+			if !hasBuild {
+				out = append(out, "--build")
+			}
 			replaced = true
 			continue
 		}
