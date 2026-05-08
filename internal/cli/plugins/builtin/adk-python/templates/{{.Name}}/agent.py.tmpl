@@ -65,6 +65,10 @@ def create_model():
 def create_model():
     """Use an Anthropic model via LiteLLM."""
     return LiteLlm(model="anthropic/{{.ModelName}}")
+{{else if eq .ModelProvider "bedrock"}}
+def create_model():
+    """Use an AWS Bedrock model via LiteLLM."""
+    return LiteLlm(model="bedrock/{{.ModelName}}")
 {{else if eq .ModelProvider "azureopenai"}}
 def create_model():
     """Use an Azure OpenAI deployment via LiteLLM."""
