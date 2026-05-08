@@ -30,6 +30,13 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
       - MODEL_PROVIDER={{.ModelProvider}}
       - MODEL_NAME={{.ModelName}}
+      # MCP wiring: pass these through from the host's .env if present.
+      # Set by `arctl init agent --local-mcp <path>` (or by the user editing
+      # .env to add a remote MCP). Compose only forwards listed env vars,
+      # so omitting these here means MCPs configured at runtime never reach
+      # the agent process.
+      - MCP_SERVERS_CONFIG
+      - MCP_TERMINATE_ON_CLOSE
 {{- if .HasSkills }}
       - KAGENT_SKILLS_FOLDER=/skills
 {{- end }}
