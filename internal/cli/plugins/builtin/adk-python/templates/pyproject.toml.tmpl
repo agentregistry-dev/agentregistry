@@ -4,7 +4,7 @@ version = "0.1"
 description = "{{.Name}} agent"
 readme = "README.md"
 dependencies = [
-  "google-adk==1.25.1",
+  "google-adk==1.32.0",
 {{- if eq .ModelProvider "agentgateway"}}
   "kagent-adk=={{.KagentADKPyVersion}}",
 {{- end}}
