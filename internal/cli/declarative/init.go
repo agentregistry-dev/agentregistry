@@ -164,7 +164,7 @@ To wire a sibling arctl-init'd MCP project for local dev, pass --local-mcp.
 For an MCP at an arbitrary URL (remote, or local-not-arctl), edit .env after
 init and add an MCP_SERVERS_CONFIG entry, e.g.:
 
-  MCP_SERVERS_CONFIG=[{"name":"my-remote","url":"https://mcp.example.com/sse"}]`,
+  MCP_SERVERS_CONFIG=[{"name":"my-remote","type":"remote","url":"https://mcp.example.com/sse"}]`,
 		Example: `  arctl init agent myagent
   arctl init agent myagent --framework adk --language python
   arctl init agent myagent --local-mcp ../my-mcp`,
@@ -337,8 +337,13 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 // users need `--add-host=host.docker.internal:host-gateway` in the agent's
 // docker-compose; we don't auto-inject that here.
 func appendLocalMCPsToDotEnv(projectDir string, paths []string) error {
+	// The kagent ADK runtime's mcp_tools.py reads this JSON and dispatches on
+	// `type`: "command" for in-cluster sidecar services (URL derived from
+	// service name) vs everything else (uses `url` directly). For local-dev
+	// wiring we always emit "remote" so the runtime takes the URL path.
 	type entry struct {
 		Name string `json:"name"`
+		Type string `json:"type"`
 		URL  string `json:"url"`
 	}
 	var entries []entry
@@ -363,6 +368,7 @@ func appendLocalMCPsToDotEnv(projectDir string, paths []string) error {
 		}
 		entries = append(entries, entry{
 			Name: siblingName,
+			Type: "remote",
 			URL:  fmt.Sprintf("http://host.docker.internal:%d/mcp", port),
 		})
 	}
