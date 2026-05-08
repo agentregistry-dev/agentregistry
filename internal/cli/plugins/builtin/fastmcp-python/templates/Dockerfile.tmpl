@@ -67,5 +67,7 @@ ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 ENV OTEL_SERVICE_NAME={{.ProjectName}}
 
-# Default command
-CMD ["python", "src/main.py"]
+# ENTRYPOINT (not CMD) so extra args from `docker run` (e.g.
+# `--transport http --port 3000`) append to the python invocation
+# instead of replacing it.
+ENTRYPOINT ["python", "src/main.py"]
