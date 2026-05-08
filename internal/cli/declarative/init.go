@@ -302,7 +302,7 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 			}
 
 			disp := displayPath(projectDir)
-			fmt.Fprintf(cmd.OutOrStdout(), "✓ Created agent: %s (framework: %s, language: %s)\n", name, plugin.Framework, plugin.Language)
+			fmt.Fprintf(cmd.OutOrStdout(), "✓ Created agent: %s (framework: %s, language: %s, model: %s/%s)\n", name, plugin.Framework, plugin.Language, provider, modelName)
 			fmt.Fprintf(cmd.OutOrStdout(), "\n🚀 Next steps:\n")
 			fmt.Fprintf(cmd.OutOrStdout(), "  1. Run locally (optional):\n")
 			fmt.Fprintf(cmd.OutOrStdout(), "     arctl run %s\n", disp)
