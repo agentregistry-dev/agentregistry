@@ -179,7 +179,7 @@ func typedKind[T v1alpha1.Object](
 			return listVersionsAny(ctx, canonicalKind, name, newObj)
 		},
 		DeleteAllVersions: func(ctx context.Context, name string) error {
-			return deleteAllVersionsAny(ctx, canonicalKind, name)
+			return deleteAllVersionsAny(ctx, canonicalKind, name, newObj)
 		},
 	}
 }

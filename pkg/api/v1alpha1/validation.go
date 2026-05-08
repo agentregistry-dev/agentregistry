@@ -102,13 +102,7 @@ var nameRegex = regexp.MustCompile(`^[a-zA-Z0-9]([-a-zA-Z0-9._/]{0,253}[a-zA-Z0-
 var labelKeyRegex = regexp.MustCompile(`^([a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?/)?[a-zA-Z0-9]([-a-zA-Z0-9._]{0,61}[a-zA-Z0-9])?$`)
 var labelValueRegex = regexp.MustCompile(`^([a-zA-Z0-9]([-a-zA-Z0-9._]{0,61}[a-zA-Z0-9])?)?$`)
 
-// versionRangeRegex: detects version strings that look like ranges or
-// wildcards rather than concrete versions. Pinned versions like "v1.2.3"
-// or "1.2.3-beta.1" must NOT match.
-var versionRangeRegex = regexp.MustCompile(`(\^|~|>=|<=|>|<|\|\||\*|,|\bx\b|\bX\b|\s)`)
 var tagRegex = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$`)
-
-const maxVersionLen = 255
 
 // -----------------------------------------------------------------------------
 // ObjectMeta validation — shared across every kind.
@@ -153,24 +147,6 @@ func validateObjectMetaCommon(m ObjectMeta) FieldErrors {
 	}
 
 	return errs
-}
-
-// validateVersion enforces: required, length-bound, not the literal
-// "latest", and not a range-looking string.
-func validateVersion(v string) error {
-	if v == "" {
-		return fmt.Errorf("%w", ErrRequiredField)
-	}
-	if len(v) > maxVersionLen {
-		return fmt.Errorf("%w: exceeds %d characters", ErrInvalidVersion, maxVersionLen)
-	}
-	if strings.EqualFold(v, "latest") {
-		return fmt.Errorf("%w: cannot be literal %q — use an explicit version", ErrInvalidVersion, "latest")
-	}
-	if versionRangeRegex.MatchString(v) {
-		return fmt.Errorf("%w: must be a pinned version, not a range or wildcard (%q)", ErrInvalidVersion, v)
-	}
-	return nil
 }
 
 func validateTag(tag string) error {

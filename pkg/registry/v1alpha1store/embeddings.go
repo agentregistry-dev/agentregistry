@@ -18,16 +18,16 @@ import (
 )
 
 // SetEmbedding writes a SemanticEmbedding onto the row identified by
-// (namespace, name, version). Called by the indexer after the provider
+// (namespace, name, identity). Called by the indexer after the provider
 // generates a fresh vector. Not part of Upsert: embeddings regenerate on a
 // different cadence than spec changes (the indexer reacts to status NOTIFY,
 // possibly asynchronously), and the caller already owns idempotency via the
 // Checksum.
 //
 // Returns pkgdb.ErrNotFound if the row doesn't exist.
-func (s *Store) SetEmbedding(ctx context.Context, namespace, name, version string, emb semantic.SemanticEmbedding) error {
-	if namespace == "" || name == "" || version == "" {
-		return errors.New("v1alpha1 store: namespace, name, and version are required")
+func (s *Store) SetEmbedding(ctx context.Context, namespace, name, identity string, emb semantic.SemanticEmbedding) error {
+	if namespace == "" || name == "" || identity == "" {
+		return errors.New("v1alpha1 store: namespace, name, and identity are required")
 	}
 	literal, err := VectorLiteral(emb.Vector)
 	if err != nil {
@@ -42,8 +42,8 @@ func (s *Store) SetEmbedding(ctx context.Context, namespace, name, version strin
 			    semantic_embedding_dimensions   = $7,
 			    semantic_embedding_checksum     = $8,
 			    semantic_embedding_generated_at = NOW()
-			WHERE namespace=$1 AND name=$2 AND version=$3`, s.table),
-		namespace, name, version,
+			WHERE namespace=$1 AND name=$2 AND %s=$3`, s.table, s.identityColumn()),
+		namespace, name, identity,
 		literal,
 		emb.Provider, emb.Model, emb.Dimensions, emb.Checksum,
 	)
@@ -57,12 +57,12 @@ func (s *Store) SetEmbedding(ctx context.Context, namespace, name, version strin
 }
 
 // GetEmbeddingMetadata returns the embedding provenance columns for
-// (namespace, name, version) without reading the vector itself. Used by the
+// (namespace, name, identity) without reading the vector itself. Used by the
 // indexer to decide whether a row needs re-indexing (comparing Checksum).
 //
 // Returns pkgdb.ErrNotFound if the row doesn't exist. Returns (nil, nil)
 // when the row exists but has no embedding yet (generated_at IS NULL).
-func (s *Store) GetEmbeddingMetadata(ctx context.Context, namespace, name, version string) (*semantic.SemanticEmbeddingMetadata, error) {
+func (s *Store) GetEmbeddingMetadata(ctx context.Context, namespace, name, identity string) (*semantic.SemanticEmbeddingMetadata, error) {
 	var (
 		provider    *string
 		model       *string
@@ -76,8 +76,8 @@ func (s *Store) GetEmbeddingMetadata(ctx context.Context, namespace, name, versi
 			       semantic_embedding_dimensions, semantic_embedding_checksum,
 			       semantic_embedding_generated_at
 			FROM %s
-			WHERE namespace=$1 AND name=$2 AND version=$3`, s.table),
-		namespace, name, version).Scan(&provider, &model, &dimensions, &checksum, &generatedAt)
+			WHERE namespace=$1 AND name=$2 AND %s=$3`, s.table, s.identityColumn()),
+		namespace, name, identity).Scan(&provider, &model, &dimensions, &checksum, &generatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, pkgdb.ErrNotFound
 	}

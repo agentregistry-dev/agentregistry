@@ -37,8 +37,8 @@ func newTestImporter(t *testing.T, extra ...Scanner) (*Importer, *v1alpha1store.
 		v1alpha1.KindMCPServer:  v1alpha1store.NewStore(pool, mcpTable),
 		v1alpha1.KindSkill:      v1alpha1store.NewStore(pool, skillsTable),
 		v1alpha1.KindPrompt:     v1alpha1store.NewStore(pool, promptsTable),
-		v1alpha1.KindProvider:   v1alpha1store.NewDeploymentStore(pool, provTable),
-		v1alpha1.KindDeployment: v1alpha1store.NewDeploymentStore(pool, deployTable),
+		v1alpha1.KindProvider:   v1alpha1store.NewMutableObjectStore(pool, provTable),
+		v1alpha1.KindDeployment: v1alpha1store.NewMutableObjectStore(pool, deployTable),
 	}
 	findings := NewFindingsStore(pool)
 	imp, err := New(Config{
@@ -79,10 +79,10 @@ func TestImport_CreatesAgent(t *testing.T) {
 
 	r := results[0]
 	require.Equal(t, ImportStatusCreated, r.Status, "error=%s", r.Error)
-	require.EqualValues(t, 1, r.Version)
+	require.Equal(t, v1alpha1store.DefaultTag(), r.Tag)
 	require.Equal(t, EnrichmentStatusSkipped, r.EnrichmentStatus)
 
-	obj, err := agents.Get(context.Background(), testNS, "demo", "1")
+	obj, err := agents.Get(context.Background(), testNS, "demo", v1alpha1store.DefaultTag())
 	require.NoError(t, err)
 	require.Equal(t, "demo", obj.Metadata.Name)
 }
@@ -98,7 +98,7 @@ func TestImport_ReimportUnchanged(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	require.Equal(t, ImportStatusUnchanged, results[0].Status)
-	require.EqualValues(t, 1, results[0].Version)
+	require.Equal(t, v1alpha1store.DefaultTag(), results[0].Tag)
 }
 
 func TestImport_InvalidValidationFails(t *testing.T) {
@@ -149,7 +149,7 @@ func TestImport_DryRunDoesNotWrite(t *testing.T) {
 	require.Len(t, results, 1)
 	require.Equal(t, ImportStatusDryRun, results[0].Status)
 
-	_, err = agents.Get(context.Background(), testNS, "demo", "1")
+	_, err = agents.Get(context.Background(), testNS, "demo", v1alpha1store.DefaultTag())
 	require.Error(t, err) // not found
 }
 
@@ -170,7 +170,7 @@ spec:
 	require.Equal(t, ImportStatusCreated, results[0].Status, "error=%s", results[0].Error)
 	require.Equal(t, "team-a", results[0].Namespace)
 
-	obj, err := agents.Get(context.Background(), "team-a", "noNS", "1")
+	obj, err := agents.Get(context.Background(), "team-a", "noNS", v1alpha1store.DefaultTag())
 	require.NoError(t, err)
 	require.Equal(t, "team-a", obj.Metadata.Namespace)
 }
@@ -232,7 +232,7 @@ func TestImport_EnrichMergesAnnotationsAndFindings(t *testing.T) {
 	require.Equal(t, 1, scanner.callCount)
 
 	// Row carries merged annotations + labels + last-scanned-at.
-	obj, err := agents.Get(context.Background(), testNS, "demo", "1")
+	obj, err := agents.Get(context.Background(), testNS, "demo", v1alpha1store.DefaultTag())
 	require.NoError(t, err)
 	require.Equal(t, "clean", obj.Metadata.Annotations[AnnoOSVStatus])
 	require.Equal(t, "clean", obj.Metadata.Labels[AnnoOSVStatus])
@@ -240,7 +240,7 @@ func TestImport_EnrichMergesAnnotationsAndFindings(t *testing.T) {
 	require.Equal(t, defaultScannedBy, obj.Metadata.Annotations[AnnoLastScannedBy])
 
 	// Findings row landed.
-	fs, err := findings.List(context.Background(), v1alpha1.KindAgent, testNS, "demo", "1")
+	fs, err := findings.List(context.Background(), v1alpha1.KindAgent, testNS, "demo", v1alpha1store.DefaultTag())
 	require.NoError(t, err)
 	require.Len(t, fs, 1)
 	require.Equal(t, "CVE-2024-0001", fs[0].ID)
@@ -268,7 +268,7 @@ func TestImport_EnrichReplacesFindingsOnRescan(t *testing.T) {
 	_, err = imp.Import(context.Background(), Options{Path: dir, Enrich: true})
 	require.NoError(t, err)
 
-	fs, err := findings.List(context.Background(), v1alpha1.KindAgent, testNS, "demo", "1")
+	fs, err := findings.List(context.Background(), v1alpha1.KindAgent, testNS, "demo", v1alpha1store.DefaultTag())
 	require.NoError(t, err)
 	require.Len(t, fs, 1)
 	require.Equal(t, "CVE-2024-NEW", fs[0].ID)

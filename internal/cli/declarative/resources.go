@@ -8,7 +8,6 @@ import (
 
 	cliCommon "github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
-	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/printer"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
@@ -66,21 +65,29 @@ func listVersionsAny[T v1alpha1.Object](ctx context.Context, kind, name string, 
 	return out, nil
 }
 
-// deleteAllVersionsAny issues a single DELETE /v0/apply with a minimal
-// envelope (apiVersion + kind + metadata.name) — the server's batch path
-// removes every tag for taggable artifact kinds. Returns an error when any
-// per-result failed, mirroring deleteFromFile's failure surface.
-func deleteAllVersionsAny(ctx context.Context, kind, name string) error {
-	body := fmt.Sprintf("apiVersion: %s\nkind: %s\nmetadata:\n  name: %s\n",
-		v1alpha1.GroupVersion, kind, name)
-	results, err := apiClient.DeleteViaApply(ctx, []byte(body))
+// deleteAllVersionsAny lists every live tag and deletes each exact tag.
+// DELETE /v0/apply deliberately defaults an omitted tag to "latest" for
+// declarative delete files, so the imperative --all-versions alias cannot use
+// that endpoint without accidentally deleting only latest.
+func deleteAllVersionsAny[T v1alpha1.Object](ctx context.Context, kind, name string, newObj func() T) error {
+	items, err := listVersionsAny(ctx, kind, name, newObj)
 	if err != nil {
 		return err
 	}
 	var errs []error
-	for _, r := range results {
-		if r.Status == arv0.ApplyStatusFailed {
-			errs = append(errs, fmt.Errorf("%s/%s: %s", r.Kind, r.Name, r.Error))
+	for _, item := range items {
+		obj, ok := item.(v1alpha1.Object)
+		if !ok {
+			errs = append(errs, fmt.Errorf("%s/%s: unexpected tag list item type %T", kind, name, item))
+			continue
+		}
+		tag := obj.GetMetadata().Tag
+		if tag == "" {
+			errs = append(errs, fmt.Errorf("%s/%s: listed tag row has empty metadata.tag", kind, name))
+			continue
+		}
+		if err := apiClient.Delete(ctx, kind, v1alpha1.DefaultNamespace, name, tag); err != nil {
+			errs = append(errs, fmt.Errorf("%s/%s@%s: %w", kind, name, tag, err))
 		}
 	}
 	return errorsJoin(errs)

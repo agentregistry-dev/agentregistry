@@ -469,7 +469,7 @@ func TestResourceRegister_MutableObjectUsesNameOnlyRoute(t *testing.T) {
 	}
 
 	resp := api.Put("/v0/providers/local-test", provider)
-	require.Equal(t, http.StatusCreated, resp.Code, resp.Body.String())
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	require.NotContains(t, resp.Body.String(), `"version"`, "mutable object response must not expose metadata.version")
 
 	resp = api.Get("/v0/providers/local-test")
@@ -699,13 +699,12 @@ func TestResourceRegister_IncludeTerminatingByDefault(t *testing.T) {
 	// Seed a row, attach a finalizer, then soft-delete so the row goes
 	// terminating (deletion_timestamp set) and recomputeLatest clears
 	// its is_latest_version flag.
-	body := v1alpha1.Agent{
+	_, err := store.Upsert(t.Context(), &v1alpha1.Agent{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "draining", Version: "v1"},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "draining", Tag: "v1"},
 		Spec:     v1alpha1.AgentSpec{Title: "Draining"},
-	}
-	resp := api.Put("/v0/agents/draining/v1", body)
-	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	})
+	require.NoError(t, err)
 
 	require.NoError(t, store.PatchFinalizers(t.Context(), "default", "draining", "v1",
 		func([]string) []string { return []string{"finalizer.example.com"} }))
@@ -718,7 +717,7 @@ func TestResourceRegister_IncludeTerminatingByDefault(t *testing.T) {
 
 	// Plain LIST with no ?includeTerminating still returns the terminating
 	// row because the kind opted in via IncludeTerminatingByDefault.
-	resp = api.Get("/v0/agents")
+	resp := api.Get("/v0/agents")
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &list))
 	require.Len(t, list.Items, 1)

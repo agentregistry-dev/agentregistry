@@ -280,13 +280,6 @@ type listOutput[T v1alpha1.Object] struct {
 	}
 }
 
-type putInput[T v1alpha1.Object] struct {
-	Namespace string `query:"namespace" doc:"Namespace (internal; defaults to 'default')."`
-	Name      string `path:"name"`
-	Tag       string `path:"tag"`
-	Body      T
-}
-
 type putMutableInput[T v1alpha1.Object] struct {
 	Namespace string `query:"namespace" doc:"Namespace (internal; defaults to 'default')."`
 	Name      string `path:"name"`

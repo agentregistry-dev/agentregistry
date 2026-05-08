@@ -3,7 +3,6 @@ package declarative_test
 import (
 	"bytes"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,7 +11,6 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
-	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -166,38 +164,44 @@ func TestGet_AllVersions_RejectsGetAll(t *testing.T) {
 	assert.Contains(t, err.Error(), "--all-versions cannot be used with `get all`")
 }
 
-// deleteApplyServer captures the body of every DELETE /v0/apply call and
-// replies with the configured ApplyResults.
-func deleteApplyServer(t *testing.T, results []arv0.ApplyResult) (*httptest.Server, *[]string) {
+// deleteAllTagsServer serves GET /v0/agents/{name}/tags plus exact-tag DELETEs.
+// capturedPaths records every served request for assertions.
+func deleteAllTagsServer(t *testing.T, rows []v1alpha1.Agent, failTag string) (*httptest.Server, *[]string) {
 	t.Helper()
 	var (
-		mu     sync.Mutex
-		bodies []string
+		mu       sync.Mutex
+		captured []string
 	)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodDelete || r.URL.Path != "/v0/apply" {
-			http.Error(w, "unexpected", http.StatusBadRequest)
-			return
-		}
-		b, _ := io.ReadAll(r.Body)
 		mu.Lock()
-		bodies = append(bodies, string(b))
+		captured = append(captured, r.Method+" "+r.URL.Path)
 		mu.Unlock()
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"results": results})
+		switch {
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/tags"):
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"items": rows})
+		case r.Method == http.MethodDelete:
+			if failTag != "" && strings.HasSuffix(r.URL.Path, "/"+failTag) {
+				http.Error(w, "boom", http.StatusInternalServerError)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			http.Error(w, `{"error":"not found"}`, http.StatusNotFound)
+		}
 	}))
 	t.Cleanup(srv.Close)
-	return srv, &bodies
+	return srv, &captured
 }
 
-// (6) `arctl delete agent NAME --all-versions` issues a single DELETE
-// /v0/apply with a minimal envelope (apiVersion + kind + metadata.name).
-// Verifies the server received the right shape.
-func TestDelete_AllVersions_Agent_HitsApplyEndpoint(t *testing.T) {
-	results := []arv0.ApplyResult{
-		{Kind: v1alpha1.KindAgent, Name: "acme/bot", Status: arv0.ApplyStatusDeleted},
+// (6) `arctl delete agent NAME --all-versions` lists tags and deletes each
+// exact tag so omitted-tag declarative delete can continue to mean "latest".
+func TestDelete_AllVersions_Agent_DeletesEveryListedTag(t *testing.T) {
+	rows := []v1alpha1.Agent{
+		agentVersionFixture("acme/bot", "stable"),
+		agentVersionFixture("acme/bot", "latest"),
 	}
-	srv, bodies := deleteApplyServer(t, results)
+	srv, paths := deleteAllTagsServer(t, rows, "")
 	setupClientForServer(t, srv)
 
 	out := &bytes.Buffer{}
@@ -207,11 +211,9 @@ func TestDelete_AllVersions_Agent_HitsApplyEndpoint(t *testing.T) {
 	cmd.SetArgs([]string{"agent", "acme/bot", "--all-versions"})
 	require.NoError(t, cmd.Execute())
 
-	require.Len(t, *bodies, 1, "expected exactly one DELETE /v0/apply call")
-	body := (*bodies)[0]
-	assert.Contains(t, body, "apiVersion: ar.dev/v1alpha1")
-	assert.Contains(t, body, "kind: Agent")
-	assert.Contains(t, body, "name: acme/bot")
+	require.Contains(t, *paths, "GET /v0/agents/acme/bot/tags")
+	require.Contains(t, *paths, "DELETE /v0/agents/acme/bot/stable")
+	require.Contains(t, *paths, "DELETE /v0/agents/acme/bot/latest")
 	assert.Contains(t, out.String(), "all tags")
 }
 
@@ -250,12 +252,10 @@ func TestDelete_AllVersions_AndVersionMutuallyExclusive(t *testing.T) {
 	assert.Contains(t, err.Error(), "mutually exclusive")
 }
 
-// (9) Server returns a failed result → CLI surfaces the error.
+// (9) An exact-tag delete failure is surfaced by the CLI.
 func TestDelete_AllVersions_PropagatesServerFailure(t *testing.T) {
-	results := []arv0.ApplyResult{
-		{Kind: v1alpha1.KindAgent, Name: "acme/bot", Status: arv0.ApplyStatusFailed, Error: "boom"},
-	}
-	srv, _ := deleteApplyServer(t, results)
+	rows := []v1alpha1.Agent{agentVersionFixture("acme/bot", "stable")}
+	srv, _ := deleteAllTagsServer(t, rows, "stable")
 	setupClientForServer(t, srv)
 
 	cmd := declarative.NewDeleteCmd()

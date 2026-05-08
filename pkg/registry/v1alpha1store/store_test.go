@@ -412,7 +412,7 @@ func TestStore_FindReferrers(t *testing.T) {
 	_, err := agents.Upsert(ctx, &v1alpha1.Agent{
 		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "refs-bar"},
 		Spec: v1alpha1.AgentSpec{
-			MCPServers: []v1alpha1.ResourceRef{{Kind: v1alpha1.KindMCPServer, Name: "bar", Version: "1"}},
+			MCPServers: []v1alpha1.ResourceRef{{Kind: v1alpha1.KindMCPServer, Name: "bar", Tag: "stable"}},
 		},
 	})
 	require.NoError(t, err)
@@ -420,13 +420,13 @@ func TestStore_FindReferrers(t *testing.T) {
 	_, err = agents.Upsert(ctx, &v1alpha1.Agent{
 		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "refs-baz"},
 		Spec: v1alpha1.AgentSpec{
-			MCPServers: []v1alpha1.ResourceRef{{Kind: v1alpha1.KindMCPServer, Name: "baz", Version: "1"}},
+			MCPServers: []v1alpha1.ResourceRef{{Kind: v1alpha1.KindMCPServer, Name: "baz", Tag: "stable"}},
 		},
 	})
 	require.NoError(t, err)
 
 	pattern, err := json.Marshal(map[string]any{
-		"mcpServers": []map[string]string{{"name": "bar", "version": "1"}},
+		"mcpServers": []map[string]string{{"name": "bar", "tag": "stable"}},
 	})
 	require.NoError(t, err)
 

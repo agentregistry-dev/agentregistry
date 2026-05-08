@@ -324,9 +324,7 @@ func crudPerKindHooks(options types.AppOptions) crud.PerKindHooks {
 	}
 	if len(options.InitialFinalizers) > 0 {
 		hooks.InitialFinalizers = make(map[string]func(obj v1alpha1.Object) []string, len(options.InitialFinalizers))
-		for kind, fn := range options.InitialFinalizers {
-			hooks.InitialFinalizers[kind] = fn
-		}
+		maps.Copy(hooks.InitialFinalizers, options.InitialFinalizers)
 	}
 	// ProviderPlatforms map dispatches the KindProvider PostUpsert /
 	// PostDelete by Spec.Platform → adapter. A Provider whose platform
