@@ -357,6 +357,8 @@ func defaultInitModelName(provider string) string {
 		return "claude-3-5-sonnet"
 	case "gemini":
 		return "gemini-2.5-flash"
+	case "bedrock":
+		return "anthropic.claude-3-haiku-20240307-v1:0"
 	case "azureopenai":
 		return "your-deployment-name"
 	default:
