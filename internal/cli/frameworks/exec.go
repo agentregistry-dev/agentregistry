@@ -1,4 +1,4 @@
-package plugins
+package frameworks
 
 import (
 	"bytes"
@@ -91,22 +91,22 @@ func resolveArgv(cmd Command, vars map[string]any) ([]string, error) {
 	if cmd.Script != "" {
 		path := cmd.Script
 		if !filepath.IsAbs(path) {
-			// Script paths are relative to the plugin's SourceDir, which the
-			// caller must include as PluginDir in vars.
-			raw, ok := vars["PluginDir"]
+			// Script paths are relative to the framework's SourceDir, which the
+			// caller must include as FrameworkDir in vars.
+			raw, ok := vars["FrameworkDir"]
 			if !ok {
-				return nil, fmt.Errorf("plugin script %q resolution requires PluginDir var", path)
+				return nil, fmt.Errorf("framework script %q resolution requires FrameworkDir var", path)
 			}
-			pluginDir, ok := raw.(string)
+			frameworkDir, ok := raw.(string)
 			if !ok {
-				return nil, fmt.Errorf("plugin script %q: PluginDir var must be string", path)
+				return nil, fmt.Errorf("framework script %q: FrameworkDir var must be string", path)
 			}
-			path = filepath.Join(pluginDir, path)
+			path = filepath.Join(frameworkDir, path)
 		}
 		return []string{path}, nil
 	}
 	if len(cmd.Command) == 0 {
-		return nil, fmt.Errorf("plugin command is empty")
+		return nil, fmt.Errorf("framework command is empty")
 	}
 	return RenderArgs(cmd.Command, vars)
 }
@@ -119,12 +119,12 @@ func envFromVars(vars map[string]any) []string {
 	return out
 }
 
-// RenderTemplates walks the plugin's templates directory and writes each file
+// RenderTemplates walks the framework's templates directory and writes each file
 // to dst. Files ending in `.tmpl` get text/template substitution applied AND
 // the `.tmpl` extension stripped on output. Other files are copied verbatim.
-func RenderTemplates(p *Plugin, dst string, vars map[string]any) error {
+func RenderTemplates(p *Framework, dst string, vars map[string]any) error {
 	if p.TemplatesDir == "" {
-		return fmt.Errorf("plugin %q: templatesDir not set", p.Name)
+		return fmt.Errorf("framework %q: templatesDir not set", p.Name)
 	}
 	srcRoot := p.TemplatesDir
 	if !filepath.IsAbs(srcRoot) {

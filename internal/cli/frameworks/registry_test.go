@@ -1,4 +1,4 @@
-package plugins
+package frameworks
 
 import (
 	"testing"
@@ -9,7 +9,7 @@ import (
 
 func TestRegistry_AddAndLookup(t *testing.T) {
 	r := NewRegistry()
-	p := &Plugin{Name: "adk-python", Type: "agent", Framework: "adk", Language: "python"}
+	p := &Framework{Name: "adk-python", Type: "agent", Framework: "adk", Language: "python"}
 	require.NoError(t, r.Add(p, SourceInTree))
 
 	got, ok := r.Lookup("agent", "adk", "python")
@@ -25,9 +25,9 @@ func TestRegistry_LookupMiss(t *testing.T) {
 
 func TestRegistry_ConflictInTreeWins(t *testing.T) {
 	r := NewRegistry()
-	inTree := &Plugin{Name: "adk-python", Type: "agent", Framework: "adk", Language: "python"}
+	inTree := &Framework{Name: "adk-python", Type: "agent", Framework: "adk", Language: "python"}
 	require.NoError(t, r.Add(inTree, SourceInTree))
-	outOfTree := &Plugin{Name: "adk-python-fork", Type: "agent", Framework: "adk", Language: "python"}
+	outOfTree := &Framework{Name: "adk-python-fork", Type: "agent", Framework: "adk", Language: "python"}
 	// Out-of-tree fights for the same key — must lose, but no error.
 	require.NoError(t, r.Add(outOfTree, SourceUserHome))
 
@@ -38,8 +38,8 @@ func TestRegistry_ConflictInTreeWins(t *testing.T) {
 
 func TestRegistry_ListByType(t *testing.T) {
 	r := NewRegistry()
-	require.NoError(t, r.Add(&Plugin{Name: "adk-python", Type: "agent", Framework: "adk", Language: "python"}, SourceInTree))
-	require.NoError(t, r.Add(&Plugin{Name: "fastmcp-python", Type: "mcp", Framework: "fastmcp", Language: "python"}, SourceInTree))
+	require.NoError(t, r.Add(&Framework{Name: "adk-python", Type: "agent", Framework: "adk", Language: "python"}, SourceInTree))
+	require.NoError(t, r.Add(&Framework{Name: "fastmcp-python", Type: "mcp", Framework: "fastmcp", Language: "python"}, SourceInTree))
 
 	agents := r.ListByType("agent")
 	assert.Len(t, agents, 1)

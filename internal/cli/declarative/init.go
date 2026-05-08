@@ -10,7 +10,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/buildconfig"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common"
-	"github.com/agentregistry-dev/agentregistry/internal/cli/plugins"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/frameworks"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	skilltemplates "github.com/agentregistry-dev/agentregistry/internal/cli/skill/templates"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
@@ -158,7 +158,7 @@ Picks a framework + language interactively (or via --framework / --language).
 Writes:
   - agent.yaml — v1alpha1 envelope
   - arctl.yaml — local build config (framework + language)
-  - .env — env vars the chosen plugin needs (gitignored)
+  - .env — env vars the chosen framework needs (gitignored)
 
 To wire a sibling arctl-init'd MCP project for local dev, pass --local-mcp.
 For an MCP at an arbitrary URL (remote, or local-not-arctl), edit .env after
@@ -199,11 +199,11 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 				return err
 			}
 
-			r, err := loadPluginRegistry(projectDir)
+			r, err := loadFrameworkRegistry(projectDir)
 			if err != nil {
 				return err
 			}
-			plugin, err := plugins.Pick(plugins.PickOpts{
+			framework, err := frameworks.Pick(frameworks.PickOpts{
 				Registry:       r,
 				Type:           "agent",
 				Framework:      initFramework,
@@ -253,14 +253,14 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 				}
 			}
 
-			vars := agentTemplateVars(name, initVersion, initDescription, provider, modelName, image, plugin.SourceDir, projectDir)
-			if err := plugins.RenderTemplates(plugin, projectDir, vars); err != nil {
+			vars := agentTemplateVars(name, initVersion, initDescription, provider, modelName, image, framework.SourceDir, projectDir)
+			if err := frameworks.RenderTemplates(framework, projectDir, vars); err != nil {
 				return fmt.Errorf("render templates: %w", err)
 			}
 
 			cfg := &buildconfig.Config{
-				Framework:     plugin.Framework,
-				Language:      plugin.Language,
+				Framework:     framework.Framework,
+				Language:      framework.Language,
 				ModelProvider: provider,
 				ModelName:     modelName,
 			}
@@ -268,16 +268,16 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 				return fmt.Errorf("write arctl.yaml: %w", err)
 			}
 
-			// Required env = plugin's infra keys + model provider's keys.
-			// arctl owns the provider→keys map (see modelenv.go) so plugins
+			// Required env = framework's infra keys + model provider's keys.
+			// arctl owns the provider→keys map (see modelenv.go) so frameworks
 			// don't have to restate it.
-			required := append([]string{}, plugin.Env.Required...)
+			required := append([]string{}, framework.Env.Required...)
 			required = append(required, ModelProviderEnvKeys(provider)...)
 
-			if err := buildconfig.WriteDotEnv(projectDir, required, plugin.Env.Optional); err != nil {
+			if err := buildconfig.WriteDotEnv(projectDir, required, framework.Env.Optional); err != nil {
 				return fmt.Errorf("write .env: %w", err)
 			}
-			if len(required) > 0 || len(plugin.Env.Optional) > 0 {
+			if len(required) > 0 || len(framework.Env.Optional) > 0 {
 				if err := buildconfig.EnsureGitignored(projectDir, ".env"); err != nil {
 					return fmt.Errorf("update .gitignore: %w", err)
 				}
@@ -302,7 +302,7 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 			}
 
 			disp := displayPath(projectDir)
-			fmt.Fprintf(cmd.OutOrStdout(), "✓ Created agent: %s (framework: %s, language: %s, model: %s/%s)\n", name, plugin.Framework, plugin.Language, provider, modelName)
+			fmt.Fprintf(cmd.OutOrStdout(), "✓ Created agent: %s (framework: %s, language: %s, model: %s/%s)\n", name, framework.Framework, framework.Language, provider, modelName)
 			fmt.Fprintf(cmd.OutOrStdout(), "\n🚀 Next steps:\n")
 			fmt.Fprintf(cmd.OutOrStdout(), "  1. Run locally (optional):\n")
 			fmt.Fprintf(cmd.OutOrStdout(), "     arctl run %s\n", disp)
@@ -433,11 +433,11 @@ func defaultInitModelName(provider string) string {
 }
 
 // agentTemplateVars returns the template-substitution vars for the agent
-// plugin's templates. The in-tree adk-python templates (vendored from the
+// framework's templates. The in-tree adk-python templates (vendored from the
 // legacy generator) reference fields beyond the canonical Phase-5 set,
 // so we provide safe defaults for those here. Phase 12 simplifies the
 // templates and trims this to the canonical set.
-func agentTemplateVars(name, version, description, modelProvider, modelName, image, pluginDir, projectDir string) map[string]any {
+func agentTemplateVars(name, version, description, modelProvider, modelName, image, frameworkDir, projectDir string) map[string]any {
 	mp := strings.ToLower(modelProvider)
 	mn := modelName
 	return map[string]any{
@@ -447,7 +447,7 @@ func agentTemplateVars(name, version, description, modelProvider, modelName, ima
 		"ModelProvider":         mp,
 		"ModelName":             mn,
 		"Image":                 image,
-		"PluginDir":             pluginDir,
+		"FrameworkDir":             frameworkDir,
 		"ProjectDir":            projectDir,
 		"Instruction":           "",
 		"KagentADKImageVersion": "0.9.2",
@@ -460,15 +460,15 @@ func agentTemplateVars(name, version, description, modelProvider, modelName, ima
 	}
 }
 
-// loadPluginRegistry centralizes the standard load order for arctl commands.
-func loadPluginRegistry(projectRoot string) (*plugins.Registry, error) {
-	stage, err := os.MkdirTemp("", "arctl-plugins-*")
+// loadFrameworkRegistry centralizes the standard load order for arctl commands.
+func loadFrameworkRegistry(projectRoot string) (*frameworks.Registry, error) {
+	stage, err := os.MkdirTemp("", "arctl-frameworks-*")
 	if err != nil {
 		return nil, err
 	}
-	return plugins.LoadAll(plugins.LoadOpts{
+	return frameworks.LoadAll(frameworks.LoadOpts{
 		StageDir:    stage,
-		UserDir:     plugins.UserPluginsDir(),
+		UserDir:     frameworks.UserFrameworksDir(),
 		ProjectRoot: projectRoot,
 	})
 }
@@ -600,11 +600,11 @@ Picks a framework + language interactively (or via --framework / --language).`,
 				return err
 			}
 
-			r, err := loadPluginRegistry(projectDir)
+			r, err := loadFrameworkRegistry(projectDir)
 			if err != nil {
 				return err
 			}
-			plugin, err := plugins.Pick(plugins.PickOpts{
+			framework, err := frameworks.Pick(frameworks.PickOpts{
 				Registry: r, Type: "mcp",
 				Framework: initFramework, Language: initLanguage,
 				NonInteractive: !isatty(),
@@ -622,21 +622,21 @@ Picks a framework + language interactively (or via --framework / --language).`,
 				image = fmt.Sprintf("%s/%s:latest", registry, projectName)
 			}
 
-			vars := mcpTemplateVars(full, projectName, initVersion, initDescription, image, plugin.SourceDir, projectDir)
-			if err := plugins.RenderTemplates(plugin, projectDir, vars); err != nil {
+			vars := mcpTemplateVars(full, projectName, initVersion, initDescription, image, framework.SourceDir, projectDir)
+			if err := frameworks.RenderTemplates(framework, projectDir, vars); err != nil {
 				return err
 			}
 			if err := buildconfig.Write(projectDir, &buildconfig.Config{
-				Framework: plugin.Framework,
-				Language:  plugin.Language,
+				Framework: framework.Framework,
+				Language:  framework.Language,
 				Port:      initPort,
 			}); err != nil {
 				return err
 			}
-			if err := buildconfig.WriteDotEnv(projectDir, plugin.Env.Required, plugin.Env.Optional); err != nil {
+			if err := buildconfig.WriteDotEnv(projectDir, framework.Env.Required, framework.Env.Optional); err != nil {
 				return err
 			}
-			if len(plugin.Env.Required) > 0 || len(plugin.Env.Optional) > 0 {
+			if len(framework.Env.Required) > 0 || len(framework.Env.Optional) > 0 {
 				if err := buildconfig.EnsureGitignored(projectDir, ".env"); err != nil {
 					return fmt.Errorf("update .gitignore: %w", err)
 				}
@@ -646,12 +646,12 @@ Picks a framework + language interactively (or via --framework / --language).`,
 			}
 
 			disp := displayPath(projectDir)
-			fmt.Fprintf(cmd.OutOrStdout(), "✓ Created MCP server: %s (framework: %s, language: %s, port: %d)\n", full, plugin.Framework, plugin.Language, initPort)
+			fmt.Fprintf(cmd.OutOrStdout(), "✓ Created MCP server: %s (framework: %s, language: %s, port: %d)\n", full, framework.Framework, framework.Language, initPort)
 			fmt.Fprintf(cmd.OutOrStdout(), "\n🚀 Next steps:\n")
 			fmt.Fprintf(cmd.OutOrStdout(), "  1. Run locally (optional):\n")
 			fmt.Fprintf(cmd.OutOrStdout(), "     arctl run %s\n", disp)
-			if len(plugin.Env.Required) > 0 {
-				fmt.Fprintf(cmd.OutOrStdout(), "     (export %s in your shell or set it in .env first)\n", strings.Join(plugin.Env.Required, ", "))
+			if len(framework.Env.Required) > 0 {
+				fmt.Fprintf(cmd.OutOrStdout(), "     (export %s in your shell or set it in .env first)\n", strings.Join(framework.Env.Required, ", "))
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "  2. Publish to the registry:\n")
 			fmt.Fprintf(cmd.OutOrStdout(), "     arctl apply -f %s/mcp.yaml\n", disp)
@@ -668,11 +668,11 @@ Picks a framework + language interactively (or via --framework / --language).`,
 	return cmd
 }
 
-// mcpTemplateVars returns the template-substitution vars for the mcp plugin's
+// mcpTemplateVars returns the template-substitution vars for the mcp framework's
 // templates. The vendored fastmcp-python and mcp-go templates reference fields
 // beyond the canonical Phase-5 set, so we supply safe defaults for those here.
 // Phase 12 simplifies the templates and trims this.
-func mcpTemplateVars(name, baseName, version, description, image, pluginDir, projectDir string) map[string]any {
+func mcpTemplateVars(name, baseName, version, description, image, frameworkDir, projectDir string) map[string]any {
 	desc := description
 	if desc == "" {
 		desc = fmt.Sprintf("%s MCP server", baseName)
@@ -685,7 +685,7 @@ func mcpTemplateVars(name, baseName, version, description, image, pluginDir, pro
 		"Description":   desc,
 		"description":   desc, // legacy lowercase alias used by some templates
 		"Image":         image,
-		"PluginDir":     pluginDir,
+		"FrameworkDir":     frameworkDir,
 		"ProjectDir":    projectDir,
 		"ProjectName":   baseName,
 		"ToolName":      toolName,

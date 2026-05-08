@@ -106,8 +106,8 @@ spec:
 }
 
 // TestBuildCmd_AgentMissingArctlYAML verifies a clear error when arctl.yaml is missing.
-// Build dispatches via the plugin registry, which requires arctl.yaml to identify the
-// (framework, language) plugin to invoke.
+// Build dispatches via the framework registry, which requires arctl.yaml to identify the
+// (framework, language) framework to invoke.
 func TestBuildCmd_AgentMissingArctlYAML(t *testing.T) {
 	tmpDir := t.TempDir()
 	writeBuildYAML(t, tmpDir, "agent.yaml", `
@@ -153,11 +153,11 @@ spec:
 	assert.Contains(t, err.Error(), "skills have no build step")
 }
 
-// TestBuild_DispatchesViaPlugin verifies that arctl init writes a valid arctl.yaml
-// that build's plugin-dispatch path can read. End-to-end docker invocation is not
+// TestBuild_DispatchesViaFramework verifies that arctl init writes a valid arctl.yaml
+// that build's framework-dispatch path can read. End-to-end docker invocation is not
 // exercised here (no docker daemon assumption); the contract under test is that
 // init's output is what build expects to consume.
-func TestBuild_DispatchesViaPlugin(t *testing.T) {
+func TestBuild_DispatchesViaFramework(t *testing.T) {
 	t.Setenv("GOOGLE_API_KEY", "fake")
 	tmp := t.TempDir()
 	cwd, err := os.Getwd()

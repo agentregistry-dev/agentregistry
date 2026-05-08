@@ -1,4 +1,4 @@
-package plugins
+package frameworks
 
 import (
 	"testing"
@@ -7,19 +7,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// LoadEmbedded returns whatever plugins are baked into the binary. With no plugins
+// LoadEmbedded returns whatever frameworks are baked into the binary. With no frameworks
 // shipped yet, the result is empty (but the call must succeed).
 func TestLoadEmbedded_EmptyOK(t *testing.T) {
-	plugins, err := LoadEmbedded(t.TempDir())
+	frameworks, err := LoadEmbedded(t.TempDir())
 	require.NoError(t, err)
-	assert.NotNil(t, plugins) // empty slice or nil, both fine
+	assert.NotNil(t, frameworks) // empty slice or nil, both fine
 }
 
 func TestLoadEmbedded_FindsAdkPython(t *testing.T) {
-	plugins, err := LoadEmbedded(t.TempDir())
+	frameworks, err := LoadEmbedded(t.TempDir())
 	require.NoError(t, err)
-	var found *Plugin
-	for _, p := range plugins {
+	var found *Framework
+	for _, p := range frameworks {
 		if p.Name == "adk-python" {
 			found = p
 			break
@@ -32,9 +32,9 @@ func TestLoadEmbedded_FindsAdkPython(t *testing.T) {
 }
 
 func TestLoadEmbedded_FindsFastmcpPython(t *testing.T) {
-	plugins, err := LoadEmbedded(t.TempDir())
+	frameworks, err := LoadEmbedded(t.TempDir())
 	require.NoError(t, err)
-	for _, p := range plugins {
+	for _, p := range frameworks {
 		if p.Name == "fastmcp-python" {
 			assert.Equal(t, "mcp", p.Type)
 			assert.Equal(t, "fastmcp", p.Framework)
@@ -42,13 +42,13 @@ func TestLoadEmbedded_FindsFastmcpPython(t *testing.T) {
 			return
 		}
 	}
-	t.Fatal("fastmcp-python not found among embedded plugins")
+	t.Fatal("fastmcp-python not found among embedded frameworks")
 }
 
 func TestLoadEmbedded_FindsMcpGo(t *testing.T) {
-	plugins, err := LoadEmbedded(t.TempDir())
+	frameworks, err := LoadEmbedded(t.TempDir())
 	require.NoError(t, err)
-	for _, p := range plugins {
+	for _, p := range frameworks {
 		if p.Name == "mcp-go" {
 			assert.Equal(t, "mcp", p.Type)
 			assert.Equal(t, "mcp-go", p.Framework)
@@ -56,5 +56,5 @@ func TestLoadEmbedded_FindsMcpGo(t *testing.T) {
 			return
 		}
 	}
-	t.Fatal("mcp-go not found among embedded plugins")
+	t.Fatal("mcp-go not found among embedded frameworks")
 }

@@ -11,7 +11,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/buildconfig"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common/docker"
-	"github.com/agentregistry-dev/agentregistry/internal/cli/plugins"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/frameworks"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
@@ -40,7 +40,7 @@ func newBuildCmd() *cobra.Command {
 		Long: `Build the Docker image for a project created with 'arctl init'.
 
 Reads arctl.yaml in the project directory to determine the (framework, language)
-plugin and dispatches to that plugin's build command. Image tag is taken from the
+framework and dispatches to that framework's build command. Image tag is taken from the
 declarative YAML's spec (or --image override).
 
 Supported kinds: Agent, MCPServer
@@ -79,7 +79,7 @@ Examples:
 			out := cmd.OutOrStdout()
 			switch kind {
 			case v1alpha1.KindAgent, v1alpha1.KindMCPServer:
-				return buildViaPlugin(out, projectDir, obj, buildImage, buildPlatform, buildPush)
+				return buildViaFramework(out, projectDir, obj, buildImage, buildPlatform, buildPush)
 			case v1alpha1.KindPrompt:
 				return fmt.Errorf("prompts have no build step — use 'arctl apply -f %s' directly", yamlFile)
 			case v1alpha1.KindSkill:
@@ -162,30 +162,30 @@ func mcpSpecPackageIdentifier(obj v1alpha1.Object) string {
 	return ""
 }
 
-// buildViaPlugin dispatches the build to the (framework, language) plugin
-// declared in arctl.yaml. The plugin's Build command is exec'd in the project
-// directory with template vars {Image, ProjectDir, Platform, PluginDir}.
-func buildViaPlugin(out io.Writer, projectDir string, obj v1alpha1.Object, flagImage, platform string, push bool) error {
+// buildViaFramework dispatches the build to the (framework, language) framework
+// declared in arctl.yaml. The framework's Build command is exec'd in the project
+// directory with template vars {Image, ProjectDir, Platform, FrameworkDir}.
+func buildViaFramework(out io.Writer, projectDir string, obj v1alpha1.Object, flagImage, platform string, push bool) error {
 	cfg, err := buildconfig.Read(projectDir)
 	if err != nil {
 		return fmt.Errorf("read arctl.yaml: %w", err)
 	}
 
-	r, err := loadPluginRegistry(projectDir)
+	r, err := loadFrameworkRegistry(projectDir)
 	if err != nil {
 		return err
 	}
 
-	pluginType := "agent"
+	frameworkType := "agent"
 	specImage := agentSpecImage(obj)
 	if obj.GetKind() == v1alpha1.KindMCPServer {
-		pluginType = "mcp"
+		frameworkType = "mcp"
 		specImage = mcpSpecPackageIdentifier(obj)
 	}
 
-	p, ok := r.Lookup(pluginType, cfg.Framework, cfg.Language)
+	p, ok := r.Lookup(frameworkType, cfg.Framework, cfg.Language)
 	if !ok {
-		return fmt.Errorf("no plugin for %s framework=%s language=%s", pluginType, cfg.Framework, cfg.Language)
+		return fmt.Errorf("no framework for %s framework=%s language=%s", frameworkType, cfg.Framework, cfg.Language)
 	}
 
 	image := resolveImage(flagImage, specImage, obj.GetMetadata().Name)
@@ -193,16 +193,16 @@ func buildViaPlugin(out io.Writer, projectDir string, obj v1alpha1.Object, flagI
 		"Image":      image,
 		"ProjectDir": projectDir,
 		"Platform":   platform,
-		"PluginDir":  p.SourceDir,
+		"FrameworkDir":  p.SourceDir,
 	}
 
-	rendered, err := plugins.RenderArgs(p.Build.Command, vars)
+	rendered, err := frameworks.RenderArgs(p.Build.Command, vars)
 	if err != nil {
 		return fmt.Errorf("render build command: %w", err)
 	}
 	fmt.Fprintf(out, "→ %s: %s\n", p.Name, strings.Join(rendered, " "))
-	if err := plugins.ExecForeground(p.Build, projectDir, vars, nil); err != nil {
-		return fmt.Errorf("plugin build: %w", err)
+	if err := frameworks.ExecForeground(p.Build, projectDir, vars, nil); err != nil {
+		return fmt.Errorf("framework build: %w", err)
 	}
 	if push {
 		fmt.Fprintf(out, "→ pushing %s...\n", image)

@@ -1,4 +1,4 @@
-package plugins
+package frameworks
 
 import (
 	"os"
@@ -12,12 +12,12 @@ import (
 func TestLoadAll_GathersFromAllSources(t *testing.T) {
 	tmp := t.TempDir()
 	stageDir := filepath.Join(tmp, "stage")
-	userDir := filepath.Join(tmp, "user-plugins")
+	userDir := filepath.Join(tmp, "user-frameworks")
 	projDir := filepath.Join(tmp, "proj")
 
-	// User-level plugin
+	// User-level framework
 	require.NoError(t, os.MkdirAll(filepath.Join(userDir, "fake-user"), 0755))
-	require.NoError(t, os.WriteFile(filepath.Join(userDir, "fake-user", "plugin.yaml"), []byte(`
+	require.NoError(t, os.WriteFile(filepath.Join(userDir, "fake-user", "framework.yaml"), []byte(`
 apiVersion: arctl.dev/v1
 name: fake-user
 type: agent
@@ -25,9 +25,9 @@ framework: fake
 language: a
 `), 0644))
 
-	// Project-local plugin
-	require.NoError(t, os.MkdirAll(filepath.Join(projDir, ".arctl", "plugins", "fake-proj"), 0755))
-	require.NoError(t, os.WriteFile(filepath.Join(projDir, ".arctl", "plugins", "fake-proj", "plugin.yaml"), []byte(`
+	// Project-local framework
+	require.NoError(t, os.MkdirAll(filepath.Join(projDir, ".arctl", "frameworks", "fake-proj"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(projDir, ".arctl", "frameworks", "fake-proj", "framework.yaml"), []byte(`
 apiVersion: arctl.dev/v1
 name: fake-proj
 type: agent

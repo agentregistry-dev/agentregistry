@@ -14,7 +14,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/buildconfig"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative/chat"
-	"github.com/agentregistry-dev/agentregistry/internal/cli/plugins"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/frameworks"
 	"github.com/spf13/cobra"
 )
 
@@ -45,12 +45,12 @@ until the agent's HTTP endpoint is reachable, then launch an interactive
 A2A chat. When chat exits the runtime is torn down. Use --no-chat to
 keep the old foreground-only behavior.
 
-For MCPServer kinds chat does not apply; the plugin's run command runs
+For MCPServer kinds chat does not apply; the framework's run command runs
 in the foreground until interrupted.
 
-Reads arctl.yaml to determine the (framework, language) plugin and
-dispatches to that plugin's run command. Loads .env (if present) and
-validates that the plugin's required env vars are set.`,
+Reads arctl.yaml to determine the (framework, language) framework and
+dispatches to that framework's run command. Loads .env (if present) and
+validates that the framework's required env vars are set.`,
 		Example: `  arctl run
   arctl run ./myagent
   arctl run -e FOO=bar -e BAZ=qux
@@ -69,7 +69,7 @@ validates that the plugin's required env vars are set.`,
 	cmd.Flags().StringArrayVarP(&extraEnv, "env", "e", nil, "KEY=VALUE env override")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Skip actual exec; useful for tests")
 	cmd.Flags().BoolVar(&watch, "watch", false, "Rebuild and restart on file change")
-	cmd.Flags().BoolVar(&noChat, "no-chat", false, "Skip chat for Agents; run the plugin command in the foreground")
+	cmd.Flags().BoolVar(&noChat, "no-chat", false, "Skip chat for Agents; run the framework command in the foreground")
 	return cmd
 }
 
@@ -100,27 +100,27 @@ func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun, wat
 		return err
 	}
 
-	r, err := loadPluginRegistry(projectDir)
+	r, err := loadFrameworkRegistry(projectDir)
 	if err != nil {
 		return err
 	}
 
-	// Locate the plugin by (framework, language). Try agent first, fall back
+	// Locate the framework by (framework, language). Try agent first, fall back
 	// to mcp — arctl.yaml carries the framework but not the kind, so the
-	// plugin's own `type` field is what tells us which lifecycle to run.
+	// framework's own `type` field is what tells us which lifecycle to run.
 	var (
-		p          *plugins.Plugin
-		pluginType string
+		p          *frameworks.Framework
+		frameworkType string
 	)
 	for _, t := range []string{"agent", "mcp"} {
 		if found, ok := r.Lookup(t, cfg.Framework, cfg.Language); ok {
 			p = found
-			pluginType = t
+			frameworkType = t
 			break
 		}
 	}
 	if p == nil {
-		return fmt.Errorf("no plugin for framework=%s language=%s", cfg.Framework, cfg.Language)
+		return fmt.Errorf("no framework for framework=%s language=%s", cfg.Framework, cfg.Language)
 	}
 
 	name := filepath.Base(projectDir)
@@ -134,7 +134,7 @@ func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun, wat
 	}
 
 	required := append([]string(nil), p.Env.Required...)
-	if pluginType == "agent" && cfg.ModelProvider != "" {
+	if frameworkType == "agent" && cfg.ModelProvider != "" {
 		required = append(required, ModelProviderEnvKeys(cfg.ModelProvider)...)
 	}
 	if err := ValidateRequiredEnv(dotEnv, extraEnv, required); err != nil {
@@ -145,35 +145,35 @@ func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun, wat
 	image := defaultImage(name)
 
 	port := cfg.Port
-	if port == 0 && pluginType == "mcp" {
+	if port == 0 && frameworkType == "mcp" {
 		port = 3000
 	}
 
 	vars := map[string]any{
 		"ProjectDir": projectDir,
-		"PluginDir":  p.SourceDir,
+		"FrameworkDir":  p.SourceDir,
 		"Image":      image,
 		"Port":       port,
 	}
 
-	rendered, err := plugins.RenderArgs(p.Run.Command, vars)
+	rendered, err := frameworks.RenderArgs(p.Run.Command, vars)
 	if err != nil {
 		return fmt.Errorf("render run command: %w", err)
 	}
 
-	// MCP plugins' run commands assume the OCI image already exists locally
+	// MCP frameworks' run commands assume the OCI image already exists locally
 	// (typically `docker run -i {{.Image}}`). Build first so users don't
 	// have to remember `arctl build` between iterations. Agents get this
 	// for free via `docker compose up --build` in their run command.
-	if pluginType == "mcp" && len(p.Build.Command) > 0 {
-		buildRendered, err := plugins.RenderArgs(p.Build.Command, vars)
+	if frameworkType == "mcp" && len(p.Build.Command) > 0 {
+		buildRendered, err := frameworks.RenderArgs(p.Build.Command, vars)
 		if err != nil {
 			return fmt.Errorf("render build command: %w", err)
 		}
 		fmt.Fprintf(out, "→ %s (build): %s\n", p.Name, strings.Join(buildRendered, " "))
 		if !dryRun {
-			if err := plugins.ExecForeground(p.Build, projectDir, vars, envv); err != nil {
-				return fmt.Errorf("plugin build: %w", err)
+			if err := frameworks.ExecForeground(p.Build, projectDir, vars, envv); err != nil {
+				return fmt.Errorf("framework build: %w", err)
 			}
 		}
 	}
@@ -188,7 +188,7 @@ func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun, wat
 
 	// Chat default applies only to Agents (not MCPServers) and when the
 	// user hasn't opted out via --no-chat.
-	chatMode := pluginType == "agent" && !noChat
+	chatMode := frameworkType == "agent" && !noChat
 
 	if chatMode {
 		return runWithChat(out, projectDir, name, p.Name, rendered, envv, dryRun)
@@ -200,16 +200,16 @@ func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun, wat
 		return nil
 	}
 	fmt.Fprintf(out, "→ %s: %s\n", p.Name, strings.Join(rendered, " "))
-	return plugins.ExecForeground(p.Run, projectDir, vars, envv)
+	return frameworks.ExecForeground(p.Run, projectDir, vars, envv)
 }
 
 // agentReadinessURL is the URL we poll to know an Agent is ready to chat.
 //
-// TODO(plugin-contract): hardcoded for adk-python (port 8080 from the
-// generated docker-compose, root-path probe). Generalize via a plugin
+// TODO(framework-contract): hardcoded for adk-python (port 8080 from the
+// generated docker-compose, root-path probe). Generalize via a framework
 // descriptor field once a second agent framework lands — e.g.
 //
-//	plugin.yaml:
+//	framework.yaml:
 //	  run:
 //	    readinessURL: "http://localhost:8080/"
 //	    teardown: ["docker", "compose", "-f", "{{.ProjectDir}}/docker-compose.yaml", "down"]
@@ -224,19 +224,19 @@ const agentReadinessTimeout = 90 * time.Second
 // resurrected from the deleted `arctl agent run`.
 //
 // dryRun short-circuits: narrate what would happen but don't shell out.
-func runWithChat(out io.Writer, projectDir, agentName, pluginName string, rendered, envv []string, dryRun bool) error {
+func runWithChat(out io.Writer, projectDir, agentName, frameworkName string, rendered, envv []string, dryRun bool) error {
 	upArgv := composeUpDetachedArgs(rendered)
 	downArgv := composeDownArgs(rendered, projectDir)
 
 	if dryRun {
-		fmt.Fprintf(out, "→ %s: %s\n", pluginName, strings.Join(upArgv, " "))
+		fmt.Fprintf(out, "→ %s: %s\n", frameworkName, strings.Join(upArgv, " "))
 		fmt.Fprintf(out, "→ would wait for %s, then launch chat (%s)\n", agentReadinessURL, agentName)
 		fmt.Fprintf(out, "→ on chat exit would teardown: %s\n", strings.Join(downArgv, " "))
 		fmt.Fprintln(out, "(dry-run; skipping exec)")
 		return nil
 	}
 
-	fmt.Fprintf(out, "→ %s: %s\n", pluginName, strings.Join(upArgv, " "))
+	fmt.Fprintf(out, "→ %s: %s\n", frameworkName, strings.Join(upArgv, " "))
 	upCmd := exec.Command(upArgv[0], upArgv[1:]...)
 	upCmd.Dir = projectDir
 	upCmd.Stdout = out
@@ -295,7 +295,7 @@ func runWithChat(out io.Writer, projectDir, agentName, pluginName string, render
 // returns immediately, leaving containers running for arctl to drive.
 //
 // If the argv doesn't look like compose-up (no "up" token), it's returned
-// unchanged — that's the sign of a non-compose plugin runtime that we
+// unchanged — that's the sign of a non-compose framework runtime that we
 // don't yet know how to drive in chat mode.
 func composeUpDetachedArgs(rendered []string) []string {
 	out := make([]string, 0, len(rendered)+2)

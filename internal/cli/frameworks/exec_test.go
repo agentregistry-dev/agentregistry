@@ -1,4 +1,4 @@
-package plugins
+package frameworks
 
 import (
 	"os"
@@ -37,14 +37,14 @@ func TestExec_Smoke(t *testing.T) {
 }
 
 func TestRenderTemplates_CopiesAndSubstitutes(t *testing.T) {
-	pluginDir := t.TempDir()
-	tplDir := filepath.Join(pluginDir, "templates")
+	frameworkDir := t.TempDir()
+	tplDir := filepath.Join(frameworkDir, "templates")
 	require.NoError(t, os.MkdirAll(tplDir, 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(tplDir, "agent.py.tmpl"), []byte(`name = "{{.Name}}"`), 0644))
 	require.NoError(t, os.WriteFile(filepath.Join(tplDir, "static.txt"), []byte(`no template here`), 0644))
 
 	dst := t.TempDir()
-	p := &Plugin{TemplatesDir: "./templates", SourceDir: pluginDir}
+	p := &Framework{TemplatesDir: "./templates", SourceDir: frameworkDir}
 	require.NoError(t, RenderTemplates(p, dst, map[string]any{"Name": "myagent"}))
 
 	got, err := os.ReadFile(filepath.Join(dst, "agent.py"))

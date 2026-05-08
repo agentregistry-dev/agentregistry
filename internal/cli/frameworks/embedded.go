@@ -1,4 +1,4 @@
-package plugins
+package frameworks
 
 import (
 	"fmt"
@@ -6,15 +6,15 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/agentregistry-dev/agentregistry/internal/cli/plugins/builtin"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/frameworks/builtin"
 )
 
-// LoadEmbedded materializes every embedded plugin directory into stageDir
-// (one subdir per plugin) and returns the parsed Plugin values.
+// LoadEmbedded materializes every embedded framework directory into stageDir
+// (one subdir per framework) and returns the parsed Framework values.
 //
 // stageDir is typically a temp dir created by the caller; arctl shells out to
-// scripts/templates inside it just like out-of-tree plugins.
-func LoadEmbedded(stageDir string) ([]*Plugin, error) {
+// scripts/templates inside it just like out-of-tree frameworks.
+func LoadEmbedded(stageDir string) ([]*Framework, error) {
 	if err := os.MkdirAll(stageDir, 0755); err != nil {
 		return nil, fmt.Errorf("create stage dir: %w", err)
 	}
@@ -29,18 +29,18 @@ func LoadEmbedded(stageDir string) ([]*Plugin, error) {
 			continue
 		}
 		if err := materialize(builtin.FS, e.Name(), filepath.Join(stageDir, e.Name())); err != nil {
-			return nil, fmt.Errorf("materialize embedded plugin %q: %w", e.Name(), err)
+			return nil, fmt.Errorf("materialize embedded framework %q: %w", e.Name(), err)
 		}
 	}
 
-	plugins, err := DiscoverFromDir(stageDir)
+	frameworks, err := DiscoverFromDir(stageDir)
 	if err != nil {
 		return nil, err
 	}
-	if plugins == nil {
-		plugins = []*Plugin{}
+	if frameworks == nil {
+		frameworks = []*Framework{}
 	}
-	return plugins, nil
+	return frameworks, nil
 }
 
 // materialize copies subFS rooted at srcRoot to dst on disk.

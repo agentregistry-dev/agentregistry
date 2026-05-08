@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRun_DispatchesToPluginRunCommand(t *testing.T) {
+func TestRun_DispatchesToFrameworkRunCommand(t *testing.T) {
 	t.Setenv("GOOGLE_API_KEY", "fake")
 	tmp := t.TempDir()
 	cwd, err := os.Getwd()
@@ -25,8 +25,8 @@ func TestRun_DispatchesToPluginRunCommand(t *testing.T) {
 	projectDir := filepath.Join(tmp, "myagent")
 	require.NoError(t, os.Chdir(projectDir))
 
-	// Run command should locate arctl.yaml, look up the plugin, and reach
-	// plugin.Run.Command. We stop short of actually exec'ing docker by using
+	// Run command should locate arctl.yaml, look up the framework, and reach
+	// framework.Run.Command. We stop short of actually exec'ing docker by using
 	// a NoExec mode (--dry-run) added in this task.
 	cmd := declarative.NewRunCmd()
 	cmd.SetArgs([]string{"--dry-run"})

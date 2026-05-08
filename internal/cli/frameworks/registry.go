@@ -1,17 +1,17 @@
-package plugins
+package frameworks
 
 import (
 	"fmt"
 	"sort"
 )
 
-// Source identifies where a plugin was loaded from. Earlier sources win on conflict.
+// Source identifies where a framework was loaded from. Earlier sources win on conflict.
 type Source int
 
 const (
 	SourceInTree   Source = iota // embedded in the arctl binary
-	SourceProject                // ./.arctl/plugins/<name>/
-	SourceUserHome               // $XDG_CONFIG_HOME/arctl/plugins/<name>/
+	SourceProject                // ./.arctl/frameworks/<name>/
+	SourceUserHome               // $XDG_CONFIG_HOME/arctl/frameworks/<name>/
 )
 
 func (s Source) String() string {
@@ -28,7 +28,7 @@ func (s Source) String() string {
 }
 
 type registryEntry struct {
-	plugin *Plugin
+	framework *Framework
 	source Source
 }
 
@@ -40,7 +40,7 @@ type registryConflict struct {
 	LoserName  string
 }
 
-// Registry indexes plugins by (type, framework, language). Earlier-source wins on conflict.
+// Registry indexes frameworks by (type, framework, language). Earlier-source wins on conflict.
 type Registry struct {
 	entries   map[string]registryEntry
 	conflicts []registryConflict
@@ -55,11 +55,11 @@ func key(typ, framework, language string) string {
 	return typ + "/" + framework + "/" + language
 }
 
-// Add inserts a plugin. If the key is already taken, the earlier-source plugin wins;
+// Add inserts a framework. If the key is already taken, the earlier-source framework wins;
 // the loser is recorded in Conflicts(). Returns nil for both wins and recorded losses.
-func (r *Registry) Add(p *Plugin, src Source) error {
+func (r *Registry) Add(p *Framework, src Source) error {
 	if p == nil {
-		return fmt.Errorf("plugin is nil")
+		return fmt.Errorf("framework is nil")
 	}
 	k := key(p.Type, p.Framework, p.Language)
 	if existing, ok := r.entries[k]; ok {
@@ -69,39 +69,39 @@ func (r *Registry) Add(p *Plugin, src Source) error {
 				Key:        k,
 				Winner:     existing.source,
 				Loser:      src,
-				WinnerName: existing.plugin.Name,
+				WinnerName: existing.framework.Name,
 				LoserName:  p.Name,
 			})
 			return nil
 		}
-		// New source has higher priority — replace and record the displaced plugin.
+		// New source has higher priority — replace and record the displaced framework.
 		r.conflicts = append(r.conflicts, registryConflict{
 			Key:        k,
 			Winner:     src,
 			Loser:      existing.source,
 			WinnerName: p.Name,
-			LoserName:  existing.plugin.Name,
+			LoserName:  existing.framework.Name,
 		})
 	}
-	r.entries[k] = registryEntry{plugin: p, source: src}
+	r.entries[k] = registryEntry{framework: p, source: src}
 	return nil
 }
 
-// Lookup finds a plugin by (type, framework, language).
-func (r *Registry) Lookup(typ, framework, language string) (*Plugin, bool) {
+// Lookup finds a framework by (type, framework, language).
+func (r *Registry) Lookup(typ, framework, language string) (*Framework, bool) {
 	e, ok := r.entries[key(typ, framework, language)]
 	if !ok {
 		return nil, false
 	}
-	return e.plugin, true
+	return e.framework, true
 }
 
-// ListByType returns all plugins of the given type, sorted by Name for stable order.
-func (r *Registry) ListByType(typ string) []*Plugin {
-	var out []*Plugin
+// ListByType returns all frameworks of the given type, sorted by Name for stable order.
+func (r *Registry) ListByType(typ string) []*Framework {
+	var out []*Framework
 	for _, e := range r.entries {
-		if e.plugin.Type == typ {
-			out = append(out, e.plugin)
+		if e.framework.Type == typ {
+			out = append(out, e.framework)
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })

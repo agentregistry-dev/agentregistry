@@ -1,4 +1,4 @@
-package plugins
+package frameworks
 
 import (
 	"errors"
@@ -11,13 +11,13 @@ import (
 )
 
 // errPickCancelled is returned when the user aborts the picker (Esc / Ctrl+C).
-var errPickCancelled = errors.New("plugin selection cancelled")
+var errPickCancelled = errors.New("framework selection cancelled")
 
 // runPickerTUI presents candidates as a single selectable list and returns
-// the chosen plugin. The picker is intentionally always shown, even with
+// the chosen framework. The picker is intentionally always shown, even with
 // one candidate, for consistency and discoverability (per design).
-func runPickerTUI(candidates []*Plugin) (*Plugin, error) {
-	sorted := append([]*Plugin(nil), candidates...)
+func runPickerTUI(candidates []*Framework) (*Framework, error) {
+	sorted := append([]*Framework(nil), candidates...)
 	sort.Slice(sorted, func(i, j int) bool {
 		if sorted[i].Framework != sorted[j].Framework {
 			return sorted[i].Framework < sorted[j].Framework
@@ -42,7 +42,7 @@ func runPickerTUI(candidates []*Plugin) (*Plugin, error) {
 }
 
 type pickerModel struct {
-	items     []*Plugin
+	items     []*Framework
 	cursor    int
 	cancelled bool
 	done      bool

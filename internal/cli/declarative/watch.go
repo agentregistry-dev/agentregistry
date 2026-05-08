@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agentregistry-dev/agentregistry/internal/cli/plugins"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/frameworks"
 	"github.com/fsnotify/fsnotify"
 )
 
@@ -21,16 +21,16 @@ import (
 // and the "Change detected" line still print, but the underlying child
 // process is never started. This is what `arctl run --watch --dry-run`
 // surfaces to tests.
-func runWithWatch(out io.Writer, projectDir string, p *plugins.Plugin, env []string, dryRun bool) error {
+func runWithWatch(out io.Writer, projectDir string, p *frameworks.Framework, env []string, dryRun bool) error {
 	var current *exec.Cmd
 	startCmd := func() error {
 		if current != nil {
 			_ = current.Process.Kill()
 			_ = current.Wait()
 		}
-		argv, err := plugins.RenderArgs(p.Run.Command, map[string]any{
+		argv, err := frameworks.RenderArgs(p.Run.Command, map[string]any{
 			"ProjectDir": projectDir,
-			"PluginDir":  p.SourceDir,
+			"FrameworkDir":  p.SourceDir,
 		})
 		if err != nil {
 			return err
