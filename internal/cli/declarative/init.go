@@ -359,13 +359,13 @@ func readMCPName(projectDir string) (string, error) {
 func defaultInitModelName(provider string) string {
 	switch strings.ToLower(provider) {
 	case "openai", "agentgateway":
-		return "gpt-4o-mini"
+		return "gpt-5-mini"
 	case "anthropic":
 		return "claude-sonnet-4-6"
 	case "gemini":
 		return "gemini-2.5-flash"
 	case "bedrock":
-		return "anthropic.claude-3-haiku-20240307-v1:0"
+		return "anthropic.claude-haiku-4-5-20251001-v1:0"
 	case "azureopenai":
 		return "your-deployment-name"
 	default:
