@@ -4,7 +4,13 @@ version = "0.1"
 description = "{{.Name}} agent"
 readme = "README.md"
 dependencies = [
+{{- if eq .ModelProvider "gemini"}}
   "google-adk==1.32.0",
+{{- else}}
+  # `[extensions]` extra is required for `google.adk.models.lite_llm` (used by
+  # openai/anthropic/bedrock/azureopenai providers).
+  "google-adk[extensions]==1.32.0",
+{{- end}}
 {{- if eq .ModelProvider "agentgateway"}}
   "kagent-adk=={{.KagentADKPyVersion}}",
 {{- end}}
