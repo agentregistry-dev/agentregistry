@@ -116,42 +116,6 @@ spec:
 	require.Contains(t, out.Results[1].Error, "unknown or unconfigured kind")
 }
 
-// TestRegisterApply_RejectsUserSuppliedVersion pins the contract that
-// the batch decoder fails any content document carrying metadata.version —
-// content identity must use metadata.tag. Failures surface as a single
-// batch-level error result
-// (not per-doc) because the decode step short-circuits the stream.
-func TestRegisterApply_RejectsUserSuppliedVersion(t *testing.T) {
-	pool := v1alpha1store.NewTestPool(t)
-	agents := v1alpha1store.NewStore(pool, "v1alpha1.agents")
-
-	_, api := humatest.New(t)
-	resource.RegisterApply(api, resource.ApplyConfig{
-		BasePrefix: "/v0",
-		Stores:     map[string]*v1alpha1store.Store{v1alpha1.KindAgent: agents},
-	})
-
-	yaml := []byte(`apiVersion: ar.dev/v1alpha1
-kind: Agent
-metadata:
-  namespace: default
-  name: bad
-  version: "5"
-spec:
-  title: Bad
-`)
-	resp := api.Post("/v0/apply", "Content-Type: application/yaml", strings.NewReader(string(yaml)))
-	require.Equal(t, http.StatusOK, resp.Code)
-
-	var out struct {
-		Results []arv0.ApplyResult `json:"results"`
-	}
-	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
-	require.Len(t, out.Results, 1)
-	require.Equal(t, arv0.ApplyStatusFailed, out.Results[0].Status)
-	require.Contains(t, out.Results[0].Error, "metadata.version")
-}
-
 func TestRegisterApply_MutableObjectResultsDoNotExposeVersion(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
 	providers := v1alpha1store.NewMutableObjectStore(pool, "v1alpha1.providers")

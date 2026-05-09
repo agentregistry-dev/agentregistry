@@ -12,8 +12,7 @@ import (
 
 func TestMCPManagerLoad_EnvelopeFormat(t *testing.T) {
 	dir := t.TempDir()
-	// metadata.version is rejected on decode; local manifests for
-	// `arctl build` / `arctl run` don't carry one.
+	// local manifests for `arctl build` / `arctl run` use metadata.tag, not metadata.version.
 	envelopeYAML := `apiVersion: ar.dev/v1alpha1
 kind: MCPServer
 metadata:

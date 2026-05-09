@@ -179,107 +179,6 @@ func TestScheme_Decode_RejectsMissingKind(t *testing.T) {
 	}
 }
 
-// TestScheme_Decode_RejectsSystemMetadataForContentRegistryKinds pins
-// the contract that unsupported system metadata fields cannot be set on
-// the wire for content-registry kinds. metadata.version is deprecated in
-// favor of metadata.tag; metadata.generation remains internal.
-func TestScheme_Decode_RejectsSystemMetadataForContentRegistryKinds(t *testing.T) {
-	contentKinds := []struct {
-		kind     string
-		specYAML string
-	}{
-		{KindAgent, "  title: y\n"},
-		{KindMCPServer, "  title: y\n"},
-		{KindRemoteMCPServer, "  title: y\n"},
-		{KindSkill, "  title: y\n"},
-		{KindPrompt, "  content: hi\n"},
-	}
-	fields := []struct {
-		name      string
-		metaLine  string
-		errSubstr string
-	}{
-		{"version", `  version: "5"`, "metadata.version"},
-		{"generation", `  generation: 3`, "metadata.generation"},
-	}
-	for _, ck := range contentKinds {
-		for _, f := range fields {
-			t.Run(ck.kind+"/"+f.name, func(t *testing.T) {
-				doc := "apiVersion: ar.dev/v1alpha1\nkind: " + ck.kind + "\nmetadata:\n  name: x\n" + f.metaLine + "\nspec:\n" + ck.specYAML
-				_, err := Default.Decode([]byte(doc))
-				if err == nil {
-					t.Fatalf("expected metadata.%s rejection for %s", f.name, ck.kind)
-				}
-				if !strings.Contains(err.Error(), f.errSubstr) {
-					t.Fatalf("expected error to mention %s; got %v", f.errSubstr, err)
-				}
-			})
-		}
-	}
-}
-
-// TestScheme_Decode_RejectsSystemMetadataForInfraKinds pins the unified public
-// contract: infra/config kinds (Provider, Deployment) also reject
-// metadata.version / metadata.generation instead of exposing their private
-// storage identity.
-func TestScheme_Decode_RejectsSystemMetadataForInfraKinds(t *testing.T) {
-	cases := map[string]string{
-		"Provider/version": `apiVersion: ar.dev/v1alpha1
-kind: Provider
-metadata:
-  name: local
-  version: "1.0.0"
-spec:
-  platform: local
-`,
-		"Provider/generation": `apiVersion: ar.dev/v1alpha1
-kind: Provider
-metadata:
-  name: local
-  generation: 3
-spec:
-  platform: local
-`,
-		"Deployment/version": `apiVersion: ar.dev/v1alpha1
-kind: Deployment
-metadata:
-  name: prod
-  version: "1.0.0"
-spec:
-  targetRef:
-    kind: Agent
-    name: summarizer
-    tag: "1"
-  providerRef:
-    kind: Provider
-    name: local
-  desiredState: deployed
-`,
-		"Deployment/generation": `apiVersion: ar.dev/v1alpha1
-kind: Deployment
-metadata:
-  name: prod
-  generation: 3
-spec:
-  targetRef:
-    kind: Agent
-    name: summarizer
-    tag: "1"
-  providerRef:
-    kind: Provider
-    name: local
-  desiredState: deployed
-`,
-	}
-	for name, doc := range cases {
-		t.Run(name, func(t *testing.T) {
-			if _, err := Default.Decode([]byte(doc)); err == nil {
-				t.Fatalf("expected public system metadata to be rejected")
-			}
-		})
-	}
-}
-
 func TestScheme_DecodeMulti_Stream(t *testing.T) {
 	doc := []byte(`apiVersion: ar.dev/v1alpha1
 kind: Skill
@@ -387,8 +286,6 @@ func TestEncode_RoundTrip_YAML(t *testing.T) {
 	// but UnmarshalJSON intentionally does NOT re-stamp it, so callers
 	// like the importer can layer their own default on top.
 	//
-	// Version is not ObjectMeta; the decoder rejects user-supplied
-	// metadata.version.
 	original := &Agent{
 		TypeMeta: TypeMeta{APIVersion: GroupVersion, Kind: KindAgent},
 		Metadata: ObjectMeta{Name: "rt", Labels: map[string]string{"k": "v"}},
@@ -420,8 +317,7 @@ func TestEncode_RoundTrip_YAML(t *testing.T) {
 }
 
 func TestEncode_RoundTrip_JSON(t *testing.T) {
-	// Deployment identity is namespace/name. The decoder must not introduce
-	// metadata.version state during a JSON round trip.
+	// Deployment identity is namespace/name. The decoder must not introduce hidden identity fields during a JSON round trip.
 	original := &Deployment{
 		TypeMeta: TypeMeta{APIVersion: GroupVersion, Kind: KindDeployment},
 		Metadata: ObjectMeta{Name: "prod"},

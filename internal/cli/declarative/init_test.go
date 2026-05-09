@@ -50,7 +50,7 @@ func TestInitAgentCmd_BasicScaffold(t *testing.T) {
 	require.True(t, ok, "metadata should be a map")
 	assert.Equal(t, "myagent", metadata["name"])
 	// Content resources use metadata.tag, so metadata.version must NOT
-	// appear in init output; the decoder rejects manifests that pre-set it.
+	// appear in init output.
 	assert.NotContains(t, metadata, "version", "init output must omit metadata.version")
 
 	spec, ok := m["spec"].(map[string]any)
@@ -608,9 +608,7 @@ func TestInit_GeneratedYAMLDecodesCleanly(t *testing.T) {
 			parts := append([]string{tmpDir}, tc.yamlPath...)
 			data, err := os.ReadFile(filepath.Join(parts...))
 			require.NoError(t, err, "generated YAML should exist")
-
-			// rejectSystemMetadata fires inside Decode; if metadata.version
-			// leaks back into the output, this returns an error.
+			// Generated manifests should stay on the tag contract and decode cleanly.
 			obj, err := v1alpha1.Default.Decode(data)
 			require.NoError(t, err, "generated YAML must decode without error (init must not write system-managed metadata)")
 			require.NotNil(t, obj)

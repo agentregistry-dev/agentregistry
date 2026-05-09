@@ -5,7 +5,6 @@
 //   - re-applying unchanged content is a no-op
 //   - applying changed content to the same tag replaces that row
 //   - explicit tags remain separate rows
-//   - manifests with metadata.version set are rejected at decode time
 //   - delete defaults to the "latest" tag; --all-tags clears every tag
 //
 // Lives next to declarative_test.go and reuses its writeDeclarativeYAML and
@@ -14,11 +13,8 @@
 package e2e
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"os"
-	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -132,57 +128,6 @@ func TestTagging_ApplyAndIdempotency(t *testing.T) {
 	if got := agentTagCount(t, regURL, tmpDir, name); got != 1 {
 		t.Fatalf("after spec change: expected 1 replaced tag row, got %d", got)
 	}
-}
-
-// TestTagging_MetadataVersionRejected pipes a manifest with
-// metadata.version set into `arctl apply -f -` and asserts the CLI rejects
-// the legacy public field through the v1alpha1 decoder.
-func TestTagging_MetadataVersionRejected(t *testing.T) {
-	regURL := RegistryURL(t)
-	tmpDir := t.TempDir()
-	name := UniqueAgentName("vermetav")
-
-	yaml := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
-kind: Agent
-metadata:
-  name: %s
-  version: "1.0.0"
-spec:
-  source:
-    image: ghcr.io/e2e-test/metaversion:latest
-  description: "manifest with system-managed metadata.version set"
-  language: python
-  framework: adk
-  modelProvider: gemini
-  modelName: gemini-2.0-flash
-`, name)
-
-	bin := arctlBinary(t)
-	cmd := exec.Command(bin, "apply", "-f", "-", "--registry-url", regURL)
-	cmd.Dir = tmpDir
-	cmd.Env = os.Environ()
-	cmd.Stdin = strings.NewReader(yaml)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	err := cmd.Run()
-	if err == nil {
-		t.Fatalf("expected non-zero exit when manifest carries metadata.version\nstdout: %s\nstderr: %s",
-			stdout.String(), stderr.String())
-	}
-
-	combined := stdout.String() + stderr.String()
-	if !strings.Contains(combined, "metadata.version") {
-		t.Fatalf("expected error mentioning %q, got:\nstdout: %s\nstderr: %s",
-			"metadata.version", stdout.String(), stderr.String())
-	}
-
-	// Belt-and-braces: the agent must not have been created.
-	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "agent", name, "--all-tags", "--registry-url", regURL)
-	})
-	verifyAgentNotFound(t, regURL, name, "latest")
 }
 
 // TestTagging_DeleteSemantics covers the delete-then-reapply flow against

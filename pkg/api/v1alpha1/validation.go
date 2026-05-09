@@ -115,10 +115,6 @@ var tagRegex = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$`)
 // Taggable artifact kinds and mutable object kinds call this same validator
 // because ObjectMeta exposes one public shape for both identities.
 func ValidateObjectMeta(m ObjectMeta) FieldErrors {
-	return validateObjectMetaCommon(m)
-}
-
-func validateObjectMetaCommon(m ObjectMeta) FieldErrors {
 	var errs FieldErrors
 
 	switch {

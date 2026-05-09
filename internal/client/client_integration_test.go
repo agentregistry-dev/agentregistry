@@ -43,8 +43,7 @@ func TestClient_V1Alpha1RoundTrip(t *testing.T) {
 	c := client.NewClient(ts.URL, "")
 	ctx := context.Background()
 
-	// Apply a single-doc YAML → creates the Agent. metadata.version is rejected
-	// on input; omitted metadata.tag defaults to the literal "latest" tag.
+	// Apply a single-doc YAML → creates the Agent. metadata.tag defaults to the literal "latest" tag.
 	yamlBody := []byte(`
 apiVersion: ar.dev/v1alpha1
 kind: Agent

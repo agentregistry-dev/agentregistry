@@ -135,7 +135,7 @@ Supported languages:  python (for adk)`,
 				// scaffolded source (e.g. as a runtime-advertised string in
 				// generated code). It is intentionally NOT written into
 				// agent.yaml's metadata.version — that field is not part of
-				// the public v1alpha1 contract and the decoder rejects it.
+				// the public v1alpha1 contract.
 				Version:               "0.1.0",
 				Description:           initDescription,
 				Image:                 image,
@@ -386,7 +386,7 @@ Supported frameworks: fastmcp-python, mcp-go`,
 				// scaffolded source (e.g. the mcp-go server's advertised
 				// Implementation.Version). It is intentionally NOT written
 				// into mcp.yaml's metadata.version — that field is not part
-				// of the public v1alpha1 contract and the decoder rejects it.
+				// of the public v1alpha1 contract.
 				Version:     "0.1.0",
 				Description: initDescription,
 				Directory:   projectDir,

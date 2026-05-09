@@ -111,10 +111,6 @@ func (s *Scheme) Lookup(kind string) (reflect.Type, func() any, bool) {
 // (*Agent, *MCPServer, etc.) routed by its kind field. Unknown kinds return
 // an error. Input may be YAML or JSON — detection is delegated to sigs.k8s.io/yaml.
 func (s *Scheme) Decode(data []byte) (any, error) {
-	if err := rejectSystemMetadata(data); err != nil {
-		return nil, err
-	}
-
 	var raw RawObject
 	if err := yaml.Unmarshal(data, &raw); err != nil {
 		return nil, fmt.Errorf("v1alpha1: decode envelope: %w", err)
@@ -158,28 +154,6 @@ func IsTaggedArtifactKind(kind string) bool {
 	default:
 		return false
 	}
-}
-
-// rejectSystemMetadata fails the decode when a manifest sets fields that are
-// not part of the public v1alpha1 contract. Users may choose metadata.tag for
-// taggable artifacts; metadata.version and metadata.generation are not public
-// identity fields.
-func rejectSystemMetadata(data []byte) error {
-	var raw struct {
-		Kind     string         `yaml:"kind" json:"kind"`
-		Metadata map[string]any `yaml:"metadata" json:"metadata"`
-	}
-	if err := yaml.Unmarshal(data, &raw); err != nil {
-		// Defer the real parse error to the typed unmarshal below.
-		return nil
-	}
-	if _, ok := raw.Metadata["version"]; ok {
-		return errors.New("v1alpha1: metadata.version is not part of the public v1alpha1 contract; use metadata.tag only for taggable artifacts")
-	}
-	if _, ok := raw.Metadata["generation"]; ok {
-		return errors.New("v1alpha1: metadata.generation is system-managed; remove it from your manifest")
-	}
-	return nil
 }
 
 // DecodeMulti parses a YAML stream (possibly containing multiple `---`-
