@@ -86,7 +86,7 @@ metadata:
   namespace: default
   name: alice
   labels:
-    team: type
+    team: platform
 spec:
   title: Alice
   source:
@@ -107,7 +107,7 @@ spec:
 	require.Equal(t, "alice", gotAgent.Metadata.Name)
 	require.Equal(t, v1alpha1store.DefaultTag(), gotAgent.Metadata.Tag)
 	require.Equal(t, "Alice", gotAgent.Spec.Title)
-	require.Equal(t, "type", gotAgent.Metadata.Labels["team"])
+	require.Equal(t, "platform", gotAgent.Metadata.Labels["team"])
 
 	// GET latest.
 	resp = api.Get("/v0/agents/alice")
