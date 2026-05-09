@@ -55,8 +55,8 @@ func TestK8sV1Alpha1Apply_MCPServerTarget_CreatesResource(t *testing.T) {
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindDeployment},
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-kube"},
 		Spec: v1alpha1.DeploymentSpec{
-			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindRemoteMCPServer, Name: "weather", Version: "1.0.0"},
-			ProviderRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindProvider, Name: "kube-local", Version: "1"},
+			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindRemoteMCPServer, Name: "weather", Tag: "1.0.0"},
+			ProviderRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindProvider, Name: "kube-local"},
 			DesiredState: v1alpha1.DesiredStateDeployed,
 		},
 	}

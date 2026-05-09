@@ -2,6 +2,8 @@ package v1alpha1
 
 import (
 	"encoding/json"
+	"errors"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -19,11 +21,6 @@ type ResourceRef struct {
 	Namespace string `json:"namespace,omitempty" yaml:"namespace,omitempty"`
 	Name      string `json:"name" yaml:"name"`
 	Tag       string `json:"tag,omitempty" yaml:"tag,omitempty"`
-
-	// Version is a deprecated input alias retained for in-process callers and
-	// old manifests. It is normalized to Tag while decoding and is never
-	// emitted on the wire.
-	Version string `json:"-" yaml:"-"`
 }
 
 type resourceRefWire struct {
@@ -31,8 +28,9 @@ type resourceRefWire struct {
 	Namespace string `json:"namespace,omitempty" yaml:"namespace,omitempty"`
 	Name      string `json:"name" yaml:"name"`
 	Tag       string `json:"tag,omitempty" yaml:"tag,omitempty"`
-	Version   string `json:"version,omitempty" yaml:"version,omitempty"`
 }
+
+var errDeprecatedResourceRefVersion = errors.New("version is deprecated; use tag")
 
 // MarshalJSON emits the canonical v1alpha1 reference shape and never writes
 // the deprecated version alias.
@@ -56,36 +54,48 @@ func (r ResourceRef) MarshalYAML() (any, error) {
 	}, nil
 }
 
-// UnmarshalJSON accepts the deprecated version alias at the public boundary
-// and normalizes it immediately to Tag. Validation later decides whether the
-// referenced kind is allowed to use a tag.
+// UnmarshalJSON rejects the deprecated version alias instead of silently
+// ignoring it.
 func (r *ResourceRef) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	for key := range raw {
+		if strings.EqualFold(key, "version") {
+			return errDeprecatedResourceRefVersion
+		}
+	}
+
 	var w resourceRefWire
 	if err := json.Unmarshal(data, &w); err != nil {
 		return err
 	}
-	r.applyWire(w)
-	return nil
-}
-
-// UnmarshalYAML accepts the deprecated version alias at the manifest boundary
-// and normalizes it immediately to Tag.
-func (r *ResourceRef) UnmarshalYAML(value *yaml.Node) error {
-	var w resourceRefWire
-	if err := value.Decode(&w); err != nil {
-		return err
-	}
-	r.applyWire(w)
-	return nil
-}
-
-func (r *ResourceRef) applyWire(w resourceRefWire) {
 	r.Kind = w.Kind
 	r.Namespace = w.Namespace
 	r.Name = w.Name
 	r.Tag = w.Tag
-	if r.Tag == "" {
-		r.Tag = w.Version
+	return nil
+}
+
+// UnmarshalYAML rejects the deprecated version alias instead of silently
+// ignoring it.
+func (r *ResourceRef) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.MappingNode {
+		for i := 0; i+1 < len(value.Content); i += 2 {
+			if strings.EqualFold(value.Content[i].Value, "version") {
+				return errDeprecatedResourceRefVersion
+			}
+		}
 	}
-	r.Version = ""
+
+	var w resourceRefWire
+	if err := value.Decode(&w); err != nil {
+		return err
+	}
+	r.Kind = w.Kind
+	r.Namespace = w.Namespace
+	r.Name = w.Name
+	r.Tag = w.Tag
+	return nil
 }

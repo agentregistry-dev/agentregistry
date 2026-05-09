@@ -45,7 +45,7 @@ spec:
   mcpServers:
     - kind: MCPServer
       name: github-tools
-      version: "0.2"
+      tag: "0.2"
   skills:
     - kind: Skill
       name: code-review
@@ -123,7 +123,7 @@ spec:
   targetRef:
     kind: Agent
     name: summarizer
-    version: "1.0.0"
+    tag: "1.0.0"
   providerRef:
     kind: Provider
     name: local

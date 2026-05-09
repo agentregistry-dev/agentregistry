@@ -31,8 +31,8 @@ func NewResolver(stores map[string]*v1alpha1store.Store) v1alpha1.ResolverFunc {
 			} else {
 				_, err = store.GetLatest(ctx, ref.Namespace, ref.Name)
 			}
-		} else if ref.Tag != "" || ref.Version != "" {
-			err = fmt.Errorf("%w: kind %q does not support tag/version pinning", v1alpha1.ErrInvalidRef, ref.Kind)
+		} else if ref.Tag != "" {
+			err = fmt.Errorf("%w: kind %q does not support tag pinning", v1alpha1.ErrInvalidRef, ref.Kind)
 		} else {
 			_, err = store.GetLatest(ctx, ref.Namespace, ref.Name)
 		}
@@ -70,8 +70,8 @@ func NewGetter(stores map[string]*v1alpha1store.Store) v1alpha1.GetterFunc {
 			} else {
 				raw, err = store.GetLatest(ctx, ref.Namespace, ref.Name)
 			}
-		} else if ref.Tag != "" || ref.Version != "" {
-			err = fmt.Errorf("%w: kind %q does not support tag/version pinning", v1alpha1.ErrInvalidRef, ref.Kind)
+		} else if ref.Tag != "" {
+			err = fmt.Errorf("%w: kind %q does not support tag pinning", v1alpha1.ErrInvalidRef, ref.Kind)
 		} else {
 			raw, err = store.GetLatest(ctx, ref.Namespace, ref.Name)
 		}

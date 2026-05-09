@@ -123,7 +123,7 @@ func TestSpecToPlatformAgent_ResolvesMCPServerRefs(t *testing.T) {
 		ModelProvider: "openai",
 		ModelName:     "gpt-4o",
 		MCPServers: []v1alpha1.ResourceRef{
-			{Kind: v1alpha1.KindMCPServer, Name: "tools", Version: "1.0.0"},
+			{Kind: v1alpha1.KindMCPServer, Name: "tools", Tag: "1.0.0"},
 		},
 	}
 
@@ -191,7 +191,7 @@ func TestSpecToPlatformAgent_ResolvesRemoteMCPServerHeaders(t *testing.T) {
 		v1alpha1.ObjectMeta{Namespace: "default", Name: "alice", Tag: "1.0.0"},
 		v1alpha1.AgentSpec{
 			MCPServers: []v1alpha1.ResourceRef{
-				{Kind: v1alpha1.KindRemoteMCPServer, Name: "remote-tools", Version: "1.0.0"},
+				{Kind: v1alpha1.KindRemoteMCPServer, Name: "remote-tools", Tag: "1.0.0"},
 			},
 		},
 		AgentTranslateOpts{
@@ -251,7 +251,7 @@ func TestSpecToPlatformAgent_DanglingRefPropagates(t *testing.T) {
 	agentMeta := v1alpha1.ObjectMeta{Namespace: "default", Name: "alice", Tag: "1.0.0"}
 	agentSpec := v1alpha1.AgentSpec{
 		MCPServers: []v1alpha1.ResourceRef{
-			{Kind: v1alpha1.KindMCPServer, Name: "missing", Version: "1.0.0"},
+			{Kind: v1alpha1.KindMCPServer, Name: "missing", Tag: "1.0.0"},
 		},
 	}
 	_, _, err := SpecToPlatformAgent(context.Background(), agentMeta, agentSpec, AgentTranslateOpts{Getter: getter})

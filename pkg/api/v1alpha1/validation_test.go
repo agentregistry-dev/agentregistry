@@ -134,8 +134,8 @@ func TestAgentResolveRefs_ReportsDangling(t *testing.T) {
 		Metadata: ObjectMeta{Namespace: "default", Name: "a", Tag: "v1"},
 		Spec: AgentSpec{
 			MCPServers: []ResourceRef{
-				{Kind: KindMCPServer, Name: "tools", Version: "v1"},
-				{Kind: KindMCPServer, Name: "missing", Version: "v1"},
+				{Kind: KindMCPServer, Name: "tools", Tag: "v1"},
+				{Kind: KindMCPServer, Name: "missing", Tag: "v1"},
 			},
 		},
 	}
@@ -155,9 +155,9 @@ func TestAgentResolveRefs_InheritsNamespace(t *testing.T) {
 		Spec: AgentSpec{
 			MCPServers: []ResourceRef{
 				// blank namespace should inherit Agent's "team-a"
-				{Kind: KindMCPServer, Name: "local-tools", Version: "v1"},
+				{Kind: KindMCPServer, Name: "local-tools", Tag: "v1"},
 				// explicit namespace sticks
-				{Kind: KindMCPServer, Namespace: "shared", Name: "common", Version: "v1"},
+				{Kind: KindMCPServer, Namespace: "shared", Name: "common", Tag: "v1"},
 			},
 		},
 	}

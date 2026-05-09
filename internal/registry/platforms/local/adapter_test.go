@@ -48,8 +48,8 @@ func TestV1Alpha1Apply_MCPServerTarget_WritesComposeAndMarksProgressing(t *testi
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindDeployment},
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-local"},
 		Spec: v1alpha1.DeploymentSpec{
-			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Version: "1.0.0"},
-			ProviderRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindProvider, Name: "local", Version: "1"},
+			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Tag: "1.0.0"},
+			ProviderRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindProvider, Name: "local"},
 			DesiredState: v1alpha1.DesiredStateDeployed,
 		},
 	}

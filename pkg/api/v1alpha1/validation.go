@@ -223,9 +223,6 @@ func validateRef(r ResourceRef, allowedKinds ...string) FieldErrors {
 	} else if !nameRegex.MatchString(r.Name) {
 		errs.Append("name", fmt.Errorf("%w: %q", ErrInvalidFormat, r.Name))
 	}
-	if r.Version != "" {
-		errs.Append("version", fmt.Errorf("%w: version is deprecated; use tag for taggable artifacts", ErrInvalidRef))
-	}
 	// Tag is optional on content refs — blank means "resolve to latest".
 	if r.Tag != "" {
 		if !IsTaggedArtifactKind(r.Kind) {
