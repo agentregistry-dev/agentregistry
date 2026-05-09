@@ -159,7 +159,7 @@ type UpsertResult struct {
 
 // UpsertOpts customizes create-time behavior for Store.Upsert.
 type UpsertOpts struct {
-	// InitialFinalizers is applied only on the create path for legacy mutable
+	// InitialFinalizers is applied only on the create path for mutable-object
 	// stores. Updates preserve existing finalizers.
 	InitialFinalizers []string
 }

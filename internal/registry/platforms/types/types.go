@@ -24,7 +24,7 @@ type ResolvedAgentConfig struct {
 
 type Agent struct {
 	Name               string                    `json:"name"`
-	Version            string                    `json:"version"`
+	Tag                string                    `json:"tag"`
 	DeploymentID       string                    `json:"deploymentId,omitempty"`
 	Deployment         AgentDeployment           `json:"deployment"`
 	ResolvedMCPServers []ResolvedMCPServerConfig `json:"resolvedMCPServers,omitempty"`

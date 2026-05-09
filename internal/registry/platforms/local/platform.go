@@ -362,8 +362,8 @@ func translateLocalAgentToServiceConfig(platformDir string, agent *platformtypes
 	}
 
 	var agentConfigDir string
-	if agent.Version != "" {
-		sanitizedVersion := utils.SanitizeVersion(agent.Version)
+	if agent.Tag != "" {
+		sanitizedVersion := utils.SanitizeVersion(agent.Tag)
 		agentConfigDir = filepath.Join(platformDir, agent.Name, sanitizedVersion)
 	} else {
 		agentConfigDir = filepath.Join(platformDir, agent.Name)

@@ -360,7 +360,7 @@ func kubernetesTranslateAgent(agent *platformtypes.Agent) (*v1alpha2.Agent, erro
 	// MCP server config is now injected via MCP_SERVERS_CONFIG env var (set by ResolveAgent).
 	// ConfigMap volume mount is only needed for prompts.json.
 	if len(agent.ResolvedPrompts) > 0 {
-		configMapName := kubernetesAgentConfigMapName(agent.Name, agent.Version, agent.DeploymentID)
+		configMapName := kubernetesAgentConfigMapName(agent.Name, agent.Tag, agent.DeploymentID)
 		volumeName := "agent-config"
 		items := []corev1.KeyToPath{
 			{Key: "prompts.json", Path: "prompts.json"},
@@ -402,7 +402,7 @@ func kubernetesTranslateAgent(agent *platformtypes.Agent) (*v1alpha2.Agent, erro
 	return &v1alpha2.Agent{
 		TypeMeta: metav1.TypeMeta{APIVersion: "kagent.dev/v1alpha2", Kind: "Agent"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        kubernetesAgentResourceName(agent.Name, agent.Version, agent.DeploymentID),
+			Name:        kubernetesAgentResourceName(agent.Name, agent.Tag, agent.DeploymentID),
 			Namespace:   namespace,
 			Labels:      kubernetesDeploymentManagedLabels(agent.DeploymentID),
 			Annotations: kubernetesDeploymentManagedAnnotations(agent.DeploymentID),
@@ -568,7 +568,7 @@ func kubernetesTranslateAgentConfigMap(agent *platformtypes.Agent) (*corev1.Conf
 		data["prompts.json"] = string(promptsJSON)
 	}
 
-	configMapName := kubernetesAgentConfigMapName(agent.Name, agent.Version, agent.DeploymentID)
+	configMapName := kubernetesAgentConfigMapName(agent.Name, agent.Tag, agent.DeploymentID)
 	labels := map[string]string{
 		"app.kubernetes.io/managed-by": "agentregistry",
 		"app.kubernetes.io/component":  "agent-config",

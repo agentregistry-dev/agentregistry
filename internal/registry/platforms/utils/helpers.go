@@ -218,7 +218,7 @@ func SpecToPlatformAgent(
 	}
 	agent := &platformtypes.Agent{
 		Name:         agentMeta.Name,
-		Version:      agentMeta.Tag,
+		Tag:          agentMeta.Tag,
 		DeploymentID: opts.DeploymentID,
 		Deployment: platformtypes.AgentDeployment{
 			Image: image,

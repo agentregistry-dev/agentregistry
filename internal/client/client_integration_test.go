@@ -90,8 +90,8 @@ spec:
 	require.Len(t, items, 1)
 
 	// Delete → finalizer-free Agent hard-deletes immediately. Both
-	// GetLatest and the exact-version Get return ErrNotFound; the row
-	// is gone, not soft-deleted.
+	// GetLatest and the exact-tag Get return ErrNotFound; the row is
+	// gone, not soft-deleted.
 	require.NoError(t, c.Delete(ctx, v1alpha1.KindAgent, "default", "acme/planner", "latest"))
 
 	_, err = c.Get(ctx, v1alpha1.KindAgent, "default", "acme/planner", "latest")

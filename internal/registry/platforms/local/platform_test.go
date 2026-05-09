@@ -12,7 +12,7 @@ func TestBuildLocalPlatformConfig_UsesDefaultAgentPortInGatewayRoute(t *testing.
 	cfg, err := BuildLocalPlatformConfig(context.Background(), "/tmp/test-platform", 8081, "test-project", &platformtypes.DesiredState{
 		Agents: []*platformtypes.Agent{{
 			Name:       "demo-agent",
-			Version:    "1.0.0",
+			Tag:        "1.0.0",
 			Deployment: platformtypes.AgentDeployment{Image: "demo-agent:latest"},
 		}},
 	})

@@ -693,12 +693,12 @@ func runList[T v1alpha1.Object](
 
 // mapNotFound converts a pkgdb.ErrNotFound error into a Huma 404 with a
 // consistent message. Other errors fall through as 500.
-func mapNotFound(err error, kind, namespace, name, version string) error {
+func mapNotFound(err error, kind, namespace, name, identity string) error {
 	if errors.Is(err, pkgdb.ErrNotFound) {
-		if version == "" {
+		if identity == "" {
 			return huma.Error404NotFound(fmt.Sprintf("%s %q/%q not found", kind, namespace, name))
 		}
-		return huma.Error404NotFound(fmt.Sprintf("%s %q/%q@%q not found", kind, namespace, name, version))
+		return huma.Error404NotFound(fmt.Sprintf("%s %q/%q@%q not found", kind, namespace, name, identity))
 	}
 	return huma.Error500InternalServerError("fetch "+kind, err)
 }

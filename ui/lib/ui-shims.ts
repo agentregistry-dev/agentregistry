@@ -101,14 +101,14 @@ export interface PromptResponse {
 // strips "default" — fall back to "default" so legacy renderers keep
 // composing display IDs the same way.
 function inner<Spec extends object>(
-  meta: { name: string; namespace?: string; tag?: string; version?: string; annotations?: Record<string, string>; createdAt?: string },
+  meta: { name: string; namespace?: string; tag?: string; annotations?: Record<string, string>; createdAt?: string },
   spec: Spec,
 ): LegacyInner<Spec> {
   return {
     ...spec,
     name: meta.name,
     namespace: meta.namespace ?? "default",
-    version: meta.tag ?? meta.version ?? "",
+    version: meta.tag ?? "",
     publishedAt: meta.createdAt,
     _meta: meta.annotations ?? {},
   } as LegacyInner<Spec>

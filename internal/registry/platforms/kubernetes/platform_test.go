@@ -22,8 +22,8 @@ func TestKubernetesTranslatePlatformConfig_AgentOnly(t *testing.T) {
 
 	desired := &platformtypes.DesiredState{
 		Agents: []*platformtypes.Agent{{
-			Name:    "test-agent",
-			Version: "v1",
+			Name: "test-agent",
+			Tag:  "v1",
 			Deployment: platformtypes.AgentDeployment{
 				Image: "agent-image:latest",
 				Env:   map[string]string{"ENV_VAR": "value"},
@@ -129,8 +129,8 @@ func TestKubernetesTranslatePlatformConfig_AgentWithMCPServers(t *testing.T) {
 	// so the K8s translation layer should not create a ConfigMap for MCP-server-only agents.
 	desired := &platformtypes.DesiredState{
 		Agents: []*platformtypes.Agent{{
-			Name:    "test-agent",
-			Version: "v1",
+			Name: "test-agent",
+			Tag:  "v1",
 			Deployment: platformtypes.AgentDeployment{
 				Image: "agent-image:latest",
 				Env: map[string]string{
@@ -212,8 +212,8 @@ func TestKubernetesTranslatePlatformConfig_NamespaceConsistency(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			desired := &platformtypes.DesiredState{
 				Agents: []*platformtypes.Agent{{
-					Name:    "test-agent",
-					Version: "v1",
+					Name: "test-agent",
+					Tag:  "v1",
 					Deployment: platformtypes.AgentDeployment{
 						Image: "agent-image:latest",
 						Env:   tt.agentEnv,
@@ -287,7 +287,7 @@ func TestKubernetesTranslatePlatformConfig_DeploymentIDMetadataAndNaming(t *test
 	desired := &platformtypes.DesiredState{
 		Agents: []*platformtypes.Agent{{
 			Name:         "demo-agent",
-			Version:      "1.0.0",
+			Tag:          "1.0.0",
 			DeploymentID: "dep-agent-123",
 			Deployment: platformtypes.AgentDeployment{
 				Image: "agent-image:latest",
@@ -373,8 +373,8 @@ func TestKubernetesTranslatePlatformConfig_AgentWithSkills(t *testing.T) {
 
 	desired := &platformtypes.DesiredState{
 		Agents: []*platformtypes.Agent{{
-			Name:    "skilled-agent",
-			Version: "v1",
+			Name: "skilled-agent",
+			Tag:  "v1",
 			Deployment: platformtypes.AgentDeployment{
 				Image: "agent-image:latest",
 				Env:   map[string]string{},
@@ -400,8 +400,8 @@ func TestKubernetesTranslatePlatformConfig_AgentWithPromptsOnly(t *testing.T) {
 
 	desired := &platformtypes.DesiredState{
 		Agents: []*platformtypes.Agent{{
-			Name:    "prompt-agent",
-			Version: "v1",
+			Name: "prompt-agent",
+			Tag:  "v1",
 			Deployment: platformtypes.AgentDeployment{
 				Image: "agent-image:latest",
 				Env:   map[string]string{"KAGENT_NAMESPACE": "test-ns"},
@@ -452,8 +452,8 @@ func TestKubernetesTranslatePlatformConfig_AgentWithMCPServersAndPrompts(t *test
 	// ConfigMap and volume mounts are only used for prompts.
 	desired := &platformtypes.DesiredState{
 		Agents: []*platformtypes.Agent{{
-			Name:    "full-agent",
-			Version: "v1",
+			Name: "full-agent",
+			Tag:  "v1",
 			Deployment: platformtypes.AgentDeployment{
 				Image: "agent-image:latest",
 				Env: map[string]string{

@@ -134,6 +134,6 @@ function RemoteRow({ type, url }: { type?: string; url?: string }) {
   )
 }
 
-function cardKey(meta: { namespace?: string; name: string; version?: string }): string {
-  return `${meta.namespace ?? "default"}/${meta.name}@${meta.version ?? ""}`
+function cardKey(meta: { namespace?: string; name: string; tag?: string }): string {
+  return `${meta.namespace ?? "default"}/${meta.name}@${meta.tag ?? ""}`
 }

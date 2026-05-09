@@ -39,9 +39,11 @@ type Stores = map[string]*v1alpha1store.Store
 // than silently no-op'ing — a misconfigured boot fails loud.
 type RouteOptions struct {
 	// Stores is the per-kind v1alpha1store map that drives the
-	// generic CRUD handlers at `/v0/{plural}/{name}/{version}?namespace={ns}`
-	// (namespace is a query param defaulting to "default";
-	// `?namespace=all` widens list scope across every namespace).
+	// generic CRUD handlers. Tagged artifacts expose
+	// `/v0/{plural}/{name}/{tag}?namespace={ns}`; mutable objects expose
+	// `/v0/{plural}/{name}?namespace={ns}`. Namespace defaults to
+	// "default"; `?namespace=all` widens list scope across every
+	// namespace.
 	// REQUIRED — RegisterRoutes errors when this is nil/empty.
 	Stores Stores
 
@@ -135,11 +137,13 @@ func RegisterRoutes(
 }
 
 // registerKindRoutes wires the generic resource handler for every
-// built-in kind at `{basePrefix}/{plural}/{name}/{version}` (with
-// namespace as a `?namespace={ns}` query param, default "default";
-// `?namespace=all` on list widens scope across every namespace), plus
-// the multi-doc apply endpoint at `{basePrefix}/apply`. Cross-kind ResourceRef
-// existence dispatches through the shared
+// built-in kind. Tagged artifacts use
+// `{basePrefix}/{plural}/{name}/{tag}`; mutable objects use
+// `{basePrefix}/{plural}/{name}`. Namespace is a `?namespace={ns}`
+// query param defaulting to "default"; `?namespace=all` on list
+// widens scope across every namespace. The multi-doc apply endpoint
+// lives at `{basePrefix}/apply`. Cross-kind ResourceRef existence
+// dispatches through the shared
 // internaldb.NewResolver so the router and any server-side
 // Importer both see the same ref-existence semantics.
 //

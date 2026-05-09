@@ -78,8 +78,7 @@ func agentTag(t *testing.T, regURL, tmpDir, name string, args ...string) string 
 }
 
 // agentTagCount runs `arctl get agent <name> --all-tags -o json` and
-// returns the number of tag rows returned. --all-tags is kept here as the
-// backward-compatible alias for --all-tags.
+// returns the number of tag rows returned.
 func agentTagCount(t *testing.T, regURL, tmpDir, name string) int {
 	t.Helper()
 	result := RunArctl(t, tmpDir, "get", "agent", name,
@@ -92,12 +91,12 @@ func agentTagCount(t *testing.T, regURL, tmpDir, name string) int {
 	return len(arr)
 }
 
-// TestVersioning_ApplyAndIdempotency verifies the core tagged-resource
+// TestTagging_ApplyAndIdempotency verifies the core tagged-resource
 // contract on the apply path:
 //   - first blank-tag apply lands as the literal latest tag
 //   - re-applying the identical spec is a no-op
 //   - applying changed content replaces the same latest row
-func TestVersioning_ApplyAndIdempotency(t *testing.T) {
+func TestTagging_ApplyAndIdempotency(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 
@@ -135,10 +134,10 @@ func TestVersioning_ApplyAndIdempotency(t *testing.T) {
 	}
 }
 
-// TestVersioning_MetadataVersionRejected pipes a manifest with
+// TestTagging_MetadataVersionRejected pipes a manifest with
 // metadata.version set into `arctl apply -f -` and asserts the CLI rejects
 // the legacy public field through the v1alpha1 decoder.
-func TestVersioning_MetadataVersionRejected(t *testing.T) {
+func TestTagging_MetadataVersionRejected(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 	name := UniqueAgentName("vermetav")
@@ -186,13 +185,13 @@ spec:
 	verifyAgentNotFound(t, regURL, name, "latest")
 }
 
-// TestVersioning_DeleteSemantics covers the delete-then-reapply flow against
+// TestTagging_DeleteSemantics covers the delete-then-reapply flow against
 // the tag contract:
 //   - apply an explicit stable tag plus default latest
 //   - delete without a tag -> removes only latest; stable remains
 //   - delete --all-tags -> removes every tag; name is freed
 //   - re-apply -> latest is created again
-func TestVersioning_DeleteSemantics(t *testing.T) {
+func TestTagging_DeleteSemantics(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 	name := UniqueAgentName("verdelete")
