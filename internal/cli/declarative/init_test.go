@@ -49,9 +49,7 @@ func TestInitAgentCmd_BasicScaffold(t *testing.T) {
 	metadata, ok := m["metadata"].(map[string]any)
 	require.True(t, ok, "metadata should be a map")
 	assert.Equal(t, "myagent", metadata["name"])
-	// Content resources use metadata.tag, so metadata.version must NOT
-	// appear in init output.
-	assert.NotContains(t, metadata, "version", "init output must omit metadata.version")
+	assert.NotContains(t, metadata, "version", "init output must keep identity on the tag contract")
 
 	spec, ok := m["spec"].(map[string]any)
 	require.True(t, ok, "spec should be a map")
@@ -84,8 +82,7 @@ func TestInitAgentCmd_CustomFlags(t *testing.T) {
 
 	m := readAgentYAML(t, tmpDir, "mybot")
 	metadata := m["metadata"].(map[string]any)
-	// Content resources use metadata.tag; metadata.version must never appear in init output.
-	assert.NotContains(t, metadata, "version", "init output must omit metadata.version")
+	assert.NotContains(t, metadata, "version", "init output must keep identity on the tag contract")
 
 	spec := m["spec"].(map[string]any)
 	assert.Equal(t, "openai", spec["modelProvider"])
@@ -315,8 +312,7 @@ func TestInitMCPCmd_BasicScaffold(t *testing.T) {
 
 	metadata := m["metadata"].(map[string]any)
 	assert.Equal(t, "myorg/myserver", metadata["name"])
-	// Content resources use metadata.tag; metadata.version must NOT appear in init output.
-	assert.NotContains(t, metadata, "version", "init output must omit metadata.version")
+	assert.NotContains(t, metadata, "version", "init output must keep identity on the tag contract")
 
 	spec := m["spec"].(map[string]any)
 	assert.Equal(t, "myserver", spec["title"])
@@ -347,8 +343,7 @@ func TestInitMCPCmd_CustomFlags(t *testing.T) {
 	m := readYAMLFile(t, filepath.Join(tmpDir, "myserver", "mcp.yaml"))
 	metadata := m["metadata"].(map[string]any)
 	assert.Equal(t, "myorg/myserver", metadata["name"])
-	// Content resources use metadata.tag; metadata.version must never appear in init output.
-	assert.NotContains(t, metadata, "version", "init output must omit metadata.version")
+	assert.NotContains(t, metadata, "version", "init output must keep identity on the tag contract")
 
 	spec := m["spec"].(map[string]any)
 	assert.Equal(t, "My weather server", spec["description"])
@@ -431,8 +426,7 @@ func TestInitSkillCmd_BasicScaffold(t *testing.T) {
 
 	metadata := m["metadata"].(map[string]any)
 	assert.Equal(t, "myskill", metadata["name"])
-	// Content resources use metadata.tag; metadata.version must NOT appear in init output.
-	assert.NotContains(t, metadata, "version", "init output must omit metadata.version")
+	assert.NotContains(t, metadata, "version", "init output must keep identity on the tag contract")
 
 	spec := m["spec"].(map[string]any)
 	assert.Equal(t, "myskill", spec["title"])
@@ -455,8 +449,7 @@ func TestInitSkillCmd_CustomFlags(t *testing.T) {
 
 	m := readYAMLFile(t, filepath.Join(tmpDir, "myskill", "skill.yaml"))
 	metadata := m["metadata"].(map[string]any)
-	// Content resources use metadata.tag; metadata.version must never appear in init output.
-	assert.NotContains(t, metadata, "version", "init output must omit metadata.version")
+	assert.NotContains(t, metadata, "version", "init output must keep identity on the tag contract")
 
 	spec := m["spec"].(map[string]any)
 	assert.Equal(t, "Text summarizer", spec["description"])
@@ -499,8 +492,7 @@ func TestInitPromptCmd_BasicScaffold(t *testing.T) {
 
 	metadata := m["metadata"].(map[string]any)
 	assert.Equal(t, "myprompt", metadata["name"])
-	// Content resources use metadata.tag; metadata.version must NOT appear in init output.
-	assert.NotContains(t, metadata, "version", "init output must omit metadata.version")
+	assert.NotContains(t, metadata, "version", "init output must keep identity on the tag contract")
 
 	spec := m["spec"].(map[string]any)
 	assert.NotEmpty(t, spec["content"])
@@ -524,8 +516,7 @@ func TestInitPromptCmd_CustomContent(t *testing.T) {
 
 	m := readYAMLFile(t, filepath.Join(tmpDir, "summarizer.yaml"))
 	metadata := m["metadata"].(map[string]any)
-	// Content resources use metadata.tag; metadata.version must never appear in init output.
-	assert.NotContains(t, metadata, "version", "init output must omit metadata.version")
+	assert.NotContains(t, metadata, "version", "init output must keep identity on the tag contract")
 
 	spec := m["spec"].(map[string]any)
 	assert.Equal(t, "Summarize text", spec["description"])
@@ -555,9 +546,7 @@ func TestInitPromptCmd_WritesFileNotDirectory(t *testing.T) {
 // ---- decoder round-trip ----
 
 // TestInit_GeneratedYAMLDecodesCleanly verifies that every kind produced by
-// arctl init can be re-read by the v1alpha1 decoder without error. Content
-// manifests must not pre-set metadata.version, so this test guards the obvious
-// user flow:
+// arctl init can be re-read by the v1alpha1 decoder without error:
 //
 //	arctl init <type> <name> -> arctl apply -f <name>/<type>.yaml
 func TestInit_GeneratedYAMLDecodesCleanly(t *testing.T) {
@@ -610,7 +599,7 @@ func TestInit_GeneratedYAMLDecodesCleanly(t *testing.T) {
 			require.NoError(t, err, "generated YAML should exist")
 			// Generated manifests should stay on the tag contract and decode cleanly.
 			obj, err := v1alpha1.Default.Decode(data)
-			require.NoError(t, err, "generated YAML must decode without error (init must not write system-managed metadata)")
+			require.NoError(t, err, "generated YAML must decode without error")
 			require.NotNil(t, obj)
 		})
 	}

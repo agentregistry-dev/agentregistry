@@ -24,7 +24,7 @@ export interface FlatDeployment {
   id: string
   namespace: string
   name: string
-  version: string
+  tag: string
   // Target (what's being deployed) — from spec.targetRef.
   serverName: string
   resourceType: "agent" | "mcp" | string
@@ -42,7 +42,7 @@ export interface FlatDeployment {
 export function toFlatDeployment(d: Deployment): FlatDeployment {
   const ns = d.metadata.namespace ?? "default"
   const name = d.metadata.name
-  const version = d.spec.targetRef.tag ?? "latest"
+  const tag = d.spec.targetRef.tag ?? "latest"
   const id = `${ns}/${name}`
 
   const targetName = d.spec.targetRef.name
@@ -57,7 +57,7 @@ export function toFlatDeployment(d: Deployment): FlatDeployment {
     id,
     namespace: ns,
     name,
-    version,
+    tag,
     serverName: targetName,
     resourceType,
     providerId: d.spec.providerRef.name,

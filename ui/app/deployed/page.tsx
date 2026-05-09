@@ -146,7 +146,7 @@ export default function DeployedPage() {
     if (filterStatus !== "all" && d.status !== filterStatus) return false
     if (searchQuery) {
       const q = searchQuery.toLowerCase()
-      if (!d.serverName.toLowerCase().includes(q) && !d.version.toLowerCase().includes(q)) return false
+      if (!d.serverName.toLowerCase().includes(q) && !d.tag.toLowerCase().includes(q)) return false
     }
     return true
   })
@@ -338,7 +338,7 @@ export default function DeployedPage() {
           <DialogHeader>
             <DialogTitle>Remove Deployment</DialogTitle>
             <DialogDescription>
-              Are you sure you want to remove <strong>{serverToRemove?.serverName}</strong> (version {serverToRemove?.version}) ({serverToRemove?.resourceType})?
+              Are you sure you want to remove <strong>{serverToRemove?.serverName}</strong> (tag {serverToRemove?.tag}) ({serverToRemove?.resourceType})?
               <br /><br />
               This will stop the server and remove it from your deployments. This action cannot be undone.
             </DialogDescription>
@@ -394,7 +394,7 @@ function DeploymentRow({ item, onRemove, removing, copiedAgentId, onCopyAgentUrl
           </div>
 
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground mt-1">
-            <span className="font-mono">{item.version}</span>
+            <span className="font-mono">{item.tag}</span>
             <span>{item.providerId || "local"}</span>
             <span>{item.origin}</span>
             <span className="flex items-center gap-1">

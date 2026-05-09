@@ -24,7 +24,7 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
   const [name, setName] = useState("")
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
-  const [version, setVersion] = useState("")
+  const [tag, setTag] = useState("latest")
   const [repositoryUrl, setRepositoryUrl] = useState("")
 
   // Schema collapsed to a single package per server.
@@ -36,7 +36,7 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
     setName("")
     setTitle("")
     setDescription("")
-    setVersion("")
+    setTag("latest")
     setRepositoryUrl("")
     setPkg(null)
   }
@@ -56,8 +56,8 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
         throw new Error("Server name must be in format 'namespace/name' (e.g., 'io.example/my-server')")
       }
       
-      if (!version.trim()) {
-        throw new Error("Version is required")
+      if (!tag.trim()) {
+        throw new Error("Tag is required")
       }
       if (!description.trim()) {
         throw new Error("Description is required")
@@ -68,7 +68,7 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
         $schema: schema.trim(),
         name: name.trim(),
         description: description.trim(),
-        version: version.trim(),
+        tag: tag.trim(),
       }
 
       if (title.trim()) {
@@ -164,12 +164,12 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="version">Version *</Label>
+              <Label htmlFor="tag">Tag *</Label>
               <Input
-                id="version"
-                placeholder="1.0.0"
-                value={version}
-                onChange={(e) => setVersion(e.target.value)}
+                id="tag"
+                placeholder="latest"
+                value={tag}
+                onChange={(e) => setTag(e.target.value)}
                 disabled={loading}
               />
             </div>
@@ -295,7 +295,7 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={loading || !name.trim() || !version.trim() || !description.trim()}
+            disabled={loading || !name.trim() || !tag.trim() || !description.trim()}
           >
             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Create Server
@@ -305,4 +305,3 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
     </Dialog>
   )
 }
-

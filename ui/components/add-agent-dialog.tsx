@@ -53,10 +53,10 @@ export function AddAgentDialog({ open, onOpenChange }: AddAgentDialogProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="version">Version</Label>
+            <Label htmlFor="tag">Tag</Label>
             <Input
-              id="version"
-              placeholder="1.0.0"
+              id="tag"
+              placeholder="latest"
               disabled
             />
           </div>
@@ -78,4 +78,3 @@ export function AddAgentDialog({ open, onOpenChange }: AddAgentDialogProps) {
     </Dialog>
   )
 }
-

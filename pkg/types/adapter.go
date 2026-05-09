@@ -173,13 +173,13 @@ type DiscoveryResult struct {
 	// TargetKind is the v1alpha1 Kind this workload looks like —
 	// Agent or MCPServer. Empty if the adapter can't infer.
 	TargetKind string
-	// Namespace, Name, Version identify the workload in the
+	// Namespace, Name, Tag identify the workload in the
 	// registry's naming scheme. Blank fields mean "unmanaged" —
 	// workload exists on the platform but has no corresponding
 	// Deployment row.
 	Namespace string
 	Name      string
-	Version   string
+	Tag       string
 	// ProviderMetadata mirrors what Apply writes so the caller can
 	// correlate this discovery with an existing Deployment's
 	// annotations.

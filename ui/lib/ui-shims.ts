@@ -57,7 +57,7 @@ type LegacyInner<Spec, Extras = object> = Spec & {
   // namespace is always populated by the adapter from ObjectMeta.namespace,
   // but test/stories mocks construct LegacyInner directly without it.
   namespace?: string
-  version: string
+  tag: string
   title?: string
   // $schema is a legacy ServerJson-only field; tolerated on the inner type so
   // fixtures can pin a schema URL without widening McpServerSpec.
@@ -108,7 +108,7 @@ function inner<Spec extends object>(
     ...spec,
     name: meta.name,
     namespace: meta.namespace ?? "default",
-    version: meta.tag ?? "",
+    tag: meta.tag ?? "",
     publishedAt: meta.createdAt,
     _meta: meta.annotations ?? {},
   } as LegacyInner<Spec>
@@ -209,31 +209,30 @@ export async function listPromptsV0(opts?: LegacyListOpts): Promise<{
 }
 
 // ----------------------------------------------------------------------------
-// Create-function shims. Legacy callers pass a flat `{name: "ns/name", version,
-// description, ...spec}` JSON. Treat that legacy version value as a tag, wrap
-// the spec in a K8s envelope, and apply the document through the shared
-// declarative endpoint.
+// Create-function shims. Legacy callers pass a flat `{name: "ns/name", tag,
+// description, ...spec}` JSON. Wrap the spec in a K8s envelope, and apply the
+// document through the shared declarative endpoint.
 // ----------------------------------------------------------------------------
 
 export interface ServerJson extends McpServerSpec {
   $schema?: string
   name: string
-  version: string
+  tag: string
 }
 
 export interface SkillJson extends SkillSpec {
   name: string
-  version: string
+  tag: string
 }
 
 export interface PromptJson extends PromptSpec {
   name: string
-  version: string
+  tag: string
 }
 
 export interface AgentJson extends AgentSpec {
   name: string
-  version: string
+  tag: string
 }
 
 interface LegacyCreateOpts<Body> {
@@ -250,8 +249,8 @@ function splitName(fullName: string): { namespace: string; name: string } {
   return { namespace: fullName.slice(0, idx), name: fullName.slice(idx + 1) }
 }
 
-function stripLegacy<T extends { name: string; version: string }>(body: T): object {
-  const { name: _n, version: _v, ...rest } = body as T & { $schema?: string }
+function stripLegacy<T extends { name: string; tag: string }>(body: T): object {
+  const { name: _n, tag: _t, ...rest } = body as T & { $schema?: string }
   delete (rest as { $schema?: string }).$schema
   return rest
 }
@@ -283,7 +282,7 @@ export async function createServerV0(opts: LegacyCreateOpts<ServerJson>): Promis
   const envelope: McpServer = {
     apiVersion: "ar.dev/v1alpha1",
     kind: "MCPServer",
-    metadata: { namespace, name, tag: opts.body.version },
+    metadata: { namespace, name, tag: opts.body.tag },
     spec,
   }
   await applySingleDoc(envelope)
@@ -298,7 +297,7 @@ export async function createSkillV0(opts: LegacyCreateOpts<SkillJson>): Promise<
   const envelope: Skill = {
     apiVersion: "ar.dev/v1alpha1",
     kind: "Skill",
-    metadata: { namespace, name, tag: opts.body.version },
+    metadata: { namespace, name, tag: opts.body.tag },
     spec,
   }
   await applySingleDoc(envelope)
@@ -313,7 +312,7 @@ export async function createPromptV0(opts: LegacyCreateOpts<PromptJson>): Promis
   const envelope: Prompt = {
     apiVersion: "ar.dev/v1alpha1",
     kind: "Prompt",
-    metadata: { namespace, name, tag: opts.body.version },
+    metadata: { namespace, name, tag: opts.body.tag },
     spec,
   }
   await applySingleDoc(envelope)
@@ -322,13 +321,13 @@ export async function createPromptV0(opts: LegacyCreateOpts<PromptJson>): Promis
 
 // ----------------------------------------------------------------------------
 // deployServer: legacy imperative deploy endpoint replaced by declarative
-// Deployment upsert. Legacy body fields: {serverName, version, env,
+// Deployment upsert. Legacy body fields: {serverName, tag, env,
 // providerId, resourceType}. Translate to a Deployment envelope.
 // ----------------------------------------------------------------------------
 
 export interface DeployServerBody {
   serverName: string
-  version: string
+  tag: string
   env?: Record<string, string>
   providerId: string
   resourceType?: "agent" | "mcp" | string
@@ -364,7 +363,7 @@ export async function deployServer(opts: { throwOnError?: true; body: DeployServ
       kind: "Deployment",
       metadata: { namespace, name: deploymentName },
       spec: {
-        targetRef: { kind, name, namespace, tag: opts.body.version },
+        targetRef: { kind, name, namespace, tag: opts.body.tag },
         providerRef: { kind: "Provider", name: opts.body.providerId, namespace },
         env: opts.body.env,
       },

@@ -49,26 +49,26 @@ import {
 
 // Grouped server type
 interface GroupedServer extends ServerResponse {
-  versionCount: number
-  allVersions: ServerResponse[]
+  tagCount: number
+  allTags: ServerResponse[]
 }
 
 // Grouped prompt type
 interface GroupedPrompt extends PromptResponse {
-  versionCount: number
-  allVersions: PromptResponse[]
+  tagCount: number
+  allTags: PromptResponse[]
 }
 
 // Grouped skill type
 interface GroupedSkill extends SkillResponse {
-  versionCount: number
-  allVersions: SkillResponse[]
+  tagCount: number
+  allTags: SkillResponse[]
 }
 
 // Grouped agent type
 interface GroupedAgent extends AgentResponse {
-  versionCount: number
-  allVersions: AgentResponse[]
+  tagCount: number
+  allTags: AgentResponse[]
 }
 
 type TabKey = "servers" | "skills" | "agents" | "prompts"
@@ -136,21 +136,21 @@ export default function AdminPage() {
       grouped.get(name)!.push(server)
     })
 
-    return Array.from(grouped.entries()).map(([, versions]) => {
-      const sortedVersions = [...versions].sort((a, b) => {
+    return Array.from(grouped.entries()).map(([, tags]) => {
+      const sortedTags = [...tags].sort((a, b) => {
         const dateA = getPublishedDate(a)
         const dateB = getPublishedDate(b)
         if (dateA && dateB) {
           return dateB.getTime() - dateA.getTime()
         }
-        return b.server.version.localeCompare(a.server.version)
+        return b.server.tag.localeCompare(a.server.tag)
       })
 
-      const latestVersion = sortedVersions[0]
+      const latestTag = sortedTags[0]
       return {
-        ...latestVersion,
-        versionCount: versions.length,
-        allVersions: sortedVersions,
+        ...latestTag,
+        tagCount: tags.length,
+        allTags: sortedTags,
       }
     })
   }
@@ -166,21 +166,21 @@ export default function AdminPage() {
       grouped.get(name)!.push(skill)
     })
 
-    return Array.from(grouped.entries()).map(([, versions]) => {
-      const sortedVersions = [...versions].sort((a, b) => {
+    return Array.from(grouped.entries()).map(([, tags]) => {
+      const sortedTags = [...tags].sort((a, b) => {
         const dateA = a._meta?.['io.modelcontextprotocol.registry/official']?.publishedAt
         const dateB = b._meta?.['io.modelcontextprotocol.registry/official']?.publishedAt
         if (dateA && dateB) {
           return new Date(dateB).getTime() - new Date(dateA).getTime()
         }
-        return (b.skill.version || '').localeCompare(a.skill.version || '')
+        return (b.skill.tag || '').localeCompare(a.skill.tag || '')
       })
 
-      const latestVersion = sortedVersions[0]
+      const latestTag = sortedTags[0]
       return {
-        ...latestVersion,
-        versionCount: versions.length,
-        allVersions: sortedVersions,
+        ...latestTag,
+        tagCount: tags.length,
+        allTags: sortedTags,
       }
     })
   }
@@ -196,21 +196,21 @@ export default function AdminPage() {
       grouped.get(name)!.push(agent)
     })
 
-    return Array.from(grouped.entries()).map(([, versions]) => {
-      const sortedVersions = [...versions].sort((a, b) => {
+    return Array.from(grouped.entries()).map(([, tags]) => {
+      const sortedTags = [...tags].sort((a, b) => {
         const dateA = a._meta?.['io.modelcontextprotocol.registry/official']?.publishedAt
         const dateB = b._meta?.['io.modelcontextprotocol.registry/official']?.publishedAt
         if (dateA && dateB) {
           return new Date(dateB).getTime() - new Date(dateA).getTime()
         }
-        return (b.agent.version || '').localeCompare(a.agent.version || '')
+        return (b.agent.tag || '').localeCompare(a.agent.tag || '')
       })
 
-      const latestVersion = sortedVersions[0]
+      const latestTag = sortedTags[0]
       return {
-        ...latestVersion,
-        versionCount: versions.length,
-        allVersions: sortedVersions,
+        ...latestTag,
+        tagCount: tags.length,
+        allTags: sortedTags,
       }
     })
   }
@@ -226,21 +226,21 @@ export default function AdminPage() {
       grouped.get(name)!.push(prompt)
     })
 
-    return Array.from(grouped.entries()).map(([, versions]) => {
-      const sortedVersions = [...versions].sort((a, b) => {
+    return Array.from(grouped.entries()).map(([, tags]) => {
+      const sortedTags = [...tags].sort((a, b) => {
         const dateA = a._meta?.['io.modelcontextprotocol.registry/official']?.publishedAt
         const dateB = b._meta?.['io.modelcontextprotocol.registry/official']?.publishedAt
         if (dateA && dateB) {
           return new Date(dateB).getTime() - new Date(dateA).getTime()
         }
-        return (b.prompt.version || '').localeCompare(a.prompt.version || '')
+        return (b.prompt.tag || '').localeCompare(a.prompt.tag || '')
       })
 
-      const latestVersion = sortedVersions[0]
+      const latestTag = sortedTags[0]
       return {
-        ...latestVersion,
-        versionCount: versions.length,
-        allVersions: sortedVersions,
+        ...latestTag,
+        tagCount: tags.length,
+        allTags: sortedTags,
       }
     })
   }
@@ -588,9 +588,9 @@ export default function AdminPage() {
               <div className="divide-y">
                 {filteredServers.map((server, index) => (
                   <ServerCard
-                    key={`${server.server.name}-${server.server.version}-${index}`}
+                    key={`${server.server.name}-${server.server.tag}-${index}`}
                     server={server}
-                    versionCount={server.versionCount}
+                    tagCount={server.tagCount}
                     onClick={() => setSelectedServer(server)}
                     showDeploy
                     onDeploy={(s) => setDeployServerTarget(s)}
@@ -616,9 +616,9 @@ export default function AdminPage() {
               <div className="divide-y">
                 {filteredSkills.map((skill, index) => (
                   <SkillCard
-                    key={`${skill.skill.name}-${skill.skill.version}-${index}`}
+                    key={`${skill.skill.name}-${skill.skill.tag}-${index}`}
                     skill={skill}
-                    versionCount={skill.versionCount}
+                    tagCount={skill.tagCount}
                     onClick={() => setSelectedSkill(skill)}
                   />
                 ))}
@@ -642,9 +642,9 @@ export default function AdminPage() {
               <div className="divide-y">
                 {filteredAgents.map((agent, index) => (
                   <AgentCard
-                    key={`${agent.agent.name}-${agent.agent.version}-${index}`}
+                    key={`${agent.agent.name}-${agent.agent.tag}-${index}`}
                     agent={agent}
-                    versionCount={agent.versionCount}
+                    tagCount={agent.tagCount}
                     onClick={() => setSelectedAgent(agent)}
                     showDeploy
                     onDeploy={(a) => setDeployAgentTarget(a)}
@@ -670,9 +670,9 @@ export default function AdminPage() {
               <div className="divide-y">
                 {filteredPrompts.map((prompt, index) => (
                   <PromptCard
-                    key={`${prompt.prompt.name}-${prompt.prompt.version}-${index}`}
+                    key={`${prompt.prompt.name}-${prompt.prompt.tag}-${index}`}
                     prompt={prompt}
-                    versionCount={prompt.versionCount}
+                    tagCount={prompt.tagCount}
                     onClick={() => setSelectedPrompt(prompt)}
                   />
                 ))}
@@ -713,13 +713,13 @@ export default function AdminPage() {
           </SheetTitle>
           {selectedServer && (
             <ServerDetail
-              server={selectedServer as ServerResponse & { allVersions?: ServerResponse[] }}
+              server={selectedServer as ServerResponse & { allTags?: ServerResponse[] }}
               onServerCopied={fetchData}
             />
           )}
-          {selectedSkill && <SkillDetail skill={selectedSkill} allVersions={selectedSkill.allVersions} />}
-          {selectedAgent && <AgentDetail agent={selectedAgent} allVersions={selectedAgent.allVersions} />}
-          {selectedPrompt && <PromptDetail prompt={selectedPrompt} allVersions={selectedPrompt.allVersions} />}
+          {selectedSkill && <SkillDetail skill={selectedSkill} allTags={selectedSkill.allTags} />}
+          {selectedAgent && <AgentDetail agent={selectedAgent} allTags={selectedAgent.allTags} />}
+          {selectedPrompt && <PromptDetail prompt={selectedPrompt} allTags={selectedPrompt.allTags} />}
         </SheetContent>
       </Sheet>
     </main>

@@ -131,11 +131,9 @@ Supported languages:  python (for adk)`,
 			}
 			agentConfig := &agentcommon.AgentConfig{
 				Name: name,
-				// Version here is the default version baked into the
-				// scaffolded source (e.g. as a runtime-advertised string in
-				// generated code). It is intentionally NOT written into
-				// agent.yaml's metadata.version — that field is not part of
-				// the public v1alpha1 contract.
+				// Version here is only the runtime-advertised value baked
+				// into the scaffolded source. Declarative identity is
+				// written below as v1alpha1 metadata.
 				Version:               "0.1.0",
 				Description:           initDescription,
 				Image:                 image,
@@ -181,8 +179,7 @@ Supported languages:  python (for adk)`,
 	return cmd
 }
 
-// parseNameTag splits the compatibility "name@tag" syntax into
-// (name, tag). If no @ is present, tag defaults to "latest". If the name
+// parseNameTag splits "name@tag" into (name, tag). If no @ is present, tag defaults to "latest". If the name
 // part is empty (e.g. "@stable"), the whole string is treated as the name.
 func parseNameTag(s string) (string, string) {
 	if i := strings.LastIndex(s, "@"); i > 0 {
@@ -192,8 +189,6 @@ func parseNameTag(s string) (string, string) {
 }
 
 // writeDeclarativeAgentYAML writes agent.yaml in the ar.dev/v1alpha1 declarative format.
-// metadata.version is intentionally omitted because it is not part of the
-// public v1alpha1 contract.
 func writeDeclarativeAgentYAML(projectDir, name, image, language, framework, modelProvider, modelName, description, gitURL string, mcps, skills, prompts []string) error {
 	desc := description
 	if desc == "" {
@@ -384,9 +379,8 @@ Supported frameworks: fastmcp-python, mcp-go`,
 				ProjectName: dirName,
 				// Version here is the default version baked into the
 				// scaffolded source (e.g. the mcp-go server's advertised
-				// Implementation.Version). It is intentionally NOT written
-				// into mcp.yaml's metadata.version — that field is not part
-				// of the public v1alpha1 contract.
+				// Implementation.Version). Declarative identity is written
+				// below as v1alpha1 metadata.
 				Version:     "0.1.0",
 				Description: initDescription,
 				Directory:   projectDir,
@@ -418,8 +412,6 @@ Supported frameworks: fastmcp-python, mcp-go`,
 }
 
 // writeDeclarativeMCPYAML writes mcp.yaml in the ar.dev/v1alpha1 declarative format.
-// metadata.version is intentionally omitted because it is not part of the
-// public v1alpha1 contract.
 func writeDeclarativeMCPYAML(projectDir, name, image, description string) error {
 	nameParts := strings.SplitN(name, "/", 2)
 	shortName := nameParts[len(nameParts)-1]
@@ -517,8 +509,6 @@ The generated skill.yaml can be applied directly:
 }
 
 // writeDeclarativeSkillYAML writes skill.yaml in the ar.dev/v1alpha1 declarative format.
-// metadata.version is intentionally omitted because it is not part of the
-// public v1alpha1 contract.
 func writeDeclarativeSkillYAML(projectDir, name, description string) error {
 	desc := description
 	if desc == "" {
@@ -602,8 +592,6 @@ The generated file can be applied directly:
 }
 
 // writeDeclarativePromptYAML writes <name>.yaml in the ar.dev/v1alpha1 declarative format.
-// metadata.version is intentionally omitted because it is not part of the
-// public v1alpha1 contract.
 func writeDeclarativePromptYAML(path, name, description, content string) error {
 	desc := description
 	if desc == "" {

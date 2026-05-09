@@ -502,11 +502,11 @@ func TestResourceRegister_MutableObjectUsesNameOnlyRoute(t *testing.T) {
 
 	resp := api.Put("/v0/providers/local-test", provider)
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
-	require.NotContains(t, resp.Body.String(), `"version"`, "mutable object response must not expose metadata.version")
+	require.NotContains(t, resp.Body.String(), `"version"`, "mutable object response must not expose a storage identity field")
 
 	resp = api.Get("/v0/providers/local-test")
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
-	require.NotContains(t, resp.Body.String(), `"version"`, "mutable object get must not expose metadata.version")
+	require.NotContains(t, resp.Body.String(), `"version"`, "mutable object get must not expose a storage identity field")
 
 	resp = api.Put("/v0/providers/local-test/1", provider)
 	require.Equal(t, http.StatusNotFound, resp.Code, "mutable object version route must not be registered")

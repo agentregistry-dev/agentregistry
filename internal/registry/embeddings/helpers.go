@@ -17,9 +17,8 @@ import (
 // generate an MCPServer's semantic embedding. Deterministic across runs
 // so the checksum can gate idempotent re-index passes.
 //
-// Version is intentionally omitted — version 2 of the same MCPServer has
-// no semantic difference from version 1 for search relevance, and the
-// integer version is not user-supplied content to begin with.
+// Tag is intentionally omitted — two tags of the same MCPServer have
+// no semantic difference for search relevance.
 //
 // Enrichment annotations are intentionally excluded from the payload
 // — they're scanner output, not user-authored search-relevant content.
