@@ -80,7 +80,7 @@ func TestCoordinator_ApplyWritesConditionsAndAnnotations(t *testing.T) {
 
 	require.NoError(t, coord.Apply(ctx, deployment))
 
-	raw, err := stores[v1alpha1.KindDeployment].Get(ctx, "default", "weather-noop", "1")
+	raw, err := stores[v1alpha1.KindDeployment].Get(ctx, "default", "weather-noop", "")
 	require.NoError(t, err)
 	// RawObject.Status is opaque JSONB bytes; decode via the Status
 	// storage codec to reach the typed Conditions field the coordinator
@@ -95,7 +95,7 @@ func TestCoordinator_ApplyPreservesExistingAnnotations(t *testing.T) {
 	stores, deployment := seedV1Alpha1Fixtures(t)
 	ctx := context.Background()
 
-	err := stores[v1alpha1.KindDeployment].PatchAnnotations(ctx, "default", "weather-noop", "1", func(annotations map[string]string) map[string]string {
+	err := stores[v1alpha1.KindDeployment].PatchAnnotations(ctx, "default", "weather-noop", "", func(annotations map[string]string) map[string]string {
 		annotations["keep"] = "me"
 		return annotations
 	})
@@ -109,7 +109,7 @@ func TestCoordinator_ApplyPreservesExistingAnnotations(t *testing.T) {
 
 	require.NoError(t, coord.Apply(ctx, deployment))
 
-	raw, err := stores[v1alpha1.KindDeployment].Get(ctx, "default", "weather-noop", "1")
+	raw, err := stores[v1alpha1.KindDeployment].Get(ctx, "default", "weather-noop", "")
 	require.NoError(t, err)
 	require.Equal(t, "me", raw.Metadata.Annotations["keep"])
 	require.Contains(t, raw.Metadata.Annotations, "platforms.agentregistry.solo.io/noop/applied-at")
@@ -128,7 +128,7 @@ func TestCoordinator_RemoveWritesRemovedCondition(t *testing.T) {
 	require.NoError(t, coord.Apply(ctx, deployment))
 	require.NoError(t, coord.Remove(ctx, deployment))
 
-	raw, err := stores[v1alpha1.KindDeployment].Get(ctx, "default", "weather-noop", "1")
+	raw, err := stores[v1alpha1.KindDeployment].Get(ctx, "default", "weather-noop", "")
 	require.NoError(t, err)
 	var status v1alpha1.Status
 	require.NoError(t, v1alpha1.UnmarshalStatusFromStorage(raw.Status, &status))

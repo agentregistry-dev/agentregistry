@@ -105,7 +105,7 @@ func TestDeploymentPut_TriggersAdapterApply(t *testing.T) {
 	require.NotEmpty(t, got.Status.Conditions, "expected status conditions from coordinator.Apply")
 
 	// Row in DB: status JSONB carries the Ready condition.
-	raw, err := stores[v1alpha1.KindDeployment].Get(t.Context(), "default", "weather-noop", "1")
+	raw, err := stores[v1alpha1.KindDeployment].Get(t.Context(), "default", "weather-noop", "")
 	require.NoError(t, err)
 	// RawObject.Status is opaque bytes at the envelope layer; decode
 	// with the Status storage codec to inspect conditions.
@@ -139,7 +139,7 @@ func TestDeploymentDelete_TriggersAdapterRemove(t *testing.T) {
 	// with the same identity then succeeds without an ErrTerminating
 	// race — see commit fixing josh-pritchard's PR #455 report
 	// "Soft-delete blocks re-apply for every v1alpha1 kind."
-	_, err := stores[v1alpha1.KindDeployment].Get(t.Context(), "default", "weather-noop", "1")
+	_, err := stores[v1alpha1.KindDeployment].Get(t.Context(), "default", "weather-noop", "")
 	require.ErrorIs(t, err, pkgdb.ErrNotFound, "finalizer-free row must hard-delete")
 }
 

@@ -24,18 +24,7 @@ func NewResolver(stores map[string]*v1alpha1store.Store) v1alpha1.ResolverFunc {
 		if !ok {
 			return fmt.Errorf("%w: unknown kind %q", v1alpha1.ErrInvalidRef, ref.Kind)
 		}
-		var err error
-		if store.IsTaggedArtifact() {
-			if ref.Tag != "" {
-				_, err = store.Get(ctx, ref.Namespace, ref.Name, ref.Tag)
-			} else {
-				_, err = store.GetLatest(ctx, ref.Namespace, ref.Name)
-			}
-		} else if ref.Tag != "" {
-			err = fmt.Errorf("%w: kind %q does not support tag pinning", v1alpha1.ErrInvalidRef, ref.Kind)
-		} else {
-			_, err = store.GetLatest(ctx, ref.Namespace, ref.Name)
-		}
+		_, err := store.GetByRef(ctx, ref.Namespace, ref.Name, ref.Tag)
 		if err != nil {
 			if errors.Is(err, pkgdb.ErrNotFound) {
 				return v1alpha1.ErrDanglingRef
@@ -60,21 +49,7 @@ func NewGetter(stores map[string]*v1alpha1store.Store) v1alpha1.GetterFunc {
 		if !ok {
 			return nil, fmt.Errorf("%w: unknown kind %q", v1alpha1.ErrInvalidRef, ref.Kind)
 		}
-		var (
-			raw *v1alpha1.RawObject
-			err error
-		)
-		if store.IsTaggedArtifact() {
-			if ref.Tag != "" {
-				raw, err = store.Get(ctx, ref.Namespace, ref.Name, ref.Tag)
-			} else {
-				raw, err = store.GetLatest(ctx, ref.Namespace, ref.Name)
-			}
-		} else if ref.Tag != "" {
-			err = fmt.Errorf("%w: kind %q does not support tag pinning", v1alpha1.ErrInvalidRef, ref.Kind)
-		} else {
-			raw, err = store.GetLatest(ctx, ref.Namespace, ref.Name)
-		}
+		raw, err := store.GetByRef(ctx, ref.Namespace, ref.Name, ref.Tag)
 		if err != nil {
 			if errors.Is(err, pkgdb.ErrNotFound) {
 				return nil, v1alpha1.ErrDanglingRef

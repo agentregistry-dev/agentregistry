@@ -708,6 +708,20 @@ func (s *Store) Get(ctx context.Context, namespace, name, identity string) (*v1a
 	return scanRow(row, false)
 }
 
+// GetByRef resolves the public reference shape shared by v1alpha1 resources.
+// Blank tag means the current live row: literal "latest" for tagged artifacts,
+// namespace/name for mutable objects. Non-empty tag selects a tagged artifact
+// row and is invalid for mutable-object stores.
+func (s *Store) GetByRef(ctx context.Context, namespace, name, tag string) (*v1alpha1.RawObject, error) {
+	if tag == "" {
+		return s.GetLatest(ctx, namespace, name)
+	}
+	if s.behavior == MutableObjectStore {
+		return nil, errors.New("v1alpha1 store: tag pinning is not supported on mutable-object stores")
+	}
+	return s.Get(ctx, namespace, name, tag)
+}
+
 // GetLatest returns the literal "latest" live tag for (namespace, name) on
 // tagged-artifact tables, or the current live row for mutable-object stores.
 // Returns pkgdb.ErrNotFound if no live row exists.

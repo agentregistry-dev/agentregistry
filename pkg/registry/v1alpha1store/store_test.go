@@ -100,6 +100,40 @@ func TestStore_GetLatestReadsLiteralLatestTag(t *testing.T) {
 	require.Equal(t, DefaultTag(), latest.Metadata.Tag)
 }
 
+func TestStore_GetByRefResolvesBlankTagToLatest(t *testing.T) {
+	pool := NewTestPool(t)
+	store := NewStore(pool, testTable)
+	ctx := context.Background()
+
+	_, err := store.Upsert(ctx, &v1alpha1.Agent{
+		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "foo", Tag: "stable"},
+		Spec:     v1alpha1.AgentSpec{Title: "stable"},
+	})
+	require.NoError(t, err)
+	upsertAgent(t, store, "foo", v1alpha1.AgentSpec{Title: "current"}, nil)
+
+	latest, err := store.GetByRef(ctx, testNS, "foo", "")
+	require.NoError(t, err)
+	require.Equal(t, DefaultTag(), latest.Metadata.Tag)
+
+	stable, err := store.GetByRef(ctx, testNS, "foo", "stable")
+	require.NoError(t, err)
+	require.Equal(t, "stable", stable.Metadata.Tag)
+}
+
+func TestStore_GetByRefMutableRejectsTag(t *testing.T) {
+	pool := NewTestPool(t)
+	providers := NewMutableObjectStore(pool, "v1alpha1.providers")
+	ctx := context.Background()
+
+	local, err := providers.GetByRef(ctx, testNS, "local", "")
+	require.NoError(t, err)
+	require.Equal(t, "local", local.Metadata.Name)
+
+	_, err = providers.GetByRef(ctx, testNS, "local", "stable")
+	require.ErrorContains(t, err, "tag pinning is not supported")
+}
+
 func TestStore_PatchStatusDisjointFromSpec(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)
