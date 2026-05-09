@@ -134,6 +134,38 @@ func TestStore_GetByRefMutableRejectsTag(t *testing.T) {
 	require.ErrorContains(t, err, "tag pinning is not supported")
 }
 
+func TestStore_DeleteByRefTaggedBlankDeletesAllTags(t *testing.T) {
+	pool := NewTestPool(t)
+	store := NewStore(pool, testTable)
+	ctx := context.Background()
+
+	_, err := store.Upsert(ctx, &v1alpha1.Agent{
+		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "foo", Tag: "stable"},
+		Spec:     v1alpha1.AgentSpec{Title: "stable"},
+	})
+	require.NoError(t, err)
+	upsertAgent(t, store, "foo", v1alpha1.AgentSpec{Title: "current"}, nil)
+
+	require.NoError(t, store.DeleteByRef(ctx, testNS, "foo", ""))
+	_, err = store.Get(ctx, testNS, "foo", DefaultTag())
+	require.ErrorIs(t, err, pkgdb.ErrNotFound)
+	_, err = store.Get(ctx, testNS, "foo", "stable")
+	require.ErrorIs(t, err, pkgdb.ErrNotFound)
+}
+
+func TestStore_DeleteByRefMutableDeletesByName(t *testing.T) {
+	pool := NewTestPool(t)
+	providers := NewMutableObjectStore(pool, "v1alpha1.providers")
+	ctx := context.Background()
+
+	require.NoError(t, providers.DeleteByRef(ctx, testNS, "local", ""))
+	_, err := providers.GetByRef(ctx, testNS, "local", "")
+	require.ErrorIs(t, err, pkgdb.ErrNotFound)
+
+	err = providers.DeleteByRef(ctx, testNS, "kubernetes-default", "stable")
+	require.ErrorContains(t, err, "tag pinning is not supported")
+}
+
 func TestStore_PatchStatusDisjointFromSpec(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)

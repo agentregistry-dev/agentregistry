@@ -307,7 +307,7 @@ func (i *Importer) importOne(ctx context.Context, source string, obj v1alpha1.Ob
 		return res
 	}
 
-	if store.IsTaggedArtifact() && meta.Tag == "" {
+	if v1alpha1.IsTaggedArtifactKind(kind) && meta.Tag == "" {
 		meta.Tag = v1alpha1store.DefaultTag()
 		obj.SetMetadata(*meta)
 		res.Tag = meta.Tag

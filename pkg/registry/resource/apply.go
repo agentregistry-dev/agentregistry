@@ -190,7 +190,7 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 	case v1alpha1store.UpsertNoOp:
 		res.Status = arv0.ApplyStatusUnchanged
 	}
-	if store.IsTaggedArtifact() {
+	if up.Tag != "" {
 		res.Tag = up.Tag
 	}
 	res.Generation = up.Generation
@@ -235,12 +235,7 @@ func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun
 		}
 	}
 
-	var err error
-	if store.IsTaggedArtifact() {
-		err = deleteTaggedBatch(ctx, store, meta, &res)
-	} else {
-		err = store.Delete(ctx, meta.Namespace, meta.Name, "")
-	}
+	err := store.DeleteByRef(ctx, meta.Namespace, meta.Name, meta.Tag)
 	if err != nil {
 		return failResult(res, &applyError{
 			Stage:    stageDelete,
@@ -249,6 +244,7 @@ func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun
 		})
 	}
 
+	res.Tag = meta.Tag
 	if hook := cfg.PostDeletes[obj.GetKind()]; hook != nil {
 		if err := hook(ctx, obj); err != nil {
 			return failResult(res, &applyError{Stage: stagePostDelete, Err: err})
@@ -256,14 +252,6 @@ func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun
 	}
 	res.Status = arv0.ApplyStatusDeleted
 	return res
-}
-
-func deleteTaggedBatch(ctx context.Context, store *v1alpha1store.Store, meta v1alpha1.ObjectMeta, res *arv0.ApplyResult) error {
-	if meta.Tag == "" {
-		return store.DeleteAllTags(ctx, meta.Namespace, meta.Name)
-	}
-	res.Tag = meta.Tag
-	return store.Delete(ctx, meta.Namespace, meta.Name, meta.Tag)
 }
 
 // resolveBatchTarget looks up the per-kind store and applies the

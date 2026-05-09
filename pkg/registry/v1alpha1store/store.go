@@ -119,18 +119,6 @@ func NewMutableObjectStore(pool *pgxpool.Pool, table string, opts ...StoreOption
 	return s
 }
 
-// IsTaggedArtifact reports whether the Store operates in tagged content mode.
-// Returns false for mutable object stores.
-func (s *Store) IsTaggedArtifact() bool {
-	return s.behavior == TaggedArtifactStore
-}
-
-// IsMutableObject reports whether the Store uses namespace/name mutable-object
-// semantics.
-func (s *Store) IsMutableObject() bool {
-	return s.behavior == MutableObjectStore
-}
-
 // UpsertOutcome categorises what an Upsert call did.
 type UpsertOutcome int
 
@@ -758,6 +746,23 @@ func (s *Store) Delete(ctx context.Context, namespace, name, identity string) er
 		return s.deleteTagged(ctx, args)
 	}
 	return s.deleteMutable(ctx, namespace, name)
+}
+
+// DeleteByRef applies the public reference/delete shape shared by v1alpha1
+// resources. For tagged artifacts, blank tag deletes every tag for
+// (namespace, name), while a non-empty tag deletes that exact tag. Mutable
+// objects delete by namespace/name and reject explicit tag pins.
+func (s *Store) DeleteByRef(ctx context.Context, namespace, name, tag string) error {
+	if s.behavior == TaggedArtifactStore {
+		if tag == "" {
+			return s.DeleteAllTags(ctx, namespace, name)
+		}
+		return s.Delete(ctx, namespace, name, tag)
+	}
+	if tag != "" {
+		return errors.New("v1alpha1 store: tag pinning is not supported on mutable-object stores")
+	}
+	return s.Delete(ctx, namespace, name, "")
 }
 
 // ListTags returns every non-deleted tag row for (namespace,

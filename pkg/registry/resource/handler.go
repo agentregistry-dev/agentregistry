@@ -357,11 +357,11 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 	// get-exact route below so the literal "tags" path segment
 	// wins over the `{tag}` capture in the underlying flow router
 	// (routes match in registration order).
-	if cfg.Store.IsTaggedArtifact() {
+	if v1alpha1.IsTaggedArtifactKind(kind) {
 		registerListTags(api, cfg, newObj, kind, itemPath)
 	}
 
-	if cfg.Store.IsTaggedArtifact() {
+	if v1alpha1.IsTaggedArtifactKind(kind) {
 		registerGetTagged(api, cfg, newObj, kind, itemTagPath)
 		registerDeleteTagged(api, cfg, newObj, kind, itemTagPath)
 	} else {

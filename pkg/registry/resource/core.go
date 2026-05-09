@@ -112,7 +112,7 @@ func applyCore(
 		return upsertResult{}, &applyError{Stage: stageRegistries, Err: err}
 	}
 
-	if store.IsTaggedArtifact() && meta.Tag == "" {
+	if v1alpha1.IsTaggedArtifactKind(kind) && meta.Tag == "" {
 		meta.Tag = v1alpha1store.DefaultTag()
 		obj.SetMetadata(*meta)
 	}
@@ -163,9 +163,8 @@ type deleteOpts struct {
 }
 
 // deleteCore runs Authorize → Store.Delete → PostDelete for a single resource.
-// For tagged artifact stores, identity is metadata.tag; mutable-object stores
-// delete by namespace/name and ignore identity. Validation is intentionally
-// skipped — deleting a row should not require its spec to validate.
+// Validation is intentionally skipped — deleting a row should not require its
+// spec to validate.
 //
 // Returns NotFound=true on the missing-row case so callers can map it
 // to 404 (single PUT) or "not found" Result (batch).
@@ -176,13 +175,9 @@ func deleteCore(
 	opts deleteOpts,
 ) *applyError {
 	if opts.Authorize != nil {
-		tag := ""
-		if store.IsTaggedArtifact() {
-			tag = identity
-		}
 		if err := opts.Authorize(ctx, AuthorizeInput{
 			Verb: "delete", Kind: kind,
-			Namespace: namespace, Name: name, Tag: tag,
+			Namespace: namespace, Name: name, Tag: identity,
 			Object: opts.PreDeleteObject,
 		}); err != nil {
 			return &applyError{Stage: stageAuth, Err: err}
