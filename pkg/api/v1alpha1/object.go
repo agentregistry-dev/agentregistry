@@ -22,8 +22,8 @@ const DefaultNamespace = "default"
 //
 // Namespace, Name, Labels, Annotations, and Tag are user-settable. Tag is
 // meaningful for content-registry kinds. UID, Generation, CreatedAt,
-// UpdatedAt, and DeletionTimestamp are server-managed. Version is not part of
-// metadata; content resources use Tag and mutable resources use Namespace/Name.
+// UpdatedAt, and DeletionTimestamp are server-managed. Content resources use
+// Tag and mutable resources use Namespace/Name.
 //
 // Generation is an internal coordination primitive that drives reconciler
 // convergence (paired with Status.ObservedGeneration). It is populated from the

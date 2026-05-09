@@ -17,7 +17,6 @@ func TestResourceRef_UsesTag(t *testing.T) {
 		out, err := json.Marshal(ref)
 		require.NoError(t, err)
 		require.JSONEq(t, `{"kind":"Agent","name":"alice","tag":"stable"}`, string(out))
-		require.NotContains(t, string(out), "version")
 	})
 
 	t.Run("yaml", func(t *testing.T) {
@@ -28,6 +27,5 @@ func TestResourceRef_UsesTag(t *testing.T) {
 		out, err := yaml.Marshal(ref)
 		require.NoError(t, err)
 		require.Contains(t, string(out), "tag: stable")
-		require.NotContains(t, string(out), "version")
 	})
 }

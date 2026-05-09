@@ -109,8 +109,8 @@ func NewStore(pool *pgxpool.Pool, table string, opts ...StoreOption) *Store {
 	return s
 }
 
-// NewMutableObjectStore constructs a mutable-object Store for tables whose
-// public and storage identity is namespace/name.
+// NewMutableObjectStore constructs a mutable-object Store for tables keyed by
+// namespace/name.
 func NewMutableObjectStore(pool *pgxpool.Pool, table string, opts ...StoreOption) *Store {
 	s := &Store{pool: pool, table: table, behavior: MutableObjectStore, auditor: types.NoopAuditor}
 	for _, opt := range opts {

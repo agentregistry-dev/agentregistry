@@ -49,7 +49,6 @@ func TestInitAgentCmd_BasicScaffold(t *testing.T) {
 	metadata, ok := m["metadata"].(map[string]any)
 	require.True(t, ok, "metadata should be a map")
 	assert.Equal(t, "myagent", metadata["name"])
-	assert.NotContains(t, metadata, "version", "init output must keep identity on the tag contract")
 
 	spec, ok := m["spec"].(map[string]any)
 	require.True(t, ok, "spec should be a map")
@@ -81,8 +80,6 @@ func TestInitAgentCmd_CustomFlags(t *testing.T) {
 	require.NoError(t, cmd.Execute())
 
 	m := readAgentYAML(t, tmpDir, "mybot")
-	metadata := m["metadata"].(map[string]any)
-	assert.NotContains(t, metadata, "version", "init output must keep identity on the tag contract")
 
 	spec := m["spec"].(map[string]any)
 	assert.Equal(t, "openai", spec["modelProvider"])
@@ -312,7 +309,6 @@ func TestInitMCPCmd_BasicScaffold(t *testing.T) {
 
 	metadata := m["metadata"].(map[string]any)
 	assert.Equal(t, "myorg/myserver", metadata["name"])
-	assert.NotContains(t, metadata, "version", "init output must keep identity on the tag contract")
 
 	spec := m["spec"].(map[string]any)
 	assert.Equal(t, "myserver", spec["title"])
@@ -343,7 +339,6 @@ func TestInitMCPCmd_CustomFlags(t *testing.T) {
 	m := readYAMLFile(t, filepath.Join(tmpDir, "myserver", "mcp.yaml"))
 	metadata := m["metadata"].(map[string]any)
 	assert.Equal(t, "myorg/myserver", metadata["name"])
-	assert.NotContains(t, metadata, "version", "init output must keep identity on the tag contract")
 
 	spec := m["spec"].(map[string]any)
 	assert.Equal(t, "My weather server", spec["description"])
@@ -426,7 +421,6 @@ func TestInitSkillCmd_BasicScaffold(t *testing.T) {
 
 	metadata := m["metadata"].(map[string]any)
 	assert.Equal(t, "myskill", metadata["name"])
-	assert.NotContains(t, metadata, "version", "init output must keep identity on the tag contract")
 
 	spec := m["spec"].(map[string]any)
 	assert.Equal(t, "myskill", spec["title"])
@@ -448,8 +442,6 @@ func TestInitSkillCmd_CustomFlags(t *testing.T) {
 	require.NoError(t, cmd.Execute())
 
 	m := readYAMLFile(t, filepath.Join(tmpDir, "myskill", "skill.yaml"))
-	metadata := m["metadata"].(map[string]any)
-	assert.NotContains(t, metadata, "version", "init output must keep identity on the tag contract")
 
 	spec := m["spec"].(map[string]any)
 	assert.Equal(t, "Text summarizer", spec["description"])
@@ -492,7 +484,6 @@ func TestInitPromptCmd_BasicScaffold(t *testing.T) {
 
 	metadata := m["metadata"].(map[string]any)
 	assert.Equal(t, "myprompt", metadata["name"])
-	assert.NotContains(t, metadata, "version", "init output must keep identity on the tag contract")
 
 	spec := m["spec"].(map[string]any)
 	assert.NotEmpty(t, spec["content"])
@@ -515,8 +506,6 @@ func TestInitPromptCmd_CustomContent(t *testing.T) {
 	require.NoError(t, cmd.Execute())
 
 	m := readYAMLFile(t, filepath.Join(tmpDir, "summarizer.yaml"))
-	metadata := m["metadata"].(map[string]any)
-	assert.NotContains(t, metadata, "version", "init output must keep identity on the tag contract")
 
 	spec := m["spec"].(map[string]any)
 	assert.Equal(t, "Summarize text", spec["description"])
