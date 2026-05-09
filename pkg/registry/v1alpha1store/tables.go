@@ -11,7 +11,7 @@ import (
 // Callers that need a *Store should prefer NewStores below
 // rather than constructing one per kind.
 //
-// Enterprise builds that register additional kinds via
+// Downstream builds that register additional kinds via
 // v1alpha1.Scheme.Register should extend their own copy of this map
 // rather than mutating this one; the OSS side treats it as effectively
 // const after init.
@@ -37,7 +37,7 @@ var TableFor = map[string]string{
 // registration order stays stable across builds (important for
 // OpenAPI output).
 //
-// The variadic opts are applied to every Store produced. Enterprise
+// The variadic opts are applied to every Store produced. Downstream
 // callers pass WithAuditor(...) here to plumb a single audit sink
 // across all kinds in one call.
 func NewStores(pool *pgxpool.Pool, opts ...StoreOption) map[string]*Store {

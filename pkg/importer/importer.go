@@ -120,8 +120,8 @@ const (
 
 // Importer wires decoded v1alpha1 manifests through validation,
 // enrichment, and persistence. One Importer is built per-server with
-// the kinds it knows about + the scanners enterprise or OSS
-// registered; callers invoke Import repeatedly per user request.
+// the kinds it knows about + the scanners the build registered;
+// callers invoke Import repeatedly per user request.
 type Importer struct {
 	// Stores maps Kind ("Agent", "MCPServer", ...) to the generic
 	// v1alpha1store.Store backing that kind's table. Must be populated for
@@ -409,8 +409,8 @@ func (i *Importer) writeFindings(ctx context.Context, obj v1alpha1.Object, opts 
 //
 // When opts.WhichScans is non-empty, only scanners whose Name() matches
 // one of its entries are considered. Unknown scanner names in
-// WhichScans are silently ignored (they may be enterprise scanners
-// present in a different build).
+// WhichScans are silently ignored (they may be scanners present in a
+// different build).
 func (i *Importer) runScanners(ctx context.Context, obj v1alpha1.Object, opts Options) (map[string][]Finding, string, []string) {
 	want := opts.WhichScans
 	filtered := make([]Scanner, 0, len(i.scanners))

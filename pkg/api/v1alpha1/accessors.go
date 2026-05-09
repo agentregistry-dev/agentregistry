@@ -17,7 +17,7 @@ func (m *ObjectMeta) SetMetadata(meta ObjectMeta) {
 }
 
 // Object is the minimal interface satisfied by every typed v1alpha1 envelope
-// (Agent, MCPServer, Skill, Prompt, Provider, Deployment; enterprise kinds
+// (Agent, MCPServer, Skill, Prompt, Provider, Deployment; extension kinds
 // opt in too). It lets generic code operate on any resource without
 // reflection.
 //
@@ -25,7 +25,7 @@ func (m *ObjectMeta) SetMetadata(meta ObjectMeta) {
 // The envelope itself stays agnostic to per-kind status schemas:
 //   - OSS kinds currently bind Status to the typed v1alpha1.Status
 //     (K8s-style Conditions) via the accessor methods below.
-//   - Enterprise kinds can use any shape they like without conforming to
+//   - Extension kinds can use any shape they like without conforming to
 //     meta.v1 conditions.
 //
 // MarshalStatus / UnmarshalStatus are the codec hooks the generic Store and

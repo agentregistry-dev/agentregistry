@@ -39,7 +39,7 @@ type upsertResult struct {
 	UID string
 }
 
-// CreateStagerInput is handed to an optional enterprise create-approval
+// CreateStagerInput is handed to an optional downstream create-approval
 // hook after auth/validation/ref checks and before production Upsert.
 // The hook may inspect the production Store to decide whether this apply
 // is a create and, if policy requires it, persist the object somewhere

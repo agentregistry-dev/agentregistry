@@ -117,7 +117,7 @@ type Config struct {
 	InitialFinalizers func(obj v1alpha1.Object) []string
 
 	// CreateStager optionally intercepts validated create attempts before
-	// production Upsert. Enterprise builds use this for approval staging.
+	// production Upsert. Downstream builds can use this for approval staging.
 	// nil preserves the normal OSS direct-write behavior.
 	CreateStager func(ctx context.Context, in CreateStagerInput) (CreateStagerResult, error)
 
@@ -131,7 +131,7 @@ type Config struct {
 	//
 	// nil hook matches the OSS default: public reads and writes, with
 	// authorization deferred to router-level middleware or the underlying
-	// auth.AuthzProvider. Enterprise builds that need per-kind gates
+	// auth.AuthzProvider. Downstream builds that need per-kind gates
 	// (e.g. "only registry admins can mutate Role") wire this callback.
 	//
 	// The hook is called after path parsing and — for apply — after the
@@ -143,7 +143,7 @@ type Config struct {
 	// ListFilter is optional; when set, list handlers consult it before
 	// querying the store and inject the returned predicate into
 	// ListOpts.ExtraWhere / ExtraArgs. This is the per-row authz seam —
-	// enterprise builds wire it to a per-user RBAC predicate so a
+	// downstream integrations wire it to a per-user RBAC predicate so a
 	// reader without grant for a given resource never sees the row in
 	// the list response, but reads at the row endpoint still 403 via
 	// Authorize.

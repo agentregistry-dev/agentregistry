@@ -123,7 +123,7 @@ func TestDecodeBytesAllowsSchemeRegisteredExtensionKind(t *testing.T) {
 apiVersion: ar.dev/v1alpha1
 kind: SchemeTestExtension
 metadata:
-  name: enterprise-only
+  name: extension-only
 spec:
   value: ok
 `

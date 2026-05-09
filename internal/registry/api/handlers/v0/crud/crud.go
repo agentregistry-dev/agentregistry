@@ -10,7 +10,7 @@
 // importpipeline, `/v0/deployments/{name}/logs` in
 // deploymentlogs.
 //
-// First-party only: enterprise extension kinds (e.g. Role) do NOT
+// First-party only: extension kinds (e.g. Role) do NOT
 // register here — they wire their own resource.Register[T] call from
 // AppOptions.ExtraRoutes (see pkg/types/types.go).
 package crud
@@ -26,7 +26,7 @@ import (
 )
 
 // PerKindHooks groups optional, per-kind callbacks layered on top of
-// the shared per-call config. Wired by enterprise builds that need to
+// the shared per-call config. Wired by downstream builds that need to
 // inject authorization / filtering per resource kind without forking
 // the OSS registration. Both maps are keyed by canonical Kind name
 // (v1alpha1.KindAgent etc.); missing keys are treated as "no hook
@@ -39,7 +39,7 @@ type PerKindHooks struct {
 	// kind; see resource.Config.ListFilter.
 	ListFilters map[string]func(ctx context.Context, in resource.AuthorizeInput) (string, []any, error)
 	// PostUpserts run after a successful PUT; see resource.Config.PostUpsert.
-	// Wired by enterprise builds that need to mirror state into a
+	// Wired by downstream builds that need to mirror state into a
 	// platform-specific sidecar table on Provider apply, drive a
 	// reconciler, etc. Missing keys = no post-upsert hook for that kind.
 	PostUpserts map[string]func(ctx context.Context, obj v1alpha1.Object) error
@@ -50,7 +50,7 @@ type PerKindHooks struct {
 	// resource.Config.InitialFinalizers.
 	InitialFinalizers map[string]func(obj v1alpha1.Object) []string
 	// CreateStager optionally intercepts validated creates before the
-	// row reaches production storage. Enterprise approval mode wires this.
+	// row reaches production storage. Downstream approval integrations wire this.
 	CreateStager func(ctx context.Context, in resource.CreateStagerInput) (resource.CreateStagerResult, error)
 }
 

@@ -69,7 +69,7 @@ func TestBuildStoresAndImporter_ExtensionKindAppliesThroughBatchEndpoint(t *test
 	yaml := []byte(`apiVersion: ar.dev/v1alpha1
 kind: IntegrationExtension
 metadata:
-  name: enterprise-only
+  name: extension-only
   tag: stable
 spec:
   value: ok
@@ -86,7 +86,7 @@ spec:
 	require.Equal(t, arv0.ApplyStatusCreated, out.Results[0].Status)
 	require.Equal(t, "stable", out.Results[0].Tag)
 
-	row, err := extensionStore.Get(t.Context(), v1alpha1.DefaultNamespace, "enterprise-only", "stable")
+	row, err := extensionStore.Get(t.Context(), v1alpha1.DefaultNamespace, "extension-only", "stable")
 	require.NoError(t, err)
 	require.JSONEq(t, `{"value":"ok"}`, string(row.Spec))
 }

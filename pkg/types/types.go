@@ -1,6 +1,6 @@
 // Package types holds extension-point surfaces that cross the
 // pkg/registry <-> internal/registry boundary. Anything a downstream
-// build (enterprise wrapper, custom CLI) needs to implement to plug
+// build (out-of-tree wrapper, custom CLI) needs to implement to plug
 // into the registry app lives here.
 //
 // The types are split by domain across files:
@@ -100,7 +100,7 @@ type ResourceRouteContext struct {
 
 // Auditor receives audit events for state changes that the OSS layer
 // considers significant. The default OSS implementation is a no-op;
-// enterprise plugs in a real audit sink via NewStore options.
+// downstream builds plug in a real audit sink via NewStore options.
 //
 // Audit completeness is enforced at the source: every code path that
 // produces a recordable state change calls into Auditor directly,
@@ -140,7 +140,7 @@ type AppOptions struct {
 	// ProviderPlatforms registers per-platform PostUpsert/PostDelete
 	// hooks for the KindProvider resource handler, keyed by
 	// Provider.Spec.Platform ("aws", "gcp", "kagent", ...). Used by
-	// enterprise builds to mirror Provider apply/delete into a
+	// downstream builds to mirror Provider apply/delete into a
 	// platform-specific sidecar table (aws_connections,
 	// gcp_connections, kagent_connections, etc.). Missing platforms =
 	// no sidecar reconciliation for that platform — the v1alpha1
@@ -150,12 +150,12 @@ type AppOptions struct {
 	// DeploymentAdapters registers v1alpha1 DeploymentAdapter
 	// implementations keyed by Provider.Spec.Platform ("local",
 	// "kubernetes", ...). The reconciler/coordinator looks up by platform
-	// string; enterprise builds inject additional adapters here.
+	// string; downstream builds inject additional adapters here.
 	DeploymentAdapters map[string]DeploymentAdapter
 
 	// Authorizers gates every read + write operation on the
 	// generic v1alpha1 resource handler, keyed by canonical Kind name
-	// (v1alpha1.KindAgent, v1alpha1.KindMCPServer, etc.). Enterprise
+	// (v1alpha1.KindAgent, v1alpha1.KindMCPServer, etc.). Downstream
 	// builds wire their RBAC engine here so reader / publisher / admin
 	// gates fire on the OSS-registered Agent / MCPServer / Skill /
 	// Prompt / Provider / Deployment endpoints. Missing keys behave
@@ -172,7 +172,7 @@ type AppOptions struct {
 	ListFilters map[string]ListFilter
 
 	// PostUpserts run after the generic resource handler PUTs a
-	// row, per kind. Enterprise builds wire this for kinds that need
+	// row, per kind. Downstream builds wire this for kinds that need
 	// platform side-effects on apply — Provider apply mirroring spec
 	// into a per-platform sidecar table, for example. Missing keys =
 	// no post-upsert hook for that kind.
@@ -185,12 +185,12 @@ type AppOptions struct {
 	PostDeletes map[string]PostDelete
 
 	// CreateStager optionally intercepts validated creates before the row
-	// reaches production storage. Enterprise builds use this for native
+	// reaches production storage. Downstream builds use this for native
 	// approval staging; nil preserves normal direct writes.
 	CreateStager func(ctx context.Context, in CreateStagerInput) (CreateStagerResult, error)
 
 	// ResolverWrapper can decorate the shared v1alpha1 ResourceRef resolver
-	// before route registration. Enterprise approval mode uses this to allow
+	// before route registration. Downstream approval integrations use this to allow
 	// same-submit pending references to validate without writing them to
 	// production storage first. Nil preserves the default store-backed resolver.
 	ResolverWrapper func(v1alpha1.ResolverFunc) v1alpha1.ResolverFunc
@@ -204,8 +204,8 @@ type AppOptions struct {
 
 	// V1Alpha1MutableStoreKinds marks extra v1alpha1 kinds that use mutable
 	// namespace/name object behavior instead of tagged artifact semantics.
-	// Downstream kinds such as AccessPolicy are v1alpha1-shaped but are
-	// control-plane policy, not content artifacts.
+	// Downstream control-plane/config kinds are v1alpha1-shaped but are not
+	// content artifacts.
 	V1Alpha1MutableStoreKinds map[string]bool
 
 	// RegistryValidator overrides the per-package registry
@@ -219,7 +219,7 @@ type AppOptions struct {
 	// per-registry validator and matches the public-catalogue contract
 	// the upstream modelcontextprotocol/registry project ships. That's
 	// the right behavior for the OSS public catalogue but not for
-	// private enterprise deployments where:
+	// private deployments where:
 	//
 	//   - images live in private ECR / GCR / ACR that anonymous fetch
 	//     can't reach;
@@ -267,7 +267,7 @@ type AppOptions struct {
 
 	// Auditor receives audit events from the v1alpha1 store layer
 	// (e.g. ResourceTagCreated on Upsert creates). The default OSS
-	// behavior is a no-op; enterprise builds plug in a real audit sink.
+	// behavior is a no-op; downstream builds plug in a real audit sink.
 	// If nil, NoopAuditor is used.
 	Auditor Auditor
 

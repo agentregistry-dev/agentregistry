@@ -36,8 +36,9 @@ const DefaultNamespace = "default"
 // live server. When Tag is omitted, the store fills it with the literal
 // "latest" tag.
 //
-// Mutable-object kinds (Provider, Deployment, AccessPolicy in downstream
-// builds) use Namespace/Name as their full identity. Namespace is an internal
+// Mutable-object kinds (Provider, Deployment, and additional downstream
+// control-plane/config kinds) use Namespace/Name as their full identity.
+// Namespace is an internal
 // detail today — it defaults to "default" on apply and is stripped from
 // responses when it equals "default" so the multi-tenant surface stays hidden
 // until we deliberately enable it.
@@ -124,7 +125,7 @@ func (m ObjectMeta) NamespaceOrDefault() string {
 // when the concrete Kind is not yet known. Spec AND Status are both held as
 // raw JSON bytes so the envelope layer stays agnostic to per-kind schemas:
 // OSS kinds layer a typed v1alpha1.Status (K8s-style conditions) on top;
-// enterprise kinds can ship any JSON shape they like
+// extension kinds can ship any JSON shape they like
 // without having to conform to meta.v1 conditions.
 //
 // Callers route into a typed object via Scheme.Decode / Scheme.DecodeMulti

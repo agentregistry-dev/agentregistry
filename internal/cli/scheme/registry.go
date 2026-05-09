@@ -7,8 +7,8 @@
 //
 // Kinds are registered at package init by the declarative package. The
 // table is global, populated once, and never mutated afterwards (no
-// SetRegistry hook — there's no test or enterprise build that needs to
-// swap it). Aliases collide → panic at boot.
+// SetRegistry hook — there is no current caller that needs to swap it).
+// Aliases collide → panic at boot.
 package scheme
 
 import (

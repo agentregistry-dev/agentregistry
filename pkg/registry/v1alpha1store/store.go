@@ -49,8 +49,8 @@ const (
 //     remote_mcp_servers, skills, and prompts.
 //
 //   - MutableObjectStore (produced by NewMutableObjectStore). Identity is
-//     (namespace, name). Used for Provider/Deployment and
-//     downstream mutable/security/config kinds such as AccessPolicy.
+//     (namespace, name). Used for Provider/Deployment and additional
+//     downstream mutable control-plane/config kinds.
 //
 // PatchStatus is disjoint from Upsert: it touches only status and
 // updated_at, never spec. Reconcilers use PatchStatus exclusively; apply
@@ -199,10 +199,9 @@ type ListOpts struct {
 	// false — callers asking for "alive" rows shouldn't see terminating ones.
 	IncludeTerminating bool
 	// ExtraWhere appends a caller-supplied parameterized SQL predicate to
-	// the WHERE clause. It's the RBAC / tenancy / enterprise-filter seam:
-	// the generic Store stays kind-agnostic while a wrapper (e.g. the
-	// enterprise DatabaseFactory) injects authz-derived constraints like
-	// `namespace = ANY($1)`.
+	// the WHERE clause. It's the RBAC / tenancy / extension-filter seam:
+	// the generic Store stays kind-agnostic while a wrapper injects
+	// authz-derived constraints like `namespace = ANY($1)`.
 	//
 	// Rules:
 	//   - Placeholders are numbered from `$1` relative to ExtraArgs (so

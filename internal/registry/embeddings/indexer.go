@@ -82,9 +82,8 @@ type Indexer struct {
 // IndexerConfig carries construction parameters.
 type IndexerConfig struct {
 	// Bindings is the Kind → (Store, BuildPayload) registry the indexer
-	// walks on every pass. Usually built from the BuiltinKinds list at
-	// bootstrap via DefaultBindings, but enterprise kinds may append
-	// their own.
+		// walks on every pass. Usually built from the BuiltinKinds list at
+		// bootstrap via DefaultBindings, but extension kinds may append their own.
 	Bindings []KindBinding
 	// Provider is the embedding generator (e.g. OpenAI).
 	Provider Provider

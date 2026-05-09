@@ -280,10 +280,10 @@ spec:
 // TestRegisterImport_DeniesKindWithNoAuthorizer pins the
 // defense-in-depth fail-closed: when Authorizers is non-empty (the
 // caller intends to gate writes), a decoded doc whose Kind has no
-// entry in the map must DENY rather than silently allow. The
-// enterprise H2 boot guard already ensures every OSS BuiltinKinds
-// entry has an authorizer; this catches downstream kinds an operator
-// adds without updating the import config.
+// entry in the map must DENY rather than silently allow. Downstream
+// boot guards can ensure every OSS BuiltinKinds entry has an
+// authorizer; this catches extension kinds an operator adds without
+// updating the import config.
 //
 // Configures the importer with two kinds (Agent + MCPServer) but
 // only an Agent authorizer. POST an MCPServer doc → fail-closed.

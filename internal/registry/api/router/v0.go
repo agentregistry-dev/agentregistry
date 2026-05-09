@@ -27,7 +27,7 @@ import (
 
 // Stores is the per-kind Store map used by the v1alpha1
 // resource handler, keyed by v1alpha1 Kind name (e.g. "Agent",
-// "MCPServer"). Produced by v1alpha1store.NewStores; enterprise
+// "MCPServer"). Produced by v1alpha1store.NewStores; downstream
 // builds may extend the map with additional kinds before passing it
 // in.
 type Stores = map[string]*v1alpha1store.Store
@@ -62,7 +62,7 @@ type RouteOptions struct {
 	DeploymentCoordinator *deploymentsvc.Coordinator
 
 	// PerKindHooks injects per-kind Authorize + ListFilter
-	// callbacks into the generic resource handler. Enterprise builds
+	// callbacks into the generic resource handler. Downstream integrations
 	// thread their RBAC engine through here so reader / publisher /
 	// admin gates fire on the OSS-registered Agent / MCPServer / Skill
 	// / Prompt / Provider / Deployment endpoints. Zero-value matches
@@ -81,7 +81,7 @@ type RouteOptions struct {
 	ExtraRoutes func(api huma.API, pathPrefix string)
 
 	// CreateStager optionally intercepts validated creates before the row
-	// reaches production storage. Enterprise approval mode wires this.
+	// reaches production storage. Downstream approval integrations wire this.
 	CreateStager func(ctx context.Context, in resource.CreateStagerInput) (resource.CreateStagerResult, error)
 
 	// ResolverWrapper optionally decorates the shared ResourceRef resolver

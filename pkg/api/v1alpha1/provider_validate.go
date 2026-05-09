@@ -5,8 +5,8 @@ import (
 )
 
 // KnownPlatforms is the set of Provider spec.platform values the generic
-// validator recognizes. Enterprise platforms may register additional
-// values via KnownPlatformsMutation at init.
+// validator recognizes. Downstream platforms may register additional values
+// via KnownPlatformsMutation at init.
 var KnownPlatforms = map[string]struct{}{
 	PlatformLocal:      {},
 	PlatformKubernetes: {},

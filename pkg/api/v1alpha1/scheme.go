@@ -37,8 +37,7 @@ func NewScheme() *Scheme {
 }
 
 // Default is the package-level Scheme pre-registered with every kind defined
-// in this package. Extensions (e.g. enterprise-added kinds) may register onto
-// it at init.
+// in this package. Extension kinds may register onto it at init.
 var Default = newDefaultScheme()
 
 func newDefaultScheme() *Scheme {

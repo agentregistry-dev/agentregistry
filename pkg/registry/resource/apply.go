@@ -65,7 +65,7 @@ type ApplyConfig struct {
 	InitialFinalizers map[string]func(obj v1alpha1.Object) []string
 
 	// CreateStager optionally intercepts validated create attempts before
-	// production Upsert. Enterprise builds use this to stage non-admin
+	// production Upsert. Downstream builds can use this to stage non-admin
 	// creates for approval while leaving OSS behavior unchanged.
 	CreateStager func(ctx context.Context, in CreateStagerInput) (CreateStagerResult, error)
 }
@@ -303,12 +303,12 @@ func resolveBatchTarget(cfg ApplyConfig, obj v1alpha1.Object, verb string) (*v1a
 		obj.SetMetadata(*meta)
 	}
 
-	// Defense-in-depth: when any Authorizers are wired, a kind without
-	// an entry must DENY rather than silently allow. The enterprise H2
-	// boot guard already ensures every OSS BuiltinKinds entry has an
-	// authorizer when authz is enabled, so this only fires for downstream
-	// kinds the operator added without updating PerKindHooks — fail
-	// closed there. Mirrors the same contract on the import handler.
+		// Defense-in-depth: when any Authorizers are wired, a kind without
+		// an entry must DENY rather than silently allow. Downstream boot guards
+		// can ensure every OSS BuiltinKinds entry has an authorizer when authz
+		// is enabled, so this only fires for extension kinds the operator added
+		// without updating PerKindHooks — fail closed there. Mirrors the same
+		// contract on the import handler.
 	if len(cfg.Authorizers) > 0 {
 		if authz, ok := cfg.Authorizers[kind]; !ok || authz == nil {
 			return nil, *meta, &applyError{

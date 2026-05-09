@@ -99,10 +99,10 @@ func Register(api huma.API, cfg Config) {
 				authz, ok := authorizers[kind]
 				// Defense-in-depth: when the caller has wired any
 				// Authorizers, a kind without an entry must DENY
-				// rather than silently allow. The enterprise H2
-				// boot guard already ensures every OSS BuiltinKinds
-				// entry has an authorizer, so this only fires for
-				// downstream kinds the operator added without
+					// rather than silently allow. Downstream boot guards
+					// can ensure every OSS BuiltinKinds entry has an
+					// authorizer, so this only fires for extension kinds
+					// the operator added without
 				// updating the import config — fail closed there.
 				if !ok || authz == nil {
 					return huma.Error403Forbidden(fmt.Sprintf("import: no authorizer wired for kind %q", kind))

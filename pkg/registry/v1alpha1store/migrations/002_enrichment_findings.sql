@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS v1alpha1.enrichment_findings (
     tag         VARCHAR(255) NOT NULL,
 
     -- Scanner identity + severity/ID for filtering.
-    source      VARCHAR(50)  NOT NULL,  -- "osv" | "scorecard" | "container-scan" | enterprise-added
+    source      VARCHAR(50)  NOT NULL,  -- "osv" | "scorecard" | "container-scan" | extension-added
     severity    VARCHAR(20),            -- "critical" | "high" | "medium" | "low" | "none"
     finding_id  TEXT,                   -- "CVE-2024-12345" | "Branch-Protection" | opaque per source
 

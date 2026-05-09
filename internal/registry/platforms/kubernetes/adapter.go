@@ -121,8 +121,8 @@ func (a *kubernetesDeploymentAdapter) Logs(ctx context.Context, in types.LogsInp
 }
 
 // Discover enumerates unmanaged kagent/kmcp workloads in the provider's
-// namespace and returns them as DiscoveryResult entries. The Syncer (OSS
-// or enterprise) persists these into the discovered_kubernetes table.
+// namespace and returns them as DiscoveryResult entries. A syncer can persist
+// these into the discovered_kubernetes table.
 //
 // Rows carrying aregistry.ai/managed=true are skipped because they
 // already correspond to existing Deployment rows.

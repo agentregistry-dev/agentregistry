@@ -92,9 +92,9 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		}
 	}()
 
-	// v1alpha1 DeploymentAdapter map consumed by the coordinator below.
-	// Built OSS-side from the local + kubernetes ports; enterprise extends
-	// via AppOptions.DeploymentAdapters.
+		// v1alpha1 DeploymentAdapter map consumed by the coordinator below.
+		// Built OSS-side from the local + kubernetes ports; downstream builds
+		// extend via AppOptions.DeploymentAdapters.
 	deploymentAdapters := map[string]types.DeploymentAdapter{
 		"local":      local.NewLocalDeploymentAdapter(cfg.RuntimeDir, cfg.AgentGatewayPort),
 		"kubernetes": kubernetes.NewKubernetesDeploymentAdapter(),
@@ -470,9 +470,9 @@ func startMCPServer(
 // mcpAuthnMiddleware uses the AuthnProvider to attach a session to the
 // request context on successful authentication. On auth error or missing
 // session, the request continues with an unauthenticated context — the
-// AuthzProvider downstream decides whether the request is allowed (the
-// OSS default `PublicAuthzProvider` permits read-only access; enterprise
-// authz can reject). Failing-open here is intentional so the MCP bridge
+	// AuthzProvider downstream decides whether the request is allowed (the
+	// OSS default `PublicAuthzProvider` permits read-only access; downstream
+	// authz can reject). Failing-open here is intentional so the MCP bridge
 // works for anonymous `list_servers` / `get_server` traffic while still
 // letting authenticated callers pick up privileged operations.
 func mcpAuthnMiddleware(authn auth.AuthnProvider) func(http.Handler) http.Handler {

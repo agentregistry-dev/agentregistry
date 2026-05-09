@@ -14,7 +14,7 @@ import (
 )
 
 // Common database errors surfaced by both the v1alpha1 generic Store
-// and any enterprise DatabaseFactory that wraps it.
+// and any downstream DatabaseFactory that wraps it.
 var (
 	ErrNotFound      = errors.New("record not found")
 	ErrForbidden     = errors.New("forbidden")
@@ -25,7 +25,7 @@ var (
 
 // Store is the root persistence contract AppOptions.DatabaseFactory
 // wraps. The OSS implementation (internal/registry/database.PostgreSQL)
-// is a pgxpool-backed Store; enterprise builds layer authz / caching /
+// is a pgxpool-backed Store; downstream builds layer authz / caching /
 // secondary indices on top by wrapping a base Store.
 //
 // The contract is intentionally thin: v1alpha1 consumers reach through
