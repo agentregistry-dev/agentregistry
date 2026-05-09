@@ -180,10 +180,9 @@ func TestScheme_Decode_RejectsMissingKind(t *testing.T) {
 }
 
 // TestScheme_Decode_RejectsSystemMetadataForContentRegistryKinds pins
-// the contract that system-managed metadata fields (version,
-// generation) cannot be set on the wire for content-registry kinds —
-// they're server-assigned and the system would silently overwrite
-// them. Surface as decode-time errors so users notice.
+// the contract that unsupported system metadata fields cannot be set on
+// the wire for content-registry kinds. metadata.version is deprecated in
+// favor of metadata.tag; metadata.generation remains internal.
 func TestScheme_Decode_RejectsSystemMetadataForContentRegistryKinds(t *testing.T) {
 	contentKinds := []struct {
 		kind     string

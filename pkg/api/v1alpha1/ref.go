@@ -23,26 +23,9 @@ type ResourceRef struct {
 	Tag       string `json:"tag,omitempty" yaml:"tag,omitempty"`
 }
 
-type resourceRefWire struct {
-	Kind      string `json:"kind" yaml:"kind"`
-	Namespace string `json:"namespace,omitempty" yaml:"namespace,omitempty"`
-	Name      string `json:"name" yaml:"name"`
-	Tag       string `json:"tag,omitempty" yaml:"tag,omitempty"`
-}
+type resourceRefWire ResourceRef
 
 var errDeprecatedResourceRefVersion = errors.New("version is deprecated; use tag")
-
-// MarshalJSON emits the canonical v1alpha1 reference shape and never writes
-// the deprecated version alias.
-func (r ResourceRef) MarshalJSON() ([]byte, error) {
-	return json.Marshal(resourceRefWire(r))
-}
-
-// MarshalYAML emits the canonical v1alpha1 reference shape and never writes the
-// deprecated version alias.
-func (r ResourceRef) MarshalYAML() (any, error) {
-	return resourceRefWire(r), nil
-}
 
 // UnmarshalJSON rejects the deprecated version alias instead of silently
 // ignoring it.
@@ -61,10 +44,7 @@ func (r *ResourceRef) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &w); err != nil {
 		return err
 	}
-	r.Kind = w.Kind
-	r.Namespace = w.Namespace
-	r.Name = w.Name
-	r.Tag = w.Tag
+	*r = ResourceRef(w)
 	return nil
 }
 
@@ -83,9 +63,6 @@ func (r *ResourceRef) UnmarshalYAML(value *yaml.Node) error {
 	if err := value.Decode(&w); err != nil {
 		return err
 	}
-	r.Kind = w.Kind
-	r.Namespace = w.Namespace
-	r.Name = w.Name
-	r.Tag = w.Tag
+	*r = ResourceRef(w)
 	return nil
 }
