@@ -49,7 +49,7 @@ const (
 //     remote_mcp_servers, skills, and prompts.
 //
 //   - MutableObjectStore (produced by NewMutableObjectStore). Identity is
-//     (namespace, name). Used for Provider/Deployment and additional
+//     (namespace, name). Used for Runtime/Deployment and additional
 //     downstream mutable control-plane/config kinds.
 //
 // PatchStatus is disjoint from Upsert: it touches only status and

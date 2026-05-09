@@ -12,15 +12,16 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/build"
-	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/manifest"
-	localplatform "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/local"
-	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
-	platformutils "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
-	"github.com/agentregistry-dev/agentregistry/internal/utils"
-	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/spf13/cobra"
 	"github.com/stoewer/go-strcase"
+
+	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/build"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/manifest"
+	localplatform "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/local"
+	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
+	platformutils "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/utils"
+	"github.com/agentregistry-dev/agentregistry/internal/utils"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
 var (
@@ -76,15 +77,15 @@ func runRun(cmd *cobra.Command, args []string) error {
 	}
 
 	// Proceed with running the server
-	if err := runMCPServerWithPlatform(cmd.Context(), server); err != nil {
+	if err := runMCPServerWithRuntime(cmd.Context(), server); err != nil {
 		return fmt.Errorf("error running MCP server: %w", err)
 	}
 
 	return nil
 }
 
-// runMCPServerWithPlatform starts an MCP server using the local platform.
-func runMCPServerWithPlatform(ctx context.Context, server *v1alpha1.MCPServer) error {
+// runMCPServerWithRuntime starts an MCP server using the local runtime.
+func runMCPServerWithRuntime(ctx context.Context, server *v1alpha1.MCPServer) error {
 	// Parse environment variables, arguments, and headers from flags
 	envValues, err := parseKeyValuePairs(runEnvVars)
 	if err != nil {
@@ -119,7 +120,7 @@ func runMCPServerWithPlatform(ctx context.Context, server *v1alpha1.MCPServer) e
 	if err != nil {
 		return fmt.Errorf("failed to translate MCP server: %w", err)
 	}
-	cfg, err := localplatform.BuildLocalPlatformConfig(
+	cfg, err := localplatform.BuildLocalRuntimeConfig(
 		ctx,
 		platformDir,
 		agentGatewayPort,
@@ -129,18 +130,18 @@ func runMCPServerWithPlatform(ctx context.Context, server *v1alpha1.MCPServer) e
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("failed to translate local platform config: %w", err)
+		return fmt.Errorf("failed to translate local runtime config: %w", err)
 	}
 	if cfg == nil {
-		return fmt.Errorf("local platform config is required")
+		return fmt.Errorf("local runtime config is required")
 	}
 
 	fmt.Printf("Starting MCP server: %s (tag %s)...\n", server.Metadata.Name, server.Metadata.Tag)
 
-	if err := localplatform.WriteLocalPlatformFiles(platformDir, cfg, agentGatewayPort); err != nil {
-		return fmt.Errorf("failed to write local platform files: %w", err)
+	if err := localplatform.WriteLocalRuntimeFiles(platformDir, cfg, agentGatewayPort); err != nil {
+		return fmt.Errorf("failed to write local runtime files: %w", err)
 	}
-	if err := localplatform.ComposeUpLocalPlatform(ctx, platformDir, runVerbose); err != nil {
+	if err := localplatform.ComposeUpLocalRuntime(ctx, platformDir, runVerbose); err != nil {
 		return fmt.Errorf("failed to start server: %w", err)
 	}
 

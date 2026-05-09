@@ -19,7 +19,7 @@ var (
 	ErrInvalidURL          = errors.New("invalid url")
 	ErrInvalidLabel        = errors.New("invalid label")
 	ErrInvalidRef          = errors.New("invalid resource reference")
-	ErrUnknownPlatform     = errors.New("unknown provider platform")
+	ErrUnknownRuntimeType  = errors.New("unknown runtime type")
 	ErrInvalidDesiredState = errors.New("invalid deployment desired state")
 	// ErrDanglingRef is returned by ResolverFunc implementations when the
 	// referenced resource does not exist. Tests + callers identify

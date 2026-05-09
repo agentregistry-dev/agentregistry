@@ -7,8 +7,8 @@ import (
 	"os"
 
 	"github.com/agentregistry-dev/agentregistry/internal/client"
-	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
-	platformutils "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
+	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
+	platformutils "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/utils"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 

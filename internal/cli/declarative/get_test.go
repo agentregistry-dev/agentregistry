@@ -62,16 +62,16 @@ func TestGetCmd_RegistryDrivenColumnLookup(t *testing.T) {
 		"should fail at API client check, not kind lookup")
 }
 
-// TestProvider_NoAllTagsSupport pins that Provider — a mutable
+// TestProvider_NoAllTagsSupport pins that Runtime — a mutable
 // namespace/name object — is registered without ListTags /
 // DeleteAllTags closures. The dispatch layer rejects --all-tags
 // when those fields are nil, which is exactly the behavior we want for
-// Provider on this branch (its server store has no /tags endpoint).
+// Runtime on this branch (its server store has no /tags endpoint).
 func TestProvider_NoAllTagsSupport(t *testing.T) {
-	k, err := scheme.Lookup("provider")
+	k, err := scheme.Lookup("runtime")
 	require.NoError(t, err)
-	require.Nil(t, k.ListTags, "Provider should not expose ListTags (mutable object kind)")
-	require.Nil(t, k.DeleteAllTags, "Provider should not expose DeleteAllTags (mutable object kind)")
+	require.Nil(t, k.ListTags, "Runtime should not expose ListTags (mutable object kind)")
+	require.Nil(t, k.DeleteAllTags, "Runtime should not expose DeleteAllTags (mutable object kind)")
 }
 
 // TestDeployment_NoAllTagsSupport is the symmetric assertion for
@@ -208,18 +208,18 @@ func TestGet_Tag_MutuallyExclusiveWithAllTags(t *testing.T) {
 }
 
 // TestGet_Tag_NotSupportedForProvider pins that --tag is rejected
-// for mutable namespace/name kinds (Provider, Deployment) before any client
+// for mutable namespace/name kinds (Runtime, Deployment) before any client
 // dispatch happens.
 func TestGet_Tag_NotSupportedForProvider(t *testing.T) {
 	declarative.SetAPIClient(client.NewClient("http://127.0.0.1:1", ""))
 	t.Cleanup(func() { declarative.SetAPIClient(nil) })
 
 	cmd := declarative.NewGetCmd()
-	cmd.SetArgs([]string{"provider", "my-kagent", "--tag", "1"})
+	cmd.SetArgs([]string{"runtime", "my-kagent", "--tag", "1"})
 	err := cmd.Execute()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "--tag not supported")
-	assert.Contains(t, err.Error(), "provider")
+	assert.Contains(t, err.Error(), "runtime")
 }
 
 // TestGet_Tag_NotSupportedForDeployment is the symmetric assertion

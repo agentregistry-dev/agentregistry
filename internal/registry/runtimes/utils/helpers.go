@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/constants"
-	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
+	runtimetypes "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
@@ -17,7 +17,7 @@ import (
 type MCPServerTranslateOpts struct {
 	DeploymentID string
 	// Namespace, when non-empty, overrides meta.Namespace on the emitted
-	// platform MCPServer. k8s callers set it to the provider's runtime
+	// platform MCPServer. k8s callers set it to the runtime's runtime
 	// namespace so label selectors line up; local callers usually leave it
 	// blank.
 	Namespace    string
@@ -27,14 +27,14 @@ type MCPServerTranslateOpts struct {
 }
 
 // SpecToPlatformMCPServer translates a v1alpha1 MCPServer envelope into the
-// platform-internal *platformtypes.MCPServer. The kind only carries packages,
+// platform-internal *runtimetypes.MCPServer. The kind only carries packages,
 // so the output is always local transport.
 func SpecToPlatformMCPServer(
 	ctx context.Context,
 	meta v1alpha1.ObjectMeta,
 	spec v1alpha1.MCPServerSpec,
 	opts MCPServerTranslateOpts,
-) (*platformtypes.MCPServer, error) {
+) (*runtimetypes.MCPServer, error) {
 	req := &MCPServerRunRequest{
 		Name:         meta.Name,
 		Spec:         spec,
@@ -63,13 +63,13 @@ type RemoteMCPServerTranslateOpts struct {
 }
 
 // SpecToPlatformRemoteMCPServer translates a v1alpha1 RemoteMCPServer envelope
-// into the platform-internal *platformtypes.MCPServer with remote transport.
+// into the platform-internal *runtimetypes.MCPServer with remote transport.
 func SpecToPlatformRemoteMCPServer(
 	ctx context.Context,
 	meta v1alpha1.ObjectMeta,
 	spec v1alpha1.RemoteMCPServerSpec,
 	opts RemoteMCPServerTranslateOpts,
-) (*platformtypes.MCPServer, error) {
+) (*runtimetypes.MCPServer, error) {
 	req := &RemoteMCPServerRunRequest{
 		Name:         meta.Name,
 		Spec:         spec,
@@ -104,7 +104,7 @@ type AgentTranslateOpts struct {
 	// Use SplitDeploymentRuntimeInputs upstream if the deployment encodes
 	// ARG_/HEADER_ prefixes.
 	DeploymentEnv map[string]string
-	// TelemetryEndpoint is Provider.Spec.TelemetryEndpoint. When non-empty
+	// TelemetryEndpoint is Runtime.Spec.TelemetryEndpoint. When non-empty
 	// it lands as OTEL_EXPORTER_OTLP_ENDPOINT on the agent process. Explicit
 	// entries in DeploymentEnv take precedence.
 	TelemetryEndpoint string
@@ -116,7 +116,7 @@ type AgentTranslateOpts struct {
 }
 
 // SpecToPlatformAgent translates a v1alpha1 Agent envelope + Deployment
-// overrides into the platform-internal *platformtypes.Agent plus the set of
+// overrides into the platform-internal *runtimetypes.Agent plus the set of
 // resolved MCPServers that should be deployed alongside it. Nested
 // AgentSpec.MCPServers refs are fetched via opts.Getter; dangling refs
 // surface as v1alpha1.ErrDanglingRef.
@@ -125,7 +125,7 @@ func SpecToPlatformAgent(
 	agentMeta v1alpha1.ObjectMeta,
 	agentSpec v1alpha1.AgentSpec,
 	opts AgentTranslateOpts,
-) (*platformtypes.Agent, []*platformtypes.MCPServer, error) {
+) (*runtimetypes.Agent, []*runtimetypes.MCPServer, error) {
 	envValues := nonNilStringMap(opts.DeploymentEnv)
 	if opts.TelemetryEndpoint != "" {
 		if _, set := envValues["OTEL_EXPORTER_OTLP_ENDPOINT"]; !set {
@@ -151,8 +151,8 @@ func SpecToPlatformAgent(
 	envValues[constants.EnvModelName] = agentSpec.ModelName
 
 	var (
-		resolvedServers []*platformtypes.MCPServer
-		resolvedConfigs []platformtypes.ResolvedMCPServerConfig
+		resolvedServers []*runtimetypes.MCPServer
+		resolvedConfigs []runtimetypes.ResolvedMCPServerConfig
 	)
 	for i, ref := range agentSpec.MCPServers {
 		normalized := ref
@@ -216,11 +216,11 @@ func SpecToPlatformAgent(
 	if agentSpec.Source != nil {
 		image = agentSpec.Source.Image
 	}
-	agent := &platformtypes.Agent{
+	agent := &runtimetypes.Agent{
 		Name:         agentMeta.Name,
 		Tag:          agentMeta.Tag,
 		DeploymentID: opts.DeploymentID,
-		Deployment: platformtypes.AgentDeployment{
+		Deployment: runtimetypes.AgentDeployment{
 			Image: image,
 			Env:   envValues,
 			Port:  DefaultLocalAgentPort,
@@ -260,8 +260,8 @@ func SplitDeploymentRuntimeInputs(input map[string]string) (env, args, headers m
 // (packages only); the agent dials it as a "command" via the gateway.
 // Remote endpoints reference the RemoteMCPServer kind separately and are
 // emitted by remoteMCPServerConfig.
-func mcpServerConfigFromSpec(name string, _ v1alpha1.MCPServerSpec, deploymentID string) platformtypes.ResolvedMCPServerConfig {
-	return platformtypes.ResolvedMCPServerConfig{
+func mcpServerConfigFromSpec(name string, _ v1alpha1.MCPServerSpec, deploymentID string) runtimetypes.ResolvedMCPServerConfig {
+	return runtimetypes.ResolvedMCPServerConfig{
 		Name: GenerateInternalNameForDeployment(name, deploymentID),
 		Type: "command",
 	}
@@ -271,8 +271,8 @@ func mcpServerConfigFromSpec(name string, _ v1alpha1.MCPServerSpec, deploymentID
 // references a RemoteMCPServer. Type is always "remote". Headers come from the
 // translated platform server so required/default/override processing matches
 // the platform apply path.
-func remoteMCPServerConfig(name string, spec v1alpha1.RemoteMCPServerSpec, deploymentID string, platformServer *platformtypes.MCPServer) platformtypes.ResolvedMCPServerConfig {
-	cfg := platformtypes.ResolvedMCPServerConfig{
+func remoteMCPServerConfig(name string, spec v1alpha1.RemoteMCPServerSpec, deploymentID string, platformServer *runtimetypes.MCPServer) runtimetypes.ResolvedMCPServerConfig {
+	cfg := runtimetypes.ResolvedMCPServerConfig{
 		Name: GenerateInternalNameForDeployment(name, deploymentID),
 		Type: "remote",
 		URL:  spec.Remote.URL,

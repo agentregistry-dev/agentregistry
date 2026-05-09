@@ -7,33 +7,34 @@ import (
 	"strings"
 	"testing"
 
-	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
-	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	v1alpha2 "github.com/kagent-dev/kagent/go/api/v1alpha2"
 	kmcpv1alpha1 "github.com/kagent-dev/kmcp/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	runtimetypes "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
 func TestKubernetesTranslatePlatformConfig_AgentOnly(t *testing.T) {
 	ctx := context.Background()
 
-	desired := &platformtypes.DesiredState{
-		Agents: []*platformtypes.Agent{{
+	desired := &runtimetypes.DesiredState{
+		Agents: []*runtimetypes.Agent{{
 			Name: "test-agent",
 			Tag:  "v1",
-			Deployment: platformtypes.AgentDeployment{
+			Deployment: runtimetypes.AgentDeployment{
 				Image: "agent-image:latest",
 				Env:   map[string]string{"ENV_VAR": "value"},
 			},
 		}},
 	}
 
-	config, err := kubernetesTranslatePlatformConfig(ctx, desired)
+	config, err := kubernetesTranslateRuntimeConfig(ctx, desired)
 	if err != nil {
-		t.Fatalf("kubernetesTranslatePlatformConfig failed: %v", err)
+		t.Fatalf("kubernetesTranslateRuntimeConfig failed: %v", err)
 	}
 	if len(config.Agents) != 1 {
 		t.Fatalf("expected 1 agent, got %d", len(config.Agents))
@@ -53,11 +54,11 @@ func TestKubernetesTranslatePlatformConfig_AgentOnly(t *testing.T) {
 func TestKubernetesTranslatePlatformConfig_RemoteMCP(t *testing.T) {
 	ctx := context.Background()
 
-	desired := &platformtypes.DesiredState{
-		MCPServers: []*platformtypes.MCPServer{{
+	desired := &runtimetypes.DesiredState{
+		MCPServers: []*runtimetypes.MCPServer{{
 			Name:          "remote-server",
-			MCPServerType: platformtypes.MCPServerTypeRemote,
-			Remote: &platformtypes.RemoteMCPTarget{
+			MCPServerType: runtimetypes.MCPServerTypeRemote,
+			Remote: &runtimetypes.RemoteMCPTarget{
 				Scheme: "https",
 				Host:   "example.com",
 				Port:   8080,
@@ -66,9 +67,9 @@ func TestKubernetesTranslatePlatformConfig_RemoteMCP(t *testing.T) {
 		}},
 	}
 
-	config, err := kubernetesTranslatePlatformConfig(ctx, desired)
+	config, err := kubernetesTranslateRuntimeConfig(ctx, desired)
 	if err != nil {
-		t.Fatalf("kubernetesTranslatePlatformConfig failed: %v", err)
+		t.Fatalf("kubernetesTranslateRuntimeConfig failed: %v", err)
 	}
 	if len(config.RemoteMCPServers) != 1 {
 		t.Fatalf("expected 1 RemoteMCPServer, got %d", len(config.RemoteMCPServers))
@@ -85,17 +86,17 @@ func TestKubernetesTranslatePlatformConfig_RemoteMCP(t *testing.T) {
 func TestKubernetesTranslatePlatformConfig_LocalMCP(t *testing.T) {
 	ctx := context.Background()
 
-	desired := &platformtypes.DesiredState{
-		MCPServers: []*platformtypes.MCPServer{{
+	desired := &runtimetypes.DesiredState{
+		MCPServers: []*runtimetypes.MCPServer{{
 			Name:          "local-server",
-			MCPServerType: platformtypes.MCPServerTypeLocal,
-			Local: &platformtypes.LocalMCPServer{
-				TransportType: platformtypes.TransportTypeHTTP,
-				Deployment: platformtypes.MCPServerDeployment{
+			MCPServerType: runtimetypes.MCPServerTypeLocal,
+			Local: &runtimetypes.LocalMCPServer{
+				TransportType: runtimetypes.TransportTypeHTTP,
+				Deployment: runtimetypes.MCPServerDeployment{
 					Image: "mcp-image:latest",
 					Env:   map[string]string{"KAGENT_NAMESPACE": "custom-ns"},
 				},
-				HTTP: &platformtypes.HTTPTransport{
+				HTTP: &runtimetypes.HTTPTransport{
 					Port: 3000,
 					Path: "/sse",
 				},
@@ -103,9 +104,9 @@ func TestKubernetesTranslatePlatformConfig_LocalMCP(t *testing.T) {
 		}},
 	}
 
-	config, err := kubernetesTranslatePlatformConfig(ctx, desired)
+	config, err := kubernetesTranslateRuntimeConfig(ctx, desired)
 	if err != nil {
-		t.Fatalf("kubernetesTranslatePlatformConfig failed: %v", err)
+		t.Fatalf("kubernetesTranslateRuntimeConfig failed: %v", err)
 	}
 	if len(config.MCPServers) != 1 {
 		t.Fatalf("expected 1 MCPServer, got %d", len(config.MCPServers))
@@ -127,18 +128,18 @@ func TestKubernetesTranslatePlatformConfig_AgentWithMCPServers(t *testing.T) {
 
 	// MCP server config is now injected via MCP_SERVERS_CONFIG env var by ResolveAgent,
 	// so the K8s translation layer should not create a ConfigMap for MCP-server-only agents.
-	desired := &platformtypes.DesiredState{
-		Agents: []*platformtypes.Agent{{
+	desired := &runtimetypes.DesiredState{
+		Agents: []*runtimetypes.Agent{{
 			Name: "test-agent",
 			Tag:  "v1",
-			Deployment: platformtypes.AgentDeployment{
+			Deployment: runtimetypes.AgentDeployment{
 				Image: "agent-image:latest",
 				Env: map[string]string{
 					"ENV_VAR":            "value",
 					"MCP_SERVERS_CONFIG": `[{"name":"sqlite","type":"command"},{"name":"brave-search","type":"remote","url":"http://brave-search:8080/mcp","headers":{"X-Custom":"header-value"}}]`,
 				},
 			},
-			ResolvedMCPServers: []platformtypes.ResolvedMCPServerConfig{
+			ResolvedMCPServers: []runtimetypes.ResolvedMCPServerConfig{
 				{Name: "sqlite", Type: "command"},
 				{
 					Name:    "brave-search",
@@ -150,9 +151,9 @@ func TestKubernetesTranslatePlatformConfig_AgentWithMCPServers(t *testing.T) {
 		}},
 	}
 
-	config, err := kubernetesTranslatePlatformConfig(ctx, desired)
+	config, err := kubernetesTranslateRuntimeConfig(ctx, desired)
 	if err != nil {
-		t.Fatalf("kubernetesTranslatePlatformConfig failed: %v", err)
+		t.Fatalf("kubernetesTranslateRuntimeConfig failed: %v", err)
 	}
 
 	// No ConfigMap should be created -- MCP config is delivered via env var.
@@ -169,7 +170,7 @@ func TestKubernetesTranslatePlatformConfig_AgentWithMCPServers(t *testing.T) {
 	for _, env := range agent.Spec.BYO.Deployment.Env {
 		if env.Name == "MCP_SERVERS_CONFIG" {
 			foundMCPEnv = true
-			var savedConfigs []platformtypes.ResolvedMCPServerConfig
+			var savedConfigs []runtimetypes.ResolvedMCPServerConfig
 			if err := json.Unmarshal([]byte(env.Value), &savedConfigs); err != nil {
 				t.Fatalf("failed to decode MCP_SERVERS_CONFIG env: %v", err)
 			}
@@ -210,24 +211,24 @@ func TestKubernetesTranslatePlatformConfig_NamespaceConsistency(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			desired := &platformtypes.DesiredState{
-				Agents: []*platformtypes.Agent{{
+			desired := &runtimetypes.DesiredState{
+				Agents: []*runtimetypes.Agent{{
 					Name: "test-agent",
 					Tag:  "v1",
-					Deployment: platformtypes.AgentDeployment{
+					Deployment: runtimetypes.AgentDeployment{
 						Image: "agent-image:latest",
 						Env:   tt.agentEnv,
 					},
-					ResolvedMCPServers: []platformtypes.ResolvedMCPServerConfig{
+					ResolvedMCPServers: []runtimetypes.ResolvedMCPServerConfig{
 						{Name: "my-mcp", Type: "remote", URL: "http://my-mcp:8080/mcp"},
 					},
 				}},
-				MCPServers: []*platformtypes.MCPServer{
+				MCPServers: []*runtimetypes.MCPServer{
 					{
 						Name:          "remote-mcp",
-						MCPServerType: platformtypes.MCPServerTypeRemote,
+						MCPServerType: runtimetypes.MCPServerTypeRemote,
 						Namespace:     tt.mcpNamespace,
-						Remote: &platformtypes.RemoteMCPTarget{
+						Remote: &runtimetypes.RemoteMCPTarget{
 							Scheme: "https",
 							Host:   "remote-mcp.example.com",
 							Port:   8080,
@@ -236,15 +237,15 @@ func TestKubernetesTranslatePlatformConfig_NamespaceConsistency(t *testing.T) {
 					},
 					{
 						Name:          "local-mcp",
-						MCPServerType: platformtypes.MCPServerTypeLocal,
+						MCPServerType: runtimetypes.MCPServerTypeLocal,
 						Namespace:     tt.mcpNamespace,
-						Local: &platformtypes.LocalMCPServer{
-							TransportType: platformtypes.TransportTypeHTTP,
-							Deployment: platformtypes.MCPServerDeployment{
+						Local: &runtimetypes.LocalMCPServer{
+							TransportType: runtimetypes.TransportTypeHTTP,
+							Deployment: runtimetypes.MCPServerDeployment{
 								Image: "local-mcp:latest",
 								Env:   tt.agentEnv,
 							},
-							HTTP: &platformtypes.HTTPTransport{
+							HTTP: &runtimetypes.HTTPTransport{
 								Port: 3000,
 								Path: "/mcp",
 							},
@@ -253,9 +254,9 @@ func TestKubernetesTranslatePlatformConfig_NamespaceConsistency(t *testing.T) {
 				},
 			}
 
-			config, err := kubernetesTranslatePlatformConfig(context.Background(), desired)
+			config, err := kubernetesTranslateRuntimeConfig(context.Background(), desired)
 			if err != nil {
-				t.Fatalf("kubernetesTranslatePlatformConfig failed: %v", err)
+				t.Fatalf("kubernetesTranslateRuntimeConfig failed: %v", err)
 			}
 			for _, agent := range config.Agents {
 				if agent.Namespace != tt.expectedNamespace {
@@ -284,23 +285,23 @@ func TestKubernetesTranslatePlatformConfig_NamespaceConsistency(t *testing.T) {
 func TestKubernetesTranslatePlatformConfig_DeploymentIDMetadataAndNaming(t *testing.T) {
 	ctx := context.Background()
 
-	desired := &platformtypes.DesiredState{
-		Agents: []*platformtypes.Agent{{
+	desired := &runtimetypes.DesiredState{
+		Agents: []*runtimetypes.Agent{{
 			Name:         "demo-agent",
 			Tag:          "1.0.0",
 			DeploymentID: "dep-agent-123",
-			Deployment: platformtypes.AgentDeployment{
+			Deployment: runtimetypes.AgentDeployment{
 				Image: "agent-image:latest",
 				Env:   map[string]string{"KAGENT_NAMESPACE": "demo-ns"},
 			},
-			ResolvedMCPServers: []platformtypes.ResolvedMCPServerConfig{{Name: "mcp-a", Type: "command"}},
+			ResolvedMCPServers: []runtimetypes.ResolvedMCPServerConfig{{Name: "mcp-a", Type: "command"}},
 		}},
-		MCPServers: []*platformtypes.MCPServer{{
+		MCPServers: []*runtimetypes.MCPServer{{
 			Name:          "demo-mcp",
 			DeploymentID:  "dep-mcp-123",
-			MCPServerType: platformtypes.MCPServerTypeRemote,
+			MCPServerType: runtimetypes.MCPServerTypeRemote,
 			Namespace:     "demo-ns",
-			Remote: &platformtypes.RemoteMCPTarget{
+			Remote: &runtimetypes.RemoteMCPTarget{
 				Scheme: "http",
 				Host:   "example.com",
 				Port:   80,
@@ -309,9 +310,9 @@ func TestKubernetesTranslatePlatformConfig_DeploymentIDMetadataAndNaming(t *test
 		}},
 	}
 
-	config, err := kubernetesTranslatePlatformConfig(ctx, desired)
+	config, err := kubernetesTranslateRuntimeConfig(ctx, desired)
 	if err != nil {
-		t.Fatalf("kubernetesTranslatePlatformConfig failed: %v", err)
+		t.Fatalf("kubernetesTranslateRuntimeConfig failed: %v", err)
 	}
 	agent := config.Agents[0]
 	if agent.Name != "demo-agent-1-0-0-dep-agent-123" {
@@ -345,7 +346,7 @@ func TestKubernetesTranslateSkillsForAgent(t *testing.T) {
 	})
 
 	t.Run("git skill parses ref and path from url", func(t *testing.T) {
-		result, err := kubernetesTranslateSkillsForAgent([]platformtypes.AgentSkillRef{
+		result, err := kubernetesTranslateSkillsForAgent([]runtimetypes.AgentSkillRef{
 			{Name: "parsed-skill", RepoURL: "https://github.com/org/skills/tree/develop/skills/argocd"},
 		})
 		if err != nil {
@@ -358,7 +359,7 @@ func TestKubernetesTranslateSkillsForAgent(t *testing.T) {
 	})
 
 	t.Run("duplicate image refs returns error", func(t *testing.T) {
-		_, err := kubernetesTranslateSkillsForAgent([]platformtypes.AgentSkillRef{
+		_, err := kubernetesTranslateSkillsForAgent([]runtimetypes.AgentSkillRef{
 			{Name: "skill-a", Image: "docker.io/org/skill:latest"},
 			{Name: "skill-b", Image: "docker.io/org/skill:latest"},
 		})
@@ -371,23 +372,23 @@ func TestKubernetesTranslateSkillsForAgent(t *testing.T) {
 func TestKubernetesTranslatePlatformConfig_AgentWithSkills(t *testing.T) {
 	ctx := context.Background()
 
-	desired := &platformtypes.DesiredState{
-		Agents: []*platformtypes.Agent{{
+	desired := &runtimetypes.DesiredState{
+		Agents: []*runtimetypes.Agent{{
 			Name: "skilled-agent",
 			Tag:  "v1",
-			Deployment: platformtypes.AgentDeployment{
+			Deployment: runtimetypes.AgentDeployment{
 				Image: "agent-image:latest",
 				Env:   map[string]string{},
 			},
-			Skills: []platformtypes.AgentSkillRef{
+			Skills: []runtimetypes.AgentSkillRef{
 				{Name: "my-skill", Image: "docker.io/org/my-skill:1.0"},
 			},
 		}},
 	}
 
-	config, err := kubernetesTranslatePlatformConfig(ctx, desired)
+	config, err := kubernetesTranslateRuntimeConfig(ctx, desired)
 	if err != nil {
-		t.Fatalf("kubernetesTranslatePlatformConfig failed: %v", err)
+		t.Fatalf("kubernetesTranslateRuntimeConfig failed: %v", err)
 	}
 	agent := config.Agents[0]
 	if agent.Spec.Skills == nil || len(agent.Spec.Skills.Refs) != 1 || agent.Spec.Skills.Refs[0] != "docker.io/org/my-skill:1.0" {
@@ -398,23 +399,23 @@ func TestKubernetesTranslatePlatformConfig_AgentWithSkills(t *testing.T) {
 func TestKubernetesTranslatePlatformConfig_AgentWithPromptsOnly(t *testing.T) {
 	ctx := context.Background()
 
-	desired := &platformtypes.DesiredState{
-		Agents: []*platformtypes.Agent{{
+	desired := &runtimetypes.DesiredState{
+		Agents: []*runtimetypes.Agent{{
 			Name: "prompt-agent",
 			Tag:  "v1",
-			Deployment: platformtypes.AgentDeployment{
+			Deployment: runtimetypes.AgentDeployment{
 				Image: "agent-image:latest",
 				Env:   map[string]string{"KAGENT_NAMESPACE": "test-ns"},
 			},
-			ResolvedPrompts: []platformtypes.ResolvedPrompt{
+			ResolvedPrompts: []runtimetypes.ResolvedPrompt{
 				{Name: "system-prompt", Content: "You are a helpful assistant."},
 			},
 		}},
 	}
 
-	config, err := kubernetesTranslatePlatformConfig(ctx, desired)
+	config, err := kubernetesTranslateRuntimeConfig(ctx, desired)
 	if err != nil {
-		t.Fatalf("kubernetesTranslatePlatformConfig failed: %v", err)
+		t.Fatalf("kubernetesTranslateRuntimeConfig failed: %v", err)
 	}
 	if len(config.ConfigMaps) != 1 {
 		t.Fatalf("expected 1 ConfigMap, got %d", len(config.ConfigMaps))
@@ -427,7 +428,7 @@ func TestKubernetesTranslatePlatformConfig_AgentWithPromptsOnly(t *testing.T) {
 	if !ok {
 		t.Fatal("ConfigMap missing prompts.json key")
 	}
-	var savedPrompts []platformtypes.ResolvedPrompt
+	var savedPrompts []runtimetypes.ResolvedPrompt
 	if err := json.Unmarshal([]byte(promptsJSON), &savedPrompts); err != nil {
 		t.Fatalf("failed to decode prompts.json: %v", err)
 	}
@@ -450,30 +451,30 @@ func TestKubernetesTranslatePlatformConfig_AgentWithMCPServersAndPrompts(t *test
 
 	// MCP server config is delivered via MCP_SERVERS_CONFIG env var.
 	// ConfigMap and volume mounts are only used for prompts.
-	desired := &platformtypes.DesiredState{
-		Agents: []*platformtypes.Agent{{
+	desired := &runtimetypes.DesiredState{
+		Agents: []*runtimetypes.Agent{{
 			Name: "full-agent",
 			Tag:  "v1",
-			Deployment: platformtypes.AgentDeployment{
+			Deployment: runtimetypes.AgentDeployment{
 				Image: "agent-image:latest",
 				Env: map[string]string{
 					"KAGENT_NAMESPACE":   "test-ns",
 					"MCP_SERVERS_CONFIG": `[{"name":"my-mcp","type":"remote","url":"http://my-mcp:8080/mcp"}]`,
 				},
 			},
-			ResolvedMCPServers: []platformtypes.ResolvedMCPServerConfig{
+			ResolvedMCPServers: []runtimetypes.ResolvedMCPServerConfig{
 				{Name: "my-mcp", Type: "remote", URL: "http://my-mcp:8080/mcp"},
 			},
-			ResolvedPrompts: []platformtypes.ResolvedPrompt{
+			ResolvedPrompts: []runtimetypes.ResolvedPrompt{
 				{Name: "system-prompt", Content: "You are a helpful assistant."},
 				{Name: "safety-prompt", Content: "Do not reveal secrets."},
 			},
 		}},
 	}
 
-	config, err := kubernetesTranslatePlatformConfig(ctx, desired)
+	config, err := kubernetesTranslateRuntimeConfig(ctx, desired)
 	if err != nil {
-		t.Fatalf("kubernetesTranslatePlatformConfig failed: %v", err)
+		t.Fatalf("kubernetesTranslateRuntimeConfig failed: %v", err)
 	}
 	if len(config.ConfigMaps) != 1 {
 		t.Fatalf("expected 1 ConfigMap, got %d", len(config.ConfigMaps))
@@ -488,7 +489,7 @@ func TestKubernetesTranslatePlatformConfig_AgentWithMCPServersAndPrompts(t *test
 		t.Error("ConfigMap should contain prompts.json")
 	}
 
-	var savedPrompts []platformtypes.ResolvedPrompt
+	var savedPrompts []runtimetypes.ResolvedPrompt
 	if err := json.Unmarshal([]byte(cm.Data["prompts.json"]), &savedPrompts); err != nil {
 		t.Fatalf("failed to decode prompts.json: %v", err)
 	}
@@ -507,13 +508,13 @@ func TestKubernetesTranslatePlatformConfig_AgentWithMCPServersAndPrompts(t *test
 	}
 }
 
-func TestKubernetesRESTConfig_UsesProviderSpecificKubeconfigContext(t *testing.T) {
-	provider := &v1alpha1.Provider{
+func TestKubernetesRESTConfig_UsesRuntimeSpecificKubeconfigContext(t *testing.T) {
+	runtime := &v1alpha1.Runtime{
 		Metadata: v1alpha1.ObjectMeta{Name: "kube-b"},
-		Spec: v1alpha1.ProviderSpec{
-			Platform: v1alpha1.PlatformKubernetes,
+		Spec: v1alpha1.RuntimeSpec{
+			Type: v1alpha1.TypeKubernetes,
 			Config: map[string]any{
-				"kubeconfig": testKubernetesProviderKubeconfig(map[string]string{
+				"kubeconfig": testKubernetesRuntimeKubeconfig(map[string]string{
 					"ctx-a": "https://cluster-a.example.test",
 					"ctx-b": "https://cluster-b.example.test",
 				}, "ctx-a"),
@@ -522,7 +523,7 @@ func TestKubernetesRESTConfig_UsesProviderSpecificKubeconfigContext(t *testing.T
 		},
 	}
 
-	cfg, err := kubernetesRESTConfig(provider)
+	cfg, err := kubernetesRESTConfig(runtime)
 	if err != nil {
 		t.Fatalf("kubernetesRESTConfig() error = %v", err)
 	}
@@ -587,7 +588,7 @@ func TestKubernetesDeleteAgentResourcesByDeploymentID_RemovesResolvedMCPResource
 	assertResourceDeleted(&kmcpv1alpha1.MCPServer{}, "demo-local-mcp")
 }
 
-func testKubernetesProviderKubeconfig(contextHosts map[string]string, currentContext string) string {
+func testKubernetesRuntimeKubeconfig(contextHosts map[string]string, currentContext string) string {
 	clusters := make([]string, 0, len(contextHosts))
 	contexts := make([]string, 0, len(contextHosts))
 	users := make([]string, 0, len(contextHosts))

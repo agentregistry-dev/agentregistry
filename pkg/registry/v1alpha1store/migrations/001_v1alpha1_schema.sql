@@ -20,7 +20,7 @@
 -- the v1alpha1 schema or renames it to public.
 --
 -- Authoritative schema for spec + status JSONB is the Go type system under
--- pkg/api/v1alpha1 (Agent/MCPServer/Skill/Prompt/Provider/Deployment typed
+-- pkg/api/v1alpha1 (Agent/MCPServer/Skill/Prompt/Runtime/Deployment typed
 -- envelopes). Validation is enforced at the API boundary by
 -- (*Kind).Validate(); this layer does NOT add JSON schema CHECK constraints.
 
@@ -76,7 +76,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- -----------------------------------------------------------------------------
 -- Tagged-artifact tables: identical shape across agents, mcp_servers,
 -- skills, prompts. (remote_mcp_servers shares the shape and is created
 -- in 005_remote_resources.sql.)
@@ -92,6 +91,13 @@ $$ LANGUAGE plpgsql;
 --   status                     — JSONB per v1alpha1.Status.
 --   deletion_timestamp         — server-managed soft-delete marker
 --   created_at, updated_at     — timestamps (trigger-maintained)
+--
+-- The `uid` column carries a DEFAULT of gen_random_uuid() so it is the sole
+-- UID issuer: the Go store omits it from the INSERT column list on Upsert
+-- (the default fires on create) and keeps it out of the ON CONFLICT DO UPDATE
+-- SET list (so it is preserved across re-applies — Kubernetes-style read-only
+-- metadata.uid). Direct-SQL inserts (the runtimes seed below, manual psql)
+-- get a valid UID without code changes.
 --
 -- Indexes:
 --   PK (namespace, name, tag) supports per-tag lookups.
@@ -197,13 +203,13 @@ CREATE OR REPLACE TRIGGER prompts_set_updated_at  BEFORE UPDATE ON v1alpha1.prom
 CREATE OR REPLACE TRIGGER prompts_notify_status   AFTER  INSERT OR UPDATE OR DELETE ON v1alpha1.prompts  FOR EACH ROW EXECUTE FUNCTION v1alpha1.notify_status_change('v1alpha1_prompts_status');
 
 -- -----------------------------------------------------------------------------
--- Providers and Deployments: lifecycle/infra state, NOT tagged artifacts.
--- Both use Kubernetes-like mutable storage. Provider belongs with Deployment as
+-- Runtimes and Deployments: lifecycle/infra state, NOT tagged artifacts.
+-- Both use Kubernetes-like mutable storage. Runtime belongs with Deployment as
 -- infra/config — the actual tagged artifacts that get deployed are
 -- Agents/MCPServers/Skills/Prompts/RemoteMCPServers.
 -- -----------------------------------------------------------------------------
 
-CREATE TABLE IF NOT EXISTS v1alpha1.providers (
+CREATE TABLE IF NOT EXISTS v1alpha1.runtimes (
     namespace          VARCHAR(255) NOT NULL,
     name               VARCHAR(255) NOT NULL,
     uid                UUID         NOT NULL DEFAULT gen_random_uuid(),
@@ -218,12 +224,12 @@ CREATE TABLE IF NOT EXISTS v1alpha1.providers (
     updated_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     PRIMARY KEY (namespace, name)
 );
-CREATE INDEX IF NOT EXISTS v1alpha1_providers_labels_gin      ON v1alpha1.providers USING GIN (labels);
-CREATE INDEX IF NOT EXISTS v1alpha1_providers_spec_gin        ON v1alpha1.providers USING GIN (spec jsonb_path_ops);
-CREATE INDEX IF NOT EXISTS v1alpha1_providers_updated_at_desc ON v1alpha1.providers (updated_at DESC);
-CREATE INDEX IF NOT EXISTS v1alpha1_providers_terminating    ON v1alpha1.providers (deletion_timestamp) WHERE deletion_timestamp IS NOT NULL;
-CREATE OR REPLACE TRIGGER providers_set_updated_at  BEFORE UPDATE ON v1alpha1.providers  FOR EACH ROW EXECUTE FUNCTION v1alpha1.set_updated_at();
-CREATE OR REPLACE TRIGGER providers_notify_status   AFTER  INSERT OR UPDATE OR DELETE ON v1alpha1.providers  FOR EACH ROW EXECUTE FUNCTION v1alpha1.notify_status_change('v1alpha1_providers_status');
+CREATE INDEX IF NOT EXISTS v1alpha1_runtimes_labels_gin      ON v1alpha1.runtimes USING GIN (labels);
+CREATE INDEX IF NOT EXISTS v1alpha1_runtimes_spec_gin        ON v1alpha1.runtimes USING GIN (spec jsonb_path_ops);
+CREATE INDEX IF NOT EXISTS v1alpha1_runtimes_updated_at_desc ON v1alpha1.runtimes (updated_at DESC);
+CREATE INDEX IF NOT EXISTS v1alpha1_runtimes_terminating    ON v1alpha1.runtimes (deletion_timestamp) WHERE deletion_timestamp IS NOT NULL;
+CREATE OR REPLACE TRIGGER runtimes_set_updated_at  BEFORE UPDATE ON v1alpha1.runtimes  FOR EACH ROW EXECUTE FUNCTION v1alpha1.set_updated_at();
+CREATE OR REPLACE TRIGGER runtimes_notify_status   AFTER  INSERT OR UPDATE OR DELETE ON v1alpha1.runtimes  FOR EACH ROW EXECUTE FUNCTION v1alpha1.notify_status_change('v1alpha1_runtimes_status');
 
 CREATE TABLE IF NOT EXISTS v1alpha1.deployments (
     namespace          VARCHAR(255) NOT NULL,
@@ -248,12 +254,12 @@ CREATE OR REPLACE TRIGGER deployments_set_updated_at  BEFORE UPDATE ON v1alpha1.
 CREATE OR REPLACE TRIGGER deployments_notify_status   AFTER  INSERT OR UPDATE OR DELETE ON v1alpha1.deployments  FOR EACH ROW EXECUTE FUNCTION v1alpha1.notify_status_change('v1alpha1_deployments_status');
 
 -- -----------------------------------------------------------------------------
--- Seed: default providers so deployments can reference them out-of-the-box.
+-- Seed: default runtimes so deployments can reference them out-of-the-box.
 -- Seeded in the `default` namespace.
 -- -----------------------------------------------------------------------------
 
-INSERT INTO v1alpha1.providers (namespace, name, spec)
+INSERT INTO v1alpha1.runtimes (namespace, name, spec)
 VALUES
-    ('default', 'local',              '{"platform":"local"}'::jsonb),
-    ('default', 'kubernetes-default', '{"platform":"kubernetes"}'::jsonb)
+    ('default', 'local',              '{"type":"Local"}'::jsonb),
+    ('default', 'kubernetes-default', '{"type":"Kubernetes"}'::jsonb)
 ON CONFLICT (namespace, name) DO NOTHING;

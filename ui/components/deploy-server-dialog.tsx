@@ -50,7 +50,7 @@ export function DeployServerDialog({ open, onOpenChange, server, onDeploySuccess
           serverName: server.server.name,
           tag: server.server.tag,
           env: config,
-          providerId: "local",
+          runtimeId: "local",
         },
         throwOnError: true,
       })

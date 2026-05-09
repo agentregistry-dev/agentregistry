@@ -218,8 +218,8 @@ func setupAgentStoreWithAuditor(t *testing.T, a types.Auditor) *v1alpha1store.St
 func setupProviderStoreWithAuditor(t *testing.T, a types.Auditor) *v1alpha1store.Store {
 	t.Helper()
 	pool := v1alpha1store.NewTestPool(t)
-	return v1alpha1store.NewMutableObjectStore(pool, "v1alpha1.providers",
-		v1alpha1store.WithKind(v1alpha1.KindProvider),
+	return v1alpha1store.NewMutableObjectStore(pool, "v1alpha1.runtimes",
+		v1alpha1store.WithKind(v1alpha1.KindRuntime),
 		v1alpha1store.WithAuditor(a),
 	)
 }
@@ -262,17 +262,17 @@ func TestUpsert_AuditorCalledOnUpsertCreated(t *testing.T) {
 }
 
 // TestUpsert_AuditorNotCalledForMutableObjectKinds verifies the
-// Provider/Deployment upsert path does not fire ResourceTagCreated; those kinds
+// Runtime/Deployment upsert path does not fire ResourceTagCreated; those kinds
 // model lifecycle state and are out of scope for tag-creation audit events.
 func TestUpsert_AuditorNotCalledForMutableObjectKinds(t *testing.T) {
 	auditor := &typestest.RecordingAuditor{}
 	store := setupProviderStoreWithAuditor(t, auditor)
 	ctx := context.Background()
 
-	_, err := store.Upsert(ctx, &v1alpha1.Provider{
-		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindProvider},
+	_, err := store.Upsert(ctx, &v1alpha1.Runtime{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindRuntime},
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "p1"},
-		Spec:     v1alpha1.ProviderSpec{Platform: v1alpha1.PlatformLocal},
+		Spec:     v1alpha1.RuntimeSpec{Type: v1alpha1.TypeLocal},
 	})
 	require.NoError(t, err)
 	require.Empty(t, auditor.Events(), "mutable-object kinds must not emit ResourceTagCreated")

@@ -1,6 +1,6 @@
 // Package v1alpha1crud wires the generic CRUD HTTP handlers for every
 // first-party v1alpha1 Kind shipped by this repo (Agent, MCPServer,
-// Skill, Prompt, Provider, Deployment). Per-kind registration is a
+// Skill, Prompt, Runtime, Deployment). Per-kind registration is a
 // single `register(...)` call in bindings.go's init(); resource.Register
 // handles every per-kind quirk internally (per-kind authz / list
 // filtering / post-upsert / post-delete threaded through PerKindHooks).
@@ -41,7 +41,7 @@ type PerKindHooks struct {
 	ListFilters map[string]func(ctx context.Context, in resource.AuthorizeInput) (string, []any, error)
 	// PostUpserts run after a successful PUT; see resource.Config.PostUpsert.
 	// Wired by downstream builds that need to mirror state into a
-	// platform-specific sidecar table on Provider apply, drive a
+	// type-specific sidecar table on Runtime apply, drive a
 	// reconciler, etc. Missing keys = no post-upsert hook for that kind.
 	PostUpserts map[string]func(ctx context.Context, obj v1alpha1.Object) error
 	// PostDeletes run after a successful DELETE; see

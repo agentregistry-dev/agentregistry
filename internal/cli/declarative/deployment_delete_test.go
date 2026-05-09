@@ -9,11 +9,12 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // deploymentTestServer builds an httptest.Server routing:
@@ -68,8 +69,8 @@ func setupClientForServer(t *testing.T, srv *httptest.Server) {
 	t.Cleanup(func() { declarative.SetAPIClient(nil) })
 }
 
-// (1) Tagged target delete removes all provider-specific deployments matching
-// (name, tag). Deployments on other providers for the same (name, tag) get
+// (1) Tagged target delete removes all runtime-specific deployments matching
+// (name, tag). Deployments on other runtimes for the same (name, tag) get
 // deleted; deployments on other tags are left alone.
 func TestDeploymentDelete_RemovesAllProviderMatchesForTag(t *testing.T) {
 	deployments := []v1alpha1.Deployment{
@@ -86,7 +87,7 @@ func TestDeploymentDelete_RemovesAllProviderMatchesForTag(t *testing.T) {
 	require.NoError(t, cmd.Execute())
 
 	assert.ElementsMatch(t, []string{"default/aws-v1", "default/gcp-v1"}, *deleted,
-		"both provider variants of summarizer 1.0.0 should be deleted; nothing else")
+		"both runtime variants of summarizer 1.0.0 should be deleted; nothing else")
 }
 
 // (2) When no deployment matches (name, tag), returns a not-found error.
@@ -220,7 +221,7 @@ func TestDeploymentDelete_NoForceFlagOmitsQueryParam(t *testing.T) {
 
 // (8) --force is rejected for non-deployment kinds.
 func TestDelete_ForceRejectedForNonDeploymentKinds(t *testing.T) {
-	for _, kind := range []string{"agent", "mcp", "skill", "prompt", "provider"} {
+	for _, kind := range []string{"agent", "mcp", "skill", "prompt", "runtime"} {
 		t.Run(kind, func(t *testing.T) {
 			cmd := declarative.NewDeleteCmd()
 			cmd.SetArgs([]string{kind, "test-name", "--tag", "1.0.0", "--force"})

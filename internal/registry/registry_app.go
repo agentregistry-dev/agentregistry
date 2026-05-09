@@ -22,8 +22,8 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/router"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/kubernetes"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/local"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/kubernetes"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/local"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
@@ -93,11 +93,13 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	}()
 
 	// v1alpha1 DeploymentAdapter map consumed by the coordinator below.
-	// Built OSS-side from the local + kubernetes ports; downstream builds
-	// extend via AppOptions.DeploymentAdapters.
+	// Built OSS-side from the local + kubernetes ports; enterprise extends
+	// via AppOptions.DeploymentAdapters. Keys are the canonical CamelCase
+	// Spec.Type values; Runtime.Validate canonicalizes user-supplied case
+	// at admission so the coordinator's lookup can use exact-match.
 	deploymentAdapters := map[string]types.DeploymentAdapter{
-		"local":      local.NewLocalDeploymentAdapter(cfg.RuntimeDir, cfg.AgentGatewayPort),
-		"kubernetes": kubernetes.NewKubernetesDeploymentAdapter(),
+		v1alpha1.TypeLocal:      local.NewLocalDeploymentAdapter(cfg.RuntimeDir, cfg.AgentGatewayPort),
+		v1alpha1.TypeKubernetes: kubernetes.NewKubernetesDeploymentAdapter(),
 	}
 	maps.Copy(deploymentAdapters, options.DeploymentAdapters)
 	pool := db.Pool()
@@ -308,46 +310,48 @@ func crudPerKindHooks(options types.AppOptions) crud.PerKindHooks {
 		hooks.InitialFinalizers = make(map[string]func(obj v1alpha1.Object) []string, len(options.InitialFinalizers))
 		maps.Copy(hooks.InitialFinalizers, options.InitialFinalizers)
 	}
-	// ProviderPlatforms map dispatches the KindProvider PostUpsert /
-	// PostDelete by Spec.Platform → adapter. A Provider whose platform
-	// has no registered adapter is a no-op (matches the OSS default
-	// where AppOptions.ProviderPlatforms is empty). When both an
-	// explicit PostUpserts[KindProvider] and ProviderPlatforms
-	// are present, the dispatcher chains: caller hook first, then the
-	// platform adapter.
-	if len(options.ProviderPlatforms) > 0 {
-		adapters := make(map[string]types.ProviderPlatformAdapter, len(options.ProviderPlatforms))
-		maps.Copy(adapters, options.ProviderPlatforms)
+	// RuntimeAdapters map dispatches the KindRuntime PostUpsert /
+	// PostDelete by Spec.Type → adapter. A Runtime whose type has
+	// no registered adapter is a no-op (matches the OSS default
+	// where AppOptions.RuntimeAdapters is empty). When both an
+	// explicit PostUpserts[KindRuntime] and RuntimeAdapters are
+	// present, the dispatcher chains: caller hook first, then the
+	// runtime adapter.
+	if len(options.RuntimeAdapters) > 0 {
+		adapters := make(map[string]types.RuntimeAdapter, len(options.RuntimeAdapters))
+		maps.Copy(adapters, options.RuntimeAdapters)
 		if hooks.PostUpserts == nil {
 			hooks.PostUpserts = map[string]func(ctx context.Context, obj v1alpha1.Object) error{}
 		}
 		if hooks.PostDeletes == nil {
 			hooks.PostDeletes = map[string]func(ctx context.Context, obj v1alpha1.Object) error{}
 		}
-		hooks.PostUpserts[v1alpha1.KindProvider] = providerPlatformDispatcher(
-			hooks.PostUpserts[v1alpha1.KindProvider], adapters,
-			func(ctx context.Context, p *v1alpha1.Provider, a types.ProviderPlatformAdapter) error {
-				return a.ApplyProvider(ctx, p)
+		hooks.PostUpserts[v1alpha1.KindRuntime] = runtimeAdapterDispatcher(
+			hooks.PostUpserts[v1alpha1.KindRuntime], adapters,
+			func(ctx context.Context, r *v1alpha1.Runtime, a types.RuntimeAdapter) error {
+				return a.ApplyRuntime(ctx, r)
 			},
 		)
-		hooks.PostDeletes[v1alpha1.KindProvider] = providerPlatformDispatcher(
-			hooks.PostDeletes[v1alpha1.KindProvider], adapters,
-			func(ctx context.Context, p *v1alpha1.Provider, a types.ProviderPlatformAdapter) error {
-				return a.RemoveProvider(ctx, p.Metadata.Name)
+		hooks.PostDeletes[v1alpha1.KindRuntime] = runtimeAdapterDispatcher(
+			hooks.PostDeletes[v1alpha1.KindRuntime], adapters,
+			func(ctx context.Context, r *v1alpha1.Runtime, a types.RuntimeAdapter) error {
+				return a.RemoveRuntime(ctx, r.Metadata.Name)
 			},
 		)
 	}
 	return hooks
 }
 
-// providerPlatformDispatcher wraps a (kind=Provider) hook so the caller
-// hook (if any) runs first, then dispatches to the per-platform adapter
-// matching provider.Spec.Platform. A Provider with no registered
-// adapter is a no-op so the hook stays safe for partial wiring.
-func providerPlatformDispatcher(
+// runtimeAdapterDispatcher wraps a (kind=Runtime) hook so the caller
+// hook (if any) runs first, then dispatches to the per-type adapter
+// matching runtime.Spec.Type. Spec.Type is canonicalized at admission
+// time (Runtime.Validate), so the lookup is exact-match against
+// adapter.Type(). A Runtime with no registered adapter is a no-op so
+// the hook stays safe for partial wiring.
+func runtimeAdapterDispatcher(
 	caller func(ctx context.Context, obj v1alpha1.Object) error,
-	adapters map[string]types.ProviderPlatformAdapter,
-	dispatch func(ctx context.Context, p *v1alpha1.Provider, a types.ProviderPlatformAdapter) error,
+	adapters map[string]types.RuntimeAdapter,
+	dispatch func(ctx context.Context, r *v1alpha1.Runtime, a types.RuntimeAdapter) error,
 ) func(ctx context.Context, obj v1alpha1.Object) error {
 	return func(ctx context.Context, obj v1alpha1.Object) error {
 		if caller != nil {
@@ -355,15 +359,15 @@ func providerPlatformDispatcher(
 				return err
 			}
 		}
-		provider, ok := obj.(*v1alpha1.Provider)
-		if !ok || provider == nil {
+		runtime, ok := obj.(*v1alpha1.Runtime)
+		if !ok || runtime == nil {
 			return nil
 		}
-		adapter, ok := adapters[provider.Spec.Platform]
+		adapter, ok := adapters[runtime.Spec.Type]
 		if !ok {
 			return nil
 		}
-		return dispatch(ctx, provider, adapter)
+		return dispatch(ctx, runtime, adapter)
 	}
 }
 

@@ -65,10 +65,10 @@ export type DeploymentSpec = {
     env?: {
         [key: string]: string;
     };
-    providerConfig?: {
+    runtimeConfig?: {
         [key: string]: unknown;
     };
-    providerRef: ResourceRef;
+    runtimeRef: ResourceRef;
     targetRef: ResourceRef;
 };
 
@@ -145,13 +145,13 @@ export type ListOutputPromptBody = {
     nextCursor?: string;
 };
 
-export type ListOutputProviderBody = {
-    items: Array<Provider> | null;
+export type ListOutputRemoteMcpServerBody = {
+    items: Array<RemoteMcpServer> | null;
     nextCursor?: string;
 };
 
-export type ListOutputRemoteMcpServerBody = {
-    items: Array<RemoteMcpServer> | null;
+export type ListOutputRuntimeBody = {
+    items: Array<Runtime> | null;
     nextCursor?: string;
 };
 
@@ -278,22 +278,6 @@ export type PromptSpec = {
     description?: string;
 };
 
-export type Provider = {
-    apiVersion: string;
-    kind: string;
-    metadata: ObjectMeta;
-    spec: ProviderSpec;
-    status?: Status;
-};
-
-export type ProviderSpec = {
-    config?: {
-        [key: string]: unknown;
-    };
-    platform: string;
-    telemetryEndpoint?: string;
-};
-
 export type RemoteMcpServer = {
     apiVersion: string;
     kind: string;
@@ -318,6 +302,22 @@ export type ResourceRef = {
     name: string;
     namespace?: string;
     tag?: string;
+};
+
+export type Runtime = {
+    apiVersion: string;
+    kind: string;
+    metadata: ObjectMeta;
+    spec: RuntimeSpec;
+    status?: Status;
+};
+
+export type RuntimeSpec = {
+    config?: {
+        [key: string]: unknown;
+    };
+    telemetryEndpoint?: string;
+    type: string;
 };
 
 export type Skill = {
@@ -1169,156 +1169,6 @@ export type ListTagsPromptResponses = {
 
 export type ListTagsPromptResponse = ListTagsPromptResponses[keyof ListTagsPromptResponses];
 
-export type ListProvidersData = {
-    body?: never;
-    path?: never;
-    query?: {
-        /**
-         * Namespace (defaults to 'default'; 'all' lists across all namespaces).
-         */
-        namespace?: string;
-        /**
-         * Max items to return (default 50).
-         */
-        limit?: number;
-        /**
-         * Opaque pagination cursor.
-         */
-        cursor?: string;
-        /**
-         * Label selector: key=value,key2=value2.
-         */
-        labels?: string;
-        /**
-         * Only return the literal latest tag per (namespace, name).
-         */
-        latestOnly?: boolean;
-        /**
-         * Include rows with a deletionTimestamp.
-         */
-        includeTerminating?: boolean;
-    };
-    url: '/v0/providers';
-};
-
-export type ListProvidersErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type ListProvidersError = ListProvidersErrors[keyof ListProvidersErrors];
-
-export type ListProvidersResponses = {
-    /**
-     * OK
-     */
-    200: ListOutputProviderBody;
-};
-
-export type ListProvidersResponse = ListProvidersResponses[keyof ListProvidersResponses];
-
-export type DeleteProviderData = {
-    body?: never;
-    path: {
-        name: string;
-    };
-    query?: {
-        /**
-         * Namespace (internal; defaults to 'default').
-         */
-        namespace?: string;
-        /**
-         * Skip provider-specific teardown and only remove the registry record.
-         */
-        force?: boolean;
-    };
-    url: '/v0/providers/{name}';
-};
-
-export type DeleteProviderErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type DeleteProviderError = DeleteProviderErrors[keyof DeleteProviderErrors];
-
-export type DeleteProviderResponses = {
-    /**
-     * No Content
-     */
-    204: void;
-};
-
-export type DeleteProviderResponse = DeleteProviderResponses[keyof DeleteProviderResponses];
-
-export type GetLatestProviderData = {
-    body?: never;
-    path: {
-        name: string;
-    };
-    query?: {
-        /**
-         * Namespace (internal; defaults to 'default').
-         */
-        namespace?: string;
-    };
-    url: '/v0/providers/{name}';
-};
-
-export type GetLatestProviderErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetLatestProviderError = GetLatestProviderErrors[keyof GetLatestProviderErrors];
-
-export type GetLatestProviderResponses = {
-    /**
-     * OK
-     */
-    200: Provider;
-};
-
-export type GetLatestProviderResponse = GetLatestProviderResponses[keyof GetLatestProviderResponses];
-
-export type ApplyProviderData = {
-    body?: Provider;
-    path: {
-        name: string;
-    };
-    query?: {
-        /**
-         * Namespace (internal; defaults to 'default').
-         */
-        namespace?: string;
-    };
-    url: '/v0/providers/{name}';
-};
-
-export type ApplyProviderErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type ApplyProviderError = ApplyProviderErrors[keyof ApplyProviderErrors];
-
-export type ApplyProviderResponses = {
-    /**
-     * OK
-     */
-    200: Provider;
-};
-
-export type ApplyProviderResponse = ApplyProviderResponses[keyof ApplyProviderResponses];
-
 export type ListRemotemcpserversData = {
     body?: never;
     path?: never;
@@ -1502,6 +1352,156 @@ export type ListTagsRemotemcpserverResponses = {
 };
 
 export type ListTagsRemotemcpserverResponse = ListTagsRemotemcpserverResponses[keyof ListTagsRemotemcpserverResponses];
+
+export type ListRuntimesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Namespace (defaults to 'default'; 'all' lists across all namespaces).
+         */
+        namespace?: string;
+        /**
+         * Max items to return (default 50).
+         */
+        limit?: number;
+        /**
+         * Opaque pagination cursor.
+         */
+        cursor?: string;
+        /**
+         * Label selector: key=value,key2=value2.
+         */
+        labels?: string;
+        /**
+         * Only return the literal latest tag per (namespace, name).
+         */
+        latestOnly?: boolean;
+        /**
+         * Include rows with a deletionTimestamp.
+         */
+        includeTerminating?: boolean;
+    };
+    url: '/v0/runtimes';
+};
+
+export type ListRuntimesErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type ListRuntimesError = ListRuntimesErrors[keyof ListRuntimesErrors];
+
+export type ListRuntimesResponses = {
+    /**
+     * OK
+     */
+    200: ListOutputRuntimeBody;
+};
+
+export type ListRuntimesResponse = ListRuntimesResponses[keyof ListRuntimesResponses];
+
+export type DeleteRuntimeData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+        /**
+         * Skip provider-specific teardown and only remove the registry record.
+         */
+        force?: boolean;
+    };
+    url: '/v0/runtimes/{name}';
+};
+
+export type DeleteRuntimeErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type DeleteRuntimeError = DeleteRuntimeErrors[keyof DeleteRuntimeErrors];
+
+export type DeleteRuntimeResponses = {
+    /**
+     * No Content
+     */
+    204: void;
+};
+
+export type DeleteRuntimeResponse = DeleteRuntimeResponses[keyof DeleteRuntimeResponses];
+
+export type GetLatestRuntimeData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/runtimes/{name}';
+};
+
+export type GetLatestRuntimeErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetLatestRuntimeError = GetLatestRuntimeErrors[keyof GetLatestRuntimeErrors];
+
+export type GetLatestRuntimeResponses = {
+    /**
+     * OK
+     */
+    200: Runtime;
+};
+
+export type GetLatestRuntimeResponse = GetLatestRuntimeResponses[keyof GetLatestRuntimeResponses];
+
+export type ApplyRuntimeData = {
+    body?: Runtime;
+    path: {
+        name: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/runtimes/{name}';
+};
+
+export type ApplyRuntimeErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type ApplyRuntimeError = ApplyRuntimeErrors[keyof ApplyRuntimeErrors];
+
+export type ApplyRuntimeResponses = {
+    /**
+     * OK
+     */
+    200: Runtime;
+};
+
+export type ApplyRuntimeResponse = ApplyRuntimeResponses[keyof ApplyRuntimeResponses];
 
 export type ListSkillsData = {
     body?: never;

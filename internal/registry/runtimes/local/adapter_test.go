@@ -33,7 +33,7 @@ func TestV1Alpha1Apply_MCPServerTarget_WritesComposeAndMarksProgressing(t *testi
 
 	target := &v1alpha1.MCPServer{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindMCPServer},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather", Tag: "1.0.0"},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather"},
 		Spec: v1alpha1.MCPServerSpec{
 			Source: &v1alpha1.MCPServerSource{
 				Package: &v1alpha1.MCPPackage{
@@ -46,22 +46,22 @@ func TestV1Alpha1Apply_MCPServerTarget_WritesComposeAndMarksProgressing(t *testi
 	}
 	deployment := &v1alpha1.Deployment{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindDeployment},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-local"},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-local", Generation: 7},
 		Spec: v1alpha1.DeploymentSpec{
-			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Tag: "1.0.0"},
-			ProviderRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindProvider, Name: "local"},
+			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather"},
+			RuntimeRef:   v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "local"},
 			DesiredState: v1alpha1.DesiredStateDeployed,
 		},
 	}
-	provider := &v1alpha1.Provider{
-		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindProvider},
+	runtime := &v1alpha1.Runtime{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindRuntime},
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "local"},
 	}
 
 	res, err := adapter.Apply(context.Background(), types.ApplyInput{
 		Deployment: deployment,
 		Target:     target,
-		Provider:   provider,
+		Runtime:    runtime,
 	})
 	if err != nil {
 		t.Fatalf("Apply: %v", err)
@@ -82,6 +82,9 @@ func TestV1Alpha1Apply_MCPServerTarget_WritesComposeAndMarksProgressing(t *testi
 	}
 	if gotProgressing.Status != v1alpha1.ConditionTrue {
 		t.Fatalf("Progressing.Status = %q, want True", gotProgressing.Status)
+	}
+	if gotProgressing.ObservedGeneration != 7 {
+		t.Fatalf("Progressing.ObservedGeneration = %d, want 7", gotProgressing.ObservedGeneration)
 	}
 
 	composePath := filepath.Join(tmpDir, "docker-compose.yaml")
@@ -118,8 +121,9 @@ func TestV1Alpha1Remove_CallsComposeDown(t *testing.T) {
 	deployment := &v1alpha1.Deployment{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindDeployment},
 		Metadata: v1alpha1.ObjectMeta{
-			Namespace: "default",
-			Name:      "weather-local",
+			Namespace:  "default",
+			Name:       "weather-local",
+			Generation: 3,
 		},
 	}
 	res, err := adapter.Remove(context.Background(), types.RemoveInput{Deployment: deployment})

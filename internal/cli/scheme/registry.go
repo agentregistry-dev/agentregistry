@@ -28,14 +28,14 @@ type GetFunc func(ctx context.Context, name, tag string) (any, error)
 
 // DeleteFunc deletes a single (name, tag) of the kind. force=true
 // asks the server to skip its PostDelete reconciliation hook (e.g.
-// provider teardown for Deployment); kinds that don't honor force
+// runtime teardown for Deployment); kinds that don't honor force
 // should ignore the flag. The CLI's `arctl delete --force` plumbs
 // through here.
 type DeleteFunc func(ctx context.Context, name, tag string, force bool) error
 
 // ListTagsFunc returns every live tag row for a single (name).
 // Set only on taggable artifact kinds (Agent, MCPServer, Skill, etc.).
-// Nil for kinds whose identity is not tagged (Deployment, Provider) —
+// Nil for kinds whose identity is not tagged (Deployment, Runtime) —
 // callers must check for nil and reject `--all-tags` cleanly.
 type ListTagsFunc func(ctx context.Context, name string) ([]any, error)
 

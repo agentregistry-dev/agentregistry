@@ -12,7 +12,7 @@ import (
 
 func TestAdapter_SatisfiesInterface(t *testing.T) {
 	a := New()
-	require.Equal(t, Platform, a.Platform())
+	require.Equal(t, RuntimeType, a.Type())
 	require.Contains(t, a.SupportedTargetKinds(), v1alpha1.KindAgent)
 	require.Contains(t, a.SupportedTargetKinds(), v1alpha1.KindMCPServer)
 }
@@ -37,8 +37,8 @@ func TestAdapter_ApplyReportsReady(t *testing.T) {
 	require.NotNil(t, ready)
 	require.Equal(t, v1alpha1.ConditionTrue, ready.Status)
 
-	// ProviderMetadata has the applied-at stamp.
-	require.Contains(t, res.ProviderMetadata, "platforms.agentregistry.solo.io/noop/applied-at")
+	// RuntimeMetadata has the applied-at stamp.
+	require.Contains(t, res.RuntimeMetadata, "runtimes.agentregistry.solo.io/noop/applied-at")
 }
 
 // TestAdapter_RemoveReportsRemovedCondition replaces the prior

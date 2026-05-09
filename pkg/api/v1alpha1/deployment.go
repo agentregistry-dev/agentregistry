@@ -4,7 +4,7 @@ package v1alpha1
 //
 // Deployment's metadata.name is independent from the thing it deploys
 // (Spec.TemplateRef), so multiple Deployments can target the same Agent or
-// MCPServer with different user-chosen names, providers, and configs. Identity
+// MCPServer with different user-chosen names, runtimes, and configs. Identity
 // is namespace/name; the deployed content is pinned separately through
 // spec.targetRef.tag.
 type Deployment struct {
@@ -25,15 +25,15 @@ const (
 //
 // TargetRef is required and must name a top-level Agent or MCPServer. The
 // referenced resource's spec is the source of truth for what to run; this
-// Deployment contributes only runtime overrides (env, providerConfig) and
+// Deployment contributes only runtime overrides (env, runtimeConfig) and
 // lifecycle intent (desiredState).
 //
-// ProviderRef is required and must name a top-level Provider. The Provider
+// RuntimeRef is required and must name a top-level Runtime. The Runtime
 // resolves how/where the target is executed (local daemon, kubernetes, etc.).
 type DeploymentSpec struct {
-	TargetRef      ResourceRef       `json:"targetRef" yaml:"targetRef"`
-	ProviderRef    ResourceRef       `json:"providerRef" yaml:"providerRef"`
-	DesiredState   string            `json:"desiredState,omitempty" yaml:"desiredState,omitempty"`
-	Env            map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
-	ProviderConfig map[string]any    `json:"providerConfig,omitempty" yaml:"providerConfig,omitempty"`
+	TargetRef     ResourceRef       `json:"targetRef" yaml:"targetRef"`
+	RuntimeRef    ResourceRef       `json:"runtimeRef" yaml:"runtimeRef"`
+	DesiredState  string            `json:"desiredState,omitempty" yaml:"desiredState,omitempty"`
+	Env           map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
+	RuntimeConfig map[string]any    `json:"runtimeConfig,omitempty" yaml:"runtimeConfig,omitempty"`
 }

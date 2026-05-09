@@ -36,7 +36,7 @@ const DefaultNamespace = "default"
 // live server. When Tag is omitted, the store fills it with the literal
 // "latest" tag.
 //
-// Mutable-object kinds (Provider, Deployment, and additional downstream
+// Mutable-object kinds (Runtime, Deployment, and additional downstream
 // control-plane/config kinds) use Namespace/Name as their full identity.
 // Namespace is an internal
 // detail today — it defaults to "default" on apply and is stripped from

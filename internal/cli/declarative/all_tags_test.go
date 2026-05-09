@@ -125,20 +125,20 @@ func TestGet_AllTags_DeploymentRejected(t *testing.T) {
 	assert.Contains(t, err.Error(), "deployment")
 }
 
-// (3b) `arctl get provider NAME --all-tags` errors cleanly — Provider
+// (3b) `arctl get runtime NAME --all-tags` errors cleanly — Runtime
 // is a mutable namespace/name object whose store has no /tags endpoint.
 // Pin the CLI surface so a future typedKind change can't
-// silently re-expose --all-tags for Provider.
+// silently re-expose --all-tags for Runtime.
 func TestGet_AllTags_ProviderRejected(t *testing.T) {
 	declarative.SetAPIClient(client.NewClient("http://127.0.0.1:1", ""))
 	t.Cleanup(func() { declarative.SetAPIClient(nil) })
 
 	cmd := declarative.NewGetCmd()
-	cmd.SetArgs([]string{"provider", "my-kagent", "--all-tags"})
+	cmd.SetArgs([]string{"runtime", "my-kagent", "--all-tags"})
 	err := cmd.Execute()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "--all-tags not supported")
-	assert.Contains(t, err.Error(), "provider")
+	assert.Contains(t, err.Error(), "runtime")
 }
 
 // (4) `arctl get agents --all-tags` (no NAME) errors — the flag
@@ -229,14 +229,14 @@ func TestDelete_AllTags_DeploymentRejected(t *testing.T) {
 	assert.Contains(t, err.Error(), "--all-tags not supported")
 }
 
-// (7b) `arctl delete provider NAME --all-tags` errors cleanly —
-// Provider has no DeleteAllTags endpoint server-side.
+// (7b) `arctl delete runtime NAME --all-tags` errors cleanly —
+// Runtime has no DeleteAllTags endpoint server-side.
 func TestDelete_AllTags_ProviderRejected(t *testing.T) {
 	declarative.SetAPIClient(client.NewClient("http://127.0.0.1:1", ""))
 	t.Cleanup(func() { declarative.SetAPIClient(nil) })
 
 	cmd := declarative.NewDeleteCmd()
-	cmd.SetArgs([]string{"provider", "my-kagent", "--all-tags"})
+	cmd.SetArgs([]string{"runtime", "my-kagent", "--all-tags"})
 	err := cmd.Execute()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "--all-tags not supported")

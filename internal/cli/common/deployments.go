@@ -11,7 +11,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
-const platformMetadataPrefix = "platforms.agentregistry.solo.io/"
+const runtimeMetadataPrefix = "runtimes.agentregistry.solo.io/"
 
 // DeploymentRecord is the CLI-friendly projection of a v1alpha1 Deployment.
 type DeploymentRecord struct {
@@ -22,12 +22,12 @@ type DeploymentRecord struct {
 	TargetName        string            `json:"serverName"`
 	TargetTag         string            `json:"targetTag,omitempty"`
 	ResourceType      string            `json:"resourceType"`
-	ProviderID        string            `json:"providerId,omitempty"`
+	RuntimeID         string            `json:"runtimeId,omitempty"`
 	Status            string            `json:"status"`
 	Origin            string            `json:"origin"`
 	Env               map[string]string `json:"env,omitempty"`
-	ProviderConfig    map[string]any    `json:"providerConfig,omitempty"`
-	ProviderMetadata  map[string]any    `json:"providerMetadata,omitempty"`
+	RuntimeConfig     map[string]any    `json:"runtimeConfig,omitempty"`
+	RuntimeMetadata   map[string]any    `json:"runtimeMetadata,omitempty"`
 	Error             string            `json:"error,omitempty"`
 	CreatedAt         time.Time         `json:"deployedAt,omitempty"`
 	UpdatedAt         time.Time         `json:"updatedAt,omitempty"`
@@ -93,12 +93,12 @@ func DeploymentRecordFromObject(dep *v1alpha1.Deployment) *DeploymentRecord {
 		TargetName:        dep.Spec.TargetRef.Name,
 		TargetTag:         dep.Spec.TargetRef.Tag,
 		ResourceType:      deploymentResourceType(dep.Spec.TargetRef.Kind),
-		ProviderID:        dep.Spec.ProviderRef.Name,
+		RuntimeID:         dep.Spec.RuntimeRef.Name,
 		Status:            DeploymentStatus(dep),
 		Origin:            "managed",
 		Env:               cloneStringMap(dep.Spec.Env),
-		ProviderConfig:    cloneAnyMap(dep.Spec.ProviderConfig),
-		ProviderMetadata:  deploymentProviderMetadata(dep.Metadata.Annotations),
+		RuntimeConfig:     cloneAnyMap(dep.Spec.RuntimeConfig),
+		RuntimeMetadata:   deploymentRuntimeMetadata(dep.Metadata.Annotations),
 		Error:             deploymentError(dep.Status),
 		CreatedAt:         dep.Metadata.CreatedAt,
 		UpdatedAt:         dep.Metadata.UpdatedAt,
@@ -112,13 +112,13 @@ func DeploymentID(namespace, name string) string {
 }
 
 // DeploymentResourceName returns the generated metadata.name used by imperative
-// deployment create flows for a (target, provider) pair.
-func DeploymentResourceName(targetName, providerID string) string {
+// deployment create flows for a (target, runtime) pair.
+func DeploymentResourceName(targetName, runtimeID string) string {
 	name := strings.ReplaceAll(targetName, "/", "-")
-	if providerID == "" {
+	if runtimeID == "" {
 		return name
 	}
-	return fmt.Sprintf("%s-%s", name, providerID)
+	return fmt.Sprintf("%s-%s", name, runtimeID)
 }
 
 // DeploymentStatus derives the old CLI phase strings from v1alpha1 conditions.
@@ -141,7 +141,7 @@ func DeploymentStatus(dep *v1alpha1.Deployment) string {
 	if c := dep.Status.GetCondition("Progressing"); c != nil && c.Status != v1alpha1.ConditionFalse {
 		return "deploying"
 	}
-	if c := dep.Status.GetCondition("ProviderConfigured"); c != nil && c.Status == v1alpha1.ConditionTrue {
+	if c := dep.Status.GetCondition("RuntimeConfigured"); c != nil && c.Status == v1alpha1.ConditionTrue {
 		return "deploying"
 	}
 	return "pending"
@@ -156,7 +156,7 @@ func deploymentError(status v1alpha1.Status) string {
 	return ""
 }
 
-func deploymentProviderMetadata(annotations map[string]string) map[string]any {
+func deploymentRuntimeMetadata(annotations map[string]string) map[string]any {
 	if len(annotations) == 0 {
 		return nil
 	}
@@ -164,7 +164,7 @@ func deploymentProviderMetadata(annotations map[string]string) map[string]any {
 	out := map[string]any{}
 	shortKeys := map[string]bool{}
 	for key, value := range annotations {
-		if !strings.HasPrefix(key, platformMetadataPrefix) {
+		if !strings.HasPrefix(key, runtimeMetadataPrefix) {
 			continue
 		}
 		shortKey := key[strings.LastIndex(key, "/")+1:]

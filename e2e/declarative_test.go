@@ -969,9 +969,13 @@ func TestApplyDeployment_HTTPIdempotent(t *testing.T) {
 metadata:
   name: %s
 spec:
-  resourceType: agent
-  providerId: local
-`, agentName)
+  targetRef:
+    kind: Agent
+    name: %s
+  runtimeRef:
+    kind: Runtime
+    name: local
+`, agentName, agentName)
 
 	httpClient := &http.Client{Timeout: 60 * time.Second}
 	doApply := func(t *testing.T) string {
@@ -1063,7 +1067,7 @@ spec:
 // --- Batch apply endpoint tests ---
 
 // TestBatchApply_MultiResource verifies that applying a multi-document YAML
-// containing an agent and a provider in one file succeeds and returns per-resource
+// containing an agent and a runtime in one file succeeds and returns per-resource
 // "applied" status for each resource.
 func TestBatchApply_MultiResource(t *testing.T) {
 	regURL := RegistryURL(t)
@@ -1071,18 +1075,13 @@ func TestBatchApply_MultiResource(t *testing.T) {
 
 	agentName := UniqueAgentName("batchagent")
 	agentTag := defaultArtifactTag
-	providerName := "e2e-batch-prov-" + UniqueNameWithPrefix("prov")
+	runtimeName := "e2e-batch-rt-" + UniqueNameWithPrefix("rt")
 
 	// Pre-clean and register cleanup for both resources.
 	RunArctl(t, tmpDir, "delete", "agent", agentName, "--tag", agentTag, "--registry-url", regURL)
 	t.Cleanup(func() {
 		RunArctl(t, tmpDir, "delete", "agent", agentName, "--tag", agentTag, "--registry-url", regURL)
-		req, _ := http.NewRequest(http.MethodDelete,
-			regURL+"/providers/"+providerName+"?platform=local", nil)
-		client := &http.Client{Timeout: 10 * time.Second}
-		if resp, err := client.Do(req); err == nil {
-			resp.Body.Close()
-		}
+		RunArctl(t, tmpDir, "delete", "runtime", runtimeName, "--registry-url", regURL)
 	})
 
 	multiYAML := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
@@ -1099,12 +1098,12 @@ spec:
   modelName: gemini-2.0-flash
 ---
 apiVersion: ar.dev/v1alpha1
-kind: Provider
+kind: Runtime
 metadata:
   name: %s
 spec:
-  platform: local
-`, agentName, providerName)
+  type: Local
+`, agentName, runtimeName)
 
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "multi.yaml", multiYAML)
 
@@ -1114,7 +1113,7 @@ spec:
 	// Each resource must appear in the output as "applied".
 	RequireOutputContains(t, result, "Agent/"+agentName)
 	RequireOutputContains(t, result, "✓")
-	RequireOutputContains(t, result, "Provider/"+providerName)
+	RequireOutputContains(t, result, "Runtime/"+runtimeName)
 
 	// Verify agent exists via HTTP.
 	verifyAgentExists(t, regURL, agentName, agentTag)
@@ -1130,17 +1129,12 @@ func TestBatchApply_Idempotent(t *testing.T) {
 
 	agentName := UniqueAgentName("idempbatch")
 	agentTag := defaultArtifactTag
-	providerName := "e2e-idemp-prov-" + UniqueNameWithPrefix("prov")
+	runtimeName := "e2e-idemp-rt-" + UniqueNameWithPrefix("rt")
 
 	RunArctl(t, tmpDir, "delete", "agent", agentName, "--tag", agentTag, "--registry-url", regURL)
 	t.Cleanup(func() {
 		RunArctl(t, tmpDir, "delete", "agent", agentName, "--tag", agentTag, "--registry-url", regURL)
-		req, _ := http.NewRequest(http.MethodDelete,
-			regURL+"/providers/"+providerName+"?platform=local", nil)
-		client := &http.Client{Timeout: 10 * time.Second}
-		if resp, err := client.Do(req); err == nil {
-			resp.Body.Close()
-		}
+		RunArctl(t, tmpDir, "delete", "runtime", runtimeName, "--registry-url", regURL)
 	})
 
 	multiYAML := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
@@ -1157,12 +1151,12 @@ spec:
   modelName: gemini-2.0-flash
 ---
 apiVersion: ar.dev/v1alpha1
-kind: Provider
+kind: Runtime
 metadata:
   name: %s
 spec:
-  platform: local
-`, agentName, providerName)
+  type: Local
+`, agentName, runtimeName)
 
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "multi.yaml", multiYAML)
 
@@ -1207,7 +1201,7 @@ func TestBatchApply_DriftRequiresForce(t *testing.T) {
 	agentName := UniqueAgentName("driftbatch")
 	agentImage := fmt.Sprintf("localhost:5001/%s:e2e", agentName)
 	agentTag := defaultArtifactTag
-	providerID := "local"
+	runtimeID := "local"
 
 	t.Cleanup(func() {
 		RemoveDeploymentsByServerName(t, regURL, agentName)
@@ -1238,9 +1232,14 @@ kind: Deployment
 metadata:
   name: %s
 spec:
-  providerId: %s
-  resourceType: agent
-`, agentName, providerID)
+  targetRef:
+    kind: Agent
+    name: %s
+    tag: %s
+  runtimeRef:
+    kind: Runtime
+    name: %s
+`, agentName, agentName, agentTag, runtimeID)
 
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "deploy.yaml", deployYAML)
 	result = RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
@@ -1254,11 +1253,16 @@ kind: Deployment
 metadata:
   name: %s
 spec:
-  providerId: %s
-  resourceType: agent
+  targetRef:
+    kind: Agent
+    name: %s
+    tag: %s
+  runtimeRef:
+    kind: Runtime
+    name: %s
   env:
     NEW_VAR: "drift-value"
-`, agentName, providerID)
+`, agentName, agentName, agentTag, runtimeID)
 
 	driftPath := writeDeclarativeYAML(t, tmpDir, "deploy-drift.yaml", driftYAML)
 
@@ -1894,9 +1898,14 @@ kind: Deployment
 metadata:
   name: %s
 spec:
-  resourceType: agent
-  providerId: local
-`, agentName)
+  targetRef:
+    kind: Agent
+    name: %s
+    tag: %s
+  runtimeRef:
+    kind: Runtime
+    name: local
+`, agentName, agentName, tag)
 	deployPath := writeDeclarativeYAML(t, tmpDir, "deployment.yaml", deployYAML)
 	RequireSuccess(t, RunArctl(t, tmpDir, "apply", "-f", deployPath, "--registry-url", regURL))
 
@@ -1906,8 +1915,9 @@ spec:
 	RequireOutputContains(t, result, "apiVersion: ar.dev/v1alpha1")
 	RequireOutputContains(t, result, "kind: Deployment")
 	// Spec fields — declarative, round-trippable.
-	RequireOutputContains(t, result, "providerId: local")
-	RequireOutputContains(t, result, "resourceType: agent")
+	RequireOutputContains(t, result, "runtimeRef:")
+	RequireOutputContains(t, result, "name: local")
+	RequireOutputContains(t, result, "kind: Runtime")
 	// Status block — server-managed.
 	RequireOutputContains(t, result, "status:")
 	// phase may be "deploying" or "deployed" depending on how fast the
@@ -1949,8 +1959,8 @@ spec:
     kind: Agent
     name: %s
     tag: latest
-  providerRef:
-    kind: Provider
+  runtimeRef:
+    kind: Runtime
     name: local
 `, missingName, missingName)
 	deployPath := writeDeclarativeYAML(t, tmpDir, "deployment.yaml", deployYAML)

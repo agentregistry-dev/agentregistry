@@ -123,14 +123,14 @@ func TestStore_GetByRefResolvesBlankTagToLatest(t *testing.T) {
 
 func TestStore_GetByRefMutableRejectsTag(t *testing.T) {
 	pool := NewTestPool(t)
-	providers := NewMutableObjectStore(pool, "v1alpha1.providers")
+	runtimes := NewMutableObjectStore(pool, "v1alpha1.runtimes")
 	ctx := context.Background()
 
-	local, err := providers.GetByRef(ctx, testNS, "local", "")
+	local, err := runtimes.GetByRef(ctx, testNS, "local", "")
 	require.NoError(t, err)
 	require.Equal(t, "local", local.Metadata.Name)
 
-	_, err = providers.GetByRef(ctx, testNS, "local", "stable")
+	_, err = runtimes.GetByRef(ctx, testNS, "local", "stable")
 	require.ErrorContains(t, err, "tag pinning is not supported")
 }
 
@@ -155,14 +155,14 @@ func TestStore_DeleteByRefTaggedBlankDeletesAllTags(t *testing.T) {
 
 func TestStore_DeleteByRefMutableDeletesByName(t *testing.T) {
 	pool := NewTestPool(t)
-	providers := NewMutableObjectStore(pool, "v1alpha1.providers")
+	runtimes := NewMutableObjectStore(pool, "v1alpha1.runtimes")
 	ctx := context.Background()
 
-	require.NoError(t, providers.DeleteByRef(ctx, testNS, "local", ""))
-	_, err := providers.GetByRef(ctx, testNS, "local", "")
+	require.NoError(t, runtimes.DeleteByRef(ctx, testNS, "local", ""))
+	_, err := runtimes.GetByRef(ctx, testNS, "local", "")
 	require.ErrorIs(t, err, pkgdb.ErrNotFound)
 
-	err = providers.DeleteByRef(ctx, testNS, "kubernetes-default", "stable")
+	err = runtimes.DeleteByRef(ctx, testNS, "kubernetes-default", "stable")
 	require.ErrorContains(t, err, "tag pinning is not supported")
 }
 
@@ -502,23 +502,23 @@ func TestStore_FindReferrers(t *testing.T) {
 	require.Equal(t, "refs-bar", results[0].Metadata.Name)
 }
 
-func TestStore_SeededProviders(t *testing.T) {
+func TestStore_SeededRuntimes(t *testing.T) {
 	pool := NewTestPool(t)
-	// Provider is a mutable object keyed by namespace/name.
-	providers := NewMutableObjectStore(pool, "v1alpha1.providers")
+	// Runtime is a mutable object keyed by namespace/name.
+	runtimes := NewMutableObjectStore(pool, "v1alpha1.runtimes")
 	ctx := context.Background()
 
-	local, err := providers.GetLatest(ctx, "default", "local")
+	local, err := runtimes.GetLatest(ctx, "default", "local")
 	require.NoError(t, err)
 
-	var spec v1alpha1.ProviderSpec
+	var spec v1alpha1.RuntimeSpec
 	require.NoError(t, json.Unmarshal(local.Spec, &spec))
-	require.Equal(t, v1alpha1.PlatformLocal, spec.Platform)
+	require.Equal(t, v1alpha1.TypeLocal, spec.Type)
 
-	k8s, err := providers.GetLatest(ctx, "default", "kubernetes-default")
+	k8s, err := runtimes.GetLatest(ctx, "default", "kubernetes-default")
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(k8s.Spec, &spec))
-	require.Equal(t, v1alpha1.PlatformKubernetes, spec.Platform)
+	require.Equal(t, v1alpha1.TypeKubernetes, spec.Type)
 }
 
 // TestStore_NotifyPayloadDiscreteFields guards the R2 fix:

@@ -9,20 +9,21 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/golang-jwt/jwt/v5"
+
+	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 )
 
 // PermissionArtifactType represents the type of artifact that a permission is for
 type PermissionArtifactType string
 
 const (
-	PermissionArtifactTypeAgent    PermissionArtifactType = "agent"
-	PermissionArtifactTypeSkill    PermissionArtifactType = "skill"
-	PermissionArtifactTypeServer   PermissionArtifactType = "server"
-	PermissionArtifactTypePrompt   PermissionArtifactType = "prompt"
-	PermissionArtifactTypeProvider PermissionArtifactType = "provider"
+	PermissionArtifactTypeAgent   PermissionArtifactType = "agent"
+	PermissionArtifactTypeSkill   PermissionArtifactType = "skill"
+	PermissionArtifactTypeServer  PermissionArtifactType = "server"
+	PermissionArtifactTypePrompt  PermissionArtifactType = "prompt"
+	PermissionArtifactTypeRuntime PermissionArtifactType = "runtime"
 )
 
 // PermissionAction represents the type of action that can be performed

@@ -66,7 +66,7 @@ type RouteOptions struct {
 	// callbacks into the generic resource handler. Downstream integrations
 	// thread their RBAC engine through here so reader / publisher /
 	// admin gates fire on the OSS-registered Agent / MCPServer / Skill
-	// / Prompt / Provider / Deployment endpoints. Zero-value matches
+	// / Prompt / Runtime / Deployment endpoints. Zero-value matches
 	// the public OSS default (no per-kind gates).
 	PerKindHooks crud.PerKindHooks
 
@@ -148,7 +148,7 @@ func RegisterRoutes(
 // Importer both see the same ref-existence semantics.
 //
 // When coord is non-nil, Deployment PUT/DELETE fire
-// coord.Apply/coord.Remove after the row is persisted so the platform
+// coord.Apply/coord.Remove after the row is persisted so the type
 // adapter converges runtime state synchronously with the API call.
 func registerKindRoutes(
 	api huma.API,
@@ -166,7 +166,7 @@ func registerKindRoutes(
 	// as the KindDeployment PostUpsert/PostDelete. Deployment
 	// reconciliation is a reserved seam in the v1alpha1 generic handler:
 	// the coordinator hooks override any caller-supplied Deployment
-	// hook so PUT/DELETE always drive the platform adapter. The same
+	// hook so PUT/DELETE always drive the type adapter. The same
 	// hook table feeds both the per-kind PUT/DELETE handlers and the
 	// /v0/apply batch path so a Deployment in a multi-doc apply
 	// reconciles identically to a single-resource apply.

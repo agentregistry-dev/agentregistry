@@ -46,11 +46,11 @@ func registerAgent(api huma.API, store *v1alpha1store.Store) {
 }
 
 func registerProvider(api huma.API, store *v1alpha1store.Store) {
-	resource.Register[*v1alpha1.Provider](api, resource.Config{
-		Kind:       v1alpha1.KindProvider,
+	resource.Register[*v1alpha1.Runtime](api, resource.Config{
+		Kind:       v1alpha1.KindRuntime,
 		BasePrefix: "/v0",
 		Store:      store,
-	}, func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
+	}, func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} })
 }
 
 // applyAgentYAML POSTs a single Agent document to /v0/apply and returns
@@ -86,7 +86,7 @@ metadata:
   namespace: default
   name: alice
   labels:
-    team: platform
+    team: type
 spec:
   title: Alice
   source:
@@ -107,7 +107,7 @@ spec:
 	require.Equal(t, "alice", gotAgent.Metadata.Name)
 	require.Equal(t, v1alpha1store.DefaultTag(), gotAgent.Metadata.Tag)
 	require.Equal(t, "Alice", gotAgent.Spec.Title)
-	require.Equal(t, "platform", gotAgent.Metadata.Labels["team"])
+	require.Equal(t, "type", gotAgent.Metadata.Labels["team"])
 
 	// GET latest.
 	resp = api.Get("/v0/agents/alice")
@@ -147,7 +147,7 @@ metadata:
   namespace: default
   name: alice
   labels:
-    team: platform
+    team: type
 spec:
   title: Alice v2
   source:
@@ -446,7 +446,7 @@ func TestResourceRegister_ListFilter(t *testing.T) {
 // longer registered for content-registry kinds (Agent, MCPServer,
 // RemoteMCPServer, Skill, Prompt). POST /v0/apply is the single
 // create/update entry point — user-controlled tags live in metadata.tag rather
-// than the URL segment of a direct PUT. Provider/Deployment mutable-object
+// than the URL segment of a direct PUT. Runtime/Deployment mutable-object
 // stores still expose direct namespace/name PUT.
 //
 // The test issues a PUT against the agents handler and expects 405
@@ -486,32 +486,32 @@ func TestResourceRegister_PutNotRegisteredForContentKinds(t *testing.T) {
 
 func TestResourceRegister_MutableObjectUsesNameOnlyRoute(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewMutableObjectStore(pool, "v1alpha1.providers")
+	store := v1alpha1store.NewMutableObjectStore(pool, "v1alpha1.runtimes")
 
 	_, api := humatest.New(t)
 	registerProvider(api, store)
 
-	provider := v1alpha1.Provider{
-		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindProvider},
+	runtime := v1alpha1.Runtime{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindRuntime},
 		Metadata: v1alpha1.ObjectMeta{
 			Namespace: "default",
 			Name:      "local-test",
 		},
-		Spec: v1alpha1.ProviderSpec{Platform: v1alpha1.PlatformLocal},
+		Spec: v1alpha1.RuntimeSpec{Type: v1alpha1.TypeLocal},
 	}
 
-	resp := api.Put("/v0/providers/local-test", provider)
+	resp := api.Put("/v0/runtimes/local-test", runtime)
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	require.NotContains(t, resp.Body.String(), `"version"`, "mutable object response must not expose a storage identity field")
 
-	resp = api.Get("/v0/providers/local-test")
+	resp = api.Get("/v0/runtimes/local-test")
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	require.NotContains(t, resp.Body.String(), `"version"`, "mutable object get must not expose a storage identity field")
 
-	resp = api.Put("/v0/providers/local-test/1", provider)
+	resp = api.Put("/v0/runtimes/local-test/1", runtime)
 	require.Equal(t, http.StatusNotFound, resp.Code, "mutable object version route must not be registered")
 
-	resp = api.Delete("/v0/providers/local-test")
+	resp = api.Delete("/v0/runtimes/local-test")
 	require.Equal(t, http.StatusNoContent, resp.Code, resp.Body.String())
 }
 
@@ -642,7 +642,7 @@ func TestResourceRegister_PostUpsertFailureLeavesPersistedRow(t *testing.T) {
 	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
 	hookCalls := 0
-	hookErr := fmt.Errorf("simulated platform-adapter failure")
+	hookErr := fmt.Errorf("simulated type-adapter failure")
 	hook := func(ctx context.Context, obj v1alpha1.Object) error {
 		hookCalls++
 		return hookErr
@@ -672,7 +672,7 @@ spec:
 	// Apply → failed result. Hook fired exactly once.
 	res := applyAgentYAML(t, api, yaml)
 	require.Equal(t, arv0.ApplyStatusFailed, res.Status)
-	require.Contains(t, res.Error, "simulated platform-adapter failure")
+	require.Contains(t, res.Error, "simulated type-adapter failure")
 	require.Equal(t, 1, hookCalls, "PostUpsert must fire exactly once on the failing apply")
 
 	// Row persists despite the hook failure: subsequent GET returns 200.
@@ -689,7 +689,7 @@ spec:
 	// Re-apply with identical spec: the no-op upsert at the Store
 	// layer does NOT short-circuit PostUpsert — the apply path fires
 	// the hook unconditionally after Upsert returns. This is the
-	// operator-friendly retry path: a transient platform-adapter
+	// operator-friendly retry path: a transient type-adapter
 	// failure clears as soon as a re-apply succeeds, with no spec
 	// bump required. Pin the behavior so a future "skip hook on
 	// no-op" optimization has to update the godoc + this test.
@@ -707,7 +707,7 @@ spec:
 	hookCalls = 0
 	res = applyAgentYAML(t, api, yaml)
 	require.NotEqual(t, arv0.ApplyStatusFailed, res.Status,
-		"once the platform-adapter clears, identical-spec re-apply succeeds without a spec bump")
+		"once the type-adapter clears, identical-spec re-apply succeeds without a spec bump")
 	require.Equal(t, 1, hookCalls)
 }
 
@@ -718,23 +718,23 @@ spec:
 // namespace/name is already unique.
 func TestResourceRegister_IncludeTerminatingByDefault(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewMutableObjectStore(pool, "v1alpha1.providers")
+	store := v1alpha1store.NewMutableObjectStore(pool, "v1alpha1.runtimes")
 	const testNamespace = "terminating-test"
 
 	_, api := humatest.New(t)
-	resource.Register[*v1alpha1.Provider](api, resource.Config{
-		Kind:                        v1alpha1.KindProvider,
+	resource.Register[*v1alpha1.Runtime](api, resource.Config{
+		Kind:                        v1alpha1.KindRuntime,
 		BasePrefix:                  "/v0",
 		Store:                       store,
 		IncludeTerminatingByDefault: true,
-	}, func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
+	}, func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} })
 
 	// Seed a row, attach a finalizer, then soft-delete so the row goes
 	// terminating (deletion_timestamp set).
-	_, err := store.Upsert(t.Context(), &v1alpha1.Provider{
-		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindProvider},
+	_, err := store.Upsert(t.Context(), &v1alpha1.Runtime{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindRuntime},
 		Metadata: v1alpha1.ObjectMeta{Namespace: testNamespace, Name: "draining"},
-		Spec:     v1alpha1.ProviderSpec{Platform: "noop"},
+		Spec:     v1alpha1.RuntimeSpec{Type: "noop"},
 	})
 	require.NoError(t, err)
 
@@ -743,13 +743,13 @@ func TestResourceRegister_IncludeTerminatingByDefault(t *testing.T) {
 	require.NoError(t, store.Delete(t.Context(), testNamespace, "draining", ""))
 
 	var list struct {
-		Items      []v1alpha1.Provider `json:"items"`
-		NextCursor string              `json:"nextCursor,omitempty"`
+		Items      []v1alpha1.Runtime `json:"items"`
+		NextCursor string             `json:"nextCursor,omitempty"`
 	}
 
 	// Plain LIST with no ?includeTerminating still returns the terminating
 	// row because the kind opted in via IncludeTerminatingByDefault.
-	resp := api.Get("/v0/providers?namespace=" + testNamespace)
+	resp := api.Get("/v0/runtimes?namespace=" + testNamespace)
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &list))
 	require.Len(t, list.Items, 1)
@@ -759,7 +759,7 @@ func TestResourceRegister_IncludeTerminatingByDefault(t *testing.T) {
 
 	// LatestOnly is a no-op for mutable objects, so the terminating row remains
 	// visible because the kind opted into IncludeTerminatingByDefault.
-	resp = api.Get("/v0/providers?namespace=" + testNamespace + "&latestOnly=true")
+	resp = api.Get("/v0/runtimes?namespace=" + testNamespace + "&latestOnly=true")
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &list))
 	require.Len(t, list.Items, 1)

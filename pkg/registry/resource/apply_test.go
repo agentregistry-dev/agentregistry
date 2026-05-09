@@ -118,25 +118,25 @@ spec:
 
 func TestRegisterApply_MutableObjectResultsDoNotExposeVersion(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	providers := v1alpha1store.NewMutableObjectStore(pool, "v1alpha1.providers")
+	runtimes := v1alpha1store.NewMutableObjectStore(pool, "v1alpha1.runtimes")
 	deployments := v1alpha1store.NewMutableObjectStore(pool, "v1alpha1.deployments")
 
 	_, api := humatest.New(t)
 	resource.RegisterApply(api, resource.ApplyConfig{
 		BasePrefix: "/v0",
 		Stores: map[string]*v1alpha1store.Store{
-			v1alpha1.KindProvider:   providers,
+			v1alpha1.KindRuntime:    runtimes,
 			v1alpha1.KindDeployment: deployments,
 		},
 	})
 
 	yaml := []byte(`apiVersion: ar.dev/v1alpha1
-kind: Provider
+kind: Runtime
 metadata:
   namespace: default
-  name: local-test-provider
+  name: local-test-runtime
 spec:
-  platform: local
+  type: local
 ---
 apiVersion: ar.dev/v1alpha1
 kind: Deployment
@@ -148,9 +148,9 @@ spec:
     kind: Agent
     name: summarizer
     tag: stable
-  providerRef:
-    kind: Provider
-    name: local-test-provider
+  runtimeRef:
+    kind: Runtime
+    name: local-test-runtime
 `)
 	resp := api.Post("/v0/apply", "Content-Type: application/yaml", strings.NewReader(string(yaml)))
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
@@ -161,7 +161,7 @@ spec:
 	}
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
 	require.Len(t, out.Results, 2)
-	require.Equal(t, v1alpha1.KindProvider, out.Results[0].Kind)
+	require.Equal(t, v1alpha1.KindRuntime, out.Results[0].Kind)
 	require.Equal(t, arv0.ApplyStatusCreated, out.Results[0].Status)
 	require.Equal(t, v1alpha1.KindDeployment, out.Results[1].Kind)
 	require.Equal(t, arv0.ApplyStatusCreated, out.Results[1].Status)

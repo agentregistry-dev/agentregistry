@@ -18,13 +18,13 @@ import (
 // v1alpha1.Status conditions block so imperative users keep the compact fields
 // they already consume while apply decode still ignores incoming status.
 type deploymentStatus struct {
-	ID               string         `json:"id,omitempty" yaml:"id,omitempty"`
-	Phase            string         `json:"phase,omitempty" yaml:"phase,omitempty"`
-	Origin           string         `json:"origin,omitempty" yaml:"origin,omitempty"`
-	Error            string         `json:"error,omitempty" yaml:"error,omitempty"`
-	ProviderMetadata map[string]any `json:"providerMetadata,omitempty" yaml:"providerMetadata,omitempty"`
-	DeployedAt       time.Time      `json:"deployedAt,omitempty" yaml:"deployedAt,omitempty"`
-	UpdatedAt        time.Time      `json:"updatedAt,omitempty" yaml:"updatedAt,omitempty"`
+	ID              string         `json:"id,omitempty" yaml:"id,omitempty"`
+	Phase           string         `json:"phase,omitempty" yaml:"phase,omitempty"`
+	Origin          string         `json:"origin,omitempty" yaml:"origin,omitempty"`
+	Error           string         `json:"error,omitempty" yaml:"error,omitempty"`
+	RuntimeMetadata map[string]any `json:"runtimeMetadata,omitempty" yaml:"runtimeMetadata,omitempty"`
+	DeployedAt      time.Time      `json:"deployedAt,omitempty" yaml:"deployedAt,omitempty"`
+	UpdatedAt       time.Time      `json:"updatedAt,omitempty" yaml:"updatedAt,omitempty"`
 }
 
 func listLatestAny[T v1alpha1.Object](ctx context.Context, kind string, newObj func() T) ([]any, error) {
@@ -154,7 +154,7 @@ func deleteDeploymentByTarget(ctx context.Context, name, tag string, force bool)
 	var errs []error
 	for _, dep := range matches {
 		if err := apiClient.Delete(ctx, v1alpha1.KindDeployment, dep.Namespace, dep.Name, "", client.DeleteOpts{Force: force}); err != nil {
-			errs = append(errs, fmt.Errorf("deleting %s (provider %s): %w", dep.ID, dep.ProviderID, err))
+			errs = append(errs, fmt.Errorf("deleting %s (runtime %s): %w", dep.ID, dep.RuntimeID, err))
 		}
 	}
 	return errorsJoin(errs)
@@ -171,7 +171,7 @@ func deploymentToDocument(dep *cliCommon.DeploymentRecord) any {
 	}
 
 	// metadata is the Deployment row's identity, NOT the target's. Two
-	// deployments of the same target/tag against different providers
+	// deployments of the same target/tag against different runtimes
 	// are distinct rows; collapsing them onto target identity here
 	// (previous behavior) made get-then-apply round-trips clobber the
 	// wrong row and made delete by metadata identity impossible.
@@ -194,21 +194,21 @@ func deploymentToDocument(dep *cliCommon.DeploymentRecord) any {
 				Name: dep.TargetName,
 				Tag:  dep.TargetTag,
 			},
-			ProviderRef: v1alpha1.ResourceRef{
-				Kind: v1alpha1.KindProvider,
-				Name: dep.ProviderID,
+			RuntimeRef: v1alpha1.ResourceRef{
+				Kind: v1alpha1.KindRuntime,
+				Name: dep.RuntimeID,
 			},
-			Env:            dep.Env,
-			ProviderConfig: dep.ProviderConfig,
+			Env:           dep.Env,
+			RuntimeConfig: dep.RuntimeConfig,
 		},
 		Status: deploymentStatus{
-			ID:               dep.ID,
-			Phase:            dep.Status,
-			Origin:           dep.Origin,
-			Error:            dep.Error,
-			ProviderMetadata: dep.ProviderMetadata,
-			DeployedAt:       dep.CreatedAt,
-			UpdatedAt:        dep.UpdatedAt,
+			ID:              dep.ID,
+			Phase:           dep.Status,
+			Origin:          dep.Origin,
+			Error:           dep.Error,
+			RuntimeMetadata: dep.RuntimeMetadata,
+			DeployedAt:      dep.CreatedAt,
+			UpdatedAt:       dep.UpdatedAt,
 		},
 	}
 }
@@ -260,11 +260,11 @@ func promptRow(prompt *v1alpha1.Prompt) []string {
 	}
 }
 
-func providerRow(provider *v1alpha1.Provider) []string {
-	if provider == nil {
+func runtimeRow(runtime *v1alpha1.Runtime) []string {
+	if runtime == nil {
 		return []string{"<invalid>"}
 	}
-	return []string{provider.Metadata.Name, provider.Spec.Platform}
+	return []string{runtime.Metadata.Name, runtime.Spec.Type}
 }
 
 func remoteMCPServerRow(r *v1alpha1.RemoteMCPServer) []string {
@@ -288,7 +288,7 @@ func deploymentRow(dep *cliCommon.DeploymentRecord) []string {
 		dep.TargetName,
 		dep.TargetTag,
 		dep.ResourceType,
-		dep.ProviderID,
+		dep.RuntimeID,
 		dep.Status,
 	}
 }

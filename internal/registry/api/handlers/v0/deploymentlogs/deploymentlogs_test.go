@@ -13,7 +13,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/deploymentlogs"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/noop"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/noop"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
@@ -35,7 +35,7 @@ func TestRegisterDeploymentLogs_RespectsAuthorize(t *testing.T) {
 
 	coord := deploymentsvc.NewCoordinator(deploymentsvc.Dependencies{
 		Stores:   stores,
-		Adapters: map[string]types.DeploymentAdapter{noop.Platform: noop.New()},
+		Adapters: map[string]types.DeploymentAdapter{noop.RuntimeType: noop.New()},
 		Getter:   internaldb.NewGetter(stores),
 	})
 
@@ -79,7 +79,7 @@ func TestRegisterDeploymentLogs_NilAuthorizeAllowsThrough(t *testing.T) {
 
 	coord := deploymentsvc.NewCoordinator(deploymentsvc.Dependencies{
 		Stores:   stores,
-		Adapters: map[string]types.DeploymentAdapter{noop.Platform: noop.New()},
+		Adapters: map[string]types.DeploymentAdapter{noop.RuntimeType: noop.New()},
 		Getter:   internaldb.NewGetter(stores),
 	})
 

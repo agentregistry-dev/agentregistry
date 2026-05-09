@@ -3,8 +3,8 @@
 // intended for:
 //   - integration tests that exercise the reconciler lifecycle without
 //     needing docker-compose or a kubernetes cluster
-//   - a placeholder Platform="noop" Provider entry while
-//     local+kubernetes native ports are in progress
+//   - a placeholder Type="noop" Runtime entry while local+kubernetes
+//     native ports are in progress
 //   - a baseline for contributors implementing new adapters — demonstrates
 //     the expected Apply/Remove/Logs/Discover shape end-to-end
 //
@@ -22,7 +22,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
-const Platform = "noop"
+const RuntimeType = "noop"
 
 // Adapter implements types.DeploymentAdapter with no side effects beyond
 // status reporting. Safe to register in test harnesses; intentionally
@@ -32,8 +32,8 @@ type Adapter struct{}
 // New returns a ready-to-use Adapter.
 func New() *Adapter { return &Adapter{} }
 
-// Platform returns "noop".
-func (a *Adapter) Platform() string { return Platform }
+// Type returns "noop".
+func (a *Adapter) Type() string { return RuntimeType }
 
 // SupportedTargetKinds returns the bundled kinds plus RemoteMCPServer — the
 // noop adapter declares broad support since it does nothing anyway.
@@ -58,15 +58,15 @@ func (a *Adapter) Apply(ctx context.Context, in types.ApplyInput) (*types.ApplyR
 				LastTransitionTime: now,
 			},
 			{
-				Type:               "ProviderConfigured",
+				Type:               "RuntimeConfigured",
 				Status:             v1alpha1.ConditionTrue,
-				Reason:             "NoopProvider",
-				Message:            "noop platform requires no provider configuration",
+				Reason:             "NoopRuntime",
+				Message:            "noop runtime requires no configuration",
 				LastTransitionTime: now,
 			},
 		},
-		ProviderMetadata: map[string]string{
-			"platforms.agentregistry.solo.io/noop/applied-at": now.Format(time.RFC3339),
+		RuntimeMetadata: map[string]string{
+			"runtimes.agentregistry.solo.io/noop/applied-at": now.Format(time.RFC3339),
 		},
 	}, nil
 }

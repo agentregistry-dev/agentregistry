@@ -11,7 +11,7 @@ import (
 
 func TestScheme_RegisterAllBuiltins(t *testing.T) {
 	got := Default.Kinds()
-	want := []string{"agent", "deployment", "mcpserver", "prompt", "provider", "remotemcpserver", "skill"}
+	want := []string{"agent", "deployment", "mcpserver", "prompt", "remotemcpserver", "runtime", "skill"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("built-in kinds = %v, want %v", got, want)
 	}
@@ -124,8 +124,8 @@ spec:
     kind: Agent
     name: summarizer
     tag: "1.0.0"
-  providerRef:
-    kind: Provider
+  runtimeRef:
+    kind: Runtime
     name: local
   desiredState: deployed
   env:
@@ -195,11 +195,11 @@ spec:
   content: hi
 ---
 apiVersion: ar.dev/v1alpha1
-kind: Provider
+kind: Runtime
 metadata:
   name: local
 spec:
-  platform: local
+  type: Local
 `)
 	objs, err := Default.DecodeMulti(doc)
 	if err != nil {
@@ -214,8 +214,8 @@ spec:
 	if _, ok := objs[1].(*Prompt); !ok {
 		t.Fatalf("doc 1: want *Prompt, got %T", objs[1])
 	}
-	if _, ok := objs[2].(*Provider); !ok {
-		t.Fatalf("doc 2: want *Provider, got %T", objs[2])
+	if _, ok := objs[2].(*Runtime); !ok {
+		t.Fatalf("doc 2: want *Runtime, got %T", objs[2])
 	}
 }
 
@@ -323,7 +323,7 @@ func TestEncode_RoundTrip_JSON(t *testing.T) {
 		Metadata: ObjectMeta{Name: "prod"},
 		Spec: DeploymentSpec{
 			TargetRef:    ResourceRef{Kind: KindAgent, Name: "x", Tag: "1"},
-			ProviderRef:  ResourceRef{Kind: KindProvider, Name: "local"},
+			RuntimeRef:   ResourceRef{Kind: KindRuntime, Name: "local"},
 			DesiredState: DesiredStateDeployed,
 			Env:          map[string]string{"FOO": "bar"},
 		},
@@ -342,21 +342,21 @@ func TestEncode_RoundTrip_JSON(t *testing.T) {
 }
 
 // Sanity: ensure we can point sigs.k8s.io/yaml at typed envelopes too.
-func TestYAMLDirect_EncodeDecodeProvider(t *testing.T) {
-	p := &Provider{
-		TypeMeta: TypeMeta{APIVersion: GroupVersion, Kind: KindProvider},
+func TestYAMLDirect_EncodeDecodeRuntime(t *testing.T) {
+	r := &Runtime{
+		TypeMeta: TypeMeta{APIVersion: GroupVersion, Kind: KindRuntime},
 		Metadata: ObjectMeta{Name: "k8s"},
-		Spec:     ProviderSpec{Platform: PlatformKubernetes, Config: map[string]any{"namespace": "agentregistry"}},
+		Spec:     RuntimeSpec{Type: TypeKubernetes, Config: map[string]any{"namespace": "agentregistry"}},
 	}
-	y, err := yaml.Marshal(p)
+	y, err := yaml.Marshal(r)
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
-	var got Provider
+	var got Runtime
 	if err := yaml.Unmarshal(y, &got); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if got.Spec.Platform != PlatformKubernetes ||
+	if got.Spec.Type != TypeKubernetes ||
 		got.Spec.Config["namespace"] != "agentregistry" {
 		t.Fatalf("yaml round-trip mismatch: %+v", got)
 	}

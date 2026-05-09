@@ -6,8 +6,8 @@
 // The types are split by domain across files:
 //   - types.go     — AppOptions, Server, HTTPServerFactory,
 //     Response/EmptyResponse wrappers
-//   - adapter.go   — deployment + provider adapter surfaces
-//     (DeploymentAdapter, ProviderPlatformAdapter)
+//   - adapter.go   — deployment + runtime adapter surfaces
+//     (DeploymentAdapter, RuntimeAdapter)
 //   - daemon.go    — CLI-side daemon + token provider hooks
 package types
 
@@ -15,10 +15,11 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/danielgtaylor/huma/v2"
+
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
-	"github.com/danielgtaylor/huma/v2"
 )
 
 // DatabaseFactory is a function type that creates a store implementation.
@@ -105,20 +106,19 @@ type AppOptions struct {
 	// database.
 	DatabaseFactory DatabaseFactory
 
-	// ProviderPlatforms registers per-platform PostUpsert/PostDelete
-	// hooks for the KindProvider resource handler, keyed by
-	// Provider.Spec.Platform ("aws", "gcp", "kagent", ...). Used by
-	// downstream builds to mirror Provider apply/delete into a
-	// platform-specific sidecar table (aws_connections,
-	// gcp_connections, kagent_connections, etc.). Missing platforms =
-	// no sidecar reconciliation for that platform — the v1alpha1
-	// Provider row still persists.
-	ProviderPlatforms map[string]ProviderPlatformAdapter
+	// RuntimeAdapters registers per-type PostUpsert/PostDelete
+	// hooks for the KindRuntime resource handler, keyed by the
+	// lowercase canonical Runtime.Spec.Type ("bedrockagentcore",
+	// "geminiagentruntime", "kagent", ...). Used by downstream builds
+	// to mirror Runtime apply/delete into a type-specific sidecar
+	// table. Missing types = no sidecar reconciliation for that type
+	// — the v1alpha1 Runtime row still persists.
+	RuntimeAdapters map[string]RuntimeAdapter
 
 	// DeploymentAdapters registers v1alpha1 DeploymentAdapter
-	// implementations keyed by Provider.Spec.Platform ("local",
-	// "kubernetes", ...). The reconciler/coordinator looks up by platform
-	// string; downstream builds inject additional adapters here.
+	// implementations keyed by lowercase Runtime.Spec.Type ("local",
+	// "kubernetes", ...). The reconciler/coordinator looks up by the
+	// type string; downstream builds inject additional adapters here.
 	DeploymentAdapters map[string]DeploymentAdapter
 
 	// Authorizers gates every read + write operation on the
@@ -126,7 +126,7 @@ type AppOptions struct {
 	// (v1alpha1.KindAgent, v1alpha1.KindMCPServer, etc.). Downstream
 	// builds wire their RBAC engine here so reader / publisher / admin
 	// gates fire on the OSS-registered Agent / MCPServer / Skill /
-	// Prompt / Provider / Deployment endpoints. Missing keys behave
+	// Prompt / Runtime / Deployment endpoints. Missing keys behave
 	// like "no per-kind gate" — the resource handler's default permits
 	// the call, with API-level authn middleware still applying.
 	Authorizers map[string]Authorizer
@@ -140,9 +140,9 @@ type AppOptions struct {
 	ListFilters map[string]ListFilter
 
 	// PostUpserts run after the generic resource handler PUTs a
-	// row, per kind. Downstream builds wire this for kinds that need
-	// platform side-effects on apply — Provider apply mirroring spec
-	// into a per-platform sidecar table, for example. Missing keys =
+	// row, per kind. Enterprise builds wire this for kinds that need
+	// runtime side-effects on apply — Runtime apply mirroring spec
+	// into a per-type sidecar table, for example. Missing keys =
 	// no post-upsert hook for that kind.
 	//
 	// Hook errors fail the request with 500 (the row is already

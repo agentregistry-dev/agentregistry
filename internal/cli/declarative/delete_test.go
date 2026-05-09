@@ -127,10 +127,10 @@ func TestDeleteFileModeNoAPIClient(t *testing.T) {
 }
 
 // TestDeleteExplicitModeWithoutTag verifies that --tag is optional
-// (providers don't use tags; the server validates if needed).
+// (runtimes don't use tags; the server validates if needed).
 func TestDeleteExplicitModeWithoutTag(t *testing.T) {
 	cmd := declarative.NewDeleteCmd()
-	cmd.SetArgs([]string{"provider", "my-aws"})
+	cmd.SetArgs([]string{"runtime", "my-aws"})
 	err := cmd.Execute()
 	// Fails because no API client is set, but NOT because of missing tag.
 	require.Error(t, err)

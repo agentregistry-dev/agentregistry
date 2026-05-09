@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
+	runtimetypes "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/utils"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
@@ -16,7 +16,7 @@ import (
 // (docker-compose.yaml + agent-gateway.yaml live there) and the port the
 // agentgateway service binds.
 type localDeploymentAdapter struct {
-	platformDir      string
+	runtimeDir       string
 	agentGatewayPort uint16
 }
 
@@ -24,21 +24,21 @@ type localDeploymentAdapter struct {
 // direct calls so adapter_test.go can stub the docker-compose shell-out
 // without spinning up a real compose stack.
 var (
-	runLocalComposeUp   = ComposeUpLocalPlatform
-	runLocalComposeDown = ComposeDownLocalPlatform
+	runLocalComposeUp   = ComposeUpLocalRuntime
+	runLocalComposeDown = ComposeDownLocalRuntime
 )
 
 // NewLocalDeploymentAdapter constructs an adapter pinned to a runtime
 // directory (docker-compose.yaml + agent-gateway.yaml live here) and the
 // port the agentgateway service binds.
-func NewLocalDeploymentAdapter(platformDir string, agentGatewayPort uint16) *localDeploymentAdapter {
+func NewLocalDeploymentAdapter(runtimeDir string, agentGatewayPort uint16) *localDeploymentAdapter {
 	return &localDeploymentAdapter{
-		platformDir:      platformDir,
+		runtimeDir:       runtimeDir,
 		agentGatewayPort: agentGatewayPort,
 	}
 }
 
-func (a *localDeploymentAdapter) Platform() string { return "local" }
+func (a *localDeploymentAdapter) Type() string { return v1alpha1.TypeLocal }
 
 // SupportedTargetKinds reports the v1alpha1 Kinds this adapter can deploy:
 // Agent and MCPServer.
@@ -63,15 +63,16 @@ func (a *localDeploymentAdapter) Apply(ctx context.Context, in types.ApplyInput)
 	if err != nil {
 		return nil, err
 	}
-	cfg, err := BuildLocalPlatformConfig(ctx, a.platformDir, a.agentGatewayPort, "", desired)
+	cfg, err := BuildLocalRuntimeConfig(ctx, a.runtimeDir, a.agentGatewayPort, "", desired)
 	if err != nil {
-		return nil, fmt.Errorf("build local platform config: %w", err)
+		return nil, fmt.Errorf("build local runtime config: %w", err)
 	}
-	if err := a.mergeAndApplyLocalPlatform(ctx, cfg, false); err != nil {
-		return nil, fmt.Errorf("apply local platform: %w", err)
+	if err := a.mergeAndApplyLocalRuntime(ctx, cfg, false); err != nil {
+		return nil, fmt.Errorf("apply local runtime: %w", err)
 	}
 
 	now := time.Now().UTC()
+	gen := in.Deployment.Metadata.Generation
 	return &types.ApplyResult{
 		Conditions: []v1alpha1.Condition{{
 			Type:               "Progressing",
@@ -79,12 +80,14 @@ func (a *localDeploymentAdapter) Apply(ctx context.Context, in types.ApplyInput)
 			Reason:             "Applied",
 			Message:            "docker-compose stack reconciled; waiting for workload convergence",
 			LastTransitionTime: now,
+			ObservedGeneration: gen,
 		}, {
-			Type:               "ProviderConfigured",
+			Type:               "RuntimeConfigured",
 			Status:             v1alpha1.ConditionTrue,
-			Reason:             "LocalProvider",
-			Message:            "local provider ready",
+			Reason:             "LocalRuntime",
+			Message:            "local runtime ready",
 			LastTransitionTime: now,
+			ObservedGeneration: gen,
 		}},
 	}, nil
 }
@@ -100,10 +103,11 @@ func (a *localDeploymentAdapter) Remove(ctx context.Context, in types.RemoveInpu
 	}
 	deploymentID := in.Deployment.Metadata.Name
 	if err := a.removeLocalDeploymentArtifactsByID(ctx, deploymentID); err != nil {
-		return nil, fmt.Errorf("remove local platform artifacts: %w", err)
+		return nil, fmt.Errorf("remove local runtime artifacts: %w", err)
 	}
 
 	now := time.Now().UTC()
+	gen := in.Deployment.Metadata.Generation
 	return &types.RemoveResult{
 		Conditions: []v1alpha1.Condition{{
 			Type:               "Ready",
@@ -111,6 +115,7 @@ func (a *localDeploymentAdapter) Remove(ctx context.Context, in types.RemoveInpu
 			Reason:             "Removed",
 			Message:            "docker-compose stack torn down",
 			LastTransitionTime: now,
+			ObservedGeneration: gen,
 		}},
 	}, nil
 }
@@ -124,12 +129,12 @@ func (a *localDeploymentAdapter) Logs(ctx context.Context, in types.LogsInput) (
 }
 
 // Discover reports no out-of-band local deployments — out-of-band
-// workloads only make sense for remote/hosted platforms.
+// workloads only make sense for remote/hosted runtimes.
 func (a *localDeploymentAdapter) Discover(ctx context.Context, in types.DiscoverInput) ([]types.DiscoveryResult, error) {
 	return nil, nil
 }
 
-// buildDesiredStateFromV1Alpha1 constructs a *platformtypes.DesiredState from
+// buildDesiredStateFromV1Alpha1 constructs a *runtimetypes.DesiredState from
 // the v1alpha1 ApplyInput. The target dispatches by Kind:
 //   - MCPServer → one-shot translate; no ref walk.
 //   - Agent     → translate spec + resolve every MCPServers entry through
@@ -137,7 +142,7 @@ func (a *localDeploymentAdapter) Discover(ctx context.Context, in types.Discover
 func (a *localDeploymentAdapter) buildDesiredStateFromV1Alpha1(
 	ctx context.Context,
 	in types.ApplyInput,
-) (*platformtypes.DesiredState, error) {
+) (*runtimetypes.DesiredState, error) {
 	if in.Target == nil {
 		return nil, fmt.Errorf("apply: target is required")
 	}
@@ -154,7 +159,7 @@ func (a *localDeploymentAdapter) buildDesiredStateFromV1Alpha1(
 		if err != nil {
 			return nil, err
 		}
-		return &platformtypes.DesiredState{MCPServers: []*platformtypes.MCPServer{server}}, nil
+		return &runtimetypes.DesiredState{MCPServers: []*runtimetypes.MCPServer{server}}, nil
 	case *v1alpha1.RemoteMCPServer:
 		server, err := utils.SpecToPlatformRemoteMCPServer(ctx, target.Metadata, target.Spec, utils.RemoteMCPServerTranslateOpts{
 			DeploymentID: deploymentID,
@@ -163,11 +168,11 @@ func (a *localDeploymentAdapter) buildDesiredStateFromV1Alpha1(
 		if err != nil {
 			return nil, err
 		}
-		return &platformtypes.DesiredState{MCPServers: []*platformtypes.MCPServer{server}}, nil
+		return &runtimetypes.DesiredState{MCPServers: []*runtimetypes.MCPServer{server}}, nil
 	case *v1alpha1.Agent:
 		var telemetryEndpoint string
-		if in.Provider != nil {
-			telemetryEndpoint = in.Provider.Spec.TelemetryEndpoint
+		if in.Runtime != nil {
+			telemetryEndpoint = in.Runtime.Spec.TelemetryEndpoint
 		}
 		agent, servers, err := utils.SpecToPlatformAgent(ctx, target.Metadata, target.Spec, utils.AgentTranslateOpts{
 			DeploymentID:      deploymentID,
@@ -180,8 +185,8 @@ func (a *localDeploymentAdapter) buildDesiredStateFromV1Alpha1(
 		if err != nil {
 			return nil, err
 		}
-		return &platformtypes.DesiredState{
-			Agents:     []*platformtypes.Agent{agent},
+		return &runtimetypes.DesiredState{
+			Agents:     []*runtimetypes.Agent{agent},
 			MCPServers: servers,
 		}, nil
 	default:

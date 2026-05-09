@@ -21,7 +21,7 @@ var TableFor = map[string]string{
 	v1alpha1.KindRemoteMCPServer: "v1alpha1.remote_mcp_servers",
 	v1alpha1.KindSkill:           "v1alpha1.skills",
 	v1alpha1.KindPrompt:          "v1alpha1.prompts",
-	v1alpha1.KindProvider:        "v1alpha1.providers",
+	v1alpha1.KindRuntime:         "v1alpha1.runtimes",
 	v1alpha1.KindDeployment:      "v1alpha1.deployments",
 }
 
@@ -31,7 +31,7 @@ var TableFor = map[string]string{
 // importer layers take — they never look up tables by string literal
 // themselves.
 //
-// KindDeployment and KindProvider are bound through NewMutableObjectStore —
+// KindDeployment and KindRuntime are bound through NewMutableObjectStore —
 // both are infra/lifecycle state, not tagged artifacts. Every other built-in
 // kind uses NewStore (tagged-artifact behavior). Iterates v1alpha1.BuiltinKinds so
 // registration order stays stable across builds (important for
@@ -54,7 +54,7 @@ func NewStores(pool *pgxpool.Pool, opts ...StoreOption) map[string]*Store {
 		// Caller-supplied opts win (they appear after WithKind in the
 		// option chain).
 		kindOpts := append([]StoreOption{WithKind(kind)}, opts...)
-		if kind == v1alpha1.KindProvider {
+		if kind == v1alpha1.KindRuntime {
 			out[kind] = NewMutableObjectStore(pool, table, kindOpts...)
 			continue
 		}

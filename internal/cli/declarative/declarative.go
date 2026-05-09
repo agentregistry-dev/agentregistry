@@ -65,34 +65,34 @@ func init() {
 		remoteMCPServerRow,
 	))
 
-	// Provider is registered manually because it is a mutable namespace/name
-	// object: the server's provider store does not expose /tags or
+	// Runtime is registered manually because it is a mutable namespace/name
+	// object: the server's runtime store does not expose /tags or
 	// DeleteAllTags endpoints. Routing it through
 	// typedKind would advertise --all-tags on its CLI surface and call
 	// endpoints that don't exist. The Get / Delete / List closures match
 	// what typedKind would otherwise produce; ListTags / DeleteAllTags are
 	// intentionally omitted so the dispatch layer rejects --all-tags cleanly.
 	scheme.Register(&scheme.Kind{
-		Kind:         "provider",
-		Plural:       "providers",
-		Aliases:      []string{"Provider"},
-		TableColumns: []scheme.Column{{Header: "NAME"}, {Header: "PLATFORM"}},
+		Kind:         "runtime",
+		Plural:       "runtimes",
+		Aliases:      []string{"Runtime"},
+		TableColumns: []scheme.Column{{Header: "NAME"}, {Header: "TYPE"}},
 		ToYAMLFunc:   func(item any) any { return item },
 		RowFunc: func(item any) []string {
-			provider, ok := item.(*v1alpha1.Provider)
+			runtime, ok := item.(*v1alpha1.Runtime)
 			if !ok {
 				return []string{"<invalid>"}
 			}
-			return providerRow(provider)
+			return runtimeRow(runtime)
 		},
 		Get: func(ctx context.Context, name, _ string) (any, error) {
-			return client.GetTyped(ctx, apiClient, v1alpha1.KindProvider, v1alpha1.DefaultNamespace, name, "", func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
+			return client.GetTyped(ctx, apiClient, v1alpha1.KindRuntime, v1alpha1.DefaultNamespace, name, "", func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} })
 		},
 		ListFunc: func(ctx context.Context) ([]any, error) {
-			return listLatestAny(ctx, v1alpha1.KindProvider, func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
+			return listLatestAny(ctx, v1alpha1.KindRuntime, func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} })
 		},
 		Delete: func(ctx context.Context, name, tag string, force bool) error {
-			return deleteAny(ctx, v1alpha1.KindProvider, name, tag, force, func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
+			return deleteAny(ctx, v1alpha1.KindRuntime, name, tag, force, func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} })
 		},
 	})
 
@@ -132,7 +132,7 @@ func init() {
 		},
 		TableColumns: []scheme.Column{
 			{Header: "ID"}, {Header: "NAME"}, {Header: "VERSION"},
-			{Header: "TYPE"}, {Header: "PROVIDER"}, {Header: "STATUS"},
+			{Header: "TYPE"}, {Header: "RUNTIME"}, {Header: "STATUS"},
 		},
 	})
 }
