@@ -287,6 +287,22 @@ func TestRuntimeValidate_RejectsUnknownType(t *testing.T) {
 	require.Contains(t, err.Error(), "heroku")
 }
 
+// TestRuntimeValidate_CanonicalizesType ensures Validate rewrites
+// Spec.Type to its canonical CamelCase form regardless of input casing.
+// Downstream adapter dispatch relies on exact-match equality, so the
+// case-insensitive normalization MUST land at admission.
+func TestRuntimeValidate_CanonicalizesType(t *testing.T) {
+	for _, input := range []string{"local", "LOCAL", "Local", " Local "} {
+		r := &Runtime{
+			Metadata: ObjectMeta{Namespace: "default", Name: "x", Version: "v1"},
+			Spec:     RuntimeSpec{Type: input},
+		}
+		require.NoError(t, r.Validate(), "input %q should validate", input)
+		require.Equal(t, TypeLocal, r.Spec.Type,
+			"input %q should canonicalize to %q, got %q", input, TypeLocal, r.Spec.Type)
+	}
+}
+
 // -----------------------------------------------------------------------------
 // MCPServer
 // -----------------------------------------------------------------------------

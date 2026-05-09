@@ -11,9 +11,12 @@ type Runtime struct {
 	Status   Status      `json:"status,omitzero" yaml:"status,omitempty"`
 }
 
-// Built-in runtime type discriminators. Canonical form is CamelCase;
-// matching is case-insensitive — adapters compare via strings.EqualFold
-// so manifests can write "local", "Local", or "LOCAL" interchangeably.
+// Built-in runtime type discriminators. Canonical form is CamelCase.
+// Manifests may write Spec.Type in any casing (`local`, `LOCAL`,
+// `Local`); Runtime.Validate looks the input up case-insensitively in
+// KnownRuntimeTypes and rewrites Spec.Type to the canonical CamelCase
+// value at admission, so all downstream consumers compare against
+// these constants with exact-match equality.
 const (
 	TypeLocal      = "Local"
 	TypeKubernetes = "Kubernetes"

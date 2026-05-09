@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -95,10 +94,12 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 
 	// v1alpha1 DeploymentAdapter map consumed by the coordinator below.
 	// Built OSS-side from the local + kubernetes ports; enterprise extends
-	// via AppOptions.DeploymentAdapters.
+	// via AppOptions.DeploymentAdapters. Keys are the canonical CamelCase
+	// Spec.Type values; Runtime.Validate canonicalizes user-supplied case
+	// at admission so the coordinator's lookup can use exact-match.
 	deploymentAdapters := map[string]types.DeploymentAdapter{
-		"local":      local.NewLocalDeploymentAdapter(cfg.RuntimeDir, cfg.AgentGatewayPort),
-		"kubernetes": kubernetes.NewKubernetesDeploymentAdapter(),
+		v1alpha1.TypeLocal:      local.NewLocalDeploymentAdapter(cfg.RuntimeDir, cfg.AgentGatewayPort),
+		v1alpha1.TypeKubernetes: kubernetes.NewKubernetesDeploymentAdapter(),
 	}
 	maps.Copy(deploymentAdapters, options.DeploymentAdapters)
 	pool := db.Pool()
@@ -337,9 +338,10 @@ func crudPerKindHooks(options types.AppOptions) crud.PerKindHooks {
 
 // runtimeAdapterDispatcher wraps a (kind=Runtime) hook so the caller
 // hook (if any) runs first, then dispatches to the per-type adapter
-// matching strings.ToLower(runtime.Spec.Type). A Runtime with no
-// registered adapter is a no-op so the hook stays safe for partial
-// wiring.
+// matching runtime.Spec.Type. Spec.Type is canonicalized at admission
+// time (Runtime.Validate), so the lookup is exact-match against
+// adapter.Type(). A Runtime with no registered adapter is a no-op so
+// the hook stays safe for partial wiring.
 func runtimeAdapterDispatcher(
 	caller func(ctx context.Context, obj v1alpha1.Object) error,
 	adapters map[string]types.RuntimeAdapter,
@@ -355,7 +357,7 @@ func runtimeAdapterDispatcher(
 		if !ok || runtime == nil {
 			return nil
 		}
-		adapter, ok := adapters[strings.ToLower(runtime.Spec.Type)]
+		adapter, ok := adapters[runtime.Spec.Type]
 		if !ok {
 			return nil
 		}

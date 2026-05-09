@@ -34,9 +34,10 @@ import (
 // via the adapter's own watch loop writing status. The reconciler
 // doesn't block on convergence.
 type DeploymentAdapter interface {
-	// Type returns the discriminator string matching
-	// Runtime.Spec.Type ("Local", "Kubernetes", "BedrockAgentCore", ...).
-	// Comparison against Runtime.Spec.Type is case-insensitive.
+	// Type returns the canonical CamelCase discriminator string
+	// ("Local", "Kubernetes", "BedrockAgentCore", ...). Runtime.Validate
+	// canonicalizes Spec.Type at admission, so the reconciler's adapter
+	// lookup compares Type() against Spec.Type with exact-match equality.
 	Type() string
 
 	// SupportedTargetKinds lists the v1alpha1 Kinds this adapter can
@@ -202,17 +203,18 @@ type DiscoveryResult struct {
 // One adapter per runtime type discriminator (runtime.Spec.Type).
 // Downstream builds register adapters via AppOptions.RuntimeAdapters;
 // the registry app maps that into per-kind PostUpsert/PostDelete on
-// KindRuntime, dispatching by Spec.Type (case-insensitive).
+// KindRuntime, dispatching by exact-match against Spec.Type
+// (Runtime.Validate canonicalizes user-supplied case at admission).
 //
 // Hook errors propagate back to the API caller (500 on the per-kind
 // PUT path; ApplyStatusFailed on the batch path) — the v1alpha1 row
 // is already persisted, so a hook failure indicates degraded sidecar
 // state.
 type RuntimeAdapter interface {
-	// Type returns the discriminator string that matches
-	// runtime.Spec.Type ("Local", "Kubernetes", "BedrockAgentCore",
-	// "GeminiAgentRuntime", ...). Comparison against Spec.Type is
-	// case-insensitive.
+	// Type returns the canonical CamelCase discriminator string
+	// ("Local", "Kubernetes", "BedrockAgentCore", "GeminiAgentRuntime",
+	// ...). Runtime.Validate canonicalizes Spec.Type at admission so
+	// dispatch can compare with exact-match equality.
 	Type() string
 
 	// ApplyRuntime runs after the v1alpha1 store has persisted a

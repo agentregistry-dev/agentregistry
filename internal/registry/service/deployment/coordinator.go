@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
@@ -227,17 +226,18 @@ func (c *Coordinator) resolveRuntime(ctx context.Context, deployment *v1alpha1.D
 }
 
 // resolveAdapter looks up the registered DeploymentAdapter for a runtime
-// type string. Returns a sentinel UnsupportedDeploymentRuntimeError so
-// callers (MCP tool surface, HTTP handler) can discriminate "no adapter"
-// from transient plumbing errors.
+// type string. Spec.Type is canonicalized at admission time
+// (Runtime.Validate), so this lookup is exact-match against
+// adapter.Type(). Returns a sentinel UnsupportedDeploymentRuntimeError
+// so callers (MCP tool surface, HTTP handler) can discriminate "no
+// adapter" from transient plumbing errors.
 func (c *Coordinator) resolveAdapter(runtimeType string) (types.DeploymentAdapter, error) {
-	normalized := strings.ToLower(strings.TrimSpace(runtimeType))
-	if normalized == "" {
+	if runtimeType == "" {
 		return nil, fmt.Errorf("%w: runtime type is empty", pkgdb.ErrInvalidInput)
 	}
-	adapter, ok := c.adapters[normalized]
+	adapter, ok := c.adapters[runtimeType]
 	if !ok {
-		return nil, &UnsupportedDeploymentRuntimeError{Type: normalized}
+		return nil, &UnsupportedDeploymentRuntimeError{Type: runtimeType}
 	}
 	return adapter, nil
 }
