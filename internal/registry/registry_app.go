@@ -92,9 +92,9 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		}
 	}()
 
-		// v1alpha1 DeploymentAdapter map consumed by the coordinator below.
-		// Built OSS-side from the local + kubernetes ports; downstream builds
-		// extend via AppOptions.DeploymentAdapters.
+	// v1alpha1 DeploymentAdapter map consumed by the coordinator below.
+	// Built OSS-side from the local + kubernetes ports; downstream builds
+	// extend via AppOptions.DeploymentAdapters.
 	deploymentAdapters := map[string]types.DeploymentAdapter{
 		"local":      local.NewLocalDeploymentAdapter(cfg.RuntimeDir, cfg.AgentGatewayPort),
 		"kubernetes": kubernetes.NewKubernetesDeploymentAdapter(),
@@ -239,29 +239,12 @@ func buildRouteOptions(
 	importer *pkgimporter.Importer,
 	adapters map[string]types.DeploymentAdapter,
 ) *router.RouteOptions {
-	var createStager func(context.Context, resource.CreateStagerInput) (resource.CreateStagerResult, error)
-	if options.CreateStager != nil {
-		createStager = func(ctx context.Context, in resource.CreateStagerInput) (resource.CreateStagerResult, error) {
-			out, err := options.CreateStager(ctx, types.CreateStagerInput{
-				Kind:      in.Kind,
-				Namespace: in.Namespace,
-				Name:      in.Name,
-				Tag:       in.Tag,
-				Object:    in.Object,
-				Store:     in.Store,
-			})
-			return resource.CreateStagerResult{Staged: out.Staged}, err
-		}
-	}
 	routeOpts := &router.RouteOptions{
-		ExtraRoutes:         options.ExtraRoutes,
-		Stores:              stores,
-		Importer:            importer,
-		PerKindHooks:        crudPerKindHooks(options),
-		RegistryValidator:   options.RegistryValidator,
-		CreateStager:        createStager,
-		ResolverWrapper:     options.ResolverWrapper,
-		ExtraResourceRoutes: options.ExtraResourceRoutes,
+		ExtraRoutes:       options.ExtraRoutes,
+		Stores:            stores,
+		Importer:          importer,
+		PerKindHooks:      crudPerKindHooks(options),
+		RegistryValidator: options.RegistryValidator,
 	}
 
 	if stores != nil {
@@ -470,9 +453,9 @@ func startMCPServer(
 // mcpAuthnMiddleware uses the AuthnProvider to attach a session to the
 // request context on successful authentication. On auth error or missing
 // session, the request continues with an unauthenticated context — the
-	// AuthzProvider downstream decides whether the request is allowed (the
-	// OSS default `PublicAuthzProvider` permits read-only access; downstream
-	// authz can reject). Failing-open here is intentional so the MCP bridge
+// AuthzProvider downstream decides whether the request is allowed (the
+// OSS default `PublicAuthzProvider` permits read-only access; downstream
+// authz can reject). Failing-open here is intentional so the MCP bridge
 // works for anonymous `list_servers` / `get_server` traffic while still
 // letting authenticated callers pick up privileged operations.
 func mcpAuthnMiddleware(authn auth.AuthnProvider) func(http.Handler) http.Handler {

@@ -49,9 +49,6 @@ type PerKindHooks struct {
 	// InitialFinalizers seeds create-time finalizers per kind; see
 	// resource.Config.InitialFinalizers.
 	InitialFinalizers map[string]func(obj v1alpha1.Object) []string
-	// CreateStager optionally intercepts validated creates before the
-	// row reaches production storage. Downstream approval integrations wire this.
-	CreateStager func(ctx context.Context, in resource.CreateStagerInput) (resource.CreateStagerResult, error)
 }
 
 // Register wires the namespace-scoped + cross-namespace list endpoints
@@ -90,7 +87,6 @@ func Register(
 			PostUpsert:        perKind.PostUpserts[kind],
 			PostDelete:        perKind.PostDeletes[kind],
 			InitialFinalizers: perKind.InitialFinalizers[kind],
-			CreateStager:      perKind.CreateStager,
 		}, true
 	}
 

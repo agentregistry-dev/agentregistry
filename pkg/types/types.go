@@ -66,38 +66,6 @@ type PostUpsert func(ctx context.Context, obj v1alpha1.Object) error
 // batch's per-doc delete hook.
 type PostDelete func(ctx context.Context, obj v1alpha1.Object) error
 
-// CreateStagerInput is handed to an optional downstream create-approval hook.
-// Store is intentionally any to keep pkg/types independent from the concrete
-// resource store package; downstream integrations can type-assert when needed.
-type CreateStagerInput struct {
-	Kind      string
-	Namespace string
-	Name      string
-	Tag       string
-	Object    v1alpha1.Object
-	Store     any
-}
-
-// CreateStagerResult reports whether the create was staged instead of written
-// to production storage.
-type CreateStagerResult struct {
-	Staged bool
-}
-
-// ResourceRouteContext exposes the finalized v1alpha1 route wiring to
-// downstream integrations that need to register adjacent routes against
-// the same stores, resolver, validator, and post-persist hooks.
-type ResourceRouteContext struct {
-	// Stores is the finalized per-kind store map. It is intentionally any to
-	// avoid a public package import cycle with the concrete store package.
-	Stores            any
-	Resolver          v1alpha1.ResolverFunc
-	RegistryValidator v1alpha1.RegistryValidatorFunc
-	PostUpserts       map[string]func(context.Context, v1alpha1.Object) error
-	PostDeletes       map[string]func(context.Context, v1alpha1.Object) error
-	InitialFinalizers map[string]func(v1alpha1.Object) []string
-}
-
 // Auditor receives audit events for state changes that the OSS layer
 // considers significant. The default OSS implementation is a no-op;
 // downstream builds plug in a real audit sink via NewStore options.
@@ -184,17 +152,6 @@ type AppOptions struct {
 	// PostDeletes mirror PostUpserts on the delete path.
 	PostDeletes map[string]PostDelete
 
-	// CreateStager optionally intercepts validated creates before the row
-	// reaches production storage. Downstream builds use this for native
-	// approval staging; nil preserves normal direct writes.
-	CreateStager func(ctx context.Context, in CreateStagerInput) (CreateStagerResult, error)
-
-	// ResolverWrapper can decorate the shared v1alpha1 ResourceRef resolver
-	// before route registration. Downstream approval integrations use this to allow
-	// same-submit pending references to validate without writing them to
-	// production storage first. Nil preserves the default store-backed resolver.
-	ResolverWrapper func(v1alpha1.ResolverFunc) v1alpha1.ResolverFunc
-
 	// V1Alpha1StoreTables registers additional v1alpha1 kinds with their
 	// backing PostgreSQL tables. Downstream builds that add their own
 	// Scheme kinds should populate this so the shared /v0/apply,
@@ -240,10 +197,6 @@ type AppOptions struct {
 	// routes using the same API instance and path prefix as OSS core
 	// routes.
 	ExtraRoutes func(api huma.API, pathPrefix string)
-
-	// ExtraResourceRoutes allows external integrations to register routes
-	// after the generic v1alpha1 resource context has been finalized.
-	ExtraResourceRoutes func(api huma.API, pathPrefix string, ctx ResourceRouteContext)
 
 	// HTTPServerFactory is an optional function to create a server that
 	// adds new API routes.

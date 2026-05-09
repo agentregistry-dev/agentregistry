@@ -28,7 +28,6 @@ const (
 	ApplyStatusUnchanged  = "unchanged"
 	ApplyStatusDeleted    = "deleted"
 	ApplyStatusDryRun     = "dry-run"
-	ApplyStatusStaged     = "staged"
 	ApplyStatusFailed     = "failed"
 )
 

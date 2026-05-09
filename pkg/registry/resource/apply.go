@@ -63,11 +63,6 @@ type ApplyConfig struct {
 
 	// InitialFinalizers mirrors resource.Config.InitialFinalizers per kind.
 	InitialFinalizers map[string]func(obj v1alpha1.Object) []string
-
-	// CreateStager optionally intercepts validated create attempts before
-	// production Upsert. Downstream builds can use this to stage non-admin
-	// creates for approval while leaving OSS behavior unchanged.
-	CreateStager func(ctx context.Context, in CreateStagerInput) (CreateStagerResult, error)
 }
 
 // applyInput receives a raw multi-doc YAML stream. RawBody keeps bytes
@@ -175,7 +170,6 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 		RegistryValidator: cfg.RegistryValidator,
 		PostUpsert:        cfg.PostUpserts[obj.GetKind()],
 		InitialFinalizers: cfg.InitialFinalizers[obj.GetKind()],
-		CreateStager:      cfg.CreateStager,
 	}, dryRun)
 	if ae != nil {
 		return failResult(res, ae)
@@ -188,17 +182,13 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 	// Map the Store outcome onto the wire status. Tagged-artifact creates
 	// surface as created, same-tag replacements as configured, and exact
 	// re-applies as unchanged.
-	if up.Staged {
-		res.Status = arv0.ApplyStatusStaged
-	} else {
-		switch up.Outcome {
-		case v1alpha1store.UpsertCreated:
-			res.Status = arv0.ApplyStatusCreated
-		case v1alpha1store.UpsertReplaced:
-			res.Status = arv0.ApplyStatusConfigured
-		case v1alpha1store.UpsertNoOp:
-			res.Status = arv0.ApplyStatusUnchanged
-		}
+	switch up.Outcome {
+	case v1alpha1store.UpsertCreated:
+		res.Status = arv0.ApplyStatusCreated
+	case v1alpha1store.UpsertReplaced:
+		res.Status = arv0.ApplyStatusConfigured
+	case v1alpha1store.UpsertNoOp:
+		res.Status = arv0.ApplyStatusUnchanged
 	}
 	if store.IsTaggedArtifact() {
 		res.Tag = up.Tag
@@ -303,12 +293,12 @@ func resolveBatchTarget(cfg ApplyConfig, obj v1alpha1.Object, verb string) (*v1a
 		obj.SetMetadata(*meta)
 	}
 
-		// Defense-in-depth: when any Authorizers are wired, a kind without
-		// an entry must DENY rather than silently allow. Downstream boot guards
-		// can ensure every OSS BuiltinKinds entry has an authorizer when authz
-		// is enabled, so this only fires for extension kinds the operator added
-		// without updating PerKindHooks — fail closed there. Mirrors the same
-		// contract on the import handler.
+	// Defense-in-depth: when any Authorizers are wired, a kind without
+	// an entry must DENY rather than silently allow. Downstream boot guards
+	// can ensure every OSS BuiltinKinds entry has an authorizer when authz
+	// is enabled, so this only fires for extension kinds the operator added
+	// without updating PerKindHooks — fail closed there. Mirrors the same
+	// contract on the import handler.
 	if len(cfg.Authorizers) > 0 {
 		if authz, ok := cfg.Authorizers[kind]; !ok || authz == nil {
 			return nil, *meta, &applyError{
