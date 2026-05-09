@@ -18,7 +18,7 @@ import (
 
 // agentTagFixture builds a minimal Agent envelope at the given tag for use
 // as a row in a /tags list response.
-func agentTagFixture(name, version string) v1alpha1.Agent {
+func agentTagFixture(name, tag string) v1alpha1.Agent {
 	return v1alpha1.Agent{
 		TypeMeta: v1alpha1.TypeMeta{
 			APIVersion: v1alpha1.GroupVersion,
@@ -27,10 +27,10 @@ func agentTagFixture(name, version string) v1alpha1.Agent {
 		Metadata: v1alpha1.ObjectMeta{
 			Namespace: v1alpha1.DefaultNamespace,
 			Name:      name,
-			Tag:       version,
+			Tag:       tag,
 		},
 		Spec: v1alpha1.AgentSpec{
-			Description: "v" + version,
+			Description: "v" + tag,
 		},
 	}
 }
@@ -61,7 +61,7 @@ func tagsListServer(t *testing.T, rows []v1alpha1.Agent) (*httptest.Server, *[]s
 
 // (1) `arctl get agent NAME --all-tags` prints one row per tag
 // returned by the server.
-func TestGet_AllVersions_Agent_PrintsAllRows(t *testing.T) {
+func TestGet_AllTags_Agent_PrintsAllRows(t *testing.T) {
 	rows := []v1alpha1.Agent{
 		agentTagFixture("acme/bot", "2"),
 		agentTagFixture("acme/bot", "1"),
@@ -89,7 +89,7 @@ func TestGet_AllVersions_Agent_PrintsAllRows(t *testing.T) {
 
 // (2) `arctl get agent NAME --all-tags -o json` emits a JSON array of
 // envelopes — verifies the multi-row YAML/JSON path also works.
-func TestGet_AllVersions_Agent_JSONOutput(t *testing.T) {
+func TestGet_AllTags_Agent_JSONOutput(t *testing.T) {
 	rows := []v1alpha1.Agent{
 		agentTagFixture("acme/bot", "2"),
 		agentTagFixture("acme/bot", "1"),
@@ -113,7 +113,7 @@ func TestGet_AllVersions_Agent_JSONOutput(t *testing.T) {
 
 // (3) `arctl get deployment NAME --all-tags` errors cleanly because
 // deployments are mutable namespace/name objects, not taggable artifacts.
-func TestGet_AllVersions_DeploymentRejected(t *testing.T) {
+func TestGet_AllTags_DeploymentRejected(t *testing.T) {
 	declarative.SetAPIClient(client.NewClient("http://127.0.0.1:1", ""))
 	t.Cleanup(func() { declarative.SetAPIClient(nil) })
 
@@ -129,7 +129,7 @@ func TestGet_AllVersions_DeploymentRejected(t *testing.T) {
 // is a mutable namespace/name object whose store has no /tags endpoint.
 // Pin the CLI surface so a future typedKind change can't
 // silently re-expose --all-tags for Provider.
-func TestGet_AllVersions_ProviderRejected(t *testing.T) {
+func TestGet_AllTags_ProviderRejected(t *testing.T) {
 	declarative.SetAPIClient(client.NewClient("http://127.0.0.1:1", ""))
 	t.Cleanup(func() { declarative.SetAPIClient(nil) })
 
@@ -143,7 +143,7 @@ func TestGet_AllVersions_ProviderRejected(t *testing.T) {
 
 // (4) `arctl get agents --all-tags` (no NAME) errors — the flag
 // requires a NAME argument.
-func TestGet_AllVersions_RequiresName(t *testing.T) {
+func TestGet_AllTags_RequiresName(t *testing.T) {
 	declarative.SetAPIClient(client.NewClient("http://127.0.0.1:1", ""))
 	t.Cleanup(func() { declarative.SetAPIClient(nil) })
 
@@ -156,7 +156,7 @@ func TestGet_AllVersions_RequiresName(t *testing.T) {
 
 // (5) `arctl get all --all-tags` errors — the cross-kind list flow has
 // no notion of "all tags of every name".
-func TestGet_AllVersions_RejectsGetAll(t *testing.T) {
+func TestGet_AllTags_RejectsGetAll(t *testing.T) {
 	cmd := declarative.NewGetCmd()
 	cmd.SetArgs([]string{"all", "--all-tags"})
 	err := cmd.Execute()
@@ -196,7 +196,7 @@ func deleteAllTagsServer(t *testing.T, rows []v1alpha1.Agent, failTag string) (*
 
 // (6) `arctl delete agent NAME --all-tags` lists tags and deletes each
 // exact tag so omitted-tag declarative delete can continue to mean "latest".
-func TestDelete_AllVersions_Agent_DeletesEveryListedTag(t *testing.T) {
+func TestDelete_AllTags_Agent_DeletesEveryListedTag(t *testing.T) {
 	rows := []v1alpha1.Agent{
 		agentTagFixture("acme/bot", "stable"),
 		agentTagFixture("acme/bot", "latest"),
@@ -218,7 +218,7 @@ func TestDelete_AllVersions_Agent_DeletesEveryListedTag(t *testing.T) {
 }
 
 // (7) `arctl delete deployment NAME --all-tags` errors cleanly.
-func TestDelete_AllVersions_DeploymentRejected(t *testing.T) {
+func TestDelete_AllTags_DeploymentRejected(t *testing.T) {
 	declarative.SetAPIClient(client.NewClient("http://127.0.0.1:1", ""))
 	t.Cleanup(func() { declarative.SetAPIClient(nil) })
 
@@ -231,7 +231,7 @@ func TestDelete_AllVersions_DeploymentRejected(t *testing.T) {
 
 // (7b) `arctl delete provider NAME --all-tags` errors cleanly —
 // Provider has no DeleteAllTags endpoint server-side.
-func TestDelete_AllVersions_ProviderRejected(t *testing.T) {
+func TestDelete_AllTags_ProviderRejected(t *testing.T) {
 	declarative.SetAPIClient(client.NewClient("http://127.0.0.1:1", ""))
 	t.Cleanup(func() { declarative.SetAPIClient(nil) })
 
@@ -242,9 +242,9 @@ func TestDelete_AllVersions_ProviderRejected(t *testing.T) {
 	assert.Contains(t, err.Error(), "--all-tags not supported")
 }
 
-// (8) `arctl delete agent NAME --all-tags --tag 1` errors — the
-// flags are mutually exclusive.
-func TestDelete_AllVersions_AndVersionMutuallyExclusive(t *testing.T) {
+// (8) `arctl delete agent NAME --all-tags --tag 1` errors because the
+// exact-tag and all-tags modes are mutually exclusive.
+func TestDelete_AllTags_AndTagMutuallyExclusive(t *testing.T) {
 	cmd := declarative.NewDeleteCmd()
 	cmd.SetArgs([]string{"agent", "acme/bot", "--all-tags", "--tag", "1"})
 	err := cmd.Execute()
@@ -253,7 +253,7 @@ func TestDelete_AllVersions_AndVersionMutuallyExclusive(t *testing.T) {
 }
 
 // (9) An exact-tag delete failure is surfaced by the CLI.
-func TestDelete_AllVersions_PropagatesServerFailure(t *testing.T) {
+func TestDelete_AllTags_PropagatesServerFailure(t *testing.T) {
 	rows := []v1alpha1.Agent{agentTagFixture("acme/bot", "stable")}
 	srv, _ := deleteAllTagsServer(t, rows, "stable")
 	setupClientForServer(t, srv)

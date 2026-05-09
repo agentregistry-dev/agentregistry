@@ -181,10 +181,10 @@ Supported languages:  python (for adk)`,
 	return cmd
 }
 
-// parseNameVersion splits the compatibility "name@tag" syntax into
+// parseNameTag splits the compatibility "name@tag" syntax into
 // (name, tag). If no @ is present, tag defaults to "latest". If the name
 // part is empty (e.g. "@stable"), the whole string is treated as the name.
-func parseNameVersion(s string) (string, string) {
+func parseNameTag(s string) (string, string) {
 	if i := strings.LastIndex(s, "@"); i > 0 {
 		return s[:i], s[i+1:]
 	}
@@ -227,29 +227,29 @@ func writeDeclarativeAgentYAML(projectDir, name, image, language, framework, mod
 	}
 
 	for _, raw := range mcps {
-		serverName, mcpVer := parseNameVersion(raw)
+		serverName, mcpTag := parseNameTag(raw)
 		agent.Spec.MCPServers = append(agent.Spec.MCPServers, v1alpha1.ResourceRef{
 			Kind: v1alpha1.KindMCPServer,
 			Name: serverName,
-			Tag:  mcpVer,
+			Tag:  mcpTag,
 		})
 	}
 
 	for _, raw := range skills {
-		skillName, skillVer := parseNameVersion(raw)
+		skillName, skillTag := parseNameTag(raw)
 		agent.Spec.Skills = append(agent.Spec.Skills, v1alpha1.ResourceRef{
 			Kind: v1alpha1.KindSkill,
 			Name: skillName,
-			Tag:  skillVer,
+			Tag:  skillTag,
 		})
 	}
 
 	for _, raw := range prompts {
-		promptName, promptVer := parseNameVersion(raw)
+		promptName, promptTag := parseNameTag(raw)
 		agent.Spec.Prompts = append(agent.Spec.Prompts, v1alpha1.ResourceRef{
 			Kind: v1alpha1.KindPrompt,
 			Name: promptName,
-			Tag:  promptVer,
+			Tag:  promptTag,
 		})
 	}
 

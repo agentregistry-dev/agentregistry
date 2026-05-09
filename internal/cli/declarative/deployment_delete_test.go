@@ -71,7 +71,7 @@ func setupClientForServer(t *testing.T, srv *httptest.Server) {
 // (1) Tagged target delete removes all provider-specific deployments matching
 // (name, tag). Deployments on other providers for the same (name, tag) get
 // deleted; deployments on other tags are left alone.
-func TestDeploymentDelete_RemovesAllProviderMatchesForVersion(t *testing.T) {
+func TestDeploymentDelete_RemovesAllProviderMatchesForTag(t *testing.T) {
 	deployments := []v1alpha1.Deployment{
 		deploymentFixture("aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "pending"),
 		deploymentFixture("gcp-v1", "summarizer", "1.0.0", "my-gcp", "agent", "pending"),
@@ -89,7 +89,7 @@ func TestDeploymentDelete_RemovesAllProviderMatchesForVersion(t *testing.T) {
 		"both provider variants of summarizer 1.0.0 should be deleted; nothing else")
 }
 
-// (2) When no deployment matches (name, version), returns a not-found error.
+// (2) When no deployment matches (name, tag), returns a not-found error.
 func TestDeploymentDelete_NotFound(t *testing.T) {
 	deployments := []v1alpha1.Deployment{
 		deploymentFixture("aws-v2", "summarizer", "2.0.0", "my-aws", "agent", "pending"),
@@ -130,7 +130,7 @@ func TestDeploymentDelete_PartialFailure(t *testing.T) {
 
 // (4) Guard against the earlier wildcard bug: empty --tag must be rejected
 // before issuing any HTTP call, to prevent accidental bulk deployment deletes.
-func TestDeploymentDelete_RejectsEmptyVersion(t *testing.T) {
+func TestDeploymentDelete_RejectsEmptyTag(t *testing.T) {
 	deployments := []v1alpha1.Deployment{
 		deploymentFixture("aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "pending"),
 		deploymentFixture("aws-v2", "summarizer", "2.0.0", "my-aws", "agent", "pending"),

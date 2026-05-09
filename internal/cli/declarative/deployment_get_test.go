@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func deploymentFixture(metaName, targetName, version, providerID, resourceType, phase string) v1alpha1.Deployment {
+func deploymentFixture(metaName, targetName, targetTag, providerID, resourceType, phase string) v1alpha1.Deployment {
 	targetKind := v1alpha1.KindAgent
 	if resourceType == "mcp" {
 		targetKind = v1alpha1.KindMCPServer
@@ -35,7 +35,7 @@ func deploymentFixture(metaName, targetName, version, providerID, resourceType, 
 				Kind:      targetKind,
 				Namespace: v1alpha1.DefaultNamespace,
 				Name:      targetName,
-				Tag:       version,
+				Tag:       targetTag,
 			},
 			ProviderRef: v1alpha1.ResourceRef{
 				Kind:      v1alpha1.KindProvider,
@@ -116,7 +116,7 @@ func TestDeploymentGet_ReturnsFirstWhenMultipleShareName(t *testing.T) {
 	assert.NotContains(t, out.String(), "default/gcp-v1",
 		"only the first match is surfaced; subsequent matches are filtered out")
 	assert.NotContains(t, out.String(), "default/aws-v2",
-		"other versions must not be surfaced when get returns first match")
+		"other deployments must not be surfaced when get returns first match")
 }
 
 // (3) Get surfaces the registry's not-found sentinel when no deployment matches.
