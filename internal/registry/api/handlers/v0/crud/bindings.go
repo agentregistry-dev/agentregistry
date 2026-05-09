@@ -37,6 +37,6 @@ func init() {
 	register(v1alpha1.KindRemoteMCPServer, func() *v1alpha1.RemoteMCPServer { return &v1alpha1.RemoteMCPServer{} })
 	register(v1alpha1.KindSkill, func() *v1alpha1.Skill { return &v1alpha1.Skill{} })
 	register(v1alpha1.KindPrompt, func() *v1alpha1.Prompt { return &v1alpha1.Prompt{} })
-	register(v1alpha1.KindProvider, func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
+	register(v1alpha1.KindRuntime, func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} })
 	register(v1alpha1.KindDeployment, func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} })
 }

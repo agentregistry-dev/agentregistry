@@ -8,7 +8,7 @@ import (
 // Validate runs Deployment's structural checks.
 //
 // Deployment is unversioned: it's a runtime binding ("deploy resource X
-// to provider Y"). The thing being deployed already carries its own
+// to runtime Y"). The thing being deployed already carries its own
 // version via spec.targetRef.version; the Deployment row's own
 // metadata.version doesn't track anything observable. (namespace, name)
 // is the identity; callers pin metadata.version to a constant ("1").
@@ -29,7 +29,7 @@ func (d *Deployment) Validate() error {
 // spec.targetRef.version.
 func (d *Deployment) DefaultMetadataVersion() string { return "1" }
 
-// ResolveRefs checks that TargetRef and ProviderRef both resolve. The
+// ResolveRefs checks that TargetRef and RuntimeRef both resolve. The
 // referenced objects must live in the referenced namespace; when
 // ref.Namespace is blank on the wire we inherit the Deployment's own
 // namespace (mirroring how kubectl treats blank metadata.namespace).
@@ -45,11 +45,11 @@ func (d *Deployment) ResolveRefs(ctx context.Context, resolver ResolverFunc) err
 	}
 	errs = append(errs, resolveRefWith(ctx, resolver, target, "spec.targetRef")...)
 
-	provider := d.Spec.ProviderRef
-	if provider.Namespace == "" {
-		provider.Namespace = d.Metadata.Namespace
+	runtime := d.Spec.RuntimeRef
+	if runtime.Namespace == "" {
+		runtime.Namespace = d.Metadata.Namespace
 	}
-	errs = append(errs, resolveRefWith(ctx, resolver, provider, "spec.providerRef")...)
+	errs = append(errs, resolveRefWith(ctx, resolver, runtime, "spec.runtimeRef")...)
 
 	if len(errs) == 0 {
 		return nil
@@ -67,9 +67,9 @@ func validateDeploymentSpec(s *DeploymentSpec) FieldErrors {
 	for _, e := range validateRef(s.TargetRef, KindAgent, KindMCPServer, KindRemoteMCPServer) {
 		errs.Append("spec.targetRef."+e.Path, e.Cause)
 	}
-	// ProviderRef: required, must name a Provider.
-	for _, e := range validateRef(s.ProviderRef, KindProvider) {
-		errs.Append("spec.providerRef."+e.Path, e.Cause)
+	// RuntimeRef: required, must name a Runtime.
+	for _, e := range validateRef(s.RuntimeRef, KindRuntime) {
+		errs.Append("spec.runtimeRef."+e.Path, e.Cause)
 	}
 
 	switch s.DesiredState {

@@ -175,19 +175,19 @@ func (p *Prompt) UnmarshalStatus(data json.RawMessage) error {
 	return UnmarshalStatusFromStorage(data, &p.Status)
 }
 
-func (p *Provider) GetMetadata() *ObjectMeta { return &p.Metadata }
-func (p *Provider) SetMetadata(meta ObjectMeta) {
-	p.Metadata = meta
+func (r *Runtime) GetMetadata() *ObjectMeta { return &r.Metadata }
+func (r *Runtime) SetMetadata(meta ObjectMeta) {
+	r.Metadata = meta
 }
-func (p *Provider) MarshalSpec() (json.RawMessage, error) { return json.Marshal(p.Spec) }
-func (p *Provider) UnmarshalSpec(data json.RawMessage) error {
-	return json.Unmarshal(data, &p.Spec)
+func (r *Runtime) MarshalSpec() (json.RawMessage, error) { return json.Marshal(r.Spec) }
+func (r *Runtime) UnmarshalSpec(data json.RawMessage) error {
+	return json.Unmarshal(data, &r.Spec)
 }
-func (p *Provider) MarshalStatus() (json.RawMessage, error) {
-	return MarshalStatusForStorage(p.Status)
+func (r *Runtime) MarshalStatus() (json.RawMessage, error) {
+	return MarshalStatusForStorage(r.Status)
 }
-func (p *Provider) UnmarshalStatus(data json.RawMessage) error {
-	return UnmarshalStatusFromStorage(data, &p.Status)
+func (r *Runtime) UnmarshalStatus(data json.RawMessage) error {
+	return UnmarshalStatusFromStorage(data, &r.Status)
 }
 
 func (d *Deployment) GetMetadata() *ObjectMeta { return &d.Metadata }

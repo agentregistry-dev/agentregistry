@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
+	runtimetypes "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
@@ -29,8 +29,8 @@ func TestSpecToPlatformRemoteMCPServer_RemoteTransport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SpecToPlatformRemoteMCPServer: %v", err)
 	}
-	if got.MCPServerType != platformtypes.MCPServerTypeRemote {
-		t.Fatalf("MCPServerType = %q, want %q", got.MCPServerType, platformtypes.MCPServerTypeRemote)
+	if got.MCPServerType != runtimetypes.MCPServerTypeRemote {
+		t.Fatalf("MCPServerType = %q, want %q", got.MCPServerType, runtimetypes.MCPServerTypeRemote)
 	}
 	if got.Remote == nil {
 		t.Fatalf("Remote is nil")
@@ -65,7 +65,7 @@ func TestSpecToPlatformMCPServer_OCIPackage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SpecToPlatformMCPServer: %v", err)
 	}
-	if got.MCPServerType != platformtypes.MCPServerTypeLocal {
+	if got.MCPServerType != runtimetypes.MCPServerTypeLocal {
 		t.Fatalf("MCPServerType = %q", got.MCPServerType)
 	}
 	if got.Local.Deployment.Image != "ghcr.io/example/mcp:v0.1.0" {
@@ -155,7 +155,7 @@ func TestSpecToPlatformAgent_ResolvesMCPServerRefs(t *testing.T) {
 	if encoded == "" {
 		t.Fatalf("MCP_SERVERS_CONFIG missing")
 	}
-	var decoded []platformtypes.ResolvedMCPServerConfig
+	var decoded []runtimetypes.ResolvedMCPServerConfig
 	if err := json.Unmarshal([]byte(encoded), &decoded); err != nil {
 		t.Fatalf("decode MCP_SERVERS_CONFIG: %v", err)
 	}
@@ -216,7 +216,7 @@ func TestSpecToPlatformAgent_ResolvesRemoteMCPServerHeaders(t *testing.T) {
 		t.Fatalf("translated headers = %+v", headers)
 	}
 
-	var decoded []platformtypes.ResolvedMCPServerConfig
+	var decoded []runtimetypes.ResolvedMCPServerConfig
 	if err := json.Unmarshal([]byte(agent.Deployment.Env["MCP_SERVERS_CONFIG"]), &decoded); err != nil {
 		t.Fatalf("decode MCP_SERVERS_CONFIG: %v", err)
 	}

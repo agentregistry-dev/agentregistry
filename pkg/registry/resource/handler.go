@@ -243,10 +243,10 @@ type deleteInput struct {
 	Name      string `path:"name"`
 	Version   string `path:"version"`
 	// Force=true skips the kind's PostDelete reconciliation hook
-	// (e.g. provider teardown for Deployment) and only soft-deletes
+	// (e.g. runtime teardown for Deployment) and only soft-deletes
 	// the row. Useful for orphaned records whose external state is
 	// already gone or unreachable.
-	Force bool `query:"force" doc:"Skip provider-specific teardown and only remove the registry record." default:"false"`
+	Force bool `query:"force" doc:"Skip runtime-specific teardown and only remove the registry record." default:"false"`
 }
 
 type listInput struct {
@@ -474,7 +474,7 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 
 		// Pre-read so PostDelete has the final spec to work with.
 		// Skipped when no hook is registered or when the caller asked
-		// for ?force=true (skip provider teardown — orphan records /
+		// for ?force=true (skip runtime teardown — orphan records /
 		// unreachable backends).
 		var preDelete v1alpha1.Object
 		runHook := cfg.PostDelete != nil && !in.Force

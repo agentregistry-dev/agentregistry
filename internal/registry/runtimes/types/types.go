@@ -1,12 +1,12 @@
 package types
 
 import (
-	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
+	composetypes "github.com/compose-spec/compose-go/v2/types"
 	v1alpha2 "github.com/kagent-dev/kagent/go/api/v1alpha2"
 	kmcpv1alpha1 "github.com/kagent-dev/kmcp/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 
-	composetypes "github.com/compose-spec/compose-go/v2/types"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
 )
 
 type DesiredState struct {
@@ -116,7 +116,7 @@ type AgentDeployment struct {
 	Port  uint16            `json:"port,omitempty"`
 }
 
-type KubernetesPlatformConfig struct {
+type KubernetesRuntimeConfig struct {
 	Agents           []*v1alpha2.Agent           `json:"agents"`
 	RemoteMCPServers []*v1alpha2.RemoteMCPServer `json:"remoteMCPServers"`
 	MCPServers       []*kmcpv1alpha1.MCPServer   `json:"mcpServers"`
@@ -125,7 +125,7 @@ type KubernetesPlatformConfig struct {
 
 type DockerComposeConfig = composetypes.Project
 
-type LocalPlatformConfig struct {
+type LocalRuntimeConfig struct {
 	DockerCompose *DockerComposeConfig
 	AgentGateway  *AgentGatewayConfig
 }

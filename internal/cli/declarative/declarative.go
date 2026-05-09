@@ -56,11 +56,11 @@ func init() {
 	))
 
 	scheme.Register(typedKind(
-		"provider", "providers", []string{"Provider"},
-		[]scheme.Column{{Header: "NAME"}, {Header: "PLATFORM"}},
-		v1alpha1.KindProvider,
-		func() *v1alpha1.Provider { return &v1alpha1.Provider{} },
-		providerRow,
+		"runtime", "runtimes", []string{"Runtime"},
+		[]scheme.Column{{Header: "NAME"}, {Header: "TYPE"}},
+		v1alpha1.KindRuntime,
+		func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} },
+		runtimeRow,
 	))
 
 	scheme.Register(typedKind(
@@ -109,7 +109,7 @@ func init() {
 		},
 		TableColumns: []scheme.Column{
 			{Header: "ID"}, {Header: "NAME"}, {Header: "VERSION"},
-			{Header: "TYPE"}, {Header: "PROVIDER"}, {Header: "STATUS"},
+			{Header: "TYPE"}, {Header: "RUNTIME"}, {Header: "STATUS"},
 		},
 	})
 }

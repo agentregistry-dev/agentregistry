@@ -49,19 +49,19 @@ func TestV1Alpha1Apply_MCPServerTarget_WritesComposeAndMarksProgressing(t *testi
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-local", Version: "1", Generation: 7},
 		Spec: v1alpha1.DeploymentSpec{
 			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Version: "1.0.0"},
-			ProviderRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindProvider, Name: "local", Version: "1"},
+			RuntimeRef:   v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "local", Version: "1"},
 			DesiredState: v1alpha1.DesiredStateDeployed,
 		},
 	}
-	provider := &v1alpha1.Provider{
-		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindProvider},
+	runtime := &v1alpha1.Runtime{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindRuntime},
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "local", Version: "1"},
 	}
 
 	res, err := adapter.Apply(context.Background(), types.ApplyInput{
 		Deployment: deployment,
 		Target:     target,
-		Provider:   provider,
+		Runtime:    runtime,
 	})
 	if err != nil {
 		t.Fatalf("Apply: %v", err)

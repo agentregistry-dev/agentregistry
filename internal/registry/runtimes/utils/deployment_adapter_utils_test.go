@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
+	runtimetypes "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
@@ -119,17 +119,17 @@ func TestTranslateMCPServerLocalIncludesOverridesAndExtraArgs(t *testing.T) {
 func TestBuildRemoteMCPURL(t *testing.T) {
 	tests := []struct {
 		name   string
-		remote *platformtypes.RemoteMCPTarget
+		remote *runtimetypes.RemoteMCPTarget
 		want   string
 	}{
-		{"https standard port", &platformtypes.RemoteMCPTarget{Scheme: "https", Host: "example.com", Port: 443, Path: "/mcp"}, "https://example.com/mcp"},
-		{"https custom port", &platformtypes.RemoteMCPTarget{Scheme: "https", Host: "example.com", Port: 8443, Path: "/mcp"}, "https://example.com:8443/mcp"},
-		{"http standard port", &platformtypes.RemoteMCPTarget{Scheme: "http", Host: "example.com", Port: 80, Path: "/sse"}, "http://example.com/sse"},
-		{"http custom port", &platformtypes.RemoteMCPTarget{Scheme: "http", Host: "localhost", Port: 3005, Path: "/mcp/"}, "http://localhost:3005/mcp/"},
-		{"empty path", &platformtypes.RemoteMCPTarget{Scheme: "https", Host: "example.com", Port: 443, Path: ""}, "https://example.com"},
-		{"empty scheme defaults to http", &platformtypes.RemoteMCPTarget{Host: "example.com", Port: 80, Path: "/mcp"}, "http://example.com/mcp"},
-		{"ipv6 with custom port", &platformtypes.RemoteMCPTarget{Scheme: "http", Host: "::1", Port: 3005, Path: "/mcp"}, "http://[::1]:3005/mcp"},
-		{"ipv6 standard port", &platformtypes.RemoteMCPTarget{Scheme: "https", Host: "::1", Port: 443, Path: "/mcp"}, "https://[::1]/mcp"},
+		{"https standard port", &runtimetypes.RemoteMCPTarget{Scheme: "https", Host: "example.com", Port: 443, Path: "/mcp"}, "https://example.com/mcp"},
+		{"https custom port", &runtimetypes.RemoteMCPTarget{Scheme: "https", Host: "example.com", Port: 8443, Path: "/mcp"}, "https://example.com:8443/mcp"},
+		{"http standard port", &runtimetypes.RemoteMCPTarget{Scheme: "http", Host: "example.com", Port: 80, Path: "/sse"}, "http://example.com/sse"},
+		{"http custom port", &runtimetypes.RemoteMCPTarget{Scheme: "http", Host: "localhost", Port: 3005, Path: "/mcp/"}, "http://localhost:3005/mcp/"},
+		{"empty path", &runtimetypes.RemoteMCPTarget{Scheme: "https", Host: "example.com", Port: 443, Path: ""}, "https://example.com"},
+		{"empty scheme defaults to http", &runtimetypes.RemoteMCPTarget{Host: "example.com", Port: 80, Path: "/mcp"}, "http://example.com/mcp"},
+		{"ipv6 with custom port", &runtimetypes.RemoteMCPTarget{Scheme: "http", Host: "::1", Port: 3005, Path: "/mcp"}, "http://[::1]:3005/mcp"},
+		{"ipv6 standard port", &runtimetypes.RemoteMCPTarget{Scheme: "https", Host: "::1", Port: 443, Path: "/mcp"}, "https://[::1]/mcp"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

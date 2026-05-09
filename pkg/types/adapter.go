@@ -8,19 +8,19 @@ import (
 )
 
 // DeploymentAdapter is the v1alpha1 runtime surface for deploying
-// Agent or MCPServer targets onto a concrete platform (local
-// docker-compose, Kubernetes, hosted cloud runtimes, etc.).
+// Agent or MCPServer targets onto a concrete runtime (local
+// docker daemon, Kubernetes, hosted cloud runtimes, etc.).
 //
-// One adapter per platform. Adapters are registered at app boot in a
-// map keyed by Platform() string; the reconciler looks up by
-// Provider.Spec.Platform when a Deployment apply arrives.
+// One adapter per runtime type. Adapters are registered at app boot in
+// a map keyed by Type() string; the reconciler looks up by
+// Runtime.Spec.Type when a Deployment apply arrives.
 //
-// Lifecycle contract (see design-docs/V1ALPHA1_PLATFORM_ADAPTERS.md):
+// Lifecycle contract (see design-docs/V1ALPHA1_RUNTIME_ADAPTERS.md):
 //
 //  1. apply handler validates + resolves refs + Upserts the Deployment
 //     row; reconciler observes NOTIFY.
 //  2. reconciler calls DeploymentAdapter.Apply with the resolved
-//     Target + Provider objects.
+//     Target + Runtime objects.
 //  3. Apply returns immediately with a Progressing condition. Adapter
 //     spawns its own watch loop to later PatchStatus with Ready=True
 //     when the workload converges.
@@ -34,9 +34,11 @@ import (
 // via the adapter's own watch loop writing status. The reconciler
 // doesn't block on convergence.
 type DeploymentAdapter interface {
-	// Platform returns the discriminator string matching
-	// Provider.Spec.Platform ("local", "kubernetes", "gcp", ...).
-	Platform() string
+	// Type returns the canonical CamelCase discriminator string
+	// ("Local", "Kubernetes", "BedrockAgentCore", ...). Runtime.Validate
+	// canonicalizes Spec.Type at admission, so the reconciler's adapter
+	// lookup compares Type() against Spec.Type with exact-match equality.
+	Type() string
 
 	// SupportedTargetKinds lists the v1alpha1 Kinds this adapter can
 	// deploy. Typically []string{KindAgent, KindMCPServer}. Used by
@@ -70,11 +72,11 @@ type DeploymentAdapter interface {
 	Logs(ctx context.Context, in LogsInput) (<-chan LogLine, error)
 
 	// Discover enumerates out-of-band workloads running under a
-	// Provider. Used by the enterprise Syncer (or an OSS equivalent)
-	// to reconcile drift between the registry's Deployment rows and
-	// external reality. Entries that correspond to managed
-	// Deployments are correlated by labels/annotations; entries
-	// without a managed owner surface as discovered-only.
+	// Runtime. Used by downstream syncers to reconcile drift between
+	// the registry's Deployment rows and external reality. Entries
+	// that correspond to managed Deployments are correlated by
+	// labels/annotations; entries without a managed owner surface as
+	// discovered-only.
 	//
 	// Adapters MUST NOT write directly to the discovered_* tables;
 	// the caller persists the results.
@@ -92,8 +94,8 @@ type ApplyInput struct {
 	// *v1alpha1.MCPServer. Adapters type-switch on it.
 	Target v1alpha1.Object
 
-	// Provider is the resolved ProviderRef.
-	Provider *v1alpha1.Provider
+	// Runtime is the resolved RuntimeRef.
+	Runtime *v1alpha1.Runtime
 
 	// Resolver is passed so adapters can check nested ref existence
 	// mid-Apply (blank-namespace refs inherit from the referencing
@@ -114,23 +116,23 @@ type ApplyResult struct {
 	// Store.PatchStatus. Canonical types:
 	//   - "Progressing" — workload is being created/updated
 	//   - "Ready"       — workload is running + serving
-	//   - "ProviderConfigured" — Provider.Config parsed and connectable
+	//   - "RuntimeConfigured" — Runtime.Config parsed and connectable
 	//   - "Degraded"    — transient failure, will retry
 	Conditions []v1alpha1.Condition
 
-	// ProviderMetadata carries adapter-internal state to persist
+	// RuntimeMetadata carries adapter-internal state to persist
 	// into Deployment.Metadata.Annotations (keyed under
-	// platforms.agentregistry.solo.io/<platform>/*). Callers marshal
+	// runtimes.agentregistry.solo.io/<type>/*). Callers marshal
 	// to string values since Annotations is map[string]string.
-	ProviderMetadata map[string]string
+	RuntimeMetadata map[string]string
 }
 
 // RemoveInput carries the Deployment being torn down plus its resolved
-// Provider (the Target has already been dereferenced and is not
+// Runtime (the Target has already been dereferenced and is not
 // included; teardown operates on the recorded runtime state).
 type RemoveInput struct {
 	Deployment *v1alpha1.Deployment
-	Provider   *v1alpha1.Provider
+	Runtime    *v1alpha1.Runtime
 }
 
 // RemoveResult describes the outcome of a Remove call. The reconciler
@@ -163,11 +165,11 @@ type LogLine struct {
 
 // DiscoverInput scopes a Discover call.
 type DiscoverInput struct {
-	Provider *v1alpha1.Provider
+	Runtime *v1alpha1.Runtime
 }
 
 // DiscoveryResult describes one out-of-band workload the adapter
-// observed under the Provider. The Syncer uses the Correlation field
+// observed under the Runtime. The Syncer uses the Correlation field
 // to decide whether this entry maps to an existing managed Deployment.
 type DiscoveryResult struct {
 	// TargetKind is the v1alpha1 Kind this workload looks like —
@@ -175,52 +177,54 @@ type DiscoveryResult struct {
 	TargetKind string
 	// Namespace, Name, Version identify the workload in the
 	// registry's naming scheme. Blank fields mean "unmanaged" —
-	// workload exists on the platform but has no corresponding
+	// workload exists on the runtime but has no corresponding
 	// Deployment row.
 	Namespace string
 	Name      string
 	Version   string
-	// ProviderMetadata mirrors what Apply writes so the caller can
+	// RuntimeMetadata mirrors what Apply writes so the caller can
 	// correlate this discovery with an existing Deployment's
 	// annotations.
-	ProviderMetadata map[string]string
+	RuntimeMetadata map[string]string
 }
 
 // -----------------------------------------------------------------------------
-// Provider adapter.
+// Runtime adapter.
 // -----------------------------------------------------------------------------
 
-// ProviderPlatformAdapter is the per-platform side-effect hook fired
-// after a Provider PUT/DELETE on the v1alpha1 generic resource
-// handler. The v1alpha1 store is the source of truth for the
-// Provider row itself; the adapter exists purely to reconcile any
-// per-platform sidecar state (e.g. enterprise's aws_connections /
-// gcp_connections / kagent_connections rows) so downstream lookups
-// — gateway credential resolution, platform-specific deploy paths —
-// can read those tables consistently.
+// RuntimeAdapter is the per-type side-effect hook fired after a
+// Runtime PUT/DELETE on the v1alpha1 generic resource handler. The
+// v1alpha1 store is the source of truth for the Runtime row itself;
+// the adapter exists purely to reconcile any per-type sidecar state
+// (downstream connection tables, credential caches, etc.) so other
+// lookups — gateway credential resolution, type-specific deploy paths
+// — can read those tables consistently.
 //
-// One adapter per platform discriminator (provider.Spec.Platform).
-// Enterprise builds register adapters via AppOptions.ProviderPlatforms;
+// One adapter per runtime type discriminator (runtime.Spec.Type).
+// Downstream builds register adapters via AppOptions.RuntimeAdapters;
 // the registry app maps that into per-kind PostUpsert/PostDelete on
-// KindProvider, dispatching by Spec.Platform.
+// KindRuntime, dispatching by exact-match against Spec.Type
+// (Runtime.Validate canonicalizes user-supplied case at admission).
 //
 // Hook errors propagate back to the API caller (500 on the per-kind
 // PUT path; ApplyStatusFailed on the batch path) — the v1alpha1 row
 // is already persisted, so a hook failure indicates degraded sidecar
 // state.
-type ProviderPlatformAdapter interface {
-	// Platform returns the discriminator string that matches
-	// provider.Spec.Platform ("aws", "gcp", "kagent", ...).
-	Platform() string
+type RuntimeAdapter interface {
+	// Type returns the canonical CamelCase discriminator string
+	// ("Local", "Kubernetes", "BedrockAgentCore", "GeminiAgentRuntime",
+	// ...). Runtime.Validate canonicalizes Spec.Type at admission so
+	// dispatch can compare with exact-match equality.
+	Type() string
 
-	// ApplyProvider runs after the v1alpha1 store has persisted a
-	// Provider on PUT or batch apply. Must be idempotent — re-apply
+	// ApplyRuntime runs after the v1alpha1 store has persisted a
+	// Runtime on PUT or batch apply. Must be idempotent — re-apply
 	// with rotated config must converge sidecar state, not error.
-	ApplyProvider(ctx context.Context, provider *v1alpha1.Provider) error
+	ApplyRuntime(ctx context.Context, runtime *v1alpha1.Runtime) error
 
-	// RemoveProvider runs after the v1alpha1 store has soft-deleted a
-	// Provider. providerID is the metadata.name (the v1alpha1 row's
+	// RemoveRuntime runs after the v1alpha1 store has soft-deleted a
+	// Runtime. runtimeID is the metadata.name (the v1alpha1 row's
 	// stable identity). Must tolerate missing sidecar rows for
 	// idempotency.
-	RemoveProvider(ctx context.Context, providerID string) error
+	RemoveRuntime(ctx context.Context, runtimeID string) error
 }

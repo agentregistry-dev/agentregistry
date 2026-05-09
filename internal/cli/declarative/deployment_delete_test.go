@@ -9,11 +9,12 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // deploymentTestServer builds an httptest.Server routing:
@@ -220,7 +221,7 @@ func TestDeploymentDelete_NoForceFlagOmitsQueryParam(t *testing.T) {
 
 // (8) --force is rejected for non-deployment kinds.
 func TestDelete_ForceRejectedForNonDeploymentKinds(t *testing.T) {
-	for _, kind := range []string{"agent", "mcp", "skill", "prompt", "provider"} {
+	for _, kind := range []string{"agent", "mcp", "skill", "prompt", "runtime"} {
 		t.Run(kind, func(t *testing.T) {
 			cmd := declarative.NewDeleteCmd()
 			cmd.SetArgs([]string{kind, "test-name", "--version", "1.0.0", "--force"})
