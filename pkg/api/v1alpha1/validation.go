@@ -15,7 +15,6 @@ import (
 var (
 	ErrRequiredField       = errors.New("required field missing")
 	ErrInvalidFormat       = errors.New("invalid format")
-	ErrInvalidVersion      = errors.New("invalid version string")
 	ErrInvalidTag          = errors.New("invalid tag")
 	ErrInvalidURL          = errors.New("invalid url")
 	ErrInvalidLabel        = errors.New("invalid label")
@@ -113,9 +112,8 @@ var tagRegex = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$`)
 // Content resources use metadata.tag for identity; mutable object kinds expose
 // only namespace/name.
 //
-// Both kinds with semantic version history (Agent, MCPServer, Skill,
-// Prompt) and unversioned kinds (Provider, Deployment) call this same
-// validator now that nothing on ObjectMeta tracks version.
+// Taggable artifact kinds and mutable object kinds call this same validator
+// because nothing on ObjectMeta tracks version.
 func ValidateObjectMeta(m ObjectMeta) FieldErrors {
 	return validateObjectMetaCommon(m)
 }

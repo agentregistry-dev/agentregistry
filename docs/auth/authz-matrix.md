@@ -11,18 +11,12 @@ These four kinds share the same endpoint shape. `{kind}` = `agent` | `server` | 
 | Operation | HTTP | Required permissions | Notes |
 | --- | --- | --- | --- |
 | List | `GET /v0/{kind}s` | none | Filtering is delegated to the provider implementation; the list boundary intentionally skips checks. |
-| Get version | `GET /v0/{kind}s/{name}/versions/{version}` | `Read` on `{kind}:{name}` | |
-| Get versions | `GET /v0/{kind}s/{name}/versions` | `Read` on `{kind}:{name}` | |
-| Publish | `POST /v0/{kind}s` | `Read` + `Publish` on `{kind}:{name}` | Creates a new name+version. Duplicate name+version is rejected — update paths are `PATCH /v0/servers/...` (servers only) or `POST /v0/apply` (any kind). `Read` covers pre-create lookups (version existence, latest resolution). |
-| Delete version | `DELETE /v0/{kind}s/{name}/versions/{version}` | `Delete` on `{kind}:{name}` | |
-
-## MCP Server-only endpoints
-
-| Operation | HTTP | Required permissions | Notes |
-| --- | --- | --- | --- |
-| Edit | `PATCH /v0/servers/{name}/versions/{version}` | `Read` + `Edit` on `server:{name}` | Handler fetches the current version before applying the patch. No equivalent endpoint exists for agents, skills, or prompts — updates to those kinds go through `POST /v0/apply`. |
-| Get latest readme | `GET /v0/servers/{name}/readme` | `Read` on `server:{name}` | |
-| Get version readme | `GET /v0/servers/{name}/versions/{version}/readme` | `Read` on `server:{name}` | |
+| Get latest tag | `GET /v0/{kind}s/{name}` | `Read` on `{kind}:{name}` | Resolves the literal `latest` tag. |
+| Get exact tag | `GET /v0/{kind}s/{name}/{tag}` | `Read` on `{kind}:{name}` | |
+| List tags | `GET /v0/{kind}s/{name}/tags` | `Read` on `{kind}:{name}` | |
+| Apply | `POST /v0/apply` | `Read` + `Publish` or `Read` + `Edit` on `{kind}:{name}` | Creates or replaces `metadata.tag`; omitted tags resolve to literal `latest`. |
+| Delete latest tag | `DELETE /v0/{kind}s/{name}` | `Delete` on `{kind}:{name}` | Deletes the literal `latest` tag. |
+| Delete exact tag | `DELETE /v0/{kind}s/{name}/{tag}` | `Delete` on `{kind}:{name}` | |
 
 ## Providers
 
@@ -39,7 +33,7 @@ These four kinds share the same endpoint shape. `{kind}` = `agent` | `server` | 
 
 Deployments are identified by `{namespace}/{name}` and authz always evaluates against the underlying artifact (`server` or `agent`) the deployment references. Artifact kind is inferred from `Deployment.Spec.TargetRef.Kind`.
 
-Every deployment lifecycle operation — launching, undeploying, cancelling — gates on `Deploy` against the underlying artifact. The `Delete` verb is reserved for deleting the artifact itself (e.g. `DELETE /v0/servers/{name}/versions/{v}`), not tearing down a running deployment of it.
+Every deployment lifecycle operation — launching, undeploying, cancelling — gates on `Deploy` against the underlying artifact. The `Delete` verb is reserved for deleting the artifact itself (e.g. `DELETE /v0/servers/{name}/{tag}`), not tearing down a running deployment of it.
 
 | Operation | HTTP | Required permissions |
 | --- | --- | --- |

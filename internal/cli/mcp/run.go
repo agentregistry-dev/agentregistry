@@ -24,6 +24,7 @@ import (
 )
 
 var (
+	runTag       string
 	runVersion   string
 	runInspector bool
 	runYes       bool
@@ -48,7 +49,8 @@ For local projects, the server is automatically built before running. Use --no-b
 }
 
 func init() {
-	RunCmd.Flags().StringVar(&runVersion, "version", "", "Deprecated alias for tag of the server to run")
+	RunCmd.Flags().StringVar(&runTag, "tag", "", "Tag of the server to run")
+	RunCmd.Flags().StringVar(&runVersion, "version", "", "Deprecated alias for --tag")
 	RunCmd.Flags().BoolVar(&runInspector, "inspector", false, "Launch MCP Inspector to interact with the server")
 	RunCmd.Flags().BoolVarP(&runYes, "yes", "y", false, "Automatically accept all prompts (use default values)")
 	RunCmd.Flags().BoolVar(&runVerbose, "verbose", false, "Enable verbose logging")
@@ -67,9 +69,16 @@ func runRun(cmd *cobra.Command, args []string) error {
 	if apiClient == nil {
 		return fmt.Errorf("API client not initialized")
 	}
+	if runTag != "" && runVersion != "" {
+		return fmt.Errorf("--tag and --version are mutually exclusive")
+	}
+	requestedTag := runTag
+	if requestedTag == "" {
+		requestedTag = runVersion
+	}
 
-	// Use the common server version selection logic
-	server, err := selectServerVersion(serverNameOrPath, runVersion, runYes)
+	// Use the common server tag selection logic.
+	server, err := selectServerTag(serverNameOrPath, requestedTag, runYes)
 	if err != nil {
 		return err
 	}

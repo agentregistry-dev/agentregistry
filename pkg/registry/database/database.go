@@ -21,11 +21,6 @@ var (
 	ErrAlreadyExists = errors.New("record already exists")
 	ErrInvalidInput  = errors.New("invalid input")
 	ErrDatabase      = errors.New("database error")
-	// ErrDuplicateVersion is returned when an upsert would publish a
-	// version that already exists (e.g. a re-publish without bumping).
-	// Distinct from v1alpha1.ErrInvalidVersion which covers structural
-	// version-string validation (length, literal "latest", format).
-	ErrDuplicateVersion = errors.New("version already published")
 )
 
 // Store is the root persistence contract AppOptions.DatabaseFactory

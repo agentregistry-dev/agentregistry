@@ -68,9 +68,9 @@ func setupClientForServer(t *testing.T, srv *httptest.Server) {
 	t.Cleanup(func() { declarative.SetAPIClient(nil) })
 }
 
-// (1) Versioned delete removes all provider-specific deployments matching (name, version).
-// Deployments on other providers for the same (name, version) get deleted; deployments on
-// other versions are left alone.
+// (1) Tagged target delete removes all provider-specific deployments matching
+// (name, tag). Deployments on other providers for the same (name, tag) get
+// deleted; deployments on other tags are left alone.
 func TestDeploymentDelete_RemovesAllProviderMatchesForVersion(t *testing.T) {
 	deployments := []v1alpha1.Deployment{
 		deploymentFixture("aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "pending"),
@@ -82,7 +82,7 @@ func TestDeploymentDelete_RemovesAllProviderMatchesForVersion(t *testing.T) {
 	setupClientForServer(t, srv)
 
 	cmd := declarative.NewDeleteCmd()
-	cmd.SetArgs([]string{"deployment", "summarizer", "--version", "1.0.0"})
+	cmd.SetArgs([]string{"deployment", "summarizer", "--tag", "1.0.0"})
 	require.NoError(t, cmd.Execute())
 
 	assert.ElementsMatch(t, []string{"default/aws-v1", "default/gcp-v1"}, *deleted,
@@ -98,7 +98,7 @@ func TestDeploymentDelete_NotFound(t *testing.T) {
 	setupClientForServer(t, srv)
 
 	cmd := declarative.NewDeleteCmd()
-	cmd.SetArgs([]string{"deployment", "summarizer", "--version", "1.0.0"})
+	cmd.SetArgs([]string{"deployment", "summarizer", "--tag", "1.0.0"})
 	err := cmd.Execute()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found",
@@ -118,7 +118,7 @@ func TestDeploymentDelete_PartialFailure(t *testing.T) {
 	setupClientForServer(t, srv)
 
 	cmd := declarative.NewDeleteCmd()
-	cmd.SetArgs([]string{"deployment", "summarizer", "--version", "1.0.0"})
+	cmd.SetArgs([]string{"deployment", "summarizer", "--tag", "1.0.0"})
 	err := cmd.Execute()
 	require.Error(t, err, "partial failure must propagate")
 	assert.Contains(t, err.Error(), "default/gcp-v1", "error should identify which deployment failed")
@@ -128,7 +128,7 @@ func TestDeploymentDelete_PartialFailure(t *testing.T) {
 		"both matching deployments should be attempted even when one fails")
 }
 
-// (4) Guard against the earlier wildcard bug: empty --version must be rejected
+// (4) Guard against the earlier wildcard bug: empty --tag must be rejected
 // before issuing any HTTP call, to prevent accidental bulk deployment deletes.
 func TestDeploymentDelete_RejectsEmptyVersion(t *testing.T) {
 	deployments := []v1alpha1.Deployment{
@@ -142,9 +142,9 @@ func TestDeploymentDelete_RejectsEmptyVersion(t *testing.T) {
 	cmd.SetArgs([]string{"deployment", "summarizer"})
 	err := cmd.Execute()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "version",
-		"empty version should error with a version-required message")
-	assert.Empty(t, *deleted, "no DELETE requests should be issued when version is missing")
+	assert.Contains(t, err.Error(), "tag",
+		"empty tag should error with a tag-required message")
+	assert.Empty(t, *deleted, "no DELETE requests should be issued when tag is missing")
 }
 
 // (5) --force sends ?force=true query param to the server.
@@ -171,7 +171,7 @@ func TestDeploymentDelete_ForcePassesQueryParam(t *testing.T) {
 	setupClientForServer(t, srv)
 
 	cmd := declarative.NewDeleteCmd()
-	cmd.SetArgs([]string{"deployment", "summarizer", "--version", "1.0.0", "--force"})
+	cmd.SetArgs([]string{"deployment", "summarizer", "--tag", "1.0.0", "--force"})
 	require.NoError(t, cmd.Execute())
 
 	require.Len(t, capturedForce, 1)
@@ -211,7 +211,7 @@ func TestDeploymentDelete_NoForceFlagOmitsQueryParam(t *testing.T) {
 	setupClientForServer(t, srv)
 
 	cmd := declarative.NewDeleteCmd()
-	cmd.SetArgs([]string{"deployment", "summarizer", "--version", "1.0.0"})
+	cmd.SetArgs([]string{"deployment", "summarizer", "--tag", "1.0.0"})
 	require.NoError(t, cmd.Execute())
 
 	require.Len(t, capturedQuery, 1)
@@ -223,7 +223,7 @@ func TestDelete_ForceRejectedForNonDeploymentKinds(t *testing.T) {
 	for _, kind := range []string{"agent", "mcp", "skill", "prompt", "provider"} {
 		t.Run(kind, func(t *testing.T) {
 			cmd := declarative.NewDeleteCmd()
-			cmd.SetArgs([]string{kind, "test-name", "--version", "1.0.0", "--force"})
+			cmd.SetArgs([]string{kind, "test-name", "--tag", "1.0.0", "--force"})
 			err := cmd.Execute()
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "--force is only supported for deployments")

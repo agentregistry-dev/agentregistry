@@ -8,11 +8,11 @@ import (
 )
 
 // GetTyped fetches one resource and materializes its typed v1alpha1 envelope.
-// Empty version resolves the latest tag for taggable resources.
+// Empty tag resolves the latest tag for taggable resources.
 func GetTyped[T v1alpha1.Object](
 	ctx context.Context,
 	c *Client,
-	kind, namespace, name, version string,
+	kind, namespace, name, tag string,
 	newObj func() T,
 ) (T, error) {
 	var zero T
@@ -24,10 +24,10 @@ func GetTyped[T v1alpha1.Object](
 		raw *v1alpha1.RawObject
 		err error
 	)
-	if version == "" {
+	if tag == "" {
 		raw, err = c.GetLatest(ctx, kind, namespace, name)
 	} else {
-		raw, err = c.Get(ctx, kind, namespace, name, version)
+		raw, err = c.Get(ctx, kind, namespace, name, tag)
 	}
 	if err != nil {
 		return zero, err

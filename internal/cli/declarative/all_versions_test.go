@@ -16,9 +16,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// agentVersionFixture builds a minimal Agent envelope at the given tag for use
+// agentTagFixture builds a minimal Agent envelope at the given tag for use
 // as a row in a /tags list response.
-func agentVersionFixture(name, version string) v1alpha1.Agent {
+func agentTagFixture(name, version string) v1alpha1.Agent {
 	return v1alpha1.Agent{
 		TypeMeta: v1alpha1.TypeMeta{
 			APIVersion: v1alpha1.GroupVersion,
@@ -35,10 +35,10 @@ func agentVersionFixture(name, version string) v1alpha1.Agent {
 	}
 }
 
-// versionsListServer serves GET /v0/agents/{name}/tags and replies with
+// tagsListServer serves GET /v0/agents/{name}/tags and replies with
 // the provided rows. Other endpoints respond 404 so unintended calls fail
 // loudly. capturedPaths records every path served (concurrency-safe).
-func versionsListServer(t *testing.T, rows []v1alpha1.Agent) (*httptest.Server, *[]string) {
+func tagsListServer(t *testing.T, rows []v1alpha1.Agent) (*httptest.Server, *[]string) {
 	t.Helper()
 	var (
 		mu       sync.Mutex
@@ -59,27 +59,27 @@ func versionsListServer(t *testing.T, rows []v1alpha1.Agent) (*httptest.Server, 
 	return srv, &captured
 }
 
-// (1) `arctl get agent NAME --all-versions` prints one row per version
+// (1) `arctl get agent NAME --all-tags` prints one row per tag
 // returned by the server.
 func TestGet_AllVersions_Agent_PrintsAllRows(t *testing.T) {
 	rows := []v1alpha1.Agent{
-		agentVersionFixture("acme/bot", "2"),
-		agentVersionFixture("acme/bot", "1"),
+		agentTagFixture("acme/bot", "2"),
+		agentTagFixture("acme/bot", "1"),
 	}
-	srv, _ := versionsListServer(t, rows)
+	srv, _ := tagsListServer(t, rows)
 	setupClientForServer(t, srv)
 
 	out := &bytes.Buffer{}
 	cmd := declarative.NewGetCmd()
 	cmd.SetOut(out)
 	cmd.SetErr(out)
-	cmd.SetArgs([]string{"agent", "acme/bot", "--all-versions"})
+	cmd.SetArgs([]string{"agent", "acme/bot", "--all-tags"})
 	require.NoError(t, cmd.Execute())
 
 	got := out.String()
 	// Table output should include the NAME column once per row plus
-	// each integer version. Counting occurrences of the name pins
-	// "two rows printed" rather than "two versions appeared anywhere
+	// each tag. Counting occurrences of the name pins
+	// "two rows printed" rather than "two tags appeared anywhere
 	// in any column".
 	assert.Equal(t, 2, strings.Count(got, "acme/bot"), "expected two rows in:\n%s", got)
 	for _, line := range []string{"acme/bot   2", "acme/bot   1"} {
@@ -87,21 +87,21 @@ func TestGet_AllVersions_Agent_PrintsAllRows(t *testing.T) {
 	}
 }
 
-// (2) `arctl get agent NAME --all-versions -o json` emits a JSON array of
+// (2) `arctl get agent NAME --all-tags -o json` emits a JSON array of
 // envelopes — verifies the multi-row YAML/JSON path also works.
 func TestGet_AllVersions_Agent_JSONOutput(t *testing.T) {
 	rows := []v1alpha1.Agent{
-		agentVersionFixture("acme/bot", "2"),
-		agentVersionFixture("acme/bot", "1"),
+		agentTagFixture("acme/bot", "2"),
+		agentTagFixture("acme/bot", "1"),
 	}
-	srv, _ := versionsListServer(t, rows)
+	srv, _ := tagsListServer(t, rows)
 	setupClientForServer(t, srv)
 
 	out := &bytes.Buffer{}
 	cmd := declarative.NewGetCmd()
 	cmd.SetOut(out)
 	cmd.SetErr(out)
-	cmd.SetArgs([]string{"agent", "acme/bot", "--all-versions", "-o", "json"})
+	cmd.SetArgs([]string{"agent", "acme/bot", "--all-tags", "-o", "json"})
 	require.NoError(t, cmd.Execute())
 
 	var got []v1alpha1.Agent
@@ -111,57 +111,57 @@ func TestGet_AllVersions_Agent_JSONOutput(t *testing.T) {
 	assert.Equal(t, "1", got[1].Metadata.Tag)
 }
 
-// (3) `arctl get deployment NAME --all-versions` errors cleanly because
+// (3) `arctl get deployment NAME --all-tags` errors cleanly because
 // deployments are mutable namespace/name objects, not taggable artifacts.
 func TestGet_AllVersions_DeploymentRejected(t *testing.T) {
 	declarative.SetAPIClient(client.NewClient("http://127.0.0.1:1", ""))
 	t.Cleanup(func() { declarative.SetAPIClient(nil) })
 
 	cmd := declarative.NewGetCmd()
-	cmd.SetArgs([]string{"deployment", "summarizer", "--all-versions"})
+	cmd.SetArgs([]string{"deployment", "summarizer", "--all-tags"})
 	err := cmd.Execute()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "--all-versions not supported")
+	assert.Contains(t, err.Error(), "--all-tags not supported")
 	assert.Contains(t, err.Error(), "deployment")
 }
 
-// (3b) `arctl get provider NAME --all-versions` errors cleanly — Provider
+// (3b) `arctl get provider NAME --all-tags` errors cleanly — Provider
 // is a mutable namespace/name object whose store has no /tags endpoint.
 // Pin the CLI surface so a future typedKind change can't
-// silently re-expose --all-versions for Provider.
+// silently re-expose --all-tags for Provider.
 func TestGet_AllVersions_ProviderRejected(t *testing.T) {
 	declarative.SetAPIClient(client.NewClient("http://127.0.0.1:1", ""))
 	t.Cleanup(func() { declarative.SetAPIClient(nil) })
 
 	cmd := declarative.NewGetCmd()
-	cmd.SetArgs([]string{"provider", "my-kagent", "--all-versions"})
+	cmd.SetArgs([]string{"provider", "my-kagent", "--all-tags"})
 	err := cmd.Execute()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "--all-versions not supported")
+	assert.Contains(t, err.Error(), "--all-tags not supported")
 	assert.Contains(t, err.Error(), "provider")
 }
 
-// (4) `arctl get agents --all-versions` (no NAME) errors — the flag
+// (4) `arctl get agents --all-tags` (no NAME) errors — the flag
 // requires a NAME argument.
 func TestGet_AllVersions_RequiresName(t *testing.T) {
 	declarative.SetAPIClient(client.NewClient("http://127.0.0.1:1", ""))
 	t.Cleanup(func() { declarative.SetAPIClient(nil) })
 
 	cmd := declarative.NewGetCmd()
-	cmd.SetArgs([]string{"agents", "--all-versions"})
+	cmd.SetArgs([]string{"agents", "--all-tags"})
 	err := cmd.Execute()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "--all-versions requires NAME")
+	assert.Contains(t, err.Error(), "--all-tags requires NAME")
 }
 
-// (5) `arctl get all --all-versions` errors — the cross-kind list flow has
+// (5) `arctl get all --all-tags` errors — the cross-kind list flow has
 // no notion of "all tags of every name".
 func TestGet_AllVersions_RejectsGetAll(t *testing.T) {
 	cmd := declarative.NewGetCmd()
-	cmd.SetArgs([]string{"all", "--all-versions"})
+	cmd.SetArgs([]string{"all", "--all-tags"})
 	err := cmd.Execute()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "--all-versions cannot be used with `get all`")
+	assert.Contains(t, err.Error(), "--all-tags cannot be used with `get all`")
 }
 
 // deleteAllTagsServer serves GET /v0/agents/{name}/tags plus exact-tag DELETEs.
@@ -194,12 +194,12 @@ func deleteAllTagsServer(t *testing.T, rows []v1alpha1.Agent, failTag string) (*
 	return srv, &captured
 }
 
-// (6) `arctl delete agent NAME --all-versions` lists tags and deletes each
+// (6) `arctl delete agent NAME --all-tags` lists tags and deletes each
 // exact tag so omitted-tag declarative delete can continue to mean "latest".
 func TestDelete_AllVersions_Agent_DeletesEveryListedTag(t *testing.T) {
 	rows := []v1alpha1.Agent{
-		agentVersionFixture("acme/bot", "stable"),
-		agentVersionFixture("acme/bot", "latest"),
+		agentTagFixture("acme/bot", "stable"),
+		agentTagFixture("acme/bot", "latest"),
 	}
 	srv, paths := deleteAllTagsServer(t, rows, "")
 	setupClientForServer(t, srv)
@@ -208,7 +208,7 @@ func TestDelete_AllVersions_Agent_DeletesEveryListedTag(t *testing.T) {
 	cmd := declarative.NewDeleteCmd()
 	cmd.SetOut(out)
 	cmd.SetErr(out)
-	cmd.SetArgs([]string{"agent", "acme/bot", "--all-versions"})
+	cmd.SetArgs([]string{"agent", "acme/bot", "--all-tags"})
 	require.NoError(t, cmd.Execute())
 
 	require.Contains(t, *paths, "GET /v0/agents/acme/bot/tags")
@@ -217,36 +217,36 @@ func TestDelete_AllVersions_Agent_DeletesEveryListedTag(t *testing.T) {
 	assert.Contains(t, out.String(), "all tags")
 }
 
-// (7) `arctl delete deployment NAME --all-versions` errors cleanly.
+// (7) `arctl delete deployment NAME --all-tags` errors cleanly.
 func TestDelete_AllVersions_DeploymentRejected(t *testing.T) {
 	declarative.SetAPIClient(client.NewClient("http://127.0.0.1:1", ""))
 	t.Cleanup(func() { declarative.SetAPIClient(nil) })
 
 	cmd := declarative.NewDeleteCmd()
-	cmd.SetArgs([]string{"deployment", "summarizer", "--all-versions"})
+	cmd.SetArgs([]string{"deployment", "summarizer", "--all-tags"})
 	err := cmd.Execute()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "--all-versions not supported")
+	assert.Contains(t, err.Error(), "--all-tags not supported")
 }
 
-// (7b) `arctl delete provider NAME --all-versions` errors cleanly —
-// Provider has no DeleteAllVersions endpoint server-side.
+// (7b) `arctl delete provider NAME --all-tags` errors cleanly —
+// Provider has no DeleteAllTags endpoint server-side.
 func TestDelete_AllVersions_ProviderRejected(t *testing.T) {
 	declarative.SetAPIClient(client.NewClient("http://127.0.0.1:1", ""))
 	t.Cleanup(func() { declarative.SetAPIClient(nil) })
 
 	cmd := declarative.NewDeleteCmd()
-	cmd.SetArgs([]string{"provider", "my-kagent", "--all-versions"})
+	cmd.SetArgs([]string{"provider", "my-kagent", "--all-tags"})
 	err := cmd.Execute()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "--all-versions not supported")
+	assert.Contains(t, err.Error(), "--all-tags not supported")
 }
 
-// (8) `arctl delete agent NAME --all-versions --version 1` errors — the
+// (8) `arctl delete agent NAME --all-tags --tag 1` errors — the
 // flags are mutually exclusive.
 func TestDelete_AllVersions_AndVersionMutuallyExclusive(t *testing.T) {
 	cmd := declarative.NewDeleteCmd()
-	cmd.SetArgs([]string{"agent", "acme/bot", "--all-versions", "--version", "1"})
+	cmd.SetArgs([]string{"agent", "acme/bot", "--all-tags", "--tag", "1"})
 	err := cmd.Execute()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "mutually exclusive")
@@ -254,12 +254,12 @@ func TestDelete_AllVersions_AndVersionMutuallyExclusive(t *testing.T) {
 
 // (9) An exact-tag delete failure is surfaced by the CLI.
 func TestDelete_AllVersions_PropagatesServerFailure(t *testing.T) {
-	rows := []v1alpha1.Agent{agentVersionFixture("acme/bot", "stable")}
+	rows := []v1alpha1.Agent{agentTagFixture("acme/bot", "stable")}
 	srv, _ := deleteAllTagsServer(t, rows, "stable")
 	setupClientForServer(t, srv)
 
 	cmd := declarative.NewDeleteCmd()
-	cmd.SetArgs([]string{"agent", "acme/bot", "--all-versions"})
+	cmd.SetArgs([]string{"agent", "acme/bot", "--all-tags"})
 	err := cmd.Execute()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "boom")

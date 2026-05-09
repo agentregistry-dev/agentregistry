@@ -18,12 +18,12 @@ Providers and deployments are mutable control-plane objects. They use public nam
 
 ```bash
 arctl get agent NAME                   # latest
-arctl get agent NAME --version stable  # deprecated alias for tag selection
+arctl get agent NAME --tag stable      # exact tag
 arctl get agent NAME --all-tags        # tag list
 
 arctl delete agent NAME                # latest
-arctl delete agent NAME --version stable # deprecated alias for tag selection
-arctl delete agent NAME --all-versions   # deprecated alias for deleting every tag
+arctl delete agent NAME --tag stable   # exact tag
+arctl delete agent NAME --all-tags     # delete every tag
 
 arctl get provider NAME
 arctl delete provider NAME

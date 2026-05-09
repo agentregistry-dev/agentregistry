@@ -6,7 +6,7 @@
 //   - applying changed content to the same tag replaces that row
 //   - explicit tags remain separate rows
 //   - manifests with metadata.version set are rejected at decode time
-//   - delete defaults to the "latest" tag; --all-versions clears every tag
+//   - delete defaults to the "latest" tag; --all-tags clears every tag
 //
 // Lives next to declarative_test.go and reuses its writeDeclarativeYAML and
 // resourceURL helpers.
@@ -77,13 +77,13 @@ func agentTag(t *testing.T, regURL, tmpDir, name string, args ...string) string 
 	return decoded.Metadata.Tag
 }
 
-// agentTagCount runs `arctl get agent <name> --all-versions -o json` and
-// returns the number of tag rows returned. --all-versions is kept here as the
+// agentTagCount runs `arctl get agent <name> --all-tags -o json` and
+// returns the number of tag rows returned. --all-tags is kept here as the
 // backward-compatible alias for --all-tags.
 func agentTagCount(t *testing.T, regURL, tmpDir, name string) int {
 	t.Helper()
 	result := RunArctl(t, tmpDir, "get", "agent", name,
-		"--all-versions", "-o", "json", "--registry-url", regURL)
+		"--all-tags", "-o", "json", "--registry-url", regURL)
 	RequireSuccess(t, result)
 	var arr []json.RawMessage
 	if err := json.Unmarshal([]byte(result.Stdout), &arr); err != nil {
@@ -104,7 +104,7 @@ func TestVersioning_ApplyAndIdempotency(t *testing.T) {
 	name := UniqueAgentName("verapply")
 
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "agent", name, "--all-versions", "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "agent", name, "--all-tags", "--registry-url", regURL)
 	})
 
 	// Step 1: first blank-tag apply -> latest.
@@ -181,7 +181,7 @@ spec:
 
 	// Belt-and-braces: the agent must not have been created.
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "agent", name, "--all-versions", "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "agent", name, "--all-tags", "--registry-url", regURL)
 	})
 	verifyAgentNotFound(t, regURL, name, "latest")
 }
@@ -190,7 +190,7 @@ spec:
 // the tag contract:
 //   - apply an explicit stable tag plus default latest
 //   - delete without a tag -> removes only latest; stable remains
-//   - delete --all-versions -> removes every tag; name is freed
+//   - delete --all-tags -> removes every tag; name is freed
 //   - re-apply -> latest is created again
 func TestVersioning_DeleteSemantics(t *testing.T) {
 	regURL := RegistryURL(t)
@@ -199,7 +199,7 @@ func TestVersioning_DeleteSemantics(t *testing.T) {
 
 	// Final cleanup: best-effort wipe in case anything is left over.
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "agent", name, "--all-versions", "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "agent", name, "--all-tags", "--registry-url", regURL)
 	})
 
 	// Step 1: apply stable + latest.
@@ -228,15 +228,15 @@ func TestVersioning_DeleteSemantics(t *testing.T) {
 			getLatest.Stdout, getLatest.Stderr)
 	}
 
-	// Step 3: delete --all-versions -> drops every tag.
-	result = RunArctl(t, tmpDir, "delete", "agent", name, "--all-versions", "--registry-url", regURL)
+	// Step 3: delete --all-tags -> drops every tag.
+	result = RunArctl(t, tmpDir, "delete", "agent", name, "--all-tags", "--registry-url", regURL)
 	RequireSuccess(t, result)
 
 	// The name must be free now: get returns "not found".
 	getResult := RunArctl(t, tmpDir, "get", "agent", name, "-o", "json", "--registry-url", regURL)
 	combined := getResult.Stdout + getResult.Stderr
 	if !strings.Contains(combined, "not found") {
-		t.Fatalf("after --all-versions delete: expected 'not found', got:\nstdout: %s\nstderr: %s",
+		t.Fatalf("after --all-tags delete: expected 'not found', got:\nstdout: %s\nstderr: %s",
 			getResult.Stdout, getResult.Stderr)
 	}
 

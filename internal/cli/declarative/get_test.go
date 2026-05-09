@@ -63,27 +63,27 @@ func TestGetCmd_RegistryDrivenColumnLookup(t *testing.T) {
 }
 
 // TestProvider_NoAllVersionsSupport pins that Provider — a mutable
-// namespace/name object — is registered without ListVersions /
-// DeleteAllVersions closures. The dispatch layer rejects --all-versions
+// namespace/name object — is registered without ListTags /
+// DeleteAllTags closures. The dispatch layer rejects --all-tags
 // when those fields are nil, which is exactly the behavior we want for
 // Provider on this branch (its server store has no /tags endpoint).
 func TestProvider_NoAllVersionsSupport(t *testing.T) {
 	k, err := scheme.Lookup("provider")
 	require.NoError(t, err)
-	require.Nil(t, k.ListVersions, "Provider should not expose ListVersions (mutable object kind)")
-	require.Nil(t, k.DeleteAllVersions, "Provider should not expose DeleteAllVersions (mutable object kind)")
+	require.Nil(t, k.ListTags, "Provider should not expose ListTags (mutable object kind)")
+	require.Nil(t, k.DeleteAllTags, "Provider should not expose DeleteAllTags (mutable object kind)")
 }
 
 // TestDeployment_NoAllVersionsSupport is the symmetric assertion for
 // Deployment — also a mutable namespace/name object. Already
 // covered by TestGet_AllVersions_DeploymentRejected at the CLI surface
 // but pinning it at the registry shape level guards against an
-// accidental ListVersions wiring regression.
+// accidental ListTags wiring regression.
 func TestDeployment_NoAllVersionsSupport(t *testing.T) {
 	k, err := scheme.Lookup("deployment")
 	require.NoError(t, err)
-	require.Nil(t, k.ListVersions, "Deployment should not expose ListVersions (mutable object kind)")
-	require.Nil(t, k.DeleteAllVersions, "Deployment should not expose DeleteAllVersions (mutable object kind)")
+	require.Nil(t, k.ListTags, "Deployment should not expose ListTags (mutable object kind)")
+	require.Nil(t, k.DeleteAllTags, "Deployment should not expose DeleteAllTags (mutable object kind)")
 }
 
 // versionGetServer serves GET /v0/agents/{name}/{version} (specific
@@ -136,11 +136,11 @@ func versionGetServer(t *testing.T, latest, specific v1alpha1.Agent) (*httptest.
 	return srv, &captured
 }
 
-// TestGet_Version_FetchesSpecificVersion verifies the deprecated --version flag
+// TestGet_Version_FetchesSpecificVersion verifies the deprecated --tag flag
 // still fetches the exact tag endpoint and renders that tag's envelope.
 func TestGet_Version_FetchesSpecificVersion(t *testing.T) {
-	v1 := agentVersionFixture("acme/bot", "1")
-	v2 := agentVersionFixture("acme/bot", "2")
+	v1 := agentTagFixture("acme/bot", "1")
+	v2 := agentTagFixture("acme/bot", "2")
 	srv, captured := versionGetServer(t, v2, v1)
 	setupClientForServer(t, srv)
 
@@ -148,7 +148,7 @@ func TestGet_Version_FetchesSpecificVersion(t *testing.T) {
 	cmd := declarative.NewGetCmd()
 	cmd.SetOut(out)
 	cmd.SetErr(out)
-	cmd.SetArgs([]string{"agent", "acme/bot", "--version", "1", "-o", "json"})
+	cmd.SetArgs([]string{"agent", "acme/bot", "--tag", "1", "-o", "json"})
 	require.NoError(t, cmd.Execute())
 
 	var got v1alpha1.Agent
@@ -168,11 +168,11 @@ func TestGet_Version_FetchesSpecificVersion(t *testing.T) {
 	assert.True(t, hitSpecific, "expected GET to exact-tag path, got %v", *captured)
 }
 
-// TestGet_Version_DefaultsToLatest verifies that omitting --version still
-// hits the latest endpoint (no regression from --version wiring).
+// TestGet_Version_DefaultsToLatest verifies that omitting --tag still
+// hits the latest endpoint (no regression from --tag wiring).
 func TestGet_Version_DefaultsToLatest(t *testing.T) {
-	v1 := agentVersionFixture("acme/bot", "1")
-	v2 := agentVersionFixture("acme/bot", "2")
+	v1 := agentTagFixture("acme/bot", "1")
+	v2 := agentTagFixture("acme/bot", "2")
 	srv, captured := versionGetServer(t, v2, v1)
 	setupClientForServer(t, srv)
 
@@ -201,13 +201,13 @@ func TestGet_Version_MutuallyExclusiveWithAllVersions(t *testing.T) {
 	t.Cleanup(func() { declarative.SetAPIClient(nil) })
 
 	cmd := declarative.NewGetCmd()
-	cmd.SetArgs([]string{"agent", "acme/bot", "--version", "1", "--all-versions"})
+	cmd.SetArgs([]string{"agent", "acme/bot", "--tag", "1", "--all-tags"})
 	err := cmd.Execute()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "mutually exclusive")
 }
 
-// TestGet_Version_NotSupportedForProvider pins that --version is rejected
+// TestGet_Version_NotSupportedForProvider pins that --tag is rejected
 // for mutable namespace/name kinds (Provider, Deployment) before any client
 // dispatch happens.
 func TestGet_Version_NotSupportedForProvider(t *testing.T) {
@@ -215,10 +215,10 @@ func TestGet_Version_NotSupportedForProvider(t *testing.T) {
 	t.Cleanup(func() { declarative.SetAPIClient(nil) })
 
 	cmd := declarative.NewGetCmd()
-	cmd.SetArgs([]string{"provider", "my-kagent", "--version", "1"})
+	cmd.SetArgs([]string{"provider", "my-kagent", "--tag", "1"})
 	err := cmd.Execute()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "--version not supported")
+	assert.Contains(t, err.Error(), "--tag not supported")
 	assert.Contains(t, err.Error(), "provider")
 }
 
@@ -229,31 +229,31 @@ func TestGet_Version_NotSupportedForDeployment(t *testing.T) {
 	t.Cleanup(func() { declarative.SetAPIClient(nil) })
 
 	cmd := declarative.NewGetCmd()
-	cmd.SetArgs([]string{"deployment", "summarizer", "--version", "1"})
+	cmd.SetArgs([]string{"deployment", "summarizer", "--tag", "1"})
 	err := cmd.Execute()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "--version not supported")
+	assert.Contains(t, err.Error(), "--tag not supported")
 	assert.Contains(t, err.Error(), "deployment")
 }
 
-// TestGet_Version_RequiresName pins that --version errors when NAME is omitted.
+// TestGet_Version_RequiresName pins that --tag errors when NAME is omitted.
 func TestGet_Version_RequiresName(t *testing.T) {
 	declarative.SetAPIClient(client.NewClient("http://127.0.0.1:1", ""))
 	t.Cleanup(func() { declarative.SetAPIClient(nil) })
 
 	cmd := declarative.NewGetCmd()
-	cmd.SetArgs([]string{"agents", "--version", "1"})
+	cmd.SetArgs([]string{"agents", "--tag", "1"})
 	err := cmd.Execute()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "--version requires NAME")
+	assert.Contains(t, err.Error(), "--tag requires NAME")
 }
 
-// TestGet_Version_RejectsGetAll pins that --version is rejected for
+// TestGet_Version_RejectsGetAll pins that --tag is rejected for
 // `arctl get all` (cross-kind list flow).
 func TestGet_Version_RejectsGetAll(t *testing.T) {
 	cmd := declarative.NewGetCmd()
-	cmd.SetArgs([]string{"all", "--version", "1"})
+	cmd.SetArgs([]string{"all", "--tag", "1"})
 	err := cmd.Execute()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "--version cannot be used with `get all`")
+	assert.Contains(t, err.Error(), "--tag cannot be used with `get all`")
 }

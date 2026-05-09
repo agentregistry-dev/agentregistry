@@ -103,7 +103,7 @@ func runGet(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("%s requires NAME", allTagsFlag)
 		}
 		name := args[1]
-		items, err := listVersions(k, name)
+		items, err := listTags(k, name)
 		if err != nil {
 			return fmt.Errorf("listing tags of %s %q: %w", k.Kind, name, err)
 		}
@@ -115,13 +115,13 @@ func runGet(cmd *cobra.Command, args []string) error {
 	}
 
 	// --tag is only meaningful for tagged content-registry kinds.
-	// ListVersions is set exclusively on those kinds via typedKind, so
+	// ListTags is set exclusively on those kinds via typedKind, so
 	// it's a stable proxy without coupling get.go to v1alpha1's kind table.
 	if tag != "" {
 		if len(args) != 2 {
 			return fmt.Errorf("%s requires NAME", tagFlag)
 		}
-		if k.ListVersions == nil {
+		if k.ListTags == nil {
 			return fmt.Errorf("%s not supported for kind %q (resource is not tagged)", tagFlag, k.Kind)
 		}
 	}

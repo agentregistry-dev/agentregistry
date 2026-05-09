@@ -67,12 +67,11 @@ func init() {
 
 	// Provider is registered manually because it is a mutable namespace/name
 	// object: the server's provider store does not expose /tags or
-	// DeleteAllVersions endpoints. Routing it through
-	// typedKind would advertise --all-versions on its CLI surface and call
+	// DeleteAllTags endpoints. Routing it through
+	// typedKind would advertise --all-tags on its CLI surface and call
 	// endpoints that don't exist. The Get / Delete / List closures match
-	// what typedKind would otherwise produce; ListVersions /
-	// DeleteAllVersions are intentionally omitted so the dispatch layer
-	// rejects --all-versions cleanly.
+	// what typedKind would otherwise produce; ListTags / DeleteAllTags are
+	// intentionally omitted so the dispatch layer rejects --all-tags cleanly.
 	scheme.Register(&scheme.Kind{
 		Kind:         "provider",
 		Plural:       "providers",
@@ -92,17 +91,17 @@ func init() {
 		ListFunc: func(ctx context.Context) ([]any, error) {
 			return listLatestAny(ctx, v1alpha1.KindProvider, func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
 		},
-		Delete: func(ctx context.Context, name, version string, force bool) error {
-			return deleteAny(ctx, v1alpha1.KindProvider, name, version, force, func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
+		Delete: func(ctx context.Context, name, tag string, force bool) error {
+			return deleteAny(ctx, v1alpha1.KindProvider, name, tag, force, func() *v1alpha1.Provider { return &v1alpha1.Provider{} })
 		},
 	})
 
 	// Deployment is registered manually because its Get/Delete dispatch
 	// does NOT key on the v1alpha1 metadata identity (namespace/name/
-	// version). Users address deployments by the underlying target's name
+	// tag). Users address deployments by the underlying target's name
 	// — `arctl get deployment <agent-or-mcp-name>` — and the CLI walks the
 	// /v0/deployments listing to find the matching row. The typed
-	// helper assumes (kind, namespace, name, version) lookup, which is
+	// helper assumes (kind, namespace, name, tag) lookup, which is
 	// the wrong shape for this dispatch.
 	scheme.Register(&scheme.Kind{
 		Kind:    "deployment",
@@ -111,8 +110,8 @@ func init() {
 		Get: func(_ context.Context, name, _ string) (any, error) {
 			return getDeploymentByTarget(context.Background(), name)
 		},
-		Delete: func(_ context.Context, name, version string, force bool) error {
-			return deleteDeploymentByTarget(context.Background(), name, version, force)
+		Delete: func(_ context.Context, name, tag string, force bool) error {
+			return deleteDeploymentByTarget(context.Background(), name, tag, force)
 		},
 		ListFunc: func(_ context.Context) ([]any, error) {
 			return listDeploymentAny(context.Background())
@@ -166,20 +165,20 @@ func typedKind[T v1alpha1.Object](
 			}
 			return row(t)
 		},
-		Get: func(ctx context.Context, name, version string) (any, error) {
-			return client.GetTyped(ctx, apiClient, canonicalKind, v1alpha1.DefaultNamespace, name, version, newObj)
+		Get: func(ctx context.Context, name, tag string) (any, error) {
+			return client.GetTyped(ctx, apiClient, canonicalKind, v1alpha1.DefaultNamespace, name, tag, newObj)
 		},
 		ListFunc: func(ctx context.Context) ([]any, error) {
 			return listLatestAny(ctx, canonicalKind, newObj)
 		},
-		Delete: func(ctx context.Context, name, version string, force bool) error {
-			return deleteAny(ctx, canonicalKind, name, version, force, newObj)
+		Delete: func(ctx context.Context, name, tag string, force bool) error {
+			return deleteAny(ctx, canonicalKind, name, tag, force, newObj)
 		},
-		ListVersions: func(ctx context.Context, name string) ([]any, error) {
-			return listVersionsAny(ctx, canonicalKind, name, newObj)
+		ListTags: func(ctx context.Context, name string) ([]any, error) {
+			return listTagsAny(ctx, canonicalKind, name, newObj)
 		},
-		DeleteAllVersions: func(ctx context.Context, name string) error {
-			return deleteAllVersionsAny(ctx, canonicalKind, name, newObj)
+		DeleteAllTags: func(ctx context.Context, name string) error {
+			return deleteAllTagsAny(ctx, canonicalKind, name, newObj)
 		},
 	}
 }

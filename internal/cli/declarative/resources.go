@@ -50,10 +50,9 @@ func listLatestAny[T v1alpha1.Object](ctx context.Context, kind string, newObj f
 	return out, nil
 }
 
-// listVersionsAny preserves the older function name for dispatch wiring, but
-// lists artifact tags and erases the concrete envelope type so the table
-// printer can format the rows.
-func listVersionsAny[T v1alpha1.Object](ctx context.Context, kind, name string, newObj func() T) ([]any, error) {
+// listTagsAny lists artifact tags and erases the concrete envelope type so the
+// table printer can format the rows.
+func listTagsAny[T v1alpha1.Object](ctx context.Context, kind, name string, newObj func() T) ([]any, error) {
 	items, err := client.ListTagsOfName(ctx, apiClient, kind, v1alpha1.DefaultNamespace, name, newObj)
 	if err != nil {
 		return nil, err
@@ -65,11 +64,11 @@ func listVersionsAny[T v1alpha1.Object](ctx context.Context, kind, name string, 
 	return out, nil
 }
 
-// deleteAllVersionsAny lists every live tag and deletes each exact tag so the
+// deleteAllTagsAny lists every live tag and deletes each exact tag so the
 // imperative command can report tag-scoped failures while preserving the
 // declarative DELETE /v0/apply contract for file input.
-func deleteAllVersionsAny[T v1alpha1.Object](ctx context.Context, kind, name string, newObj func() T) error {
-	items, err := listVersionsAny(ctx, kind, name, newObj)
+func deleteAllTagsAny[T v1alpha1.Object](ctx context.Context, kind, name string, newObj func() T) error {
+	items, err := listTagsAny(ctx, kind, name, newObj)
 	if err != nil {
 		return err
 	}
@@ -92,8 +91,8 @@ func deleteAllVersionsAny[T v1alpha1.Object](ctx context.Context, kind, name str
 	return errorsJoin(errs)
 }
 
-func deleteAny[T v1alpha1.Object](ctx context.Context, kind, name, version string, force bool, newObj func() T) error {
-	targetTag := version
+func deleteAny[T v1alpha1.Object](ctx context.Context, kind, name, tag string, force bool, newObj func() T) error {
+	targetTag := tag
 	if targetTag == "" {
 		obj, err := client.GetTyped(ctx, apiClient, kind, v1alpha1.DefaultNamespace, name, "", newObj)
 		if err != nil {
@@ -129,9 +128,9 @@ func getDeploymentByTarget(ctx context.Context, name string) (any, error) {
 	return nil, database.ErrNotFound
 }
 
-func deleteDeploymentByTarget(ctx context.Context, name, version string, force bool) error {
-	if version == "" {
-		return fmt.Errorf("%w: --version is required when deleting deployments", database.ErrInvalidInput)
+func deleteDeploymentByTarget(ctx context.Context, name, tag string, force bool) error {
+	if tag == "" {
+		return fmt.Errorf("%w: --tag is required when deleting deployments", database.ErrInvalidInput)
 	}
 
 	deployments, err := cliCommon.ListDeployments(ctx, apiClient)
@@ -144,7 +143,7 @@ func deleteDeploymentByTarget(ctx context.Context, name, version string, force b
 		if dep == nil {
 			continue
 		}
-		if dep.TargetName == name && dep.TargetTag == version {
+		if dep.TargetName == name && dep.TargetTag == tag {
 			matches = append(matches, dep)
 		}
 	}

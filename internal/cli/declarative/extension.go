@@ -61,8 +61,8 @@ func RegisterExtensionKind(k ExtensionKind) {
 		ListFunc: func(ctx context.Context) ([]any, error) {
 			return listLatestAny(ctx, k.CanonicalKind, k.NewObject)
 		},
-		Delete: func(ctx context.Context, name, version string, force bool) error {
-			return deleteAny(ctx, k.CanonicalKind, name, version, force, k.NewObject)
+		Delete: func(ctx context.Context, name, tag string, force bool) error {
+			return deleteAny(ctx, k.CanonicalKind, name, tag, force, k.NewObject)
 		},
 	})
 }

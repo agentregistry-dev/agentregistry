@@ -209,16 +209,17 @@ func namespaceQuery(namespace string) string {
 
 // Get returns the tagged-artifact resource at (kind, namespace, name, tag).
 // Mutable objects should use GetLatest/name-only semantics.
-func (c *Client) Get(ctx context.Context, kind, namespace, name, version string) (*v1alpha1.RawObject, error) {
+func (c *Client) Get(ctx context.Context, kind, namespace, name, tag string) (*v1alpha1.RawObject, error) {
 	path := fmt.Sprintf("/%s/%s/%s%s",
 		v1alpha1.PluralFor(kind),
 		url.PathEscape(name),
-		url.PathEscape(version),
+		url.PathEscape(tag),
 		namespaceQuery(namespace))
 	return c.getRaw(ctx, path)
 }
 
-// GetLatest returns the highest-version live row for (kind, namespace, name).
+// GetLatest returns the literal latest tag for taggable resources and the
+// current live row for mutable objects.
 func (c *Client) GetLatest(ctx context.Context, kind, namespace, name string) (*v1alpha1.RawObject, error) {
 	path := fmt.Sprintf("/%s/%s%s",
 		v1alpha1.PluralFor(kind),
@@ -259,12 +260,6 @@ func (c *Client) ListTags(ctx context.Context, kind, namespace, name string) ([]
 		return nil, err
 	}
 	return resp.Items, nil
-}
-
-// ListVersions is a compatibility alias for callers that have not yet renamed
-// to tag terminology. It calls the /tags endpoint.
-func (c *Client) ListVersions(ctx context.Context, kind, namespace, name string) ([]v1alpha1.RawObject, error) {
-	return c.ListTags(ctx, kind, namespace, name)
 }
 
 // List returns rows of kind, paginated. opts.Namespace="" (empty) lists
@@ -317,12 +312,12 @@ type DeleteOpts struct {
 	Force bool
 }
 
-// Delete soft-deletes a row. When version is empty it uses the name-only
+// Delete soft-deletes a row. When tag is empty it uses the name-only
 // mutable-object route; otherwise it deletes the exact tag route. Returns
 // ErrNotFound when the row doesn't exist. See Store.Delete for the
 // soft-delete semantics (the row stays visible with DeletionTimestamp
 // set until the GC pass purges it).
-func (c *Client) Delete(ctx context.Context, kind, namespace, name, version string, opts ...DeleteOpts) error {
+func (c *Client) Delete(ctx context.Context, kind, namespace, name, tag string, opts ...DeleteOpts) error {
 	var force bool
 	if len(opts) > 0 {
 		force = opts[0].Force
@@ -339,11 +334,11 @@ func (c *Client) Delete(ctx context.Context, kind, namespace, name, version stri
 		v1alpha1.PluralFor(kind),
 		url.PathEscape(name),
 		q)
-	if version != "" {
+	if tag != "" {
 		path = fmt.Sprintf("/%s/%s/%s%s",
 			v1alpha1.PluralFor(kind),
 			url.PathEscape(name),
-			url.PathEscape(version),
+			url.PathEscape(tag),
 			q)
 	}
 	req, err := c.newRequest(http.MethodDelete, path)

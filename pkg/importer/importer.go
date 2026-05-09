@@ -369,9 +369,8 @@ func (i *Importer) importOne(ctx context.Context, source string, obj v1alpha1.Ob
 		res.Status = ImportStatusUnchanged
 	}
 	res.Tag = up.Tag
-	findingsVersion := up.Tag
 
-	i.writeFindings(ctx, obj, opts, pendingFindings, &res, findingsVersion)
+	i.writeFindings(ctx, obj, opts, pendingFindings, &res, up.Tag)
 	return res
 }
 
@@ -380,19 +379,19 @@ func (i *Importer) importOne(ctx context.Context, source string, obj v1alpha1.Ob
 // (e.g. a mode that only wants annotation summaries); log and move on.
 // Per-source write failures don't roll back the Upsert but downgrade
 // EnrichmentStatus so callers see the detail table may be stale.
-func (i *Importer) writeFindings(ctx context.Context, obj v1alpha1.Object, opts Options, pending map[string][]Finding, res *ImportResult, version string) {
+func (i *Importer) writeFindings(ctx context.Context, obj v1alpha1.Object, opts Options, pending map[string][]Finding, res *ImportResult, tag string) {
 	if len(pending) == 0 {
 		return
 	}
 	meta := obj.GetMetadata()
 	if i.findings == nil {
 		i.logger.Warn("findings produced but no FindingsStore configured; dropping",
-			"kind", obj.GetKind(), "name", meta.Name, "version", version)
+			"kind", obj.GetKind(), "name", meta.Name, "tag", tag)
 		return
 	}
 	for source, fs := range pending {
 		if err := i.findings.Replace(ctx,
-			obj.GetKind(), meta.Namespace, meta.Name, version,
+			obj.GetKind(), meta.Namespace, meta.Name, tag,
 			source, opts.ScannedBy, fs,
 		); err != nil {
 			res.EnrichmentErrors = append(res.EnrichmentErrors,

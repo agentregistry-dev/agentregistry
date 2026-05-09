@@ -31,9 +31,9 @@ func TestDeclarativeApply_RemoteMCPServer(t *testing.T) {
 	name := "e2e-test/" + UniqueNameWithPrefix("decl-remote-mcp")
 	tag := "latest"
 
-	RunArctl(t, tmpDir, "delete", "remote-mcp", name, "--version", tag, "--registry-url", regURL)
+	RunArctl(t, tmpDir, "delete", "remote-mcp", name, "--tag", tag, "--registry-url", regURL)
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "remote-mcp", name, "--version", tag, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "remote-mcp", name, "--tag", tag, "--registry-url", regURL)
 	})
 
 	yaml := fmt.Sprintf(`
@@ -71,11 +71,11 @@ func TestDeclarativeApply_AgentReferencesRemoteMCPServer(t *testing.T) {
 	agentName := UniqueAgentName("decl-agent-ref-remote")
 	tag := "latest"
 
-	RunArctl(t, tmpDir, "delete", "remote-mcp", remoteName, "--version", tag, "--registry-url", regURL)
-	RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", tag, "--registry-url", regURL)
+	RunArctl(t, tmpDir, "delete", "remote-mcp", remoteName, "--tag", tag, "--registry-url", regURL)
+	RunArctl(t, tmpDir, "delete", "agent", agentName, "--tag", tag, "--registry-url", regURL)
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", tag, "--registry-url", regURL)
-		RunArctl(t, tmpDir, "delete", "remote-mcp", remoteName, "--version", tag, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "agent", agentName, "--tag", tag, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "remote-mcp", remoteName, "--tag", tag, "--registry-url", regURL)
 	})
 
 	yaml := fmt.Sprintf(`

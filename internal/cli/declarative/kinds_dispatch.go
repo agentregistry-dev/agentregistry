@@ -26,43 +26,41 @@ func listItems(k *scheme.Kind) ([]any, error) {
 	return k.ListFunc(context.Background())
 }
 
-// getItem fetches a single item by name for the given kind. Empty
-// version resolves the latest tag; a non-empty version is a deprecated
-// tag-selection alias passed through to the per-kind closure (only meaningful
-// for taggable artifacts — runGet gates the CLI flag accordingly).
-func getItem(k *scheme.Kind, name, version string) (any, error) {
+// getItem fetches a single item by name for the given kind. Empty tag resolves
+// the latest tag; non-empty tag selects an exact tag on taggable artifacts.
+func getItem(k *scheme.Kind, name, tag string) (any, error) {
 	if k.Get == nil {
 		return nil, fmt.Errorf("get not supported for kind %q", k.Kind)
 	}
-	return k.Get(context.Background(), name, version)
+	return k.Get(context.Background(), name, tag)
 }
 
-// deleteItem deletes a single item by (name, version) for the given kind.
+// deleteItem deletes a single item by (name, tag) for the given kind.
 // force=true asks the server to skip its PostDelete reconciliation hook
 // (e.g. provider teardown for Deployment).
-func deleteItem(k *scheme.Kind, name, version string, force bool) error {
+func deleteItem(k *scheme.Kind, name, tag string, force bool) error {
 	if k.Delete == nil {
 		return fmt.Errorf("delete not supported for kind %q", k.Kind)
 	}
-	return k.Delete(context.Background(), name, version, force)
+	return k.Delete(context.Background(), name, tag, force)
 }
 
-// listVersions returns every live tag for (kind, name). Errors when the kind
-// is not a taggable artifact (e.g. mutable Deployment/Provider).
-func listVersions(k *scheme.Kind, name string) ([]any, error) {
-	if k.ListVersions == nil {
-		return nil, fmt.Errorf("--all-versions not supported for kind %q (resource is not taggable)", k.Kind)
+// listTags returns every live tag for (kind, name). Errors when the kind is not
+// a taggable artifact (e.g. mutable Deployment/Provider).
+func listTags(k *scheme.Kind, name string) ([]any, error) {
+	if k.ListTags == nil {
+		return nil, fmt.Errorf("--all-tags not supported for kind %q (resource is not taggable)", k.Kind)
 	}
-	return k.ListVersions(context.Background(), name)
+	return k.ListTags(context.Background(), name)
 }
 
-// deleteAllVersions soft-deletes every live tag for (kind, name). Errors when
-// the kind is not a taggable artifact.
-func deleteAllVersions(k *scheme.Kind, name string) error {
-	if k.DeleteAllVersions == nil {
-		return fmt.Errorf("--all-versions not supported for kind %q (resource is not taggable)", k.Kind)
+// deleteAllTags soft-deletes every live tag for (kind, name). Errors when the
+// kind is not a taggable artifact.
+func deleteAllTags(k *scheme.Kind, name string) error {
+	if k.DeleteAllTags == nil {
+		return fmt.Errorf("--all-tags not supported for kind %q (resource is not taggable)", k.Kind)
 	}
-	return k.DeleteAllVersions(context.Background(), name)
+	return k.DeleteAllTags(context.Background(), name)
 }
 
 // tableRow returns a []string row for the given item, matching the TableColumns

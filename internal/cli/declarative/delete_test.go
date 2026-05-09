@@ -126,7 +126,7 @@ func TestDeleteFileModeNoAPIClient(t *testing.T) {
 	assert.Contains(t, err.Error(), "API client not initialized")
 }
 
-// TestDeleteExplicitModeWithoutVersion verifies that --version is optional
+// TestDeleteExplicitModeWithoutVersion verifies that --tag is optional
 // (providers don't use versions; the server validates if needed).
 func TestDeleteExplicitModeWithoutVersion(t *testing.T) {
 	cmd := declarative.NewDeleteCmd()

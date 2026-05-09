@@ -24,37 +24,37 @@ type Column struct {
 type ListFunc func(context.Context) ([]any, error)
 type RowFunc func(any) []string
 type ToYAMLFunc func(any) any
-type GetFunc func(ctx context.Context, name, version string) (any, error)
+type GetFunc func(ctx context.Context, name, tag string) (any, error)
 
-// DeleteFunc deletes a single (name, version) of the kind. force=true
+// DeleteFunc deletes a single (name, tag) of the kind. force=true
 // asks the server to skip its PostDelete reconciliation hook (e.g.
 // provider teardown for Deployment); kinds that don't honor force
 // should ignore the flag. The CLI's `arctl delete --force` plumbs
 // through here.
-type DeleteFunc func(ctx context.Context, name, version string, force bool) error
+type DeleteFunc func(ctx context.Context, name, tag string, force bool) error
 
-// ListVersionsFunc returns every live version row for a single (name).
-// Set only on versioned-artifact kinds (Agent, MCPServer, Skill, etc.).
-// Nil for kinds whose identity is single-version (Deployment, Provider) —
-// callers must check for nil and reject `--all-versions` cleanly.
-type ListVersionsFunc func(ctx context.Context, name string) ([]any, error)
+// ListTagsFunc returns every live tag row for a single (name).
+// Set only on taggable artifact kinds (Agent, MCPServer, Skill, etc.).
+// Nil for kinds whose identity is not tagged (Deployment, Provider) —
+// callers must check for nil and reject `--all-tags` cleanly.
+type ListTagsFunc func(ctx context.Context, name string) ([]any, error)
 
-// DeleteAllVersionsFunc soft-deletes every live version of a single
-// (name) in one server round-trip. Set only on versioned-artifact
-// kinds. Nil for kinds whose identity is single-version.
-type DeleteAllVersionsFunc func(ctx context.Context, name string) error
+// DeleteAllTagsFunc soft-deletes every live tag of a single (name) in one
+// server round-trip. Set only on taggable artifact kinds. Nil for kinds whose
+// identity is not tagged.
+type DeleteAllTagsFunc func(ctx context.Context, name string) error
 
 type Kind struct {
-	Kind              string
-	Plural            string
-	Aliases           []string
-	ListFunc          ListFunc
-	RowFunc           RowFunc
-	ToYAMLFunc        ToYAMLFunc
-	Get               GetFunc
-	Delete            DeleteFunc
-	ListVersions      ListVersionsFunc
-	DeleteAllVersions DeleteAllVersionsFunc
+	Kind          string
+	Plural        string
+	Aliases       []string
+	ListFunc      ListFunc
+	RowFunc       RowFunc
+	ToYAMLFunc    ToYAMLFunc
+	Get           GetFunc
+	Delete        DeleteFunc
+	ListTags      ListTagsFunc
+	DeleteAllTags DeleteAllTagsFunc
 
 	TableColumns []Column
 }

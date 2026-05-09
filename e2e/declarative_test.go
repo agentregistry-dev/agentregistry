@@ -140,9 +140,9 @@ func TestDeclarativeApply_AgentLifecycle(t *testing.T) {
 	version := defaultArtifactTag
 
 	// Clean up any stale entry from a previous interrupted run.
-	RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", version, "--registry-url", regURL)
+	RunArctl(t, tmpDir, "delete", "agent", agentName, "--tag", version, "--registry-url", regURL)
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", version, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "agent", agentName, "--tag", version, "--registry-url", regURL)
 	})
 
 	agentYAML := fmt.Sprintf(`
@@ -203,7 +203,7 @@ spec:
 
 	// Step 6: Delete it.
 	t.Run("delete", func(t *testing.T) {
-		result := RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", version, "--registry-url", regURL)
+		result := RunArctl(t, tmpDir, "delete", "agent", agentName, "--tag", version, "--registry-url", regURL)
 		RequireSuccess(t, result)
 	})
 
@@ -223,9 +223,9 @@ func TestDeclarativeApply_MCPServer(t *testing.T) {
 	version := defaultArtifactTag
 
 	// Clean up any stale entry.
-	RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
+	RunArctl(t, tmpDir, "delete", "mcp", serverName, "--tag", version, "--registry-url", regURL)
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "mcp", serverName, "--tag", version, "--registry-url", regURL)
 	})
 
 	serverYAML := fmt.Sprintf(`
@@ -259,11 +259,11 @@ func TestDeclarativeApply_MultiDoc(t *testing.T) {
 	version := defaultArtifactTag
 
 	// Clean up.
-	RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
-	RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", version, "--registry-url", regURL)
+	RunArctl(t, tmpDir, "delete", "mcp", serverName, "--tag", version, "--registry-url", regURL)
+	RunArctl(t, tmpDir, "delete", "agent", agentName, "--tag", version, "--registry-url", regURL)
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
-		RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", version, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "mcp", serverName, "--tag", version, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "agent", agentName, "--tag", version, "--registry-url", regURL)
 	})
 
 	multiDocYAML := fmt.Sprintf(`
@@ -359,7 +359,7 @@ func TestDeclarativeInit_Agent(t *testing.T) {
 	version := defaultArtifactTag
 
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "agent", name, "--version", version, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "agent", name, "--tag", version, "--registry-url", regURL)
 	})
 
 	// Step 1: init generates project directory and declarative agent.yaml (offline).
@@ -441,7 +441,7 @@ func TestDeclarativeInit_Skill(t *testing.T) {
 	version := defaultArtifactTag
 
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "skill", name, "--version", version, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "skill", name, "--tag", version, "--registry-url", regURL)
 	})
 
 	// Step 1: init generates project directory and declarative skill.yaml (offline).
@@ -478,7 +478,7 @@ func TestDeclarativeInit_Prompt(t *testing.T) {
 	version := defaultArtifactTag
 
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "prompt", name, "--version", version, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "prompt", name, "--tag", version, "--registry-url", regURL)
 	})
 
 	// Step 1: init writes NAME.yaml in cwd (no project directory).
@@ -656,7 +656,7 @@ func TestDeclarativeApply_Idempotent(t *testing.T) {
 	version := defaultArtifactTag
 
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", version, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "agent", agentName, "--tag", version, "--registry-url", regURL)
 	})
 
 	agentYAML := fmt.Sprintf(`
@@ -731,7 +731,7 @@ func TestDeclarativeApply_Update(t *testing.T) {
 	tag := "latest"
 
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", tag, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "agent", agentName, "--tag", tag, "--registry-url", regURL)
 	})
 
 	// Step 1: Apply with "v1 description" to the default latest tag.
@@ -794,7 +794,7 @@ spec:
 
 // TestDeclarativeApply_MCPServer_Idempotent verifies that applying the same
 // MCPServer YAML twice succeeds. This exercises the new PUT
-// /v0/servers/{name}/versions/{version} apply endpoint enabled by the PATCH/PUT
+// same-tag apply path enabled by the v1alpha1 resource handler
 // swap (admin edit moved to PATCH so apply could own PUT).
 func TestDeclarativeApply_MCPServer_Idempotent(t *testing.T) {
 	regURL := RegistryURL(t)
@@ -803,9 +803,9 @@ func TestDeclarativeApply_MCPServer_Idempotent(t *testing.T) {
 	serverName := "e2e-test/" + UniqueNameWithPrefix("decl-mcp-idemp")
 	version := defaultArtifactTag
 
-	RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
+	RunArctl(t, tmpDir, "delete", "mcp", serverName, "--tag", version, "--registry-url", regURL)
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "mcp", serverName, "--tag", version, "--registry-url", regURL)
 	})
 
 	serverYAML := fmt.Sprintf(`
@@ -824,7 +824,7 @@ spec:
 	RequireOutputContains(t, result, "MCPServer/"+serverName)
 	RequireOutputContains(t, result, "✓")
 
-	// Second apply — must succeed (no error like "version already exists").
+	// Second apply — must succeed as a same-tag replacement.
 	result = RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
 	RequireOutputContains(t, result, "MCPServer/"+serverName)
@@ -842,9 +842,9 @@ func TestDeclarativeApply_Skill_Idempotent(t *testing.T) {
 	skillName := UniqueNameWithPrefix("decl-skill-idemp")
 	version := defaultArtifactTag
 
-	RunArctl(t, tmpDir, "delete", "skill", skillName, "--version", version, "--registry-url", regURL)
+	RunArctl(t, tmpDir, "delete", "skill", skillName, "--tag", version, "--registry-url", regURL)
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "skill", skillName, "--version", version, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "skill", skillName, "--tag", version, "--registry-url", regURL)
 	})
 
 	skillYAML := fmt.Sprintf(`
@@ -884,9 +884,9 @@ func TestDeclarativeApply_Prompt_Idempotent(t *testing.T) {
 	promptName := UniqueNameWithPrefix("decl-prompt-idemp")
 	version := defaultArtifactTag
 
-	RunArctl(t, tmpDir, "delete", "prompt", promptName, "--version", version, "--registry-url", regURL)
+	RunArctl(t, tmpDir, "delete", "prompt", promptName, "--tag", version, "--registry-url", regURL)
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "prompt", promptName, "--version", version, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "prompt", promptName, "--tag", version, "--registry-url", regURL)
 	})
 
 	promptYAML := fmt.Sprintf(`
@@ -1074,9 +1074,9 @@ func TestBatchApply_MultiResource(t *testing.T) {
 	providerName := "e2e-batch-prov-" + UniqueNameWithPrefix("prov")
 
 	// Pre-clean and register cleanup for both resources.
-	RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", agentVersion, "--registry-url", regURL)
+	RunArctl(t, tmpDir, "delete", "agent", agentName, "--tag", agentVersion, "--registry-url", regURL)
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", agentVersion, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "agent", agentName, "--tag", agentVersion, "--registry-url", regURL)
 		req, _ := http.NewRequest(http.MethodDelete,
 			regURL+"/providers/"+providerName+"?platform=local", nil)
 		client := &http.Client{Timeout: 10 * time.Second}
@@ -1132,9 +1132,9 @@ func TestBatchApply_Idempotent(t *testing.T) {
 	agentVersion := defaultArtifactTag
 	providerName := "e2e-idemp-prov-" + UniqueNameWithPrefix("prov")
 
-	RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", agentVersion, "--registry-url", regURL)
+	RunArctl(t, tmpDir, "delete", "agent", agentName, "--tag", agentVersion, "--registry-url", regURL)
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", agentVersion, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "agent", agentName, "--tag", agentVersion, "--registry-url", regURL)
 		req, _ := http.NewRequest(http.MethodDelete,
 			regURL+"/providers/"+providerName+"?platform=local", nil)
 		client := &http.Client{Timeout: 10 * time.Second}
@@ -1212,7 +1212,7 @@ func TestBatchApply_DriftRequiresForce(t *testing.T) {
 	t.Cleanup(func() {
 		RemoveDeploymentsByServerName(t, regURL, agentName)
 		removeLocalDeployment(t)
-		RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", agentVersion, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "agent", agentName, "--tag", agentVersion, "--registry-url", regURL)
 	})
 
 	// Step 1: init → build+push → apply the agent. Build pushes to the
@@ -1289,7 +1289,7 @@ func TestBatchApply_DeleteFile(t *testing.T) {
 	agentVersion := defaultArtifactTag
 
 	// Ensure clean state before the test.
-	RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", agentVersion, "--registry-url", regURL)
+	RunArctl(t, tmpDir, "delete", "agent", agentName, "--tag", agentVersion, "--registry-url", regURL)
 
 	agentYAML := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
 kind: Agent
@@ -1330,9 +1330,9 @@ func TestDeclarative_MCPRoundTrip(t *testing.T) {
 	serverName := "e2e-test/" + UniqueNameWithPrefix("mcp-rt")
 	version := defaultArtifactTag
 
-	RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
+	RunArctl(t, tmpDir, "delete", "mcp", serverName, "--tag", version, "--registry-url", regURL)
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "mcp", serverName, "--tag", version, "--registry-url", regURL)
 	})
 
 	serverYAML := fmt.Sprintf(`
@@ -1380,7 +1380,7 @@ spec:
 	})
 
 	t.Run("delete", func(t *testing.T) {
-		result := RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
+		result := RunArctl(t, tmpDir, "delete", "mcp", serverName, "--tag", version, "--registry-url", regURL)
 		RequireSuccess(t, result)
 	})
 
@@ -1398,9 +1398,9 @@ func TestDeclarative_SkillRoundTrip(t *testing.T) {
 	skillName := UniqueNameWithPrefix("skill-rt")
 	version := defaultArtifactTag
 
-	RunArctl(t, tmpDir, "delete", "skill", skillName, "--version", version, "--registry-url", regURL)
+	RunArctl(t, tmpDir, "delete", "skill", skillName, "--tag", version, "--registry-url", regURL)
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "skill", skillName, "--version", version, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "skill", skillName, "--tag", version, "--registry-url", regURL)
 	})
 
 	skillYAML := fmt.Sprintf(`
@@ -1455,7 +1455,7 @@ spec:
 	})
 
 	t.Run("delete", func(t *testing.T) {
-		result := RunArctl(t, tmpDir, "delete", "skill", skillName, "--version", version, "--registry-url", regURL)
+		result := RunArctl(t, tmpDir, "delete", "skill", skillName, "--tag", version, "--registry-url", regURL)
 		RequireSuccess(t, result)
 	})
 
@@ -1473,9 +1473,9 @@ func TestDeclarative_PromptRoundTrip(t *testing.T) {
 	promptName := UniqueNameWithPrefix("prompt-rt")
 	version := defaultArtifactTag
 
-	RunArctl(t, tmpDir, "delete", "prompt", promptName, "--version", version, "--registry-url", regURL)
+	RunArctl(t, tmpDir, "delete", "prompt", promptName, "--tag", version, "--registry-url", regURL)
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "prompt", promptName, "--version", version, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "prompt", promptName, "--tag", version, "--registry-url", regURL)
 	})
 
 	promptYAML := fmt.Sprintf(`
@@ -1531,7 +1531,7 @@ spec:
 	})
 
 	t.Run("delete", func(t *testing.T) {
-		result := RunArctl(t, tmpDir, "delete", "prompt", promptName, "--version", version, "--registry-url", regURL)
+		result := RunArctl(t, tmpDir, "delete", "prompt", promptName, "--tag", version, "--registry-url", regURL)
 		RequireSuccess(t, result)
 	})
 
@@ -1554,10 +1554,10 @@ func TestDeclarative_DeleteFileMultiKind(t *testing.T) {
 
 	// Pre-clean and post-clean via the same declarative command.
 	cleanup := func() {
-		RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", version, "--registry-url", regURL)
-		RunArctl(t, tmpDir, "delete", "mcp", mcpName, "--version", version, "--registry-url", regURL)
-		RunArctl(t, tmpDir, "delete", "skill", skillName, "--version", version, "--registry-url", regURL)
-		RunArctl(t, tmpDir, "delete", "prompt", promptName, "--version", version, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "agent", agentName, "--tag", version, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "mcp", mcpName, "--tag", version, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "skill", skillName, "--tag", version, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "prompt", promptName, "--tag", version, "--registry-url", regURL)
 	}
 	cleanup()
 	t.Cleanup(cleanup)
@@ -1750,7 +1750,7 @@ func TestDeclarativeDelete_NotFound(t *testing.T) {
 
 	result := RunArctl(t, tmpDir,
 		"delete", "prompt", "nonexistent-prompt-xyz-12345",
-		"--version", "1",
+		"--tag", "1",
 		"--registry-url", regURL,
 	)
 	RequireFailure(t, result)
@@ -1874,7 +1874,7 @@ func TestDeploymentGet_YAMLIncludesStatus(t *testing.T) {
 	t.Cleanup(func() { RemoveDeploymentsByServerName(t, regURL, agentName) })
 	t.Cleanup(func() { removeLocalDeployment(t) })
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", version, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "agent", agentName, "--tag", version, "--registry-url", regURL)
 	})
 
 	// init → build+push → apply — same shape as TestApplyDeployment_HTTPIdempotent.
@@ -1978,7 +1978,7 @@ func TestMCPServer_PackagesShape(t *testing.T) {
 	version := defaultArtifactTag
 
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "mcp", serverName, "--tag", version, "--registry-url", regURL)
 	})
 
 	// localhost:5001 lands in the validator's private-registry exemption
@@ -2034,7 +2034,7 @@ func TestRemoteMCPServer_RemoteShape(t *testing.T) {
 	version := defaultArtifactTag
 
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "remote-mcp", serverName, "--version", version, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "remote-mcp", serverName, "--tag", version, "--registry-url", regURL)
 	})
 
 	// The server-side URL validator rejects localhost/private addresses.
@@ -2076,7 +2076,7 @@ func TestMCPServer_RepositoryShape(t *testing.T) {
 	version := defaultArtifactTag
 
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "mcp", serverName, "--version", version, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "mcp", serverName, "--tag", version, "--registry-url", regURL)
 	})
 
 	yaml := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
@@ -2119,8 +2119,8 @@ func TestPrompt_MultipleTags(t *testing.T) {
 	v2Content := "Expert tag: You are an expert coding assistant."
 
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "prompt", promptName, "--version", v1, "--registry-url", regURL)
-		RunArctl(t, tmpDir, "delete", "prompt", promptName, "--version", v2, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "prompt", promptName, "--tag", v1, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "prompt", promptName, "--tag", v2, "--registry-url", regURL)
 	})
 
 	// Apply v1 + v2 via declarative YAML.
@@ -2176,7 +2176,7 @@ spec:
 
 	// Delete v1 only — v2 must remain accessible.
 	result := RunArctl(t, tmpDir, "delete", "prompt", promptName,
-		"--version", v1, "--registry-url", regURL)
+		"--tag", v1, "--registry-url", regURL)
 	RequireSuccess(t, result)
 
 	// v1 gone (soft-deleted — either 404 or 200-with-deletionTimestamp is OK).
@@ -2214,7 +2214,7 @@ func TestPrompt_ContentIntegrity(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "prompt", promptName, "--version", version, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "prompt", promptName, "--tag", version, "--registry-url", regURL)
 	})
 
 	// Apply with inline literal-block content.
@@ -2236,7 +2236,7 @@ spec:
 	path := writeDeclarativeYAML(t, tmpDir, "content.yaml", yaml)
 	RequireSuccess(t, RunArctl(t, tmpDir, "apply", "-f", path, "--registry-url", regURL))
 
-	// Fetch via HTTP — declarative `arctl get` has no --version flag.
+	// Fetch via HTTP — declarative `arctl get` has no --tag flag.
 	// Decode the JSON response so content comparisons are against the
 	// unescaped stored string, not its JSON-encoded form.
 	resp := RegistryGet(t, resourceURL(regURL, "prompts", promptName, version))
@@ -2270,8 +2270,8 @@ func TestSkill_DeleteTaggedArtifactKeepsLatest(t *testing.T) {
 
 	t.Cleanup(func() {
 		// Best-effort cleanup of both tags.
-		RunArctl(t, tmpDir, "delete", "skill", skillName, "--version", v1, "--registry-url", regURL)
-		RunArctl(t, tmpDir, "delete", "skill", skillName, "--version", v2, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "skill", skillName, "--tag", v1, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "skill", skillName, "--tag", v2, "--registry-url", regURL)
 	})
 
 	// Apply stable.
@@ -2300,16 +2300,16 @@ spec:
 		writeDeclarativeYAML(t, tmpDir, "skill-v2.yaml", yamlV2),
 		"--registry-url", regURL))
 
-	// Without --version, get returns the literal latest tag.
+	// Without --tag, get returns the literal latest tag.
 	result := RunArctl(t, tmpDir, "get", "skill", skillName, "-o", "yaml", "--registry-url", regURL)
 	RequireSuccess(t, result)
 	RequireOutputContains(t, result, "tag: "+v2)
 
 	// Delete the stable tag — latest should remain.
 	RequireSuccess(t, RunArctl(t, tmpDir, "delete", "skill", skillName,
-		"--version", v1, "--registry-url", regURL))
+		"--tag", v1, "--registry-url", regURL))
 
-	// Re-query without --version: expect latest to remain.
+	// Re-query without --tag: expect latest to remain.
 	result = RunArctl(t, tmpDir, "get", "skill", skillName, "-o", "yaml", "--registry-url", regURL)
 	RequireSuccess(t, result)
 	RequireOutputContains(t, result, "tag: "+v2)

@@ -14,7 +14,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var pullVersion string
+var (
+	pullTag     string
+	pullVersion string
+)
 
 var PullCmd = &cobra.Command{
 	Use:   "pull <skill-name> [output-directory]",
@@ -28,7 +31,8 @@ If output-directory is not specified, it will be extracted to ./skills/<skill-na
 }
 
 func init() {
-	PullCmd.Flags().StringVar(&pullVersion, "version", "", "Deprecated alias for tag to pull (if not specified and multiple tags exist, you will be prompted)")
+	PullCmd.Flags().StringVar(&pullTag, "tag", "", "Tag to pull (if not specified and multiple tags exist, you will be prompted)")
+	PullCmd.Flags().StringVar(&pullVersion, "version", "", "Deprecated alias for --tag")
 }
 
 func runPull(cmd *cobra.Command, args []string) error {
@@ -36,6 +40,13 @@ func runPull(cmd *cobra.Command, args []string) error {
 
 	if apiClient == nil {
 		return fmt.Errorf("API client not initialized")
+	}
+	if pullTag != "" && pullVersion != "" {
+		return fmt.Errorf("--tag and --version are mutually exclusive")
+	}
+	requestedTag := pullTag
+	if requestedTag == "" {
+		requestedTag = pullVersion
 	}
 
 	// Determine output directory
@@ -49,7 +60,7 @@ func runPull(cmd *cobra.Command, args []string) error {
 	printer.PrintInfo(fmt.Sprintf("Pulling skill: %s", skillName))
 
 	// 1. Resolve which tag to pull
-	tag, err := resolveSkillTag(cmd.Context(), skillName, pullVersion)
+	tag, err := resolveSkillTag(cmd.Context(), skillName, requestedTag)
 	if err != nil {
 		return err
 	}
@@ -128,7 +139,7 @@ func resolveSkillTag(ctx context.Context, skillName, requestedTag string) (strin
 		return tags[0].Metadata.Tag, nil
 	}
 
-	printer.PrintError(fmt.Sprintf("skill '%s' has %d tags, please specify one with --version:", skillName, len(tags)))
+	printer.PrintError(fmt.Sprintf("skill '%s' has %d tags, please specify one with --tag:", skillName, len(tags)))
 	for i, v := range tags {
 		latest := ""
 		if i == 0 {
@@ -137,7 +148,7 @@ func resolveSkillTag(ctx context.Context, skillName, requestedTag string) (strin
 		printer.PrintInfo(fmt.Sprintf("  %s%s", v.Metadata.Tag, latest))
 	}
 
-	return "", fmt.Errorf("multiple tags available, specify one with --version")
+	return "", fmt.Errorf("multiple tags available, specify one with --tag")
 }
 
 // pullFromGit clones a git repository and copies the skill files to the output directory.

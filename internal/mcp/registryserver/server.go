@@ -293,7 +293,7 @@ func addServerPrompts(server *mcp.Server) {
 		if resourceType != "" {
 			instruction += " (filter to " + resourceType + " only)"
 		}
-		instruction += ". Use the appropriate list tool (list_servers, list_agents, list_skills, list_deployments) with the search parameter. Summarize what you find including names, descriptions, and versions."
+		instruction += ". Use the appropriate list tool (list_servers, list_agents, list_skills, list_deployments) with the search parameter. Summarize what you find including names, descriptions, and tags."
 
 		return &mcp.GetPromptResult{
 			Description: "Search the registry for resources matching a query",
@@ -314,7 +314,7 @@ func addServerPrompts(server *mcp.Server) {
 					Text: "Give me an overview of what's available in the agent registry. " +
 						"Use list_servers, list_agents, and list_skills to see what's published. " +
 						"Also check list_deployments to see what's currently deployed. " +
-						"Summarize the results in a clear table format showing name, description, and latest version for each resource type.",
+						"Summarize the results in a clear table format showing name, description, and tag for each resource type.",
 				}},
 			},
 		}, nil

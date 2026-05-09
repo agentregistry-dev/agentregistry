@@ -18,31 +18,30 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
-// selectServerVersion handles server tag selection logic with interactive prompts.
+// selectServerTag handles server tag selection logic with interactive prompts.
 // Returns the selected server or an error if not found or cancelled
-func selectServerVersion(resourceName, requestedVersion string, autoYes bool) (*v1alpha1.MCPServer, error) {
+func selectServerTag(resourceName, requestedTag string, autoYes bool) (*v1alpha1.MCPServer, error) {
 	if apiClient == nil {
 		return nil, errors.New("API client not initialized")
 	}
 
-	// If a specific tag was requested, try to get that tag. The flag is
-	// still named --version for CLI compatibility.
-	if requestedVersion != "" && requestedVersion != "latest" {
-		fmt.Printf("Checking if MCP server '%s' tag '%s' exists in registry...\n", resourceName, requestedVersion)
+	// If a specific tag was requested, try to get that tag.
+	if requestedTag != "" && requestedTag != "latest" {
+		fmt.Printf("Checking if MCP server '%s' tag '%s' exists in registry...\n", resourceName, requestedTag)
 		server, err := client.GetTyped(
 			context.Background(),
 			apiClient,
 			v1alpha1.KindMCPServer,
 			v1alpha1.DefaultNamespace,
 			resourceName,
-			requestedVersion,
+			requestedTag,
 			func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} },
 		)
 		if err != nil {
 			return nil, fmt.Errorf("error querying registry: %w", err)
 		}
 		if server == nil {
-			return nil, fmt.Errorf("MCP server '%s' tag '%s' not found in registry", resourceName, requestedVersion)
+			return nil, fmt.Errorf("MCP server '%s' tag '%s' not found in registry", resourceName, requestedTag)
 		}
 
 		fmt.Printf("✓ Found MCP server: %s (tag %s)\n", server.Metadata.Name, server.Metadata.Tag)
@@ -51,7 +50,7 @@ func selectServerVersion(resourceName, requestedVersion string, autoYes bool) (*
 
 	// No specific tag requested, check all tags.
 	fmt.Printf("Checking for tags of MCP server '%s'...\n", resourceName)
-	allVersions, err := client.ListTagsOfName(
+	allTags, err := client.ListTagsOfName(
 		context.Background(),
 		apiClient,
 		v1alpha1.KindMCPServer,
@@ -63,14 +62,14 @@ func selectServerVersion(resourceName, requestedVersion string, autoYes bool) (*
 		return nil, fmt.Errorf("error querying registry: %w", err)
 	}
 
-	if len(allVersions) == 0 {
+	if len(allTags) == 0 {
 		return nil, fmt.Errorf("MCP server '%s' not found in registry. Use 'arctl get mcpservers' to see available servers", resourceName)
 	}
 
 	// If there are multiple tags, prompt the user (unless --yes is set)
-	if len(allVersions) > 1 { //nolint:nestif
-		fmt.Printf("✓ Found %d tag(s) of MCP server '%s':\n", len(allVersions), resourceName)
-		for i, v := range allVersions {
+	if len(allTags) > 1 { //nolint:nestif
+		fmt.Printf("✓ Found %d tag(s) of MCP server '%s':\n", len(allTags), resourceName)
+		for i, v := range allTags {
 			marker := ""
 			if i == 0 {
 				marker = " (latest)"
@@ -89,14 +88,14 @@ func selectServerVersion(resourceName, requestedVersion string, autoYes bool) (*
 
 			response = strings.TrimSpace(strings.ToLower(response))
 			if response != "" && response != "y" && response != "yes" {
-				return nil, fmt.Errorf("operation cancelled. To use a specific tag, use: --version <tag>")
+				return nil, fmt.Errorf("operation cancelled. To use a specific tag, use: --tag <tag>")
 			}
 		} else {
 			fmt.Println("Auto-accepting latest tag (--yes flag set)")
 		}
 	} else {
-		fmt.Printf("✓ Found MCP server: %s (tag %s)\n", allVersions[0].Metadata.Name, allVersions[0].Metadata.Tag)
+		fmt.Printf("✓ Found MCP server: %s (tag %s)\n", allTags[0].Metadata.Name, allTags[0].Metadata.Tag)
 	}
 
-	return allVersions[0], nil
+	return allTags[0], nil
 }
