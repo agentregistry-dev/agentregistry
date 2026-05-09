@@ -15,8 +15,7 @@ import (
 )
 
 var (
-	pullTag     string
-	pullVersion string
+	pullTag string
 )
 
 var PullCmd = &cobra.Command{
@@ -32,7 +31,6 @@ If output-directory is not specified, it will be extracted to ./skills/<skill-na
 
 func init() {
 	PullCmd.Flags().StringVar(&pullTag, "tag", "", "Tag to pull (if not specified and multiple tags exist, you will be prompted)")
-	PullCmd.Flags().StringVar(&pullVersion, "version", "", "Deprecated alias for --tag")
 }
 
 func runPull(cmd *cobra.Command, args []string) error {
@@ -41,13 +39,7 @@ func runPull(cmd *cobra.Command, args []string) error {
 	if apiClient == nil {
 		return fmt.Errorf("API client not initialized")
 	}
-	if pullTag != "" && pullVersion != "" {
-		return fmt.Errorf("--tag and --version are mutually exclusive")
-	}
 	requestedTag := pullTag
-	if requestedTag == "" {
-		requestedTag = pullVersion
-	}
 
 	// Determine output directory
 	outputDir := ""

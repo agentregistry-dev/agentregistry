@@ -45,33 +45,16 @@ Examples:
 	}
 	cmd.Flags().StringP("output", "o", "table", "Output format: table, yaml, json")
 	cmd.Flags().String("tag", "", "Specific tag to fetch (defaults to latest; tagged content kinds only; not allowed with --all-tags)")
-	cmd.Flags().String("version", "", "Deprecated alias for --tag on content kinds")
 	cmd.Flags().Bool("all-tags", false, "List every tag of NAME (tagged content kinds only)")
-	cmd.Flags().Bool("all-versions", false, "Deprecated alias for --all-tags")
 	return cmd
 }
 
 func runGet(cmd *cobra.Command, args []string) error {
 	outputFormat, _ := cmd.Flags().GetString("output")
 	allTags, _ := cmd.Flags().GetBool("all-tags")
-	allVersions, _ := cmd.Flags().GetBool("all-versions")
 	tag, _ := cmd.Flags().GetString("tag")
-	version, _ := cmd.Flags().GetString("version")
-	if allVersions {
-		allTags = true
-	}
 	allTagsFlag := "--all-tags"
-	if allVersions {
-		allTagsFlag = "--all-versions"
-	}
 	tagFlag := "--tag"
-	if version != "" {
-		if tag != "" {
-			return fmt.Errorf("--tag and --version are mutually exclusive")
-		}
-		tag = version
-		tagFlag = "--version"
-	}
 
 	if allTags && tag != "" {
 		return fmt.Errorf("%s and %s are mutually exclusive", tagFlag, allTagsFlag)

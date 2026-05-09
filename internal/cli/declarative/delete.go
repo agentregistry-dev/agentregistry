@@ -45,10 +45,8 @@ TYPE must be one of: agent, mcp, skill, prompt, deployment
 	}
 	cmd.Flags().StringP("filename", "f", "", "YAML file to read resources from")
 	cmd.Flags().String("tag", "", "Specific tag to delete (taggable artifact kinds only; defaults to latest)")
-	cmd.Flags().String("version", "", "Deprecated alias for --tag")
 	cmd.Flags().Bool("force", false, "Skip provider-specific teardown and only remove the registry record (deployments only)")
 	cmd.Flags().Bool("all-tags", false, "Delete every tag of NAME (taggable artifact kinds only)")
-	cmd.Flags().Bool("all-versions", false, "Deprecated alias for --all-tags")
 	return cmd
 }
 
@@ -56,24 +54,9 @@ func runDeclarativeDelete(cmd *cobra.Command, args []string) error {
 	filename, _ := cmd.Flags().GetString("filename")
 	force, _ := cmd.Flags().GetBool("force")
 	allTags, _ := cmd.Flags().GetBool("all-tags")
-	allVersions, _ := cmd.Flags().GetBool("all-versions")
 	tag, _ := cmd.Flags().GetString("tag")
-	version, _ := cmd.Flags().GetString("version")
-	if allVersions {
-		allTags = true
-	}
 	allTagsFlag := "--all-tags"
-	if allVersions {
-		allTagsFlag = "--all-versions"
-	}
 	tagFlag := "--tag"
-	if version != "" {
-		if tag != "" {
-			return fmt.Errorf("--tag and --version are mutually exclusive")
-		}
-		tag = version
-		tagFlag = "--version"
-	}
 
 	if filename != "" {
 		if force {

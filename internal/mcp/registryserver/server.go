@@ -44,32 +44,32 @@ func NewServer(stores map[string]*v1alpha1store.Store) *mcp.Server {
 		Kind:     v1alpha1.KindAgent,
 		ListName: "list_agents",
 		GetName:  "get_agent",
-		ListDesc: "List published agents as v1alpha1 envelopes with optional namespace / substring-name / version filters.",
-		GetDesc:  "Fetch a published agent as a v1alpha1 envelope (defaults to the latest live version).",
+		ListDesc: "List published agents as v1alpha1 envelopes with optional namespace, substring-name, and tag filters.",
+		GetDesc:  "Fetch a published agent as a v1alpha1 envelope (defaults to the latest tag).",
 		NewObj:   func() *v1alpha1.Agent { return &v1alpha1.Agent{} },
 	})
 	addKindTools(server, stores[v1alpha1.KindMCPServer], kindTools[*v1alpha1.MCPServer]{
 		Kind:     v1alpha1.KindMCPServer,
 		ListName: "list_servers",
 		GetName:  "get_server",
-		ListDesc: "List published MCP servers as v1alpha1 envelopes with optional namespace / substring-name / version filters.",
-		GetDesc:  "Fetch a published MCP server as a v1alpha1 envelope (defaults to the latest live version).",
+		ListDesc: "List published MCP servers as v1alpha1 envelopes with optional namespace, substring-name, and tag filters.",
+		GetDesc:  "Fetch a published MCP server as a v1alpha1 envelope (defaults to the latest tag).",
 		NewObj:   func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} },
 	})
 	addKindTools(server, stores[v1alpha1.KindSkill], kindTools[*v1alpha1.Skill]{
 		Kind:     v1alpha1.KindSkill,
 		ListName: "list_skills",
 		GetName:  "get_skill",
-		ListDesc: "List published skills as v1alpha1 envelopes with optional namespace / substring-name / version filters.",
-		GetDesc:  "Fetch a published skill as a v1alpha1 envelope (defaults to the latest live version).",
+		ListDesc: "List published skills as v1alpha1 envelopes with optional namespace, substring-name, and tag filters.",
+		GetDesc:  "Fetch a published skill as a v1alpha1 envelope (defaults to the latest tag).",
 		NewObj:   func() *v1alpha1.Skill { return &v1alpha1.Skill{} },
 	})
 	addKindTools(server, stores[v1alpha1.KindDeployment], kindTools[*v1alpha1.Deployment]{
 		Kind:     v1alpha1.KindDeployment,
 		ListName: "list_deployments",
 		GetName:  "get_deployment",
-		ListDesc: "List deployments as v1alpha1 envelopes with optional namespace / substring-name / version filters.",
-		GetDesc:  "Fetch a deployment as a v1alpha1 envelope (defaults to the latest live version).",
+		ListDesc: "List deployments as v1alpha1 envelopes with optional namespace and substring-name filters.",
+		GetDesc:  "Fetch a deployment as a v1alpha1 envelope by namespace/name.",
 		NewObj:   func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} },
 	})
 	addMetaTools(server)
@@ -129,14 +129,12 @@ type listInput struct {
 	Limit     int    `json:"limit,omitempty"     doc:"Max items (1-100, default 30)"`
 	Search    string `json:"search,omitempty"    doc:"Case-insensitive substring filter on metadata.name"`
 	Tag       string `json:"tag,omitempty"       doc:"'latest' to return only the literal latest tag per (namespace, name); empty returns every tag"`
-	Version   string `json:"version,omitempty"   doc:"Deprecated alias for tag"`
 }
 
 type getByRefInput struct {
 	Namespace string `json:"namespace,omitempty" doc:"Namespace (empty defaults to 'default')"`
 	Name      string `json:"name"                doc:"Resource name"    required:"true"`
 	Tag       string `json:"tag,omitempty"       doc:"Exact tag; empty or 'latest' returns the literal latest tag"`
-	Version   string `json:"version,omitempty"   doc:"Deprecated alias for tag"`
 }
 
 // listOutput is the generic envelope every list_* tool returns. Items
@@ -149,8 +147,8 @@ type listOutput[T v1alpha1.Object] struct {
 
 // Deployment note: only read tools (list + get) are exposed via MCP.
 // Create + delete equivalents live on the v1alpha1 apply surface at
-// /v0/deployments/{name}/{version}?namespace={ns} — MCP clients that
-// need to deploy should PUT or DELETE against that HTTP path directly.
+// /v0/deployments/{name}?namespace={ns} — MCP clients that need to
+// deploy should PUT or DELETE against that HTTP path directly.
 
 func addMetaTools(server *mcp.Server) {
 	mcp.AddTool(server, &mcp.Tool{
@@ -183,9 +181,6 @@ func runList(ctx context.Context, store *v1alpha1store.Store, args listInput) ([
 		Cursor:    args.Cursor,
 	}
 	tag := strings.TrimSpace(args.Tag)
-	if tag == "" {
-		tag = strings.TrimSpace(args.Version)
-	}
 	if strings.EqualFold(tag, "latest") {
 		opts.LatestOnly = true
 	}
@@ -236,9 +231,6 @@ func getEnvelope[T v1alpha1.Object](
 		namespace = v1alpha1.DefaultNamespace
 	}
 	tag := strings.TrimSpace(args.Tag)
-	if tag == "" {
-		tag = strings.TrimSpace(args.Version)
-	}
 
 	var (
 		raw *v1alpha1.RawObject
