@@ -71,8 +71,8 @@ func (e *applyError) Error() string {
 // applyCore runs the shared upsert pipeline on a single
 // already-decoded, metadata-stamped object:
 //
-//	authorize → validate → resolve refs → validate registries →
-//	marshal spec → Store.Upsert → PostUpsert
+//	canonicalize metadata → authorize → validate → resolve refs →
+//	validate registries → marshal spec → Store.Upsert → PostUpsert
 //
 // dryRun=true skips Upsert + PostUpsert; everything else still runs so
 // clients get the same 400-class error surface they would on a real
@@ -89,6 +89,11 @@ func applyCore(
 
 	if meta.UID != "" {
 		meta.UID = ""
+		obj.SetMetadata(*meta)
+	}
+
+	if v1alpha1.IsTaggedArtifactKind(kind) && meta.Tag == "" {
+		meta.Tag = v1alpha1store.DefaultTag()
 		obj.SetMetadata(*meta)
 	}
 
@@ -110,11 +115,6 @@ func applyCore(
 	}
 	if err := v1alpha1.ValidateObjectRegistries(ctx, obj, opts.RegistryValidator); err != nil {
 		return upsertResult{}, &applyError{Stage: stageRegistries, Err: err}
-	}
-
-	if v1alpha1.IsTaggedArtifactKind(kind) && meta.Tag == "" {
-		meta.Tag = v1alpha1store.DefaultTag()
-		obj.SetMetadata(*meta)
 	}
 
 	if dryRun {
