@@ -21,9 +21,19 @@ func TestRenderArgs_SubstitutesPerArg(t *testing.T) {
 	assert.Equal(t, []string{"docker", "build", "-t", "myagent:dev", "/path/to/proj"}, out)
 }
 
-func TestRenderArgs_MissingValueErrors(t *testing.T) {
-	_, err := RenderArgs([]string{"{{.Missing}}"}, map[string]any{})
-	require.Error(t, err)
+func TestRenderArgs_OptionalConditionalFlagDrops(t *testing.T) {
+	// Conditional flag pattern: {{if .X}}...{{end}} renders to "" when X is
+	// missing, then RenderArgs drops the empty arg. Lets each command supply
+	// only the vars it owns — e.g. arctl run doesn't need to know about
+	// docker --platform when an MCP framework's build step is rendered.
+	args := []string{
+		"docker", "build",
+		`{{if .Platform}}--platform={{.Platform}}{{end}}`,
+		"-t", "{{.Image}}",
+	}
+	out, err := RenderArgs(args, map[string]any{"Image": "img:tag"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"docker", "build", "-t", "img:tag"}, out)
 }
 
 func TestExec_Smoke(t *testing.T) {

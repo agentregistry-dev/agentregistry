@@ -31,7 +31,6 @@ func runWithWatch(out io.Writer, projectDir string, p *frameworks.Framework, env
 		argv, err := frameworks.RenderArgs(p.Run.Command, map[string]any{
 			"ProjectDir":   projectDir,
 			"FrameworkDir": p.SourceDir,
-			"Platform":     "",
 		})
 		if err != nil {
 			return err

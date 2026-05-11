@@ -38,13 +38,14 @@ func renderPathComponents(rel string, vars map[string]any) (string, error) {
 }
 
 // RenderArgs runs Go text/template substitution on each arg independently.
-// Missing values cause an error. Args that render to an empty string are
-// dropped so framework commands can use `{{if .X}}--flag={{.X}}{{end}}` to
-// emit-or-skip optional flags without breaking the argv.
+// Missing values render as their zero value (empty string for strings) so
+// framework commands can use `{{if .X}}--flag={{.X}}{{end}}` to emit-or-skip
+// optional flags — callers only supply the vars that command actually owns.
+// Args that render to an empty string are dropped from the final argv.
 func RenderArgs(args []string, vars map[string]any) ([]string, error) {
 	out := make([]string, 0, len(args))
 	for _, raw := range args {
-		t, err := template.New("arg").Option("missingkey=error").Parse(raw)
+		t, err := template.New("arg").Option("missingkey=zero").Parse(raw)
 		if err != nil {
 			return nil, fmt.Errorf("parse arg %q: %w", raw, err)
 		}

@@ -155,7 +155,6 @@ func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun, wat
 		"FrameworkDir": p.SourceDir,
 		"Image":        image,
 		"Port":         port,
-		"Platform":     "",
 	}
 
 	rendered, err := frameworks.RenderArgs(p.Run.Command, vars)
