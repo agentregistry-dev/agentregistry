@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/yaml"
@@ -48,7 +49,6 @@ func TestInitAgentCmd_BasicScaffold(t *testing.T) {
 	metadata, ok := m["metadata"].(map[string]any)
 	require.True(t, ok, "metadata should be a map")
 	assert.Equal(t, "myagent", metadata["name"])
-	assert.Equal(t, "0.1.0", metadata["version"])
 
 	spec, ok := m["spec"].(map[string]any)
 	require.True(t, ok, "spec should be a map")
@@ -72,7 +72,6 @@ func TestInitAgentCmd_CustomFlags(t *testing.T) {
 	cmd := declarative.NewInitCmd()
 	cmd.SetArgs([]string{
 		"agent", "adk", "python", "mybot",
-		"--version", "2.0.0",
 		"--description", "My custom bot",
 		"--model-provider", "openai",
 		"--model-name", "gpt-4o",
@@ -81,8 +80,6 @@ func TestInitAgentCmd_CustomFlags(t *testing.T) {
 	require.NoError(t, cmd.Execute())
 
 	m := readAgentYAML(t, tmpDir, "mybot")
-	metadata := m["metadata"].(map[string]any)
-	assert.Equal(t, "2.0.0", metadata["version"])
 
 	spec := m["spec"].(map[string]any)
 	assert.Equal(t, "openai", spec["modelProvider"])
@@ -118,25 +115,25 @@ func TestInitAgentCmd_MCPSkillPromptRefs(t *testing.T) {
 	mcp0 := mcps[0].(map[string]any)
 	assert.Equal(t, "MCPServer", mcp0["kind"])
 	assert.Equal(t, "acme/fetch", mcp0["name"])
-	assert.Equal(t, "1.0.0", mcp0["version"])
+	assert.Equal(t, "1.0.0", mcp0["tag"])
 	mcp1 := mcps[1].(map[string]any)
 	assert.Equal(t, "MCPServer", mcp1["kind"])
 	assert.Equal(t, "myorg/weather", mcp1["name"])
-	assert.Equal(t, "latest", mcp1["version"])
+	assert.Equal(t, "latest", mcp1["tag"])
 
 	skills := spec["skills"].([]any)
 	require.Len(t, skills, 1)
 	skill0 := skills[0].(map[string]any)
 	assert.Equal(t, "Skill", skill0["kind"])
 	assert.Equal(t, "summarize", skill0["name"])
-	assert.Equal(t, "2.0.0", skill0["version"])
+	assert.Equal(t, "2.0.0", skill0["tag"])
 
 	prompts := spec["prompts"].([]any)
 	require.Len(t, prompts, 1)
 	prompt0 := prompts[0].(map[string]any)
 	assert.Equal(t, "Prompt", prompt0["kind"])
 	assert.Equal(t, "system-prompt", prompt0["name"])
-	assert.Equal(t, "latest", prompt0["version"])
+	assert.Equal(t, "latest", prompt0["tag"])
 }
 
 func TestInitAgentCmd_GitRepository(t *testing.T) {
@@ -312,7 +309,6 @@ func TestInitMCPCmd_BasicScaffold(t *testing.T) {
 
 	metadata := m["metadata"].(map[string]any)
 	assert.Equal(t, "myorg/myserver", metadata["name"])
-	assert.Equal(t, "0.1.0", metadata["version"])
 
 	spec := m["spec"].(map[string]any)
 	assert.Equal(t, "myserver", spec["title"])
@@ -335,7 +331,6 @@ func TestInitMCPCmd_CustomFlags(t *testing.T) {
 	cmd := declarative.NewInitCmd()
 	cmd.SetArgs([]string{
 		"mcp", "fastmcp-python", "myorg/myserver",
-		"--version", "2.0.0",
 		"--description", "My weather server",
 		"--image", "ghcr.io/acme/myserver:v2",
 	})
@@ -344,7 +339,6 @@ func TestInitMCPCmd_CustomFlags(t *testing.T) {
 	m := readYAMLFile(t, filepath.Join(tmpDir, "myserver", "mcp.yaml"))
 	metadata := m["metadata"].(map[string]any)
 	assert.Equal(t, "myorg/myserver", metadata["name"])
-	assert.Equal(t, "2.0.0", metadata["version"])
 
 	spec := m["spec"].(map[string]any)
 	assert.Equal(t, "My weather server", spec["description"])
@@ -427,7 +421,6 @@ func TestInitSkillCmd_BasicScaffold(t *testing.T) {
 
 	metadata := m["metadata"].(map[string]any)
 	assert.Equal(t, "myskill", metadata["name"])
-	assert.Equal(t, "0.1.0", metadata["version"])
 
 	spec := m["spec"].(map[string]any)
 	assert.Equal(t, "myskill", spec["title"])
@@ -444,14 +437,11 @@ func TestInitSkillCmd_CustomFlags(t *testing.T) {
 	cmd := declarative.NewInitCmd()
 	cmd.SetArgs([]string{
 		"skill", "myskill",
-		"--version", "1.2.0",
 		"--description", "Text summarizer",
 	})
 	require.NoError(t, cmd.Execute())
 
 	m := readYAMLFile(t, filepath.Join(tmpDir, "myskill", "skill.yaml"))
-	metadata := m["metadata"].(map[string]any)
-	assert.Equal(t, "1.2.0", metadata["version"])
 
 	spec := m["spec"].(map[string]any)
 	assert.Equal(t, "Text summarizer", spec["description"])
@@ -494,7 +484,6 @@ func TestInitPromptCmd_BasicScaffold(t *testing.T) {
 
 	metadata := m["metadata"].(map[string]any)
 	assert.Equal(t, "myprompt", metadata["name"])
-	assert.Equal(t, "0.1.0", metadata["version"])
 
 	spec := m["spec"].(map[string]any)
 	assert.NotEmpty(t, spec["content"])
@@ -513,13 +502,10 @@ func TestInitPromptCmd_CustomContent(t *testing.T) {
 		"prompt", "summarizer",
 		"--description", "Summarize text",
 		"--content", "You are a text summarizer. Be concise.",
-		"--version", "2.0.0",
 	})
 	require.NoError(t, cmd.Execute())
 
 	m := readYAMLFile(t, filepath.Join(tmpDir, "summarizer.yaml"))
-	metadata := m["metadata"].(map[string]any)
-	assert.Equal(t, "2.0.0", metadata["version"])
 
 	spec := m["spec"].(map[string]any)
 	assert.Equal(t, "Summarize text", spec["description"])
@@ -544,4 +530,66 @@ func TestInitPromptCmd_WritesFileNotDirectory(t *testing.T) {
 
 	_, err = os.Stat(filepath.Join(tmpDir, "myprompt"))
 	assert.True(t, os.IsNotExist(err), "no directory named myprompt should be created")
+}
+
+// ---- decoder round-trip ----
+
+// TestInit_GeneratedYAMLDecodesCleanly verifies that every kind produced by
+// arctl init can be re-read by the v1alpha1 decoder without error:
+//
+//	arctl init <type> <name> -> arctl apply -f <name>/<type>.yaml
+func TestInit_GeneratedYAMLDecodesCleanly(t *testing.T) {
+	cases := []struct {
+		name      string
+		args      []string
+		yamlPath  []string // path components under tmpDir to the generated YAML
+		expectKey string
+	}{
+		{
+			name:      "agent",
+			args:      []string{"agent", "adk", "python", "myagent"},
+			yamlPath:  []string{"myagent", "agent.yaml"},
+			expectKey: "Agent",
+		},
+		{
+			name:      "mcp",
+			args:      []string{"mcp", "fastmcp-python", "myorg/myserver"},
+			yamlPath:  []string{"myserver", "mcp.yaml"},
+			expectKey: "MCPServer",
+		},
+		{
+			name:      "skill",
+			args:      []string{"skill", "myskill"},
+			yamlPath:  []string{"myskill", "skill.yaml"},
+			expectKey: "Skill",
+		},
+		{
+			name:      "prompt",
+			args:      []string{"prompt", "myprompt"},
+			yamlPath:  []string{"myprompt.yaml"},
+			expectKey: "Prompt",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			origDir, err := os.Getwd()
+			require.NoError(t, err)
+			require.NoError(t, os.Chdir(tmpDir))
+			defer func() { _ = os.Chdir(origDir) }()
+
+			cmd := declarative.NewInitCmd()
+			cmd.SetArgs(tc.args)
+			require.NoError(t, cmd.Execute())
+
+			parts := append([]string{tmpDir}, tc.yamlPath...)
+			data, err := os.ReadFile(filepath.Join(parts...))
+			require.NoError(t, err, "generated YAML should exist")
+			// Generated manifests should stay on the tag contract and decode cleanly.
+			obj, err := v1alpha1.Default.Decode(data)
+			require.NoError(t, err, "generated YAML must decode without error")
+			require.NotNil(t, obj)
+		})
+	}
 }

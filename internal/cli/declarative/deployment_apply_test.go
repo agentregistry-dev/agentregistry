@@ -13,17 +13,16 @@ import (
 
 // deploymentYAMLBadTemplate is a minimally-valid declarative deployment that
 // points at a non-existent agent. Apply rejects this server-side because the
-// referenced (name, version) is not a registered agent.
+// referenced (name, tag) is not a registered agent.
 const deploymentYAMLBadTemplate = `apiVersion: ar.dev/v1alpha1
 kind: Deployment
 metadata:
   name: nonexistent-agent
-  version: "0.1.0"
 spec:
   targetRef:
     kind: Agent
     name: nonexistent-agent
-    version: "0.1.0"
+    tag: "0.1.0"
   runtimeRef:
     kind: Runtime
     name: my-provider
@@ -36,11 +35,10 @@ spec:
 func TestDeploymentApply_InvalidTemplateRefSurfaces(t *testing.T) {
 	results := []arv0.ApplyResult{
 		{
-			Kind:    "deployment",
-			Name:    "nonexistent-agent",
-			Version: "0.1.0",
-			Status:  arv0.ApplyStatusFailed,
-			Error:   `agent "nonexistent-agent" version "0.1.0" not found`,
+			Kind:   "deployment",
+			Name:   "nonexistent-agent",
+			Status: arv0.ApplyStatusFailed,
+			Error:  `agent "nonexistent-agent" tag "0.1.0" not found`,
 		},
 	}
 	srv, _ := newApplyTestServer(t, results)

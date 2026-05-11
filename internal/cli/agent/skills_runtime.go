@@ -51,22 +51,22 @@ func resolveSkillSource(skill v1alpha1.ResourceRef) (resolvedSkillRef, error) {
 	}
 
 	localName := agentmanifest.RefBasename(registrySkillName)
-	version := strings.TrimSpace(skill.Version)
-	if version == "" {
-		version = "latest"
+	tag := strings.TrimSpace(skill.Tag)
+	if tag == "" {
+		tag = "latest"
 	}
 
-	skillResp, err := fetchSkillFromRegistry(registrySkillName, version)
+	skillResp, err := fetchSkillFromRegistry(registrySkillName, tag)
 	if err != nil {
 		return resolvedSkillRef{}, err
 	}
 	if skillResp == nil {
-		return resolvedSkillRef{}, fmt.Errorf("skill not found: %s (version %s)", registrySkillName, version)
+		return resolvedSkillRef{}, fmt.Errorf("skill not found: %s (tag %s)", registrySkillName, tag)
 	}
 
 	repoURL, err := extractSkillRepoURL(skillResp)
 	if err != nil {
-		return resolvedSkillRef{}, fmt.Errorf("skill %s (version %s): no git repository found", registrySkillName, version)
+		return resolvedSkillRef{}, fmt.Errorf("skill %s (tag %s): no git repository found", registrySkillName, tag)
 	}
 	return resolvedSkillRef{name: localName, repoURL: repoURL}, nil
 }

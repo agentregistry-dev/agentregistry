@@ -7,9 +7,15 @@
 //
 //	GET    {basePrefix}/{pluralKind}?namespace={ns}                   list
 //	GET    {basePrefix}/{pluralKind}/{name}?namespace={ns}            get latest
-//	GET    {basePrefix}/{pluralKind}/{name}/{version}?namespace={ns}  get exact version
-//	PUT    {basePrefix}/{pluralKind}/{name}/{version}?namespace={ns}  apply (idempotent upsert)
-//	DELETE {basePrefix}/{pluralKind}/{name}/{version}?namespace={ns}  delete
+//	GET    {basePrefix}/{pluralKind}/{name}/tags?namespace={ns}      list tags of one (tagged content kinds only)
+//	GET    {basePrefix}/{pluralKind}/{name}/{tag}?namespace={ns}     get exact tag (tagged content kinds only)
+//	PUT    {basePrefix}/{pluralKind}/{name}?namespace={ns}           apply mutable object (Provider/Deployment/config)
+//	DELETE {basePrefix}/{pluralKind}/{name}?namespace={ns}           delete mutable object
+//	DELETE {basePrefix}/{pluralKind}/{name}/{tag}?namespace={ns}     delete exact tag (tagged content kinds only)
+//
+// Direct PUT is registered only for mutable object stores. Content-registry
+// artifact kinds (Agent, MCPServer, RemoteMCPServer, Skill, Prompt) use
+// metadata.tag and are written through POST /v0/apply.
 package resource
 
 import (
@@ -51,7 +57,8 @@ type Config struct {
 	// "mcpservers"). If empty, defaults to strings.ToLower(Kind) + "s".
 	PluralKind string
 	// BasePrefix is the HTTP route prefix shared across kinds (e.g. "/v0").
-	// Routes extend it with `/{plural}/{name}/{version}`; namespace is
+	// Routes extend it with `/{plural}/{name}` and, for tagged artifacts,
+	// `/{plural}/{name}/{tag}`; namespace is
 	// carried as a query param (`?namespace={ns}`, default "default").
 	BasePrefix string
 	// Store is the v1alpha1store.Store bound to this kind's table. Callers
@@ -105,6 +112,10 @@ type Config struct {
 	// and writes the terminal Removed condition.
 	PostDelete func(ctx context.Context, obj v1alpha1.Object) error
 
+	// InitialFinalizers, when non-nil, seeds finalizers atomically on create.
+	// Updates preserve existing finalizers.
+	InitialFinalizers func(obj v1alpha1.Object) []string
+
 	// Authorize is optional; when set, every read and write handler
 	// (get / list / apply / delete) invokes it as an access gate before
 	// touching the store. Return nil to allow; return a huma error
@@ -115,19 +126,19 @@ type Config struct {
 	//
 	// nil hook matches the OSS default: public reads and writes, with
 	// authorization deferred to router-level middleware or the underlying
-	// auth.AuthzProvider. Enterprise builds that need per-kind gates
+	// auth.AuthzProvider. Downstream builds that need per-kind gates
 	// (e.g. "only registry admins can mutate Role") wire this callback.
 	//
 	// The hook is called after path parsing and — for apply — after the
 	// body decodes, but before any validation or store I/O. For list +
-	// cross-namespace list, Name and Version are empty; for get-latest,
-	// Version is empty; Object is non-nil only for apply.
+	// cross-namespace list, Name and Tag are empty; for get-latest,
+	// Tag is empty; Object is non-nil only for apply.
 	Authorize func(ctx context.Context, in AuthorizeInput) error
 
 	// ListFilter is optional; when set, list handlers consult it before
 	// querying the store and inject the returned predicate into
 	// ListOpts.ExtraWhere / ExtraArgs. This is the per-row authz seam —
-	// enterprise builds wire it to a per-user RBAC predicate so a
+	// downstream integrations wire it to a per-user RBAC predicate so a
 	// reader without grant for a given resource never sees the row in
 	// the list response, but reads at the row endpoint still 403 via
 	// Authorize.
@@ -146,34 +157,12 @@ type Config struct {
 	// surface rows with deletion_timestamp set even if the caller
 	// hasn't passed ?includeTerminating=true. Used by kinds whose
 	// teardown is operator-observable so `arctl get` can
-	// show phase=Terminating during in-flight cleanup; the row drops
-	// from the list once the reconciler hard-deletes it. The user's
-	// ?includeTerminating query value is OR-ed with this flag, so the
-	// caller can still force inclusion but never exclusion when the
-	// kind has opted in.
+	// show resources while finalizers are still draining.
+	//
+	// The ?includeTerminating query value is OR-ed with this flag, so
+	// the caller can still force inclusion but never exclusion when
+	// the kind has opted in.
 	IncludeTerminatingByDefault bool
-
-	// InitialFinalizers, when non-nil, is invoked on every apply (PUT
-	// + /v0/apply batch) to compute the finalizer set passed to Upsert.
-	// Returning nil/empty leaves the row with finalizers=[] — today's
-	// behavior. Returning a non-empty slice makes Store.Delete take the
-	// soft-delete path on the next DELETE, keeping the row visible to
-	// the kind's reconciler until it finishes platform-side teardown.
-	//
-	// The store applies the result only on create; updates preserve
-	// existing finalizers as before. Calling on every apply (rather
-	// than guarding with a create-detection load round-trip) keeps the
-	// pipeline straight-line — implementations should be cheap and
-	// side-effect-free. Reapply scenarios where a row already exists
-	// with the wrong finalizer set must use PatchFinalizers from a
-	// PostUpsert hook.
-	//
-	// Required for kinds whose teardown owns external infrastructure
-	// the reconciler is responsible for cleaning up. Without it, a
-	// concurrent DELETE between Upsert commit and any post-upsert
-	// finalizer write hits the hard-delete fast-path and orphans
-	// whatever the reconciler would have torn down.
-	InitialFinalizers func(obj v1alpha1.Object) []string
 }
 
 // AuthorizeInput is the context passed to Config.Authorize on every handler
@@ -191,8 +180,9 @@ type AuthorizeInput struct {
 	Namespace string
 	// Name is empty for list verbs.
 	Name string
-	// Version is empty for list or get-latest.
-	Version string
+	// Tag is populated for exact tagged content resource operations.
+	// Batch delete leaves Tag empty when deleting every tag for a name.
+	Tag string
 	// Object is non-nil only when Verb == "apply"; it carries the decoded
 	// request body post-validation-stamping (path identity already merged
 	// into metadata), so the hook can inspect labels / annotations / spec
@@ -230,7 +220,7 @@ func resolveNamespace(raw string, allowAll bool) string {
 type getInput struct {
 	Namespace string `query:"namespace" doc:"Namespace (internal; defaults to 'default')."`
 	Name      string `path:"name"`
-	Version   string `path:"version"`
+	Tag       string `path:"tag"`
 }
 
 type getLatestInput struct {
@@ -238,15 +228,26 @@ type getLatestInput struct {
 	Name      string `path:"name"`
 }
 
+type listTagsInput struct {
+	Namespace string `query:"namespace" doc:"Namespace (internal; defaults to 'default')."`
+	Name      string `path:"name"`
+}
+
 type deleteInput struct {
 	Namespace string `query:"namespace" doc:"Namespace (internal; defaults to 'default')."`
 	Name      string `path:"name"`
-	Version   string `path:"version"`
+	Tag       string `path:"tag"`
 	// Force=true skips the kind's PostDelete reconciliation hook
-	// (e.g. runtime teardown for Deployment) and only soft-deletes
+	// (e.g. provider teardown for Deployment) and only soft-deletes
 	// the row. Useful for orphaned records whose external state is
 	// already gone or unreachable.
-	Force bool `query:"force" doc:"Skip runtime-specific teardown and only remove the registry record." default:"false"`
+	Force bool `query:"force" doc:"Skip provider-specific teardown and only remove the registry record." default:"false"`
+}
+
+type deleteMutableInput struct {
+	Namespace string `query:"namespace" doc:"Namespace (internal; defaults to 'default')."`
+	Name      string `path:"name"`
+	Force     bool   `query:"force" doc:"Skip provider-specific teardown and only remove the registry record." default:"false"`
 }
 
 type listInput struct {
@@ -256,7 +257,7 @@ type listInput struct {
 	Limit      int    `query:"limit" doc:"Max items to return (default 50)." default:"50"`
 	Cursor     string `query:"cursor" doc:"Opaque pagination cursor."`
 	Labels     string `query:"labels" doc:"Label selector: key=value,key2=value2."`
-	LatestOnly bool   `query:"latestOnly" doc:"Only return rows with is_latest_version=true."`
+	LatestOnly bool   `query:"latestOnly" doc:"Only return the literal latest tag per (namespace, name)."`
 	// IncludeTerminating surfaces soft-deleted rows (deletionTimestamp != nil)
 	// which are hidden by default.
 	IncludeTerminating bool `query:"includeTerminating" doc:"Include rows with a deletionTimestamp."`
@@ -273,10 +274,9 @@ type listOutput[T v1alpha1.Object] struct {
 	}
 }
 
-type putInput[T v1alpha1.Object] struct {
+type putMutableInput[T v1alpha1.Object] struct {
 	Namespace string `query:"namespace" doc:"Namespace (internal; defaults to 'default')."`
 	Name      string `path:"name"`
-	Version   string `path:"version"`
 	Body      T
 }
 
@@ -298,7 +298,7 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 	// "all" on the list endpoint widens the scope to every namespace.
 	listPath := base + "/" + plural
 	itemPath := listPath + "/{name}"
-	itemVersionPath := itemPath + "/{version}"
+	itemTagPath := itemPath + "/{tag}"
 
 	// List: `/v0/{plural}?namespace=default` (or ?namespace=all).
 	huma.Register(api, huma.Operation{
@@ -328,7 +328,7 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		OperationID: "get-latest-" + strings.ToLower(kind),
 		Method:      http.MethodGet,
 		Path:        itemPath,
-		Summary:     fmt.Sprintf("Get the latest version of a %s", kind),
+		Summary:     fmt.Sprintf("Get the latest %s", kind),
 	}, func(ctx context.Context, in *getLatestInput) (*bodyOutput[T], error) {
 		ns := resolveNamespace(in.Namespace, false)
 		name, err := unescapePath("name", in.Name)
@@ -351,30 +351,49 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		return &bodyOutput[T]{Body: obj}, nil
 	})
 
-	// Get exact (name, version; namespace via query).
+	// List tags (name only; namespace via query). Tagged-artifact
+	// kinds only — mutable object stores have no concept of
+	// "every tag of a logical resource". Registered before the
+	// get-exact route below so the literal "tags" path segment
+	// wins over the `{tag}` capture in the underlying flow router
+	// (routes match in registration order).
+	if v1alpha1.IsTaggedArtifactKind(kind) {
+		registerListTags(api, cfg, newObj, kind, itemPath)
+	}
+
+	if v1alpha1.IsTaggedArtifactKind(kind) {
+		registerGetTagged(api, cfg, newObj, kind, itemTagPath)
+		registerDeleteTagged(api, cfg, newObj, kind, itemTagPath)
+	} else {
+		registerApplyMutable(api, cfg, newObj, kind, itemPath)
+		registerDeleteMutable(api, cfg, newObj, kind, itemPath)
+	}
+}
+
+func registerGetTagged[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T, kind, itemTagPath string) {
 	huma.Register(api, huma.Operation{
 		OperationID: "get-" + strings.ToLower(kind),
 		Method:      http.MethodGet,
-		Path:        itemVersionPath,
-		Summary:     fmt.Sprintf("Get a %s by name and version", kind),
+		Path:        itemTagPath,
+		Summary:     fmt.Sprintf("Get a %s by name and tag", kind),
 	}, func(ctx context.Context, in *getInput) (*bodyOutput[T], error) {
 		ns := resolveNamespace(in.Namespace, false)
 		name, err := unescapePath("name", in.Name)
 		if err != nil {
 			return nil, err
 		}
-		version, err := unescapePath("version", in.Version)
+		tag, err := unescapePath("tag", in.Tag)
 		if err != nil {
 			return nil, err
 		}
 		if cfg.Authorize != nil {
-			if err := cfg.Authorize(ctx, AuthorizeInput{Verb: "get", Kind: kind, Namespace: ns, Name: name, Version: version}); err != nil {
+			if err := cfg.Authorize(ctx, AuthorizeInput{Verb: "get", Kind: kind, Namespace: ns, Name: name, Tag: tag}); err != nil {
 				return nil, err
 			}
 		}
-		row, err := cfg.Store.Get(ctx, ns, name, version)
+		row, err := cfg.Store.Get(ctx, ns, name, tag)
 		if err != nil {
-			return nil, mapNotFound(err, kind, ns, name, version)
+			return nil, mapNotFound(err, kind, ns, name, tag)
 		}
 		obj, err := v1alpha1.EnvelopeFromRaw(newObj, row, kind)
 		if err != nil {
@@ -382,21 +401,57 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		}
 		return &bodyOutput[T]{Body: obj}, nil
 	})
+}
 
-	// Apply (upsert).
+// registerListTags wires the GET /{name}/tags endpoint for a
+// tagged-artifact kind. Extracted from Register to keep the per-kind
+// route registration sequence readable.
+func registerListTags[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T, kind, itemPath string) {
 	huma.Register(api, huma.Operation{
-		OperationID:   "apply-" + strings.ToLower(kind),
-		Method:        http.MethodPut,
-		Path:          itemVersionPath,
-		Summary:       fmt.Sprintf("Apply a %s (idempotent upsert)", kind),
-		DefaultStatus: http.StatusOK,
-	}, func(ctx context.Context, in *putInput[T]) (*bodyOutput[T], error) {
+		OperationID: "list-tags-" + strings.ToLower(kind),
+		Method:      http.MethodGet,
+		Path:        itemPath + "/tags",
+		Summary:     fmt.Sprintf("List all tags of a %s", kind),
+	}, func(ctx context.Context, in *listTagsInput) (*listOutput[T], error) {
 		ns := resolveNamespace(in.Namespace, false)
 		name, err := unescapePath("name", in.Name)
 		if err != nil {
 			return nil, err
 		}
-		version, err := unescapePath("version", in.Version)
+		if cfg.Authorize != nil {
+			if err := cfg.Authorize(ctx, AuthorizeInput{Verb: "list", Kind: kind, Namespace: ns, Name: name}); err != nil {
+				return nil, err
+			}
+		}
+		rows, err := cfg.Store.ListTags(ctx, ns, name)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("list tags "+kind, err)
+		}
+		items := make([]T, 0, len(rows))
+		for _, row := range rows {
+			obj, err := v1alpha1.EnvelopeFromRaw(newObj, row, kind)
+			if err != nil {
+				return nil, huma.Error500InternalServerError("decode "+kind, err)
+			}
+			items = append(items, obj)
+		}
+		out := &listOutput[T]{}
+		out.Body.Items = items
+		return out, nil
+	})
+}
+
+// registerApplyMutable wires name-only PUT for mutable object stores.
+func registerApplyMutable[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T, kind, itemPath string) {
+	huma.Register(api, huma.Operation{
+		OperationID:   "apply-" + strings.ToLower(kind),
+		Method:        http.MethodPut,
+		Path:          itemPath,
+		Summary:       fmt.Sprintf("Apply a %s (idempotent upsert)", kind),
+		DefaultStatus: http.StatusOK,
+	}, func(ctx context.Context, in *putMutableInput[T]) (*bodyOutput[T], error) {
+		ns := resolveNamespace(in.Namespace, false)
+		name, err := unescapePath("name", in.Name)
 		if err != nil {
 			return nil, err
 		}
@@ -416,16 +471,12 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		if meta.Name != "" && meta.Name != name {
 			return nil, huma.Error400BadRequest("metadata.name does not match path")
 		}
-		if meta.Version != "" && meta.Version != version {
-			return nil, huma.Error400BadRequest("metadata.version does not match path")
-		}
 
-		// Stamp resolved identity into metadata so applyCore sees the
-		// resolved values (clients may omit namespace/name/version in the
-		// body and rely on the path + query).
+		// Stamp resolved public identity into metadata so applyCore sees the
+		// resolved namespace/name. The store owns any private mutable-object
+		// backing-row identity.
 		meta.Namespace = ns
 		meta.Name = name
-		meta.Version = version
 		body.SetMetadata(*meta)
 
 		if _, ae := applyCore(ctx, cfg.Store, body, applyOpts{
@@ -435,15 +486,13 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 			PostUpsert:        cfg.PostUpsert,
 			InitialFinalizers: cfg.InitialFinalizers,
 		}, false); ae != nil {
-			return nil, mapApplyErrorToHuma(ae, kind, ns, name, version)
+			return nil, mapApplyErrorToHuma(ae, kind, ns, name, "")
 		}
 
-		// Read back so the response reflects the stored identity (assigned
-		// generation, default'd metadata) plus any status / annotation
-		// writes the PostUpsert hook performed. Failure to re-read after a
-		// successful apply degrades to a 500 rather than swallowing the
-		// already-persisted change silently.
-		row, err := cfg.Store.Get(ctx, ns, name, version)
+		// Read back so the response reflects the stored identity
+		// (assigned generation, default'd metadata) plus any status /
+		// annotation writes the PostUpsert hook performed.
+		row, err := cfg.Store.GetLatest(ctx, ns, name)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("read back "+kind, err)
 		}
@@ -453,62 +502,102 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		}
 		return &bodyOutput[T]{Body: obj}, nil
 	})
+}
 
-	// Delete (soft).
-	huma.Register(api, huma.Operation{
+func registerDeleteTagged[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T, kind, itemTagPath string) {
+	registerDelete(api, cfg, newObj, kind, itemTagPath, true)
+}
+
+func registerDeleteMutable[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T, kind, itemPath string) {
+	registerDelete(api, cfg, newObj, kind, itemPath, false)
+}
+
+func registerDelete[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T, kind, path string, tagged bool) {
+	op := huma.Operation{
 		OperationID:   "delete-" + strings.ToLower(kind),
 		Method:        http.MethodDelete,
-		Path:          itemVersionPath,
+		Path:          path,
 		Summary:       fmt.Sprintf("Delete a %s (soft-delete: sets deletionTimestamp)", kind),
 		DefaultStatus: http.StatusNoContent,
-	}, func(ctx context.Context, in *deleteInput) (*deleteOutput, error) {
+	}
+	if tagged {
+		huma.Register(api, op, func(ctx context.Context, in *deleteInput) (*deleteOutput, error) {
+			ns := resolveNamespace(in.Namespace, false)
+			name, err := unescapePath("name", in.Name)
+			if err != nil {
+				return nil, err
+			}
+			tag, err := unescapePath("tag", in.Tag)
+			if err != nil {
+				return nil, err
+			}
+			return runDelete(ctx, cfg, newObj, kind, ns, name, tag, in.Force)
+		})
+		return
+	}
+	huma.Register(api, op, func(ctx context.Context, in *deleteMutableInput) (*deleteOutput, error) {
 		ns := resolveNamespace(in.Namespace, false)
 		name, err := unescapePath("name", in.Name)
 		if err != nil {
 			return nil, err
 		}
-		version, err := unescapePath("version", in.Version)
-		if err != nil {
-			return nil, err
-		}
-
-		// Pre-read so PostDelete has the final spec to work with.
-		// Skipped when no hook is registered or when the caller asked
-		// for ?force=true (skip runtime teardown — orphan records /
-		// unreachable backends).
-		var preDelete v1alpha1.Object
-		runHook := cfg.PostDelete != nil && !in.Force
-		if runHook {
-			row, err := cfg.Store.Get(ctx, ns, name, version)
-			if err != nil {
-				return nil, mapNotFound(err, kind, ns, name, version)
-			}
-			obj, err := v1alpha1.EnvelopeFromRaw(newObj, row, kind)
-			if err != nil {
-				return nil, huma.Error500InternalServerError("decode "+kind, err)
-			}
-			preDelete = obj
-		}
-
-		dopts := deleteOpts{
-			Authorize:       cfg.Authorize,
-			PreDeleteObject: preDelete,
-		}
-		if runHook {
-			dopts.PostDelete = cfg.PostDelete
-		}
-		if ae := deleteCore(ctx, cfg.Store, kind, ns, name, version, dopts); ae != nil {
-			return nil, mapApplyErrorToHuma(ae, kind, ns, name, version)
-		}
-		return &deleteOutput{}, nil
+		return runDeleteLatest(ctx, cfg, newObj, kind, ns, name, in.Force)
 	})
+}
+
+func runDeleteLatest[T v1alpha1.Object](ctx context.Context, cfg Config, newObj func() T, kind, ns, name string, force bool) (*deleteOutput, error) {
+	row, err := cfg.Store.GetLatest(ctx, ns, name)
+	if err != nil {
+		return nil, mapNotFound(err, kind, ns, name, "")
+	}
+	obj, err := v1alpha1.EnvelopeFromRaw(newObj, row, kind)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("decode "+kind, err)
+	}
+	dopts := deleteOpts{Authorize: cfg.Authorize}
+	if cfg.PostDelete != nil && !force {
+		dopts.PostDelete = cfg.PostDelete
+		dopts.PreDeleteObject = obj
+	}
+	if ae := deleteCore(ctx, cfg.Store, kind, ns, name, "", dopts); ae != nil {
+		return nil, mapApplyErrorToHuma(ae, kind, ns, name, "")
+	}
+	return &deleteOutput{}, nil
+}
+
+func runDelete[T v1alpha1.Object](ctx context.Context, cfg Config, newObj func() T, kind, ns, name, tag string, force bool) (*deleteOutput, error) {
+	var preDelete v1alpha1.Object
+	runHook := cfg.PostDelete != nil && !force
+	if runHook {
+		row, err := cfg.Store.Get(ctx, ns, name, tag)
+		if err != nil {
+			return nil, mapNotFound(err, kind, ns, name, tag)
+		}
+		obj, err := v1alpha1.EnvelopeFromRaw(newObj, row, kind)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("decode "+kind, err)
+		}
+		preDelete = obj
+	}
+
+	dopts := deleteOpts{
+		Authorize:       cfg.Authorize,
+		PreDeleteObject: preDelete,
+	}
+	if runHook {
+		dopts.PostDelete = cfg.PostDelete
+	}
+	if ae := deleteCore(ctx, cfg.Store, kind, ns, name, tag, dopts); ae != nil {
+		return nil, mapApplyErrorToHuma(ae, kind, ns, name, tag)
+	}
+	return &deleteOutput{}, nil
 }
 
 // mapApplyErrorToHuma translates the stage-tagged applyError surface
 // from applyCore / deleteCore into the huma error shape the
 // single-resource handlers emit. Mirrors the per-stage HTTP-status
 // policy that used to be inlined in each closure.
-func mapApplyErrorToHuma(ae *applyError, kind, ns, name, version string) error {
+func mapApplyErrorToHuma(ae *applyError, kind, ns, name, tag string) error {
 	switch ae.Stage {
 	case stageAuth:
 		// Auth callbacks already return huma errors; propagate.
@@ -525,14 +614,14 @@ func mapApplyErrorToHuma(ae *applyError, kind, ns, name, version string) error {
 		if ae.Terminating {
 			return huma.Error409Conflict(fmt.Sprintf(
 				"%s %s/%s/%s is terminating; delete + re-apply once GC purges the row",
-				kind, ns, name, version))
+				kind, ns, name, tag))
 		}
 		return huma.Error500InternalServerError("upsert "+kind, ae.Err)
 	case stagePostUpsert:
 		return huma.Error500InternalServerError(kind+" post-upsert", ae.Err)
 	case stageDelete:
 		if ae.NotFound {
-			return mapNotFound(ae.Err, kind, ns, name, version)
+			return mapNotFound(ae.Err, kind, ns, name, tag)
 		}
 		return huma.Error500InternalServerError("delete "+kind, ae.Err)
 	case stagePostDelete:
@@ -604,12 +693,12 @@ func runList[T v1alpha1.Object](
 
 // mapNotFound converts a pkgdb.ErrNotFound error into a Huma 404 with a
 // consistent message. Other errors fall through as 500.
-func mapNotFound(err error, kind, namespace, name, version string) error {
+func mapNotFound(err error, kind, namespace, name, tag string) error {
 	if errors.Is(err, pkgdb.ErrNotFound) {
-		if version == "" {
+		if tag == "" {
 			return huma.Error404NotFound(fmt.Sprintf("%s %q/%q not found", kind, namespace, name))
 		}
-		return huma.Error404NotFound(fmt.Sprintf("%s %q/%q@%q not found", kind, namespace, name, version))
+		return huma.Error404NotFound(fmt.Sprintf("%s %q/%q@%q not found", kind, namespace, name, tag))
 	}
 	return huma.Error500InternalServerError("fetch "+kind, err)
 }

@@ -37,14 +37,14 @@ func NewFindingsStore(pool *pgxpool.Pool) *FindingsStore {
 // rescan state.
 func (s *FindingsStore) Replace(
 	ctx context.Context,
-	kind, namespace, name, version, source, scannedBy string,
+	kind, namespace, name, tag, source, scannedBy string,
 	findings []Finding,
 ) error {
 	return runInTx(ctx, s.pool, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, `
 			DELETE FROM v1alpha1.enrichment_findings
-			WHERE kind=$1 AND namespace=$2 AND name=$3 AND version=$4 AND source=$5
-		`, kind, namespace, name, version, source); err != nil {
+			WHERE kind=$1 AND namespace=$2 AND name=$3 AND tag=$4 AND source=$5
+		`, kind, namespace, name, tag, source); err != nil {
 			return fmt.Errorf("delete prior findings: %w", err)
 		}
 		for _, f := range findings {
@@ -62,10 +62,10 @@ func (s *FindingsStore) Replace(
 			}
 			if _, err := tx.Exec(ctx, `
 				INSERT INTO v1alpha1.enrichment_findings
-				    (kind, namespace, name, version, source, severity, finding_id, data, scanned_by, found_at)
+				    (kind, namespace, name, tag, source, severity, finding_id, data, scanned_by, found_at)
 				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 			`,
-				kind, namespace, name, version, source,
+				kind, namespace, name, tag, source,
 				f.Severity, f.ID, raw, scannedBy, foundAt,
 			); err != nil {
 				return fmt.Errorf("insert finding: %w", err)
@@ -75,17 +75,17 @@ func (s *FindingsStore) Replace(
 	})
 }
 
-// List returns every finding for a (kind, namespace, name, version).
+// List returns every finding for a (kind, namespace, name, tag).
 // Used by the UI drill-down "show me findings" view. Ordered by
 // severity DESC then found_at DESC.
 func (s *FindingsStore) List(
 	ctx context.Context,
-	kind, namespace, name, version string,
+	kind, namespace, name, tag string,
 ) ([]Finding, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT severity, finding_id, data, found_at
 		FROM v1alpha1.enrichment_findings
-		WHERE kind=$1 AND namespace=$2 AND name=$3 AND version=$4
+		WHERE kind=$1 AND namespace=$2 AND name=$3 AND tag=$4
 		ORDER BY
 		    CASE severity
 		        WHEN 'critical' THEN 0
@@ -95,7 +95,7 @@ func (s *FindingsStore) List(
 		        ELSE             4
 		    END,
 		    found_at DESC
-	`, kind, namespace, name, version)
+	`, kind, namespace, name, tag)
 	if err != nil {
 		return nil, fmt.Errorf("query findings: %w", err)
 	}
@@ -132,7 +132,7 @@ func (s *FindingsStore) List(
 // v1alpha1.Object instead of the four identity strings.
 func (s *FindingsStore) ListByObject(ctx context.Context, obj v1alpha1.Object) ([]Finding, error) {
 	m := obj.GetMetadata()
-	return s.List(ctx, obj.GetKind(), m.Namespace, m.Name, m.Version)
+	return s.List(ctx, obj.GetKind(), m.Namespace, m.Name, m.Tag)
 }
 
 // runInTx is a local copy of the database package helper; we don't

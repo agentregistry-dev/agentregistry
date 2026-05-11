@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
@@ -22,11 +23,11 @@ import (
 //
 // Responsibilities:
 //  1. resolve TargetRef + RuntimeRef via the supplied GetterFunc.
-//  2. dispatch to the adapter keyed by lowercased Runtime.Spec.Type.
+//  2. dispatch to the adapter keyed by Runtime.Spec.Type.
 //  3. merge returned conditions into Deployment.Status and adapter-owned
 //     annotations into Deployment.Metadata.Annotations.
 //  4. surface a structured error when no adapter is registered for a
-//     runtime's type.
+//     runtime's platform.
 //
 // Coordinator is NOT responsible for Upserting the Deployment row — that
 // happens upstream at the apply handler. Coordinator.Apply MUST be called
@@ -42,8 +43,8 @@ type Dependencies struct {
 	// Stores is the per-Kind generic Store map — output of
 	// internaldb.NewStores.
 	Stores map[string]*v1alpha1store.Store
-	// Adapters is the type → adapter map. Coordinator looks up by
-	// lowercased Runtime.Spec.Type; unmapped types surface
+	// Adapters is the platform → adapter map. Coordinator looks up by
+	// Runtime.Spec.Type; unmapped platforms surface
 	// UnsupportedDeploymentRuntimeError.
 	Adapters map[string]types.DeploymentAdapter
 	// Getter fetches typed Objects by ref. Coordinator uses it for
@@ -70,13 +71,13 @@ func NewCoordinator(deps Dependencies) *Coordinator {
 	}
 }
 
-// Apply drives a Deployment to its desired state on the backing runtime.
+// Apply drives a Deployment to its desired state on the backing platform.
 // Preconditions: the Deployment row exists (Store.Upsert has run); the
 // TargetRef + RuntimeRef resolve via the coordinator's Getter.
 //
 // Flow:
 //  1. resolve target (Agent or MCPServer) and runtime via Getter.
-//  2. pick the DeploymentAdapter keyed by lowercased Runtime.Spec.Type.
+//  2. pick the DeploymentAdapter keyed by Runtime.Spec.Type.
 //  3. reject the apply if the adapter doesn't support the target Kind.
 //  4. call adapter.Apply with the resolved inputs.
 //  5. merge returned conditions into Deployment.Status via PatchStatus.
@@ -175,7 +176,7 @@ func (c *Coordinator) Logs(ctx context.Context, deployment *v1alpha1.Deployment,
 
 // Discover enumerates out-of-band workloads for the supplied Runtime.
 // Empty slice + nil error means the adapter found nothing; mismatched
-// types surface UnsupportedDeploymentRuntimeError.
+// platforms surface UnsupportedDeploymentRuntimeError.
 func (c *Coordinator) Discover(ctx context.Context, runtime *v1alpha1.Runtime) ([]types.DiscoveryResult, error) {
 	if runtime == nil {
 		return nil, fmt.Errorf("%w: runtime is required", pkgdb.ErrInvalidInput)
@@ -198,7 +199,7 @@ func (c *Coordinator) resolveTarget(ctx context.Context, deployment *v1alpha1.De
 	}
 	obj, err := c.getter(ctx, ref)
 	if err != nil {
-		return nil, fmt.Errorf("resolve targetRef %s/%s@%s: %w", ref.Namespace, ref.Name, ref.Version, err)
+		return nil, fmt.Errorf("resolve targetRef %s/%s@%s: %w", ref.Namespace, ref.Name, ref.Tag, err)
 	}
 	if obj == nil {
 		return nil, fmt.Errorf("resolve targetRef %s/%s: nil object", ref.Namespace, ref.Name)
@@ -216,7 +217,7 @@ func (c *Coordinator) resolveRuntime(ctx context.Context, deployment *v1alpha1.D
 	}
 	obj, err := c.getter(ctx, ref)
 	if err != nil {
-		return nil, fmt.Errorf("resolve runtimeRef %s/%s@%s: %w", ref.Namespace, ref.Name, ref.Version, err)
+		return nil, fmt.Errorf("resolve runtimeRef %s/%s: %w", ref.Namespace, ref.Name, err)
 	}
 	runtime, ok := obj.(*v1alpha1.Runtime)
 	if !ok || runtime == nil {
@@ -225,19 +226,18 @@ func (c *Coordinator) resolveRuntime(ctx context.Context, deployment *v1alpha1.D
 	return runtime, nil
 }
 
-// resolveAdapter looks up the registered DeploymentAdapter for a runtime
-// type string. Spec.Type is canonicalized at admission time
-// (Runtime.Validate), so this lookup is exact-match against
-// adapter.Type(). Returns a sentinel UnsupportedDeploymentRuntimeError
-// so callers (MCP tool surface, HTTP handler) can discriminate "no
-// adapter" from transient plumbing errors.
+// resolveAdapter looks up the registered DeploymentAdapter for a platform
+// string. Returns a sentinel UnsupportedDeploymentRuntimeError so callers
+// (MCP tool surface, HTTP handler) can discriminate "no adapter" from
+// transient plumbing errors.
 func (c *Coordinator) resolveAdapter(runtimeType string) (types.DeploymentAdapter, error) {
-	if runtimeType == "" {
+	normalized := strings.TrimSpace(runtimeType)
+	if normalized == "" {
 		return nil, fmt.Errorf("%w: runtime type is empty", pkgdb.ErrInvalidInput)
 	}
-	adapter, ok := c.adapters[runtimeType]
+	adapter, ok := c.adapters[normalized]
 	if !ok {
-		return nil, &UnsupportedDeploymentRuntimeError{Type: runtimeType}
+		return nil, &UnsupportedDeploymentRuntimeError{Type: normalized}
 	}
 	return adapter, nil
 }
@@ -261,7 +261,6 @@ func (c *Coordinator) persistApplyResult(ctx context.Context, deployment *v1alph
 	patch := v1alpha1store.PatchOpts{}
 	if len(result.Conditions) > 0 {
 		patch.Status = v1alpha1.StatusPatcher(func(s *v1alpha1.Status) {
-			s.ObservedGeneration = deployment.Metadata.Generation
 			for _, cond := range result.Conditions {
 				s.SetCondition(cond)
 			}
@@ -276,7 +275,7 @@ func (c *Coordinator) persistApplyResult(ctx context.Context, deployment *v1alph
 			return annotations
 		}
 	}
-	if err := store.ApplyPatch(ctx, deployment.Metadata.Namespace, deployment.Metadata.Name, deployment.Metadata.Version, patch); err != nil {
+	if err := store.ApplyPatch(ctx, deployment.Metadata.Namespace, deployment.Metadata.Name, "", patch); err != nil {
 		return fmt.Errorf("persist apply result: %w", err)
 	}
 	return nil
@@ -303,7 +302,6 @@ func (c *Coordinator) persistRemoveResult(ctx context.Context, deployment *v1alp
 	patch := v1alpha1store.PatchOpts{}
 	if len(result.Conditions) > 0 {
 		patch.Status = v1alpha1.StatusPatcher(func(s *v1alpha1.Status) {
-			s.ObservedGeneration = deployment.Metadata.Generation
 			for _, cond := range result.Conditions {
 				s.SetCondition(cond)
 			}
@@ -312,7 +310,7 @@ func (c *Coordinator) persistRemoveResult(ctx context.Context, deployment *v1alp
 	if patch.Status == nil && patch.Annotations == nil {
 		return nil
 	}
-	if err := store.ApplyPatch(ctx, deployment.Metadata.Namespace, deployment.Metadata.Name, deployment.Metadata.Version, patch); err != nil {
+	if err := store.ApplyPatch(ctx, deployment.Metadata.Namespace, deployment.Metadata.Name, "", patch); err != nil {
 		if errors.Is(err, pkgdb.ErrNotFound) {
 			// Row already hard-deleted (finalizer-free fast path) — no
 			// place to record the Removed condition. Adapter teardown

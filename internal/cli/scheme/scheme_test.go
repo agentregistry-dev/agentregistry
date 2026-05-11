@@ -69,7 +69,6 @@ apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   name: acme/bot
-  version: "1.0.0"
 spec:
   source:
     image: ghcr.io/acme/bot:latest
@@ -85,7 +84,6 @@ spec:
 	assert.Equal(t, "ar.dev/v1alpha1", agent.GetAPIVersion())
 	assert.Equal(t, "Agent", agent.GetKind())
 	assert.Equal(t, "acme/bot", agent.Metadata.Name)
-	assert.Equal(t, "1.0.0", agent.Metadata.Version)
 	assert.Equal(t, "ghcr.io/acme/bot:latest", agent.Spec.Source.Image)
 }
 
@@ -95,7 +93,6 @@ apiVersion: ar.dev/v1alpha1
 kind: MCPServer
 metadata:
   name: acme/fetch
-  version: "1.0.0"
 spec:
   description: "Fetches URLs"
 ---
@@ -103,7 +100,6 @@ apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   name: acme/bot
-  version: "1.0.0"
 spec:
   description: "A bot"
   source:
@@ -127,8 +123,7 @@ func TestDecodeBytesAllowsSchemeRegisteredExtensionKind(t *testing.T) {
 apiVersion: ar.dev/v1alpha1
 kind: SchemeTestExtension
 metadata:
-  name: enterprise-only
-  version: "1"
+  name: extension-only
 spec:
   value: ok
 `
@@ -179,7 +174,6 @@ apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   name: acme/bot
-  version: "1.0.0"
 spec:
   source:
     image: ghcr.io/acme/bot:latest

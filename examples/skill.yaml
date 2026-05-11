@@ -2,7 +2,6 @@ apiVersion: ar.dev/v1alpha1
 kind: Skill
 metadata:
   name: summarize
-  version: "1.0.0"
 spec:
   title: Summarization
   category: nlp

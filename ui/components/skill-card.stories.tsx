@@ -8,7 +8,7 @@ const mockSkill: SkillResponse = {
     title: "Code Review",
     description:
       "Analyzes pull requests for code quality, security vulnerabilities, and adherence to best practices. Provides inline suggestions and summary reports.",
-    version: "1.3.0",
+    tag: "1.3.0",
     source: {
       repository: {
         url: "https://github.com/example/code-review-skill",
@@ -29,7 +29,7 @@ const minimalSkill: SkillResponse = {
   skill: {
     name: "hello-world",
     description: "A simple starter skill.",
-    version: "0.1.0",
+    tag: "0.1.0",
   },
   _meta: {},
 }

@@ -32,12 +32,10 @@ var KnownRuntimeTypes = map[string]struct{}{
 // target (an AWS account + role, a kagent cluster, a local daemon).
 // Multiple coexisting versions of the same (namespace, name) carry no
 // meaning — there is no "v1" vs "v2" of the same AWS role — so the
-// (namespace, name) pair is the identity. The storage layer still
-// requires a version string in its 3-tuple PK; callers pin it to a
-// constant ("1") rather than fabricate semantic versions.
+// (namespace, name) pair is the identity.
 func (r *Runtime) Validate() error {
 	var errs FieldErrors
-	errs = append(errs, ValidateObjectMetaUnversioned(r.Metadata)...)
+	errs = append(errs, ValidateObjectMeta(r.Metadata)...)
 	if r.Spec.Type == "" {
 		errs.Append("spec.type", fmt.Errorf("%w", ErrRequiredField))
 	} else if canonical, ok := canonicalRuntimeType(r.Spec.Type); ok {
@@ -51,12 +49,6 @@ func (r *Runtime) Validate() error {
 	}
 	return errs
 }
-
-// DefaultMetadataVersion satisfies MetadataVersionDefaulter so YAML
-// manifests for Runtime can omit metadata.version. The constant "1"
-// goes into the (namespace, name, version) PK; multi-version Runtime
-// is not a concept we expose.
-func (r *Runtime) DefaultMetadataVersion() string { return "1" }
 
 // canonicalRuntimeType case-insensitively resolves a user-supplied
 // spec.type string to its canonical CamelCase form. Returns the

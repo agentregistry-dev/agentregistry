@@ -9,7 +9,7 @@ const mockSkill: SkillResponse = {
     name: "code-review",
     title: "Code Review",
     description: "Analyzes pull requests for quality and security.",
-    version: "1.3.0",
+    tag: "1.3.0",
     source: {
       repository: {
         url: "https://github.com/example/code-review-skill",
@@ -32,7 +32,7 @@ describe("SkillCard", () => {
     expect(screen.getByText("Code Review")).toBeInTheDocument()
   })
 
-  it("renders description and version", () => {
+  it("renders description and tag", () => {
     render(<SkillCard skill={mockSkill} />)
     expect(screen.getByText("Analyzes pull requests for quality and security.")).toBeInTheDocument()
     expect(screen.getByText("1.3.0")).toBeInTheDocument()

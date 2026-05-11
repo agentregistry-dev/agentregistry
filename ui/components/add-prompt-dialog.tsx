@@ -17,7 +17,7 @@ interface AddPromptDialogProps {
 export function AddPromptDialog({ open, onOpenChange, onPromptAdded }: AddPromptDialogProps) {
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
-  const [version, setVersion] = useState("1.0.0")
+  const [tag, setTag] = useState("latest")
   const [content, setContent] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -31,8 +31,8 @@ export function AddPromptDialog({ open, onOpenChange, onPromptAdded }: AddPrompt
       if (!name.trim()) {
         throw new Error("Prompt name is required")
       }
-      if (!version.trim()) {
-        throw new Error("Version is required")
+      if (!tag.trim()) {
+        throw new Error("Tag is required")
       }
       if (!content.trim()) {
         throw new Error("Prompt content is required")
@@ -40,7 +40,7 @@ export function AddPromptDialog({ open, onOpenChange, onPromptAdded }: AddPrompt
 
       const promptData: PromptJson = {
         name: name.trim(),
-        version: version.trim(),
+        tag: tag.trim(),
         content: content.trim(),
         description: description.trim() || undefined,
       }
@@ -50,7 +50,7 @@ export function AddPromptDialog({ open, onOpenChange, onPromptAdded }: AddPrompt
       // Reset form
       setName("")
       setDescription("")
-      setVersion("1.0.0")
+      setTag("latest")
       setContent("")
 
       // Notify parent and close dialog
@@ -66,7 +66,7 @@ export function AddPromptDialog({ open, onOpenChange, onPromptAdded }: AddPrompt
   const handleCancel = () => {
     setName("")
     setDescription("")
-    setVersion("1.0.0")
+    setTag("latest")
     setContent("")
     setError(null)
     onOpenChange(false)
@@ -114,19 +114,19 @@ export function AddPromptDialog({ open, onOpenChange, onPromptAdded }: AddPrompt
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="version">
-              Version <span className="text-red-500">*</span>
+            <Label htmlFor="tag">
+              Tag <span className="text-red-500">*</span>
             </Label>
             <Input
-              id="version"
-              placeholder="1.0.0"
-              value={version}
-              onChange={(e) => setVersion(e.target.value)}
+              id="tag"
+              placeholder="latest"
+              value={tag}
+              onChange={(e) => setTag(e.target.value)}
               disabled={loading}
               required
             />
             <p className="text-xs text-muted-foreground">
-              e.g., &quot;1.0.0&quot;, &quot;2.3.1&quot;
+              e.g., &quot;latest&quot;, &quot;1.0.0&quot;, &quot;v2.3.1&quot;
             </p>
           </div>
 

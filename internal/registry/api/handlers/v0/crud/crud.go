@@ -1,16 +1,17 @@
 // Package v1alpha1crud wires the generic CRUD HTTP handlers for every
 // first-party v1alpha1 Kind shipped by this repo (Agent, MCPServer,
-// Skill, Prompt, Provider, Deployment). Per-kind registration is a
+// Skill, Prompt, Runtime, Deployment). Per-kind registration is a
 // single `register(...)` call in bindings.go's init(); resource.Register
 // handles every per-kind quirk internally (per-kind authz / list
 // filtering / post-upsert / post-delete threaded through PerKindHooks).
 //
-// Scope: only the per-kind CRUD surface (`/v0/{plural}/{name}/{version}`).
+// Scope: only the per-kind CRUD surface. Tagged artifacts use
+// `/v0/{plural}/{name}/{tag}`; mutable objects use `/v0/{plural}/{name}`.
 // Other v1alpha1 HTTP endpoints live in sibling packages — `/v0/import` in
-// importpipeline, `/v0/deployments/{name}/{version}/logs` in
+// importpipeline, `/v0/deployments/{name}/logs` in
 // deploymentlogs.
 //
-// First-party only: enterprise extension kinds (e.g. Role) do NOT
+// First-party only: extension kinds (e.g. Role) do NOT
 // register here — they wire their own resource.Register[T] call from
 // AppOptions.ExtraRoutes (see pkg/types/types.go).
 package crud
@@ -26,7 +27,7 @@ import (
 )
 
 // PerKindHooks groups optional, per-kind callbacks layered on top of
-// the shared per-call config. Wired by enterprise builds that need to
+// the shared per-call config. Wired by downstream builds that need to
 // inject authorization / filtering per resource kind without forking
 // the OSS registration. Both maps are keyed by canonical Kind name
 // (v1alpha1.KindAgent etc.); missing keys are treated as "no hook
@@ -39,17 +40,15 @@ type PerKindHooks struct {
 	// kind; see resource.Config.ListFilter.
 	ListFilters map[string]func(ctx context.Context, in resource.AuthorizeInput) (string, []any, error)
 	// PostUpserts run after a successful PUT; see resource.Config.PostUpsert.
-	// Wired by enterprise builds that need to mirror state into a
-	// platform-specific sidecar table on Provider apply, drive a
+	// Wired by downstream builds that need to mirror state into a
+	// type-specific sidecar table on Runtime apply, drive a
 	// reconciler, etc. Missing keys = no post-upsert hook for that kind.
 	PostUpserts map[string]func(ctx context.Context, obj v1alpha1.Object) error
 	// PostDeletes run after a successful DELETE; see
 	// resource.Config.PostDelete. Mirrors PostUpserts above.
 	PostDeletes map[string]func(ctx context.Context, obj v1alpha1.Object) error
-	// InitialFinalizers seed finalizers atomically with row creation;
-	// see resource.Config.InitialFinalizers. Used by kinds whose
-	// teardown is owned by a reconciler driving external
-	// infrastructure.
+	// InitialFinalizers seeds create-time finalizers per kind; see
+	// resource.Config.InitialFinalizers.
 	InitialFinalizers map[string]func(obj v1alpha1.Object) []string
 }
 

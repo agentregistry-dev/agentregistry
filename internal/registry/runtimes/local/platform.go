@@ -363,9 +363,9 @@ func translateLocalAgentToServiceConfig(runtimeDir string, agent *runtimetypes.A
 	}
 
 	var agentConfigDir string
-	if agent.Version != "" {
-		sanitizedVersion := utils.SanitizeVersion(agent.Version)
-		agentConfigDir = filepath.Join(runtimeDir, agent.Name, sanitizedVersion)
+	if agent.Tag != "" {
+		sanitizedTag := utils.SanitizeVersion(agent.Tag)
+		agentConfigDir = filepath.Join(runtimeDir, agent.Name, sanitizedTag)
 	} else {
 		agentConfigDir = filepath.Join(runtimeDir, agent.Name)
 	}

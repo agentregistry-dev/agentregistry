@@ -62,7 +62,6 @@ Examples:
 
 func newInitAgentCmd() *cobra.Command {
 	var (
-		initVersion       string
 		initDescription   string
 		initModelProvider string
 		initModelName     string
@@ -131,8 +130,11 @@ Supported languages:  python (for adk)`,
 				return err
 			}
 			agentConfig := &agentcommon.AgentConfig{
-				Name:                  name,
-				Version:               initVersion,
+				Name: name,
+				// Version here is only the runtime-advertised value baked
+				// into the scaffolded source. Declarative identity is
+				// written below as v1alpha1 metadata.
+				Version:               "0.1.0",
 				Description:           initDescription,
 				Image:                 image,
 				Directory:             projectDir,
@@ -150,7 +152,7 @@ Supported languages:  python (for adk)`,
 			}
 
 			// Overwrite agent.yaml with the declarative format.
-			if err := writeDeclarativeAgentYAML(projectDir, name, initVersion, image, language, framework, modelProvider, modelName, initDescription, initGit, initMCPs, initSkills, initPrompts); err != nil {
+			if err := writeDeclarativeAgentYAML(projectDir, name, image, language, framework, modelProvider, modelName, initDescription, initGit, initMCPs, initSkills, initPrompts); err != nil {
 				return fmt.Errorf("writing declarative agent.yaml: %w", err)
 			}
 
@@ -165,23 +167,21 @@ Supported languages:  python (for adk)`,
 		},
 	}
 
-	cmd.Flags().StringVar(&initVersion, "version", "0.1.0", "Initial version")
 	cmd.Flags().StringVar(&initDescription, "description", "", "Agent description")
 	cmd.Flags().StringVar(&initModelProvider, "model-provider", "Gemini", "Model provider (OpenAI, Anthropic, Gemini, AzureOpenAI, Agentgateway)")
 	cmd.Flags().StringVar(&initModelName, "model-name", "gemini-2.5-flash", "Model name")
 	cmd.Flags().StringVar(&initImage, "image", "", "Docker image (default: localhost:5001/<name>:latest)")
 	cmd.Flags().StringVar(&initGit, "git", "", "Git repository URL (GitHub, GitLab, Bitbucket)")
-	cmd.Flags().StringArrayVar(&initMCPs, "mcp", nil, "Registry MCP server to reference: name[@version] (repeatable)")
-	cmd.Flags().StringArrayVar(&initSkills, "skill", nil, "Registry skill to reference: name[@version] (repeatable)")
-	cmd.Flags().StringArrayVar(&initPrompts, "prompt", nil, "Registry prompt to reference: name[@version] (repeatable)")
+	cmd.Flags().StringArrayVar(&initMCPs, "mcp", nil, "Registry MCP server to reference: name[@tag] (repeatable)")
+	cmd.Flags().StringArrayVar(&initSkills, "skill", nil, "Registry skill to reference: name[@tag] (repeatable)")
+	cmd.Flags().StringArrayVar(&initPrompts, "prompt", nil, "Registry prompt to reference: name[@tag] (repeatable)")
 
 	return cmd
 }
 
-// parseNameVersion splits "name@version" into (name, version).
-// If no @ is present, version defaults to "latest".
-// If the name part is empty (e.g. "@1.0.0"), the whole string is treated as the name.
-func parseNameVersion(s string) (string, string) {
+// parseNameTag splits "name@tag" into (name, tag). If no @ is present, tag defaults to "latest". If the name
+// part is empty (e.g. "@stable"), the whole string is treated as the name.
+func parseNameTag(s string) (string, string) {
 	if i := strings.LastIndex(s, "@"); i > 0 {
 		return s[:i], s[i+1:]
 	}
@@ -189,7 +189,7 @@ func parseNameVersion(s string) (string, string) {
 }
 
 // writeDeclarativeAgentYAML writes agent.yaml in the ar.dev/v1alpha1 declarative format.
-func writeDeclarativeAgentYAML(projectDir, name, ver, image, language, framework, modelProvider, modelName, description, gitURL string, mcps, skills, prompts []string) error {
+func writeDeclarativeAgentYAML(projectDir, name, image, language, framework, modelProvider, modelName, description, gitURL string, mcps, skills, prompts []string) error {
 	desc := description
 	if desc == "" {
 		desc = fmt.Sprintf("%s agent", name)
@@ -201,8 +201,7 @@ func writeDeclarativeAgentYAML(projectDir, name, ver, image, language, framework
 			Kind:       v1alpha1.KindAgent,
 		},
 		Metadata: v1alpha1.ObjectMeta{
-			Name:    name,
-			Version: ver,
+			Name: name,
 		},
 		Spec: v1alpha1.AgentSpec{
 			Language:      language,
@@ -223,29 +222,29 @@ func writeDeclarativeAgentYAML(projectDir, name, ver, image, language, framework
 	}
 
 	for _, raw := range mcps {
-		serverName, mcpVer := parseNameVersion(raw)
+		serverName, mcpTag := parseNameTag(raw)
 		agent.Spec.MCPServers = append(agent.Spec.MCPServers, v1alpha1.ResourceRef{
-			Kind:    v1alpha1.KindMCPServer,
-			Name:    serverName,
-			Version: mcpVer,
+			Kind: v1alpha1.KindMCPServer,
+			Name: serverName,
+			Tag:  mcpTag,
 		})
 	}
 
 	for _, raw := range skills {
-		skillName, skillVer := parseNameVersion(raw)
+		skillName, skillTag := parseNameTag(raw)
 		agent.Spec.Skills = append(agent.Spec.Skills, v1alpha1.ResourceRef{
-			Kind:    v1alpha1.KindSkill,
-			Name:    skillName,
-			Version: skillVer,
+			Kind: v1alpha1.KindSkill,
+			Name: skillName,
+			Tag:  skillTag,
 		})
 	}
 
 	for _, raw := range prompts {
-		promptName, promptVer := parseNameVersion(raw)
+		promptName, promptTag := parseNameTag(raw)
 		agent.Spec.Prompts = append(agent.Spec.Prompts, v1alpha1.ResourceRef{
-			Kind:    v1alpha1.KindPrompt,
-			Name:    promptName,
-			Version: promptVer,
+			Kind: v1alpha1.KindPrompt,
+			Name: promptName,
+			Tag:  promptTag,
 		})
 	}
 
@@ -322,7 +321,6 @@ var supportedMCPFrameworks = map[string]struct{}{
 
 func newInitMCPCmd() *cobra.Command {
 	var (
-		initVersion     string
 		initDescription string
 		initImage       string
 	)
@@ -340,7 +338,7 @@ The generated mcp.yaml can be applied directly:
 
 Supported frameworks: fastmcp-python, mcp-go`,
 		Example: `  arctl init mcp fastmcp-python myorg/my-server
-  arctl init mcp mcp-go myorg/my-server --version 1.0.0`,
+  arctl init mcp mcp-go myorg/my-server`,
 		Args:         cobra.ExactArgs(2),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -379,7 +377,11 @@ Supported frameworks: fastmcp-python, mcp-go`,
 			}
 			cfg := mcptemplates.ProjectConfig{
 				ProjectName: dirName,
-				Version:     initVersion,
+				// Version here is the default version baked into the
+				// scaffolded source (e.g. the mcp-go server's advertised
+				// Implementation.Version). Declarative identity is written
+				// below as v1alpha1 metadata.
+				Version:     "0.1.0",
 				Description: initDescription,
 				Directory:   projectDir,
 				NoGit:       false,
@@ -388,7 +390,7 @@ Supported frameworks: fastmcp-python, mcp-go`,
 				return fmt.Errorf("generating MCP project: %w", err)
 			}
 
-			if err := writeDeclarativeMCPYAML(projectDir, fullName, initVersion, image, initDescription); err != nil {
+			if err := writeDeclarativeMCPYAML(projectDir, fullName, image, initDescription); err != nil {
 				return fmt.Errorf("writing declarative mcp.yaml: %w", err)
 			}
 
@@ -403,14 +405,14 @@ Supported frameworks: fastmcp-python, mcp-go`,
 		},
 	}
 
-	cmd.Flags().StringVar(&initVersion, "version", "0.1.0", "Initial version")
 	cmd.Flags().StringVar(&initDescription, "description", "", "MCP server description")
 	cmd.Flags().StringVar(&initImage, "image", "", "Docker image (default: localhost:5001/<name>:latest)")
 
 	return cmd
 }
 
-func writeDeclarativeMCPYAML(projectDir, name, ver, image, description string) error {
+// writeDeclarativeMCPYAML writes mcp.yaml in the ar.dev/v1alpha1 declarative format.
+func writeDeclarativeMCPYAML(projectDir, name, image, description string) error {
 	nameParts := strings.SplitN(name, "/", 2)
 	shortName := nameParts[len(nameParts)-1]
 
@@ -425,8 +427,7 @@ func writeDeclarativeMCPYAML(projectDir, name, ver, image, description string) e
 			Kind:       v1alpha1.KindMCPServer,
 		},
 		Metadata: v1alpha1.ObjectMeta{
-			Name:    name,
-			Version: ver,
+			Name: name,
 		},
 		Spec: v1alpha1.MCPServerSpec{
 			Title:       shortName,
@@ -453,7 +454,6 @@ func writeDeclarativeMCPYAML(projectDir, name, ver, image, description string) e
 
 func newInitSkillCmd() *cobra.Command {
 	var (
-		initVersion     string
 		initDescription string
 	)
 
@@ -490,7 +490,7 @@ The generated skill.yaml can be applied directly:
 				return fmt.Errorf("generating skill project: %w", err)
 			}
 
-			if err := writeDeclarativeSkillYAML(projectDir, name, initVersion, initDescription); err != nil {
+			if err := writeDeclarativeSkillYAML(projectDir, name, initDescription); err != nil {
 				return fmt.Errorf("writing declarative skill.yaml: %w", err)
 			}
 
@@ -503,13 +503,13 @@ The generated skill.yaml can be applied directly:
 		},
 	}
 
-	cmd.Flags().StringVar(&initVersion, "version", "0.1.0", "Initial version")
 	cmd.Flags().StringVar(&initDescription, "description", "", "Skill description")
 
 	return cmd
 }
 
-func writeDeclarativeSkillYAML(projectDir, name, ver, description string) error {
+// writeDeclarativeSkillYAML writes skill.yaml in the ar.dev/v1alpha1 declarative format.
+func writeDeclarativeSkillYAML(projectDir, name, description string) error {
 	desc := description
 	if desc == "" {
 		desc = fmt.Sprintf("%s skill", name)
@@ -521,8 +521,7 @@ func writeDeclarativeSkillYAML(projectDir, name, ver, description string) error 
 			Kind:       v1alpha1.KindSkill,
 		},
 		Metadata: v1alpha1.ObjectMeta{
-			Name:    name,
-			Version: ver,
+			Name: name,
 		},
 		Spec: v1alpha1.SkillSpec{
 			Title:       name,
@@ -542,7 +541,6 @@ func writeDeclarativeSkillYAML(projectDir, name, ver, description string) error 
 
 func newInitPromptCmd() *cobra.Command {
 	var (
-		initVersion     string
 		initDescription string
 		initContent     string
 	)
@@ -574,7 +572,7 @@ The generated file can be applied directly:
 			// Prompts are just a YAML file — no project directory needed.
 			outPath := filepath.Join(cwd, name+".yaml")
 
-			if err := writeDeclarativePromptYAML(outPath, name, initVersion, initDescription, initContent); err != nil {
+			if err := writeDeclarativePromptYAML(outPath, name, initDescription, initContent); err != nil {
 				return fmt.Errorf("writing declarative prompt.yaml: %w", err)
 			}
 
@@ -587,14 +585,14 @@ The generated file can be applied directly:
 		},
 	}
 
-	cmd.Flags().StringVar(&initVersion, "version", "0.1.0", "Initial version")
 	cmd.Flags().StringVar(&initDescription, "description", "", "Prompt description")
 	cmd.Flags().StringVar(&initContent, "content", "You are a helpful assistant.", "Initial prompt content")
 
 	return cmd
 }
 
-func writeDeclarativePromptYAML(path, name, ver, description, content string) error {
+// writeDeclarativePromptYAML writes <name>.yaml in the ar.dev/v1alpha1 declarative format.
+func writeDeclarativePromptYAML(path, name, description, content string) error {
 	desc := description
 	if desc == "" {
 		desc = fmt.Sprintf("%s prompt", name)
@@ -606,8 +604,7 @@ func writeDeclarativePromptYAML(path, name, ver, description, content string) er
 			Kind:       v1alpha1.KindPrompt,
 		},
 		Metadata: v1alpha1.ObjectMeta{
-			Name:    name,
-			Version: ver,
+			Name: name,
 		},
 		Spec: v1alpha1.PromptSpec{
 			Description: desc,

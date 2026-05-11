@@ -25,7 +25,7 @@ import (
 )
 
 var (
-	runVersion   string
+	runTag       string
 	runInspector bool
 	runYes       bool
 	runVerbose   bool
@@ -49,7 +49,7 @@ For local projects, the server is automatically built before running. Use --no-b
 }
 
 func init() {
-	RunCmd.Flags().StringVar(&runVersion, "version", "", "Specify the version of the server to run")
+	RunCmd.Flags().StringVar(&runTag, "tag", "", "Tag of the server to run")
 	RunCmd.Flags().BoolVar(&runInspector, "inspector", false, "Launch MCP Inspector to interact with the server")
 	RunCmd.Flags().BoolVarP(&runYes, "yes", "y", false, "Automatically accept all prompts (use default values)")
 	RunCmd.Flags().BoolVar(&runVerbose, "verbose", false, "Enable verbose logging")
@@ -68,9 +68,10 @@ func runRun(cmd *cobra.Command, args []string) error {
 	if apiClient == nil {
 		return fmt.Errorf("API client not initialized")
 	}
+	requestedTag := runTag
 
-	// Use the common server version selection logic
-	server, err := selectServerVersion(serverNameOrPath, runVersion, runYes)
+	// Use the common server tag selection logic.
+	server, err := selectServerTag(serverNameOrPath, requestedTag, runYes)
 	if err != nil {
 		return err
 	}
@@ -135,7 +136,7 @@ func runMCPServerWithRuntime(ctx context.Context, server *v1alpha1.MCPServer) er
 		return fmt.Errorf("local runtime config is required")
 	}
 
-	fmt.Printf("Starting MCP server: %s (version %s)...\n", server.Metadata.Name, server.Metadata.Version)
+	fmt.Printf("Starting MCP server: %s (tag %s)...\n", server.Metadata.Name, server.Metadata.Tag)
 
 	if err := localplatform.WriteLocalRuntimeFiles(platformDir, cfg, agentGatewayPort); err != nil {
 		return fmt.Errorf("failed to write local runtime files: %w", err)

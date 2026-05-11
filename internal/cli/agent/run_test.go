@@ -278,7 +278,7 @@ func TestRenderComposeFromManifest_WithSkills(t *testing.T) {
 		"test-agent",
 		"docker.io/org/test-agent:latest",
 		"openai", "gpt-4o",
-		[]v1alpha1.ResourceRef{{Kind: v1alpha1.KindSkill, Name: "skill-a", Version: "1"}},
+		[]v1alpha1.ResourceRef{{Kind: v1alpha1.KindSkill, Name: "skill-a", Tag: "1"}},
 	)
 
 	data, err := renderComposeFromManifest(resolved, "1.2.3", 8080)

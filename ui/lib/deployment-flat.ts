@@ -20,12 +20,11 @@ export type FlatStatus =
   | "unknown"
 
 export interface FlatDeployment {
-  // Identity. `id` is a composite of the v1alpha1 (namespace, name, version)
-  // triple so existing UI that keys lists by `id` stays stable.
+  // Identity. `id` is a composite of the public v1alpha1 namespace/name pair.
   id: string
   namespace: string
   name: string
-  version: string
+  tag: string
   // Target (what's being deployed) — from spec.targetRef.
   serverName: string
   resourceType: "agent" | "mcp" | string
@@ -43,8 +42,8 @@ export interface FlatDeployment {
 export function toFlatDeployment(d: Deployment): FlatDeployment {
   const ns = d.metadata.namespace ?? "default"
   const name = d.metadata.name
-  const version = d.metadata.version ?? ""
-  const id = `${ns}/${name}/${version}`
+  const tag = d.spec.targetRef.tag ?? "latest"
+  const id = `${ns}/${name}`
 
   const targetName = d.spec.targetRef.name
   const targetKind = d.spec.targetRef.kind
@@ -58,7 +57,7 @@ export function toFlatDeployment(d: Deployment): FlatDeployment {
     id,
     namespace: ns,
     name,
-    version,
+    tag,
     serverName: targetName,
     resourceType,
     runtimeId: d.spec.runtimeRef.name,

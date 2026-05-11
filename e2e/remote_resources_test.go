@@ -12,28 +12,28 @@ import (
 )
 
 // verifyRemoteMCPServerExists checks that the RemoteMCPServer exists in the registry via HTTP GET.
-func verifyRemoteMCPServerExists(t *testing.T, regURL, name, version string) {
+func verifyRemoteMCPServerExists(t *testing.T, regURL, name, tag string) {
 	t.Helper()
-	resp := RegistryGet(t, resourceURL(regURL, "remotemcpservers", name, version))
+	resp := RegistryGet(t, resourceURL(regURL, "remotemcpservers", name, tag))
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("Expected RemoteMCPServer %s@%s to exist (HTTP 200) but got %d", name, version, resp.StatusCode)
+		t.Fatalf("Expected RemoteMCPServer %s@%s to exist (HTTP 200) but got %d", name, tag, resp.StatusCode)
 	}
 }
 
 // TestDeclarativeApply_RemoteMCPServer covers apply → get → delete for the
 // RemoteMCPServer kind. Verifies the row is created and is reachable under
-// the canonical /v0/remotemcpservers/{name}/{version} path.
+// the canonical /v0/remotemcpservers/{name}/{tag} path.
 func TestDeclarativeApply_RemoteMCPServer(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 
 	name := "e2e-test/" + UniqueNameWithPrefix("decl-remote-mcp")
-	version := "0.0.1-e2e"
+	tag := "latest"
 
-	RunArctl(t, tmpDir, "delete", "remote-mcp", name, "--version", version, "--registry-url", regURL)
+	RunArctl(t, tmpDir, "delete", "remote-mcp", name, "--tag", tag, "--registry-url", regURL)
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "remote-mcp", name, "--version", version, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "remote-mcp", name, "--tag", tag, "--registry-url", regURL)
 	})
 
 	yaml := fmt.Sprintf(`
@@ -41,14 +41,13 @@ apiVersion: ar.dev/v1alpha1
 kind: RemoteMCPServer
 metadata:
   name: %s
-  version: "%s"
 spec:
   title: E2E Remote MCP Server
   description: Hosted MCP endpoint for the declarative-apply E2E test
   remote:
     type: streamable-http
     url: https://example.test/mcp
-`, name, version)
+`, name)
 
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "remote-mcp.yaml", yaml)
 
@@ -56,7 +55,7 @@ spec:
 	RequireSuccess(t, result)
 	RequireOutputContains(t, result, "RemoteMCPServer/"+name)
 
-	verifyRemoteMCPServerExists(t, regURL, name, version)
+	verifyRemoteMCPServerExists(t, regURL, name, tag)
 }
 
 // TestDeclarativeApply_AgentReferencesRemoteMCPServer covers the
@@ -70,13 +69,13 @@ func TestDeclarativeApply_AgentReferencesRemoteMCPServer(t *testing.T) {
 
 	remoteName := "e2e-test/" + UniqueNameWithPrefix("decl-remote-mcp-ref")
 	agentName := UniqueAgentName("decl-agent-ref-remote")
-	version := "0.0.1-e2e"
+	tag := "latest"
 
-	RunArctl(t, tmpDir, "delete", "remote-mcp", remoteName, "--version", version, "--registry-url", regURL)
-	RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", version, "--registry-url", regURL)
+	RunArctl(t, tmpDir, "delete", "remote-mcp", remoteName, "--tag", tag, "--registry-url", regURL)
+	RunArctl(t, tmpDir, "delete", "agent", agentName, "--tag", tag, "--registry-url", regURL)
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", version, "--registry-url", regURL)
-		RunArctl(t, tmpDir, "delete", "remote-mcp", remoteName, "--version", version, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "agent", agentName, "--tag", tag, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "remote-mcp", remoteName, "--tag", tag, "--registry-url", regURL)
 	})
 
 	yaml := fmt.Sprintf(`
@@ -84,7 +83,6 @@ apiVersion: ar.dev/v1alpha1
 kind: RemoteMCPServer
 metadata:
   name: %s
-  version: "%s"
 spec:
   remote:
     type: streamable-http
@@ -94,7 +92,6 @@ apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   name: %s
-  version: "%s"
 spec:
   image: ghcr.io/e2e-test/agent-ref-remote:latest
   description: Agent that wires in a RemoteMCPServer via Kind discrimination
@@ -105,8 +102,8 @@ spec:
   mcpServers:
     - kind: RemoteMCPServer
       name: %s
-      version: "%s"
-`, remoteName, version, agentName, version, remoteName, version)
+      tag: %s
+`, remoteName, agentName, remoteName, tag)
 
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "stack.yaml", yaml)
 
@@ -115,6 +112,6 @@ spec:
 	RequireOutputContains(t, result, "RemoteMCPServer/"+remoteName)
 	RequireOutputContains(t, result, "Agent/"+agentName)
 
-	verifyRemoteMCPServerExists(t, regURL, remoteName, version)
-	verifyAgentExists(t, regURL, agentName, version)
+	verifyRemoteMCPServerExists(t, regURL, remoteName, tag)
+	verifyAgentExists(t, regURL, agentName, tag)
 }

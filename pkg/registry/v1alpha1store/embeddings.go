@@ -17,52 +17,71 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/semantic"
 )
 
-// SetEmbedding writes a SemanticEmbedding onto the row identified by
-// (namespace, name, version). Called by the indexer after the provider
+// SetEmbedding writes a SemanticEmbedding onto a row. Tagged-artifact stores
+// require tag=metadata.tag; mutable-object stores ignore tag and
+// address rows by namespace/name. Called by the indexer after the provider
 // generates a fresh vector. Not part of Upsert: embeddings regenerate on a
 // different cadence than spec changes (the indexer reacts to status NOTIFY,
 // possibly asynchronously), and the caller already owns idempotency via the
 // Checksum.
 //
 // Returns pkgdb.ErrNotFound if the row doesn't exist.
-func (s *Store) SetEmbedding(ctx context.Context, namespace, name, version string, emb semantic.SemanticEmbedding) error {
-	if namespace == "" || name == "" || version == "" {
-		return errors.New("v1alpha1 store: namespace, name, and version are required")
+func (s *Store) SetEmbedding(ctx context.Context, namespace, name, tag string, emb semantic.SemanticEmbedding) error {
+	if namespace == "" || name == "" {
+		return errors.New("v1alpha1 store: namespace and name are required")
+	}
+	if s.behavior == TaggedArtifactStore && tag == "" {
+		return errors.New("v1alpha1 store: tag is required")
 	}
 	literal, err := VectorLiteral(emb.Vector)
 	if err != nil {
 		return fmt.Errorf("encode vector: %w", err)
 	}
-	tag, err := s.pool.Exec(ctx,
+	args := []any{namespace, name}
+	where := "namespace=$1 AND name=$2"
+	next := 3
+	if s.behavior == TaggedArtifactStore {
+		args = append(args, tag)
+		where += " AND tag=$3"
+		next = 4
+	}
+	args = append(args, literal, emb.Provider, emb.Model, emb.Dimensions, emb.Checksum)
+	cmdTag, err := s.pool.Exec(ctx,
 		fmt.Sprintf(`
 			UPDATE %s
-			SET semantic_embedding              = $4::vector,
-			    semantic_embedding_provider     = $5,
-			    semantic_embedding_model        = $6,
-			    semantic_embedding_dimensions   = $7,
-			    semantic_embedding_checksum     = $8,
+			SET semantic_embedding              = $%d::vector,
+			    semantic_embedding_provider     = $%d,
+			    semantic_embedding_model        = $%d,
+			    semantic_embedding_dimensions   = $%d,
+			    semantic_embedding_checksum     = $%d,
 			    semantic_embedding_generated_at = NOW()
-			WHERE namespace=$1 AND name=$2 AND version=$3`, s.table),
-		namespace, name, version,
-		literal,
-		emb.Provider, emb.Model, emb.Dimensions, emb.Checksum,
+			WHERE %s`, s.table, next, next+1, next+2, next+3, next+4, where),
+		args...,
 	)
 	if err != nil {
 		return fmt.Errorf("set embedding: %w", err)
 	}
-	if tag.RowsAffected() == 0 {
+	if cmdTag.RowsAffected() == 0 {
 		return pkgdb.ErrNotFound
 	}
 	return nil
 }
 
-// GetEmbeddingMetadata returns the embedding provenance columns for
-// (namespace, name, version) without reading the vector itself. Used by the
-// indexer to decide whether a row needs re-indexing (comparing Checksum).
+// GetEmbeddingMetadata returns embedding provenance columns without reading the
+// vector itself. Tagged-artifact stores require tag=metadata.tag;
+// mutable-object stores ignore tag and address rows by namespace/name.
+// Used by the indexer to decide whether a row needs re-indexing (comparing
+// Checksum).
 //
 // Returns pkgdb.ErrNotFound if the row doesn't exist. Returns (nil, nil)
 // when the row exists but has no embedding yet (generated_at IS NULL).
-func (s *Store) GetEmbeddingMetadata(ctx context.Context, namespace, name, version string) (*semantic.SemanticEmbeddingMetadata, error) {
+func (s *Store) GetEmbeddingMetadata(ctx context.Context, namespace, name, tag string) (*semantic.SemanticEmbeddingMetadata, error) {
+	if namespace == "" || name == "" {
+		return nil, errors.New("v1alpha1 store: namespace and name are required")
+	}
+	if s.behavior == TaggedArtifactStore && tag == "" {
+		return nil, errors.New("v1alpha1 store: tag is required")
+	}
 	var (
 		provider    *string
 		model       *string
@@ -70,14 +89,20 @@ func (s *Store) GetEmbeddingMetadata(ctx context.Context, namespace, name, versi
 		checksum    *string
 		generatedAt *time.Time
 	)
+	args := []any{namespace, name}
+	where := "namespace=$1 AND name=$2"
+	if s.behavior == TaggedArtifactStore {
+		args = append(args, tag)
+		where += " AND tag=$3"
+	}
 	err := s.pool.QueryRow(ctx,
 		fmt.Sprintf(`
 			SELECT semantic_embedding_provider, semantic_embedding_model,
 			       semantic_embedding_dimensions, semantic_embedding_checksum,
 			       semantic_embedding_generated_at
 			FROM %s
-			WHERE namespace=$1 AND name=$2 AND version=$3`, s.table),
-		namespace, name, version).Scan(&provider, &model, &dimensions, &checksum, &generatedAt)
+			WHERE %s`, s.table, where),
+		args...).Scan(&provider, &model, &dimensions, &checksum, &generatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, pkgdb.ErrNotFound
 	}
@@ -116,7 +141,8 @@ type SemanticListOpts struct {
 	Limit int
 	// Namespace narrows to a specific namespace; blank = cross-namespace.
 	Namespace string
-	// LatestOnly restricts to is_latest_version rows.
+	// LatestOnly restricts tagged-artifact stores to the literal "latest" tag.
+	// It is a no-op for mutable-object stores because namespace/name is unique.
 	LatestOnly bool
 	// IncludeTerminating includes rows with a set DeletionTimestamp.
 	IncludeTerminating bool
@@ -160,7 +186,10 @@ func (s *Store) SemanticList(ctx context.Context, opts SemanticListOpts) ([]sema
 		where = append(where, fmt.Sprintf("namespace = $%d", len(args)))
 	}
 	if opts.LatestOnly {
-		where = append(where, "is_latest_version")
+		if s.behavior == TaggedArtifactStore {
+			args = append(args, DefaultTag())
+			where = append(where, fmt.Sprintf("tag = $%d", len(args)))
+		}
 	}
 	if !opts.IncludeTerminating {
 		where = append(where, "deletion_timestamp IS NULL")
@@ -193,13 +222,12 @@ func (s *Store) SemanticList(ctx context.Context, opts SemanticListOpts) ([]sema
 
 	args = append(args, limit)
 	query := fmt.Sprintf(`
-		SELECT namespace, name, version, uid::text, generation, labels, annotations, spec, status,
-		       deletion_timestamp, finalizers, created_at, updated_at,
+		SELECT %s,
 		       semantic_embedding <=> $1::vector AS score
 		FROM %s
 		WHERE %s
 		ORDER BY semantic_embedding <=> $1::vector
-		LIMIT $%d`, s.table, strings.Join(where, " AND "), len(args))
+		LIMIT $%d`, s.selectColumns(), s.table, strings.Join(where, " AND "), len(args))
 
 	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
@@ -209,7 +237,7 @@ func (s *Store) SemanticList(ctx context.Context, opts SemanticListOpts) ([]sema
 
 	out := make([]semantic.SemanticResult, 0, limit)
 	for rows.Next() {
-		obj, score, err := scanSemanticRow(rows)
+		obj, score, err := scanSemanticRow(rows, s.behavior == TaggedArtifactStore)
 		if err != nil {
 			return nil, err
 		}
@@ -220,23 +248,26 @@ func (s *Store) SemanticList(ctx context.Context, opts SemanticListOpts) ([]sema
 
 // scanSemanticRow is scanRow + one trailing float column for the distance
 // score. Kept separate so the regular Get/List paths don't take a hit.
-func scanSemanticRow(rows pgx.Rows) (*v1alpha1.RawObject, float32, error) {
+func scanSemanticRow(rows pgx.Rows, tagged bool) (*v1alpha1.RawObject, float32, error) {
 	var (
-		namespace, name, version string
-		uid                      string
-		generation               int64
-		labelsJSON               []byte
-		annotationsJSON          []byte
-		specJSON                 []byte
-		statusJSON               []byte
-		deletionTimestamp        *time.Time
-		finalizersJSON           []byte
-		createdAt                time.Time
-		updatedAt                time.Time
-		score                    float32
+		namespace         string
+		name              string
+		tag               string
+		uid               string
+		generation        int64
+		labelsJSON        []byte
+		annotationsJSON   []byte
+		specJSON          []byte
+		statusJSON        []byte
+		deletionTimestamp *time.Time
+		finalizersJSON    []byte
+		createdAt         time.Time
+		updatedAt         time.Time
+		score             float32
 	)
+
 	if err := rows.Scan(
-		&namespace, &name, &version, &uid, &generation,
+		&namespace, &name, &tag, &uid, &generation,
 		&labelsJSON, &annotationsJSON, &specJSON, &statusJSON,
 		&deletionTimestamp, &finalizersJSON,
 		&createdAt, &updatedAt,
@@ -246,7 +277,8 @@ func scanSemanticRow(rows pgx.Rows) (*v1alpha1.RawObject, float32, error) {
 	}
 
 	obj, err := decodeRow(
-		namespace, name, version, uid, generation,
+		tagged,
+		namespace, name, tag, uid, generation,
 		labelsJSON, annotationsJSON, specJSON, statusJSON,
 		deletionTimestamp, finalizersJSON, createdAt, updatedAt,
 	)

@@ -30,10 +30,8 @@ import type {
   SkillSpec,
 } from "@/lib/api/types.gen"
 import {
+  applyBatch as applyBatchRaw,
   applyDeployment as applyDeploymentRaw,
-  applyMcpserver as applyMcpserverRaw,
-  applyPrompt as applyPromptRaw,
-  applySkill as applySkillRaw,
   listAgents as listAgentsRaw,
   listMcpservers as listMcpserversRaw,
   listPrompts as listPromptsRaw,
@@ -59,7 +57,7 @@ type LegacyInner<Spec, Extras = object> = Spec & {
   // namespace is always populated by the adapter from ObjectMeta.namespace,
   // but test/stories mocks construct LegacyInner directly without it.
   namespace?: string
-  version: string
+  tag: string
   title?: string
   // $schema is a legacy ServerJson-only field; tolerated on the inner type so
   // fixtures can pin a schema URL without widening McpServerSpec.
@@ -103,14 +101,14 @@ export interface PromptResponse {
 // strips "default" — fall back to "default" so legacy renderers keep
 // composing display IDs the same way.
 function inner<Spec extends object>(
-  meta: { name: string; namespace?: string; version?: string; annotations?: Record<string, string>; createdAt?: string },
+  meta: { name: string; namespace?: string; tag?: string; annotations?: Record<string, string>; createdAt?: string },
   spec: Spec,
 ): LegacyInner<Spec> {
   return {
     ...spec,
     name: meta.name,
     namespace: meta.namespace ?? "default",
-    version: meta.version ?? "",
+    tag: meta.tag ?? "",
     publishedAt: meta.createdAt,
     _meta: meta.annotations ?? {},
   } as LegacyInner<Spec>
@@ -211,31 +209,30 @@ export async function listPromptsV0(opts?: LegacyListOpts): Promise<{
 }
 
 // ----------------------------------------------------------------------------
-// Create-function shims. Legacy callers pass a flat `{name: "ns/name", version,
-// description, ...spec}` JSON; the regen'd apply* endpoints take a K8s
-// envelope plus `{namespace, name, version}` in the path. These helpers split
-// `name` into namespace/name, wrap the spec in an envelope, and call apply.
+// Create-function shims. Legacy callers pass a flat `{name: "ns/name", tag,
+// description, ...spec}` JSON. Wrap the spec in a K8s envelope, and apply the
+// document through the shared declarative endpoint.
 // ----------------------------------------------------------------------------
 
 export interface ServerJson extends McpServerSpec {
   $schema?: string
   name: string
-  version: string
+  tag: string
 }
 
 export interface SkillJson extends SkillSpec {
   name: string
-  version: string
+  tag: string
 }
 
 export interface PromptJson extends PromptSpec {
   name: string
-  version: string
+  tag: string
 }
 
 export interface AgentJson extends AgentSpec {
   name: string
-  version: string
+  tag: string
 }
 
 interface LegacyCreateOpts<Body> {
@@ -252,10 +249,29 @@ function splitName(fullName: string): { namespace: string; name: string } {
   return { namespace: fullName.slice(0, idx), name: fullName.slice(idx + 1) }
 }
 
-function stripLegacy<T extends { name: string; version: string }>(body: T): object {
-  const { name: _n, version: _v, ...rest } = body as T & { $schema?: string }
+function stripLegacy<T extends { name: string; tag: string }>(body: T): object {
+  const { name: _n, tag: _t, ...rest } = body as T & { $schema?: string }
   delete (rest as { $schema?: string }).$schema
   return rest
+}
+
+// applySingleDoc wraps a single typed envelope as a JSON body and POSTs
+// it to /v0/apply. Phase 1.5 removed the per-kind PUT routes for
+// content-registry kinds (Agent, MCPServer, RemoteMCPServer, Skill,
+// Prompt) — `applyBatch` is now the only write path. The handler decodes
+// the body via sigs.k8s.io/yaml, which natively accepts JSON, so we can
+// avoid pulling in a YAML serializer for what is always a single
+// document. Throws if the per-doc result reports failure so callers see
+// the same error surface as the old per-kind PUTs.
+async function applySingleDoc<T>(envelope: T & { kind?: string; metadata: { name: string } }): Promise<void> {
+  const json = JSON.stringify(envelope)
+  const body = new Blob([json], { type: "application/yaml" })
+  const { data } = await applyBatchRaw({ throwOnError: true, body })
+  const result = data?.results?.[0]
+  if (!result || result.status === "failed") {
+    const detail = result?.error ?? "no result returned"
+    throw new Error(`apply ${envelope.kind ?? "resource"} ${envelope.metadata.name} failed: ${detail}`)
+  }
 }
 
 export async function createServerV0(opts: LegacyCreateOpts<ServerJson>): Promise<{
@@ -263,17 +279,14 @@ export async function createServerV0(opts: LegacyCreateOpts<ServerJson>): Promis
 }> {
   const { namespace, name } = splitName(opts.body.name)
   const spec = stripLegacy(opts.body) as McpServerSpec
-  const { data } = await applyMcpserverRaw({
-    throwOnError: true,
-    path: { name, version: opts.body.version }, query: namespace !== "default" ? { namespace } : undefined,
-    body: {
-      apiVersion: "agentregistry.solo.io/v1alpha1",
-      kind: "MCPServer",
-      metadata: { namespace, name, version: opts.body.version },
-      spec,
-    },
-  })
-  return { data: toServerResponse(data as McpServer) }
+  const envelope: McpServer = {
+    apiVersion: "ar.dev/v1alpha1",
+    kind: "MCPServer",
+    metadata: { namespace, name, tag: opts.body.tag },
+    spec,
+  }
+  await applySingleDoc(envelope)
+  return { data: toServerResponse(envelope) }
 }
 
 export async function createSkillV0(opts: LegacyCreateOpts<SkillJson>): Promise<{
@@ -281,17 +294,14 @@ export async function createSkillV0(opts: LegacyCreateOpts<SkillJson>): Promise<
 }> {
   const { namespace, name } = splitName(opts.body.name)
   const spec = stripLegacy(opts.body) as SkillSpec
-  const { data } = await applySkillRaw({
-    throwOnError: true,
-    path: { name, version: opts.body.version }, query: namespace !== "default" ? { namespace } : undefined,
-    body: {
-      apiVersion: "agentregistry.solo.io/v1alpha1",
-      kind: "Skill",
-      metadata: { namespace, name, version: opts.body.version },
-      spec,
-    },
-  })
-  return { data: toSkillResponse(data as Skill) }
+  const envelope: Skill = {
+    apiVersion: "ar.dev/v1alpha1",
+    kind: "Skill",
+    metadata: { namespace, name, tag: opts.body.tag },
+    spec,
+  }
+  await applySingleDoc(envelope)
+  return { data: toSkillResponse(envelope) }
 }
 
 export async function createPromptV0(opts: LegacyCreateOpts<PromptJson>): Promise<{
@@ -299,28 +309,25 @@ export async function createPromptV0(opts: LegacyCreateOpts<PromptJson>): Promis
 }> {
   const { namespace, name } = splitName(opts.body.name)
   const spec = stripLegacy(opts.body) as PromptSpec
-  const { data } = await applyPromptRaw({
-    throwOnError: true,
-    path: { name, version: opts.body.version }, query: namespace !== "default" ? { namespace } : undefined,
-    body: {
-      apiVersion: "agentregistry.solo.io/v1alpha1",
-      kind: "Prompt",
-      metadata: { namespace, name, version: opts.body.version },
-      spec,
-    },
-  })
-  return { data: toPromptResponse(data as Prompt) }
+  const envelope: Prompt = {
+    apiVersion: "ar.dev/v1alpha1",
+    kind: "Prompt",
+    metadata: { namespace, name, tag: opts.body.tag },
+    spec,
+  }
+  await applySingleDoc(envelope)
+  return { data: toPromptResponse(envelope) }
 }
 
 // ----------------------------------------------------------------------------
 // deployServer: legacy imperative deploy endpoint replaced by declarative
-// Deployment upsert. Legacy body fields: {serverName, version, env,
+// Deployment upsert. Legacy body fields: {serverName, tag, env,
 // runtimeId, resourceType}. Translate to a Deployment envelope.
 // ----------------------------------------------------------------------------
 
 export interface DeployServerBody {
   serverName: string
-  version: string
+  tag: string
   env?: Record<string, string>
   runtimeId: string
   resourceType?: "agent" | "mcp" | string
@@ -350,13 +357,13 @@ export async function deployServer(opts: { throwOnError?: true; body: DeployServ
   const deploymentName = `${name}-${kind.toLowerCase()}`
   const { data } = await applyDeploymentRaw({
     throwOnError: true,
-    path: { name: deploymentName, version: opts.body.version }, query: namespace !== "default" ? { namespace } : undefined,
+    path: { name: deploymentName }, query: namespace !== "default" ? { namespace } : undefined,
     body: {
-      apiVersion: "agentregistry.solo.io/v1alpha1",
+      apiVersion: "ar.dev/v1alpha1",
       kind: "Deployment",
-      metadata: { namespace, name: deploymentName, version: opts.body.version },
+      metadata: { namespace, name: deploymentName },
       spec: {
-        targetRef: { kind, name, namespace, version: opts.body.version },
+        targetRef: { kind, name, namespace, tag: opts.body.tag },
         runtimeRef: { kind: "Runtime", name: opts.body.runtimeId, namespace },
         env: opts.body.env,
       },

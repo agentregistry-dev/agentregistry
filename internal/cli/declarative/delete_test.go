@@ -46,7 +46,7 @@ func setupDeleteClient(t *testing.T, srv *httptest.Server) {
 // TestDeleteFileModeUsesDeleteApplyEndpoint verifies that -f sends DELETE to /v0/apply.
 func TestDeleteFileModeUsesDeleteApplyEndpoint(t *testing.T) {
 	results := []arv0.ApplyResult{
-		{Kind: "agent", Name: "acme/bot", Version: "1.0.0", Status: arv0.ApplyStatusDeleted},
+		{Kind: "agent", Name: "acme/bot", Tag: "1.0.0", Status: arv0.ApplyStatusDeleted},
 	}
 	srv, captured := newDeleteTestServer(t, results)
 	setupDeleteClient(t, srv)
@@ -65,7 +65,7 @@ func TestDeleteFileModeUsesDeleteApplyEndpoint(t *testing.T) {
 // TestDeleteFileModeReportsResults verifies that per-resource results are printed.
 func TestDeleteFileModeReportsResults(t *testing.T) {
 	results := []arv0.ApplyResult{
-		{Kind: "agent", Name: "acme/bot", Version: "1.0.0", Status: arv0.ApplyStatusDeleted},
+		{Kind: "agent", Name: "acme/bot", Tag: "1.0.0", Status: arv0.ApplyStatusDeleted},
 	}
 	srv, _ := newDeleteTestServer(t, results)
 	setupDeleteClient(t, srv)
@@ -104,7 +104,6 @@ func TestDeleteFileModeRejectsUnknownKind(t *testing.T) {
 kind: UnknownKind
 metadata:
   name: acme/test
-  version: "1.0.0"
 spec:
   description: "test"
 `
@@ -127,15 +126,15 @@ func TestDeleteFileModeNoAPIClient(t *testing.T) {
 	assert.Contains(t, err.Error(), "API client not initialized")
 }
 
-// TestDeleteExplicitModeWithoutVersion verifies that --version is optional
-// (providers don't use versions; the server validates if needed).
-func TestDeleteExplicitModeWithoutVersion(t *testing.T) {
+// TestDeleteExplicitModeWithoutTag verifies that --tag is optional
+// (runtimes don't use tags; the server validates if needed).
+func TestDeleteExplicitModeWithoutTag(t *testing.T) {
 	cmd := declarative.NewDeleteCmd()
-	cmd.SetArgs([]string{"provider", "my-aws"})
+	cmd.SetArgs([]string{"runtime", "my-aws"})
 	err := cmd.Execute()
-	// Fails because no API client is set, but NOT because of missing version.
+	// Fails because no API client is set, but NOT because of missing tag.
 	require.Error(t, err)
-	assert.NotContains(t, err.Error(), "version")
+	assert.NotContains(t, err.Error(), "tag")
 }
 
 // TestDeleteExplicitModeRequiresTwoArgs verifies that explicit mode without two args errors.

@@ -35,7 +35,7 @@ func RegisterExtensionKind(k ExtensionKind) {
 		k.NewObject = newSchemeObject(k.CanonicalKind)
 	}
 	if len(k.TableColumns) == 0 {
-		k.TableColumns = []scheme.Column{{Header: "NAME"}, {Header: "VERSION"}}
+		k.TableColumns = []scheme.Column{{Header: "NAME"}}
 	}
 
 	scheme.Register(&scheme.Kind{
@@ -53,7 +53,7 @@ func RegisterExtensionKind(k ExtensionKind) {
 				return k.Row(obj)
 			}
 			meta := obj.GetMetadata()
-			return []string{meta.Name, meta.Version}
+			return []string{meta.Name}
 		},
 		Get: func(ctx context.Context, name, _ string) (any, error) {
 			return client.GetTyped(ctx, apiClient, k.CanonicalKind, v1alpha1.DefaultNamespace, name, "", k.NewObject)
@@ -61,8 +61,8 @@ func RegisterExtensionKind(k ExtensionKind) {
 		ListFunc: func(ctx context.Context) ([]any, error) {
 			return listLatestAny(ctx, k.CanonicalKind, k.NewObject)
 		},
-		Delete: func(ctx context.Context, name, version string, force bool) error {
-			return deleteAny(ctx, k.CanonicalKind, name, version, force, k.NewObject)
+		Delete: func(ctx context.Context, name, tag string, force bool) error {
+			return deleteAny(ctx, k.CanonicalKind, name, tag, force, k.NewObject)
 		},
 	})
 }

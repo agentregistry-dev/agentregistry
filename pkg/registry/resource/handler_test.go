@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -15,29 +16,56 @@ import (
 	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/stretchr/testify/require"
 
+	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
-// mustSpecJSON marshals a kind-specific spec into JSONB for direct
-// Store.Upsert calls in tests that bypass the HTTP path.
-func mustSpecJSON(t *testing.T, v any) json.RawMessage {
-	t.Helper()
-	b, err := json.Marshal(v)
-	require.NoError(t, err)
-	return json.RawMessage(b)
-}
-
-// registerAgent wires the generic resource handler for *v1alpha1.Agent onto
-// the given Huma API, against the supplied Store. It's a test-local helper
-// so we don't pull the full registry_app into these tests.
+// registerAgent wires the generic resource handler for *v1alpha1.Agent and
+// the multi-doc apply endpoint onto the given Huma API, against the supplied
+// Store. It's a test-local helper so we don't pull the full registry_app
+// into these tests.
+//
+// Direct PUT on the per-kind item URL is no longer registered for
+// content-registry kinds (Agent, MCPServer, RemoteMCPServer, Skill,
+// Prompt) — POST /v0/apply is the single create/update entry point. The
+// helper wires both so tests can drive applies through /v0/apply and
+// reads/deletes through the per-kind GET/DELETE.
 func registerAgent(api huma.API, store *v1alpha1store.Store) {
 	resource.Register[*v1alpha1.Agent](api, resource.Config{
 		Kind:       v1alpha1.KindAgent,
 		BasePrefix: "/v0",
 		Store:      store,
 	}, func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
+
+	resource.RegisterApply(api, resource.ApplyConfig{
+		BasePrefix: "/v0",
+		Stores:     map[string]*v1alpha1store.Store{v1alpha1.KindAgent: store},
+	})
+}
+
+func registerProvider(api huma.API, store *v1alpha1store.Store) {
+	resource.Register[*v1alpha1.Runtime](api, resource.Config{
+		Kind:       v1alpha1.KindRuntime,
+		BasePrefix: "/v0",
+		Store:      store,
+	}, func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} })
+}
+
+// applyAgentYAML POSTs a single Agent document to /v0/apply and returns
+// the per-document ApplyResult. Used by the rewritten tests in this file
+// since direct PUT on a content-kind URL is no longer registered.
+func applyAgentYAML(t *testing.T, api humatest.TestAPI, yaml string) arv0.ApplyResult {
+	t.Helper()
+	resp := api.Post("/v0/apply", "Content-Type: application/yaml", strings.NewReader(yaml))
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	var out struct {
+		Results []arv0.ApplyResult `json:"results"`
+	}
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+	require.Len(t, out.Results, 1, "expected exactly one ApplyResult; got: %s", resp.Body.String())
+	return out.Results[0]
 }
 
 // newTestPool is defined in database/store_v1alpha1_testutil.go. Each test
@@ -51,49 +79,41 @@ func TestResourceRegister_AgentCRUD(t *testing.T) {
 	_, api := humatest.New(t)
 	registerAgent(api, store)
 
-	// PUT a new agent in the default namespace.
-	putBody := v1alpha1.Agent{
-		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
-		Metadata: v1alpha1.ObjectMeta{
-			Namespace: "default",
-			Name:      "alice",
-			Version:   "v1.0.0",
-			Labels:    map[string]string{"team": "platform"},
-		},
-		Spec: v1alpha1.AgentSpec{
-			Title:  "Alice",
-			Source: &v1alpha1.AgentSource{Image: "ghcr.io/example/alice:1.0.0"},
-		},
-	}
-	resp := api.Put("/v0/agents/alice/v1.0.0", putBody)
-	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	// Apply a new agent in the default namespace via POST /v0/apply.
+	createYAML := `apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  namespace: default
+  name: alice
+  labels:
+    team: platform
+spec:
+  title: Alice
+  source:
+    image: ghcr.io/example/alice:1.0.0
+`
+	res := applyAgentYAML(t, api, createYAML)
+	require.Equal(t, arv0.ApplyStatusCreated, res.Status, "first apply must report created")
+	require.Equal(t, v1alpha1store.DefaultTag(), res.Tag)
 
+	// GET exact tag.
+	resp := api.Get("/v0/agents/alice/latest")
+	require.Equal(t, http.StatusOK, resp.Code)
 	var gotAgent v1alpha1.Agent
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &gotAgent))
 	require.Equal(t, v1alpha1.GroupVersion, gotAgent.APIVersion)
 	require.Equal(t, v1alpha1.KindAgent, gotAgent.Kind)
-	// Wire strips namespace="default"; the client observes empty. Use
-	// NamespaceOrDefault for display / id composition.
 	require.Equal(t, "default", gotAgent.Metadata.NamespaceOrDefault())
 	require.Equal(t, "alice", gotAgent.Metadata.Name)
-	require.Equal(t, "v1.0.0", gotAgent.Metadata.Version)
-	// Generation is hidden from the wire (json:"-"), so the client decode
-	// sees its zero value. Internal consumers (coordinator, reconcilers)
-	// read the DB column directly.
+	require.Equal(t, v1alpha1store.DefaultTag(), gotAgent.Metadata.Tag)
 	require.Equal(t, "Alice", gotAgent.Spec.Title)
 	require.Equal(t, "platform", gotAgent.Metadata.Labels["team"])
-
-	// GET exact version.
-	resp = api.Get("/v0/agents/alice/v1.0.0")
-	require.Equal(t, http.StatusOK, resp.Code)
-	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &gotAgent))
-	require.Equal(t, "alice", gotAgent.Metadata.Name)
 
 	// GET latest.
 	resp = api.Get("/v0/agents/alice")
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &gotAgent))
-	require.Equal(t, "v1.0.0", gotAgent.Metadata.Version)
+	require.Equal(t, v1alpha1store.DefaultTag(), gotAgent.Metadata.Tag)
 
 	// LIST in namespace with label selector.
 	resp = api.Get("/v0/agents?labels=team%3Dplatform")
@@ -112,37 +132,51 @@ func TestResourceRegister_AgentCRUD(t *testing.T) {
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &list))
 	require.Len(t, list.Items, 1)
 
-	// Re-apply with same spec — generation must stay at 1. Generation
-	// is internal-only so the assertion goes through the Store directly
-	// (the wire response omits generation via json:"-").
-	resp = api.Put("/v0/agents/alice/v1.0.0", putBody)
-	require.Equal(t, http.StatusOK, resp.Code)
-	row, err := store.Get(t.Context(), "default", "alice", "v1.0.0")
+	// Re-apply with the same spec is a no-op at the Store layer; the
+	// row remains at tag latest.
+	res = applyAgentYAML(t, api, createYAML)
+	require.Equal(t, arv0.ApplyStatusUnchanged, res.Status, "no-op re-apply must report unchanged")
+	latest, err := store.GetLatest(t.Context(), "default", "alice")
 	require.NoError(t, err)
-	require.EqualValues(t, 1, row.Metadata.Generation, "no-op apply preserves generation")
+	require.Equal(t, v1alpha1store.DefaultTag(), latest.Metadata.Tag)
 
-	// PUT with mutated spec — generation bumps to 2.
-	putBody.Spec.Title = "Alice v2"
-	resp = api.Put("/v0/agents/alice/v1.0.0", putBody)
-	require.Equal(t, http.StatusOK, resp.Code)
+	// Apply with mutated spec under the same default tag replaces the row.
+	updateYAML := `apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  namespace: default
+  name: alice
+  labels:
+    team: type
+spec:
+  title: Alice v2
+  source:
+    image: ghcr.io/example/alice:1.0.0
+`
+	res = applyAgentYAML(t, api, updateYAML)
+	require.Equal(t, arv0.ApplyStatusConfigured, res.Status, "spec change must replace latest")
+	require.Equal(t, v1alpha1store.DefaultTag(), res.Tag)
+	latest, err = store.GetLatest(t.Context(), "default", "alice")
+	require.NoError(t, err)
+	require.Equal(t, v1alpha1store.DefaultTag(), latest.Metadata.Tag)
+	// store.GetLatest returns spec as raw JSON; read back through the
+	// per-kind GET handler for the typed view.
+	resp = api.Get("/v0/agents/alice/latest")
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &gotAgent))
 	require.Equal(t, "Alice v2", gotAgent.Spec.Title)
-	row, err = store.Get(t.Context(), "default", "alice", "v1.0.0")
-	require.NoError(t, err)
-	require.EqualValues(t, 2, row.Metadata.Generation)
 
-	// DELETE — finalizer-free row hard-deletes immediately. (The
-	// soft-delete + drain dance only kicks in for finalizer-bearing
-	// rows; see TestResourceRegister_DeleteHardDeletesFinalizerFree.)
-	resp = api.Delete("/v0/agents/alice/v1.0.0")
+	// DELETE — tagged-artifact rows have no finalizers, so DELETE
+	// hard-deletes the targeted tag immediately.
+	resp = api.Delete("/v0/agents/alice/latest")
 	require.Equal(t, http.StatusNoContent, resp.Code)
 
 	// GetLatest returns 404 — row is gone.
 	resp = api.Get("/v0/agents/alice")
 	require.Equal(t, http.StatusNotFound, resp.Code, resp.Body.String())
 
-	// GET on the exact version returns 404 too.
-	resp = api.Get("/v0/agents/alice/v1.0.0")
+	// GET on the exact tag returns 404 too.
+	resp = api.Get("/v0/agents/alice/latest")
 	require.Equal(t, http.StatusNotFound, resp.Code)
 
 	// List is empty.
@@ -158,6 +192,38 @@ func TestResourceRegister_AgentCRUD(t *testing.T) {
 	require.Empty(t, list.Items)
 }
 
+func TestResourceRegister_DeleteTaggedPassesTagToAuthorizer(t *testing.T) {
+	pool := v1alpha1store.NewTestPool(t)
+	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+	_, err := store.Upsert(t.Context(), &v1alpha1.Agent{
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "alice", Tag: "stable"},
+		Spec:     v1alpha1.AgentSpec{Title: "Stable Alice"},
+	})
+	require.NoError(t, err)
+
+	var seen resource.AuthorizeInput
+	_, api := humatest.New(t)
+	resource.Register[*v1alpha1.Agent](api, resource.Config{
+		Kind:       v1alpha1.KindAgent,
+		BasePrefix: "/v0",
+		Store:      store,
+		Authorize: func(_ context.Context, in resource.AuthorizeInput) error {
+			if in.Verb == "delete" {
+				seen = in
+			}
+			return nil
+		},
+	}, func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
+
+	resp := api.Delete("/v0/agents/alice/stable")
+	require.Equal(t, http.StatusNoContent, resp.Code, resp.Body.String())
+	require.Equal(t, "delete", seen.Verb)
+	require.Equal(t, v1alpha1.KindAgent, seen.Kind)
+	require.Equal(t, "default", seen.Namespace)
+	require.Equal(t, "alice", seen.Name)
+	require.Equal(t, "stable", seen.Tag)
+}
+
 func TestResourceRegister_AgentNamespaceIsolation(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
 	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
@@ -165,29 +231,37 @@ func TestResourceRegister_AgentNamespaceIsolation(t *testing.T) {
 	_, api := humatest.New(t)
 	registerAgent(api, store)
 
-	// Same name in two different namespaces — no conflict.
-	bodyTeamA := v1alpha1.Agent{
-		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "team-a", Name: "shared", Version: "v1"},
-		Spec:     v1alpha1.AgentSpec{Title: "A's"},
-	}
-	bodyTeamB := bodyTeamA
-	bodyTeamB.Metadata.Namespace = "team-b"
-	bodyTeamB.Spec.Title = "B's"
-
-	resp := api.Put("/v0/agents/shared/v1?namespace=team-a", bodyTeamA)
-	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
-	resp = api.Put("/v0/agents/shared/v1?namespace=team-b", bodyTeamB)
-	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	// Same name in two different namespaces — no conflict. Apply each
+	// via POST /v0/apply; metadata.namespace on the doc is authoritative.
+	teamA := `apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  namespace: team-a
+  name: shared
+spec:
+  title: A's
+`
+	teamB := `apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  namespace: team-b
+  name: shared
+spec:
+  title: B's
+`
+	resA := applyAgentYAML(t, api, teamA)
+	require.Equal(t, arv0.ApplyStatusCreated, resA.Status)
+	resB := applyAgentYAML(t, api, teamB)
+	require.Equal(t, arv0.ApplyStatusCreated, resB.Status)
 
 	// Namespaced GETs resolve the right one.
 	var got v1alpha1.Agent
-	resp = api.Get("/v0/agents/shared/v1?namespace=team-a")
+	resp := api.Get("/v0/agents/shared/latest?namespace=team-a")
 	require.Equal(t, http.StatusOK, resp.Code)
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &got))
 	require.Equal(t, "A's", got.Spec.Title)
 
-	resp = api.Get("/v0/agents/shared/v1?namespace=team-b")
+	resp = api.Get("/v0/agents/shared/latest?namespace=team-b")
 	require.Equal(t, http.StatusOK, resp.Code)
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &got))
 	require.Equal(t, "B's", got.Spec.Title)
@@ -217,13 +291,16 @@ func TestResourceRegister_AgentListCursorPagination(t *testing.T) {
 	registerAgent(api, store)
 
 	for _, name := range []string{"one", "two", "three"} {
-		body := v1alpha1.Agent{
-			TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
-			Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: name, Version: "v1"},
-			Spec:     v1alpha1.AgentSpec{Title: name},
-		}
-		resp := api.Put(fmt.Sprintf("/v0/agents/%s/v1", url.PathEscape(name)), body)
-		require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+		yaml := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  namespace: default
+  name: %s
+spec:
+  title: %s
+`, name, name)
+		res := applyAgentYAML(t, api, yaml)
+		require.Equal(t, arv0.ApplyStatusCreated, res.Status)
 	}
 
 	var page struct {
@@ -255,6 +332,52 @@ func TestResourceRegister_AgentListCursorPagination(t *testing.T) {
 	require.Len(t, seen, 3)
 }
 
+// TestResourceRegister_AgentListTags pins the GET /v0/{plural}/{name}/tags
+// contract: every non-deleted tag row for (namespace, name) is returned.
+func TestResourceRegister_AgentListTags(t *testing.T) {
+	pool := v1alpha1store.NewTestPool(t)
+	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+
+	_, api := humatest.New(t)
+	registerAgent(api, store)
+
+	body := v1alpha1.Agent{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "foo", Tag: "v1"},
+		Spec:     v1alpha1.AgentSpec{Title: "v1"},
+	}
+	_, err := store.Upsert(t.Context(), &body)
+	require.NoError(t, err)
+	body.Metadata.Tag = "v2"
+	body.Spec.Title = "v2"
+	_, err = store.Upsert(t.Context(), &body)
+	require.NoError(t, err)
+
+	resp := api.Get("/v0/agents/foo/tags")
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+
+	var list struct {
+		Items []v1alpha1.Agent `json:"items"`
+	}
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &list))
+	require.Len(t, list.Items, 2, "both tags should be returned")
+	// Ordering: newest updated tag first.
+	require.Equal(t, "v2", list.Items[0].Metadata.Tag)
+	require.Equal(t, "v2", list.Items[0].Spec.Title)
+	require.Equal(t, "v1", list.Items[1].Metadata.Tag)
+	require.Equal(t, "v1", list.Items[1].Spec.Title)
+
+	// Unknown name → 200 with empty items (list semantics: a
+	// nonexistent name is just an empty result set, not an error).
+	resp = api.Get("/v0/agents/missing/tags")
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	var empty struct {
+		Items []v1alpha1.Agent `json:"items"`
+	}
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &empty))
+	require.Empty(t, empty.Items)
+}
+
 func TestResourceRegister_AgentListRejectsInvalidCursor(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
 	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
@@ -276,9 +399,10 @@ func TestResourceRegister_ListFilter(t *testing.T) {
 	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
 	for _, name := range []string{"ok-one", "ok-two", "blocked-three"} {
-		_, err := store.Upsert(t.Context(), "default", name, "v1",
-			mustSpecJSON(t, v1alpha1.AgentSpec{Title: name}),
-			v1alpha1store.UpsertOpts{})
+		_, err := store.Upsert(t.Context(), &v1alpha1.Agent{
+			Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: name},
+			Spec:     v1alpha1.AgentSpec{Title: name},
+		})
 		require.NoError(t, err)
 	}
 
@@ -317,55 +441,76 @@ func TestResourceRegister_ListFilter(t *testing.T) {
 	}
 }
 
-func TestResourceRegister_AgentWrongKindRejected(t *testing.T) {
-	t.Helper()
-
+// TestResourceRegister_PutNotRegisteredForContentKinds pins the
+// post-redesign contract: direct PUT on the per-kind item URL is no
+// longer registered for content-registry kinds (Agent, MCPServer,
+// RemoteMCPServer, Skill, Prompt). POST /v0/apply is the single
+// create/update entry point — user-controlled tags live in metadata.tag rather
+// than the URL segment of a direct PUT. Runtime/Deployment mutable-object
+// stores still expose direct namespace/name PUT.
+//
+// The test issues a PUT against the agents handler and expects 405
+// (Method Not Allowed) — the path exists for GET / DELETE, but PUT is
+// not in the registered method set. The Allow header on the response
+// confirms PUT is excluded.
+func TestResourceRegister_PutNotRegisteredForContentKinds(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
 	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
 	_, api := humatest.New(t)
 	registerAgent(api, store)
 
-	// Body carries Kind: "Skill" but PUT targets the agents handler.
-	body := v1alpha1.Agent{
-		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: "Skill"},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "bob", Version: "v1"},
-		Spec:     v1alpha1.AgentSpec{Title: "wrong kind"},
-	}
-	resp := api.Put("/v0/agents/bob/v1", body)
-	require.Equal(t, http.StatusBadRequest, resp.Code, resp.Body.String())
+	resp := api.Put("/v0/agents/foo/1", v1alpha1.Agent{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "foo"},
+		Spec:     v1alpha1.AgentSpec{Title: "Foo"},
+	})
+	require.Equal(t, http.StatusMethodNotAllowed, resp.Code,
+		"PUT route must not be registered for content-registry kinds; got %d body=%s",
+		resp.Code, resp.Body.String())
+	require.NotContains(t, resp.Header().Get("Allow"), "PUT",
+		"Allow header must not list PUT for content-registry kinds; got %q",
+		resp.Header().Get("Allow"))
+
+	// Also sanity-check via raw httptest (no Huma wrapping) so the
+	// assertion is independent of humatest's request shaping.
+	httpReq := httptest.NewRequest(http.MethodPut, "/v0/agents/foo/1", strings.NewReader(
+		`{"apiVersion":"ar.dev/v1alpha1","kind":"Agent","metadata":{"name":"foo"},"spec":{}}`))
+	httpReq.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	api.Adapter().ServeHTTP(rec, httpReq)
+	require.Equal(t, http.StatusMethodNotAllowed, rec.Code,
+		"raw PUT against content-registry kind must return 405; got %d body=%s",
+		rec.Code, rec.Body.String())
 }
 
-func TestResourceRegister_AgentPathMismatchRejected(t *testing.T) {
-	t.Helper()
+func TestResourceRegister_MutableObjectUsesNameOnlyRoute(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+	store := v1alpha1store.NewMutableObjectStore(pool, "v1alpha1.runtimes")
 
 	_, api := humatest.New(t)
-	registerAgent(api, store)
+	registerProvider(api, store)
 
-	body := v1alpha1.Agent{
-		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "mismatched", Version: "v1"},
+	runtime := v1alpha1.Runtime{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindRuntime},
+		Metadata: v1alpha1.ObjectMeta{
+			Namespace: "default",
+			Name:      "local-test",
+		},
+		Spec: v1alpha1.RuntimeSpec{Type: v1alpha1.TypeLocal},
 	}
-	resp := api.Put("/v0/agents/alice/v1", body)
-	require.Equal(t, http.StatusBadRequest, resp.Code, fmt.Sprintf("body=%s", resp.Body.String()))
-}
 
-func TestResourceRegister_ValidationRejectsBadVersion(t *testing.T) {
-	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
-	_, api := humatest.New(t)
-	registerAgent(api, store)
+	resp := api.Put("/v0/runtimes/local-test", runtime)
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 
-	body := v1alpha1.Agent{
-		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "bad", Version: "latest"},
-		Spec:     v1alpha1.AgentSpec{Title: "B"},
-	}
-	resp := api.Put("/v0/agents/bad/latest", body)
-	require.Equal(t, http.StatusBadRequest, resp.Code)
-	require.Contains(t, resp.Body.String(), "metadata.version")
+	resp = api.Get("/v0/runtimes/local-test")
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+
+	resp = api.Put("/v0/runtimes/local-test/1", runtime)
+	require.Equal(t, http.StatusNotFound, resp.Code, "mutable object route must be name-only")
+
+	resp = api.Delete("/v0/runtimes/local-test")
+	require.Equal(t, http.StatusNoContent, resp.Code, resp.Body.String())
 }
 
 func TestResourceRegister_ResolverDetectsDanglingRef(t *testing.T) {
@@ -378,51 +523,60 @@ func TestResourceRegister_ResolverDetectsDanglingRef(t *testing.T) {
 		if ref.Kind != v1alpha1.KindMCPServer {
 			return nil
 		}
-		_, err := mcpStore.Get(ctx, ref.Namespace, ref.Name, ref.Version)
+		tag := ref.Tag
+		if tag == "" {
+			tag = v1alpha1store.DefaultTag()
+		}
+		_, err := mcpStore.Get(ctx, ref.Namespace, ref.Name, tag)
 		return err
 	}
 
 	// Seed the one existing MCPServer.
-	_, err := mcpStore.Upsert(context.Background(), "default", "tools", "v1",
-		mustSpec(t, v1alpha1.MCPServerSpec{Title: "T"}), v1alpha1store.UpsertOpts{})
+	_, err := mcpStore.Upsert(context.Background(), &v1alpha1.MCPServer{
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "tools"},
+		Spec:     v1alpha1.MCPServerSpec{Title: "T"},
+	})
 	require.NoError(t, err)
 
 	_, api := humatest.New(t)
-	resource.Register[*v1alpha1.Agent](api, resource.Config{
-		Kind:       v1alpha1.KindAgent,
+	resource.RegisterApply(api, resource.ApplyConfig{
 		BasePrefix: "/v0",
-		Store:      agentStore,
-		Resolver:   resolver,
-	}, func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
-
-	// Reference a missing MCPServer.
-	body := v1alpha1.Agent{
-		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "dangling", Version: "v1"},
-		Spec: v1alpha1.AgentSpec{
-			MCPServers: []v1alpha1.ResourceRef{
-				{Kind: v1alpha1.KindMCPServer, Name: "tools", Version: "v1"},
-				{Kind: v1alpha1.KindMCPServer, Name: "missing", Version: "v1"},
-			},
+		Stores: map[string]*v1alpha1store.Store{
+			v1alpha1.KindAgent:     agentStore,
+			v1alpha1.KindMCPServer: mcpStore,
 		},
-	}
-	resp := api.Put("/v0/agents/dangling/v1", body)
-	require.Equal(t, http.StatusBadRequest, resp.Code)
-	require.Contains(t, resp.Body.String(), "spec.mcpServers[1]")
-}
+		Resolver: resolver,
+	})
 
-// mustSpec is a test helper duplicated from the database package tests.
-// Kept local so we don't create a test-util cycle.
-func mustSpec(t *testing.T, spec any) []byte {
-	t.Helper()
-	b, err := json.Marshal(spec)
-	require.NoError(t, err)
-	return b
+	// Reference a missing MCPServer via POST /v0/apply.
+	yaml := `apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  namespace: default
+  name: dangling
+spec:
+  mcpServers:
+    - kind: MCPServer
+      name: tools
+      tag: latest
+    - kind: MCPServer
+      name: missing
+      tag: latest
+`
+	resp := api.Post("/v0/apply", "Content-Type: application/yaml", strings.NewReader(yaml))
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	var out struct {
+		Results []arv0.ApplyResult `json:"results"`
+	}
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+	require.Len(t, out.Results, 1)
+	require.Equal(t, arv0.ApplyStatusFailed, out.Results[0].Status)
+	require.Contains(t, out.Results[0].Error, "spec.mcpServers[1]")
 }
 
 // TestResourceRegister_DeleteHardDeletesFinalizerFree pins the K8s
 // fast-path: rows with no finalizers hard-delete synchronously on
-// DELETE. Without it, "DELETE then PUT same identity" hits
+// DELETE. Without it, "DELETE then apply same tag" hits
 // ErrTerminating until the (currently non-existent) GC purges the row.
 // Reported by josh-pritchard on PR #455 ("Soft-delete blocks re-apply
 // for every v1alpha1 kind"); fixed at the Store layer.
@@ -433,46 +587,52 @@ func TestResourceRegister_DeleteHardDeletesFinalizerFree(t *testing.T) {
 	_, api := humatest.New(t)
 	registerAgent(api, store)
 
-	// Create the row via the wire.
-	body := v1alpha1.Agent{
-		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "soft", Version: "v1"},
-		Spec:     v1alpha1.AgentSpec{Title: "Soft"},
-	}
-	resp := api.Put("/v0/agents/soft/v1", body)
-	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	// Create the row via POST /v0/apply.
+	createYAML := `apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  namespace: default
+  name: soft
+spec:
+  title: Soft
+`
+	res := applyAgentYAML(t, api, createYAML)
+	require.Equal(t, arv0.ApplyStatusCreated, res.Status)
+	require.Equal(t, v1alpha1store.DefaultTag(), res.Tag)
 
-	// DELETE on a finalizer-free row hard-deletes immediately.
-	resp = api.Delete("/v0/agents/soft/v1")
+	// DELETE on a finalizer-free row hard-deletes immediately. DELETE
+	// stays per-kind for content-registry kinds (CLI uses it for
+	// "arctl delete agent foo --tag latest").
+	resp := api.Delete("/v0/agents/soft/latest")
 	require.Equal(t, http.StatusNoContent, resp.Code)
 
 	// GET returns 404 — row is gone, not terminating.
-	resp = api.Get("/v0/agents/soft/v1")
+	resp = api.Get("/v0/agents/soft/latest")
 	require.Equal(t, http.StatusNotFound, resp.Code)
 
-	// Re-apply with the same (name, version) succeeds — no
+	// Re-apply with the same logical tag succeeds — no
 	// "object is terminating" race since the row is fully removed.
-	resp = api.Put("/v0/agents/soft/v1", body)
-	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	// A fresh create after hard-delete recreates the latest tag.
+	res = applyAgentYAML(t, api, createYAML)
+	require.Equal(t, arv0.ApplyStatusCreated, res.Status)
+	require.Equal(t, v1alpha1store.DefaultTag(), res.Tag,
+		"re-apply after hard-delete is a fresh insert at tag latest")
 
-	// Generation is server-managed (json:"-") so it doesn't appear on
-	// the wire; check directly against the store. A re-applied row
-	// after hard-delete is a fresh create, so generation resets to 1.
-	row, err := store.Get(t.Context(), "default", "soft", "v1")
+	row, err := store.Get(t.Context(), "default", "soft", v1alpha1store.DefaultTag())
 	require.NoError(t, err)
-	require.EqualValues(t, 1, row.Metadata.Generation,
-		"re-apply after hard-delete must reset generation to 1")
+	require.Equal(t, v1alpha1store.DefaultTag(), row.Metadata.Tag)
 }
 
 // TestResourceRegister_PostUpsertFailureLeavesPersistedRow pins the
 // documented (pre-Phase-2-KRT) contract: when PostUpsert returns an
 // error, Store.Upsert has already committed and the row is persisted;
-// the caller sees a 500, but a follow-up GetLatest still returns the
-// row with whatever Status the previous reconcile (or zero-value) left.
+// the caller sees a failed result, but a follow-up GetLatest still
+// returns the row with whatever Status the previous reconcile (or
+// zero-value) left.
 //
 // The risk this guards against is silently moving the contract — e.g.
 // adding a "stamp Failed condition / hard-delete the row" branch
-// without updating the godoc on Config.PostUpsert. Tests pin the
+// without updating the godoc on ApplyConfig.PostUpserts. Tests pin the
 // behavior so future changes are forced through documentation +
 // reviewer awareness.
 func TestResourceRegister_PostUpsertFailureLeavesPersistedRow(t *testing.T) {
@@ -480,31 +640,41 @@ func TestResourceRegister_PostUpsertFailureLeavesPersistedRow(t *testing.T) {
 	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
 	hookCalls := 0
-	hookErr := fmt.Errorf("simulated platform-adapter failure")
+	hookErr := fmt.Errorf("simulated type-adapter failure")
+	hook := func(ctx context.Context, obj v1alpha1.Object) error {
+		hookCalls++
+		return hookErr
+	}
+
 	_, api := humatest.New(t)
 	resource.Register[*v1alpha1.Agent](api, resource.Config{
 		Kind:       v1alpha1.KindAgent,
 		BasePrefix: "/v0",
 		Store:      store,
-		PostUpsert: func(ctx context.Context, obj v1alpha1.Object) error {
-			hookCalls++
-			return hookErr
-		},
 	}, func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
+	resource.RegisterApply(api, resource.ApplyConfig{
+		BasePrefix:  "/v0",
+		Stores:      map[string]*v1alpha1store.Store{v1alpha1.KindAgent: store},
+		PostUpserts: map[string]func(context.Context, v1alpha1.Object) error{v1alpha1.KindAgent: hook},
+	})
 
-	body := v1alpha1.Agent{
-		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "halfapplied", Version: "v1"},
-		Spec:     v1alpha1.AgentSpec{Title: "Half"},
-	}
+	yaml := `apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  namespace: default
+  name: halfapplied
+spec:
+  title: Half
+`
 
-	// PUT → 500. Hook fired exactly once.
-	resp := api.Put("/v0/agents/halfapplied/v1", body)
-	require.Equal(t, http.StatusInternalServerError, resp.Code, resp.Body.String())
+	// Apply → failed result. Hook fired exactly once.
+	res := applyAgentYAML(t, api, yaml)
+	require.Equal(t, arv0.ApplyStatusFailed, res.Status)
+	require.Contains(t, res.Error, "simulated type-adapter failure")
 	require.Equal(t, 1, hookCalls, "PostUpsert must fire exactly once on the failing apply")
 
 	// Row persists despite the hook failure: subsequent GET returns 200.
-	resp = api.Get("/v0/agents/halfapplied/v1")
+	resp := api.Get("/v0/agents/halfapplied/latest")
 	require.Equal(t, http.StatusOK, resp.Code,
 		"contract: Store.Upsert commits before the hook, so a hook failure leaves the row persisted")
 
@@ -515,70 +685,69 @@ func TestResourceRegister_PostUpsertFailureLeavesPersistedRow(t *testing.T) {
 		"spec is the just-applied value — the upsert succeeded under the hood")
 
 	// Re-apply with identical spec: the no-op upsert at the Store
-	// layer does NOT short-circuit PostUpsert — the handler fires
+	// layer does NOT short-circuit PostUpsert — the apply path fires
 	// the hook unconditionally after Upsert returns. This is the
-	// operator-friendly retry path: a transient platform-adapter
+	// operator-friendly retry path: a transient type-adapter
 	// failure clears as soon as a re-apply succeeds, with no spec
 	// bump required. Pin the behavior so a future "skip hook on
 	// no-op" optimization has to update the godoc + this test.
 	hookCalls = 0
-	resp = api.Put("/v0/agents/halfapplied/v1", body)
-	require.Equal(t, http.StatusInternalServerError, resp.Code,
-		"identical-spec re-apply still fires the hook (and 500s if the hook still errors)")
+	res = applyAgentYAML(t, api, yaml)
+	require.Equal(t, arv0.ApplyStatusFailed, res.Status,
+		"identical-spec re-apply still fires the hook (and fails if the hook still errors)")
 	require.Equal(t, 1, hookCalls,
-		"contract: hook re-fires on every PUT, including no-op upserts; this is the retry path")
+		"contract: hook re-fires on every apply, including no-op upserts; this is the retry path")
 
-	// Now make the hook succeed and re-apply: success path returns 200,
-	// hook fired again (third call total, counter=1 since reset), row
-	// readable through the regular GET.
+	// Now make the hook succeed and re-apply: success path returns
+	// unchanged (Store.Upsert no-op'd), hook fired again, row readable
+	// through the regular GET.
 	hookErr = nil
 	hookCalls = 0
-	resp = api.Put("/v0/agents/halfapplied/v1", body)
-	require.Equal(t, http.StatusOK, resp.Code,
-		"once the platform-adapter clears, identical-spec re-apply succeeds without a spec bump")
+	res = applyAgentYAML(t, api, yaml)
+	require.NotEqual(t, arv0.ApplyStatusFailed, res.Status,
+		"once the type-adapter clears, identical-spec re-apply succeeds without a spec bump")
 	require.Equal(t, 1, hookCalls)
 }
 
 // TestResourceRegister_IncludeTerminatingByDefault pins the opt-in
 // behavior: a kind registered with IncludeTerminatingByDefault=true
 // surfaces terminating rows on plain LIST (no ?includeTerminating=true
-// needed), and the OR-ing with ?latestOnly=true still returns terminating
-// rows even though recomputeLatest has cleared is_latest_version on them.
+// needed), and ?latestOnly=true remains a no-op for mutable objects because
+// namespace/name is already unique.
 func TestResourceRegister_IncludeTerminatingByDefault(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+	store := v1alpha1store.NewMutableObjectStore(pool, "v1alpha1.runtimes")
+	const testNamespace = "terminating-test"
 
 	_, api := humatest.New(t)
-	resource.Register[*v1alpha1.Agent](api, resource.Config{
-		Kind:                        v1alpha1.KindAgent,
+	resource.Register[*v1alpha1.Runtime](api, resource.Config{
+		Kind:                        v1alpha1.KindRuntime,
 		BasePrefix:                  "/v0",
 		Store:                       store,
 		IncludeTerminatingByDefault: true,
-	}, func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
+	}, func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} })
 
 	// Seed a row, attach a finalizer, then soft-delete so the row goes
-	// terminating (deletion_timestamp set) and recomputeLatest clears
-	// its is_latest_version flag.
-	body := v1alpha1.Agent{
-		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "draining", Version: "v1"},
-		Spec:     v1alpha1.AgentSpec{Title: "Draining"},
-	}
-	resp := api.Put("/v0/agents/draining/v1", body)
-	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	// terminating (deletion_timestamp set).
+	_, err := store.Upsert(t.Context(), &v1alpha1.Runtime{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindRuntime},
+		Metadata: v1alpha1.ObjectMeta{Namespace: testNamespace, Name: "draining"},
+		Spec:     v1alpha1.RuntimeSpec{Type: "noop"},
+	})
+	require.NoError(t, err)
 
-	require.NoError(t, store.PatchFinalizers(t.Context(), "default", "draining", "v1",
+	require.NoError(t, store.PatchFinalizers(t.Context(), testNamespace, "draining", "",
 		func([]string) []string { return []string{"finalizer.example.com"} }))
-	require.NoError(t, store.Delete(t.Context(), "default", "draining", "v1"))
+	require.NoError(t, store.Delete(t.Context(), testNamespace, "draining", ""))
 
 	var list struct {
-		Items      []v1alpha1.Agent `json:"items"`
-		NextCursor string           `json:"nextCursor,omitempty"`
+		Items      []v1alpha1.Runtime `json:"items"`
+		NextCursor string             `json:"nextCursor,omitempty"`
 	}
 
 	// Plain LIST with no ?includeTerminating still returns the terminating
 	// row because the kind opted in via IncludeTerminatingByDefault.
-	resp = api.Get("/v0/agents")
+	resp := api.Get("/v0/runtimes?namespace=" + testNamespace)
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &list))
 	require.Len(t, list.Items, 1)
@@ -586,11 +755,9 @@ func TestResourceRegister_IncludeTerminatingByDefault(t *testing.T) {
 	require.NotNil(t, list.Items[0].Metadata.DeletionTimestamp,
 		"opt-in default must surface the deletionTimestamp so operators see in-flight teardown")
 
-	// LatestOnly OR-ed with the default-on flag: store widens the
-	// predicate to "(is_latest_version OR deletion_timestamp IS NOT NULL)"
-	// so the terminating row still appears even though its
-	// is_latest_version was cleared by recomputeLatest.
-	resp = api.Get("/v0/agents?latestOnly=true")
+	// LatestOnly is a no-op for mutable objects, so the terminating row remains
+	// visible because the kind opted into IncludeTerminatingByDefault.
+	resp = api.Get("/v0/runtimes?namespace=" + testNamespace + "&latestOnly=true")
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &list))
 	require.Len(t, list.Items, 1)

@@ -48,7 +48,7 @@ export function DeployServerDialog({ open, onOpenChange, server, onDeploySuccess
       await deployServerApi({
         body: {
           serverName: server.server.name,
-          version: server.server.version,
+          tag: server.server.tag,
           env: config,
           runtimeId: "local",
         },
@@ -88,7 +88,7 @@ export function DeployServerDialog({ open, onOpenChange, server, onDeploySuccess
         <DialogHeader>
           <DialogTitle>Deploy Server</DialogTitle>
           <DialogDescription>
-            Deploy {server.server.title || server.server.name} (v{server.server.version}) to your runtime
+            Deploy {server.server.title || server.server.name} ({server.server.tag}) to your runtime
           </DialogDescription>
         </DialogHeader>
 
@@ -110,7 +110,7 @@ export function DeployServerDialog({ open, onOpenChange, server, onDeploySuccess
               <div className="p-3 bg-muted rounded-lg">
                 <div className="font-medium">{server.server.title || server.server.name}</div>
                 <div className="text-sm text-muted-foreground">{server.server.name}</div>
-                <div className="text-xs text-muted-foreground mt-1">Version: {server.server.version}</div>
+                <div className="text-xs text-muted-foreground mt-1">Tag: {server.server.tag}</div>
               </div>
             </div>
 
@@ -219,4 +219,3 @@ export function DeployServerDialog({ open, onOpenChange, server, onDeploySuccess
     </Dialog>
   )
 }
-

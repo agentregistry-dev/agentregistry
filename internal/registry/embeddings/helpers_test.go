@@ -14,7 +14,7 @@ import (
 )
 
 func TestBuildMCPServerEmbeddingPayload_StableAcrossRuns(t *testing.T) {
-	meta := v1alpha1.ObjectMeta{Namespace: "default", Name: "foo", Version: "v1"}
+	meta := v1alpha1.ObjectMeta{Namespace: "default", Name: "foo", Tag: "v1"}
 	spec := v1alpha1.MCPServerSpec{
 		Title:       "Foo",
 		Description: "demo server",
@@ -41,7 +41,7 @@ func TestBuildMCPServerEmbeddingPayload_SkipsEmptyFields(t *testing.T) {
 
 func TestBuildRemoteMCPServerEmbeddingPayload_IncludesRemoteEndpoint(t *testing.T) {
 	out := BuildRemoteMCPServerEmbeddingPayload(
-		v1alpha1.ObjectMeta{Name: "remote-search", Version: "v2"},
+		v1alpha1.ObjectMeta{Name: "remote-search"},
 		v1alpha1.RemoteMCPServerSpec{
 			Title:       "Remote Search",
 			Description: "already running",
@@ -55,7 +55,6 @@ func TestBuildRemoteMCPServerEmbeddingPayload_IncludesRemoteEndpoint(t *testing.
 	require.Contains(t, out, "remote-search")
 	require.Contains(t, out, "Remote Search")
 	require.Contains(t, out, "already running")
-	require.Contains(t, out, "v2")
 	require.Contains(t, out, "streamable-http")
 	require.Contains(t, out, "https://mcp.example.com")
 }

@@ -97,7 +97,7 @@ function RemoteServerCard({ server }: { server: RemoteMcpServer }) {
         <CardTitle className="text-base">
           {server.spec.title || server.metadata.name}
           <Badge variant="outline" className="ml-2 align-middle text-xs">
-            v{server.metadata.version || "—"}
+            {server.metadata.tag || "latest"}
           </Badge>
         </CardTitle>
       </CardHeader>
@@ -134,6 +134,6 @@ function RemoteRow({ type, url }: { type?: string; url?: string }) {
   )
 }
 
-function cardKey(meta: { namespace?: string; name: string; version?: string }): string {
-  return `${meta.namespace ?? "default"}/${meta.name}@${meta.version ?? ""}`
+function cardKey(meta: { namespace?: string; name: string; tag?: string }): string {
+  return `${meta.namespace ?? "default"}/${meta.name}@${meta.tag ?? ""}`
 }

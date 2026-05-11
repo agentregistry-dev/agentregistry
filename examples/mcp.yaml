@@ -2,7 +2,6 @@ apiVersion: ar.dev/v1alpha1
 kind: MCPServer
 metadata:
   name: acme/fetch
-  version: "1.0.0"
 spec:
   title: Fetch Server
   description: "Fetches and extracts content from URLs"

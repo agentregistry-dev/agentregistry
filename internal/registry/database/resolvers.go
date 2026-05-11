@@ -24,12 +24,7 @@ func NewResolver(stores map[string]*v1alpha1store.Store) v1alpha1.ResolverFunc {
 		if !ok {
 			return fmt.Errorf("%w: unknown kind %q", v1alpha1.ErrInvalidRef, ref.Kind)
 		}
-		var err error
-		if ref.Version == "" {
-			_, err = store.GetLatest(ctx, ref.Namespace, ref.Name)
-		} else {
-			_, err = store.Get(ctx, ref.Namespace, ref.Name, ref.Version)
-		}
+		_, err := store.GetByRef(ctx, ref.Namespace, ref.Name, ref.Tag)
 		if err != nil {
 			if errors.Is(err, pkgdb.ErrNotFound) {
 				return v1alpha1.ErrDanglingRef
@@ -54,15 +49,7 @@ func NewGetter(stores map[string]*v1alpha1store.Store) v1alpha1.GetterFunc {
 		if !ok {
 			return nil, fmt.Errorf("%w: unknown kind %q", v1alpha1.ErrInvalidRef, ref.Kind)
 		}
-		var (
-			raw *v1alpha1.RawObject
-			err error
-		)
-		if ref.Version == "" {
-			raw, err = store.GetLatest(ctx, ref.Namespace, ref.Name)
-		} else {
-			raw, err = store.Get(ctx, ref.Namespace, ref.Name, ref.Version)
-		}
+		raw, err := store.GetByRef(ctx, ref.Namespace, ref.Name, ref.Tag)
 		if err != nil {
 			if errors.Is(err, pkgdb.ErrNotFound) {
 				return nil, v1alpha1.ErrDanglingRef

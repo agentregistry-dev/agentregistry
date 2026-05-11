@@ -1,6 +1,6 @@
 // Package types holds extension-point surfaces that cross the
 // pkg/registry <-> internal/registry boundary. Anything a downstream
-// build (enterprise wrapper, custom CLI) needs to implement to plug
+// build (out-of-tree wrapper, custom CLI) needs to implement to plug
 // into the registry app lives here.
 //
 // The types are split by domain across files:
@@ -40,8 +40,8 @@ type AuthorizeInput struct {
 	Namespace string
 	// Name is the resource name; "" for list verbs.
 	Name string
-	// Version is the resource version; "" for list and get-latest.
-	Version string
+	// Tag is the resource tag for content kinds; "" for list/get-latest.
+	Tag string
 }
 
 // Authorizer gates a single resource handler invocation. Return
@@ -67,19 +67,28 @@ type PostUpsert func(ctx context.Context, obj v1alpha1.Object) error
 // batch's per-doc delete hook.
 type PostDelete func(ctx context.Context, obj v1alpha1.Object) error
 
-// InitialFinalizers computes the finalizer slice seeded onto a row at
-// create time. Returning nil/empty leaves finalizers=[] (today's
-// default; no soft-delete protection). Returning a non-empty slice
-// blocks Store.Delete's hard-delete fast-path so the kind's reconciler
-// can own teardown.
+// Auditor receives audit events for state changes that the OSS layer
+// considers significant. The default OSS implementation is a no-op;
+// downstream builds plug in a real audit sink via NewStore options.
 //
-// The callback is invoked on every apply because the apply pipeline
-// can't know "create vs update" without an extra round-trip — the
-// distinction happens inside Upsert under FOR UPDATE. The returned
-// slice is used only on create; updates preserve existing finalizers
-// regardless. Implementations should be cheap (a type assertion + a
-// field read) and side-effect-free.
-type InitialFinalizers func(obj v1alpha1.Object) []string
+// Audit completeness is enforced at the source: every code path that
+// produces a recordable state change calls into Auditor directly,
+// rather than relying on observers (PostUpsert hooks, etc.) to remember
+// to log.
+type Auditor interface {
+	// ResourceTagCreated is invoked when Store.Upsert creates a new tag row
+	// for a content-registry kind. Mutable-object kinds do not produce this
+	// event.
+	ResourceTagCreated(ctx context.Context, kind, namespace, name, tag string)
+}
+
+type noopAuditor struct{}
+
+func (noopAuditor) ResourceTagCreated(ctx context.Context, kind, namespace, name, tag string) {
+}
+
+// NoopAuditor is the default Auditor used when none is plugged in.
+var NoopAuditor Auditor = noopAuditor{}
 
 // AppOptions contains configuration for the registry app.
 // All fields are optional and allow external developers to extend
@@ -114,7 +123,7 @@ type AppOptions struct {
 
 	// Authorizers gates every read + write operation on the
 	// generic v1alpha1 resource handler, keyed by canonical Kind name
-	// (v1alpha1.KindAgent, v1alpha1.KindMCPServer, etc.). Enterprise
+	// (v1alpha1.KindAgent, v1alpha1.KindMCPServer, etc.). Downstream
 	// builds wire their RBAC engine here so reader / publisher / admin
 	// gates fire on the OSS-registered Agent / MCPServer / Skill /
 	// Prompt / Runtime / Deployment endpoints. Missing keys behave
@@ -143,21 +152,18 @@ type AppOptions struct {
 	// PostDeletes mirror PostUpserts on the delete path.
 	PostDeletes map[string]PostDelete
 
-	// InitialFinalizers seeds finalizers atomically with row creation,
-	// per kind. Used by kinds whose teardown is owned by a reconciler
-	// driving external infrastructure: blocks Store.Delete's
-	// finalizer-empty hard-delete fast-path so the reconciler can drive
-	// cleanup before the row is purged. Missing keys leave new rows
-	// with finalizers=[] (today's behavior); existing rows preserve
-	// their finalizers across re-apply regardless.
-	InitialFinalizers map[string]InitialFinalizers
-
 	// V1Alpha1StoreTables registers additional v1alpha1 kinds with their
 	// backing PostgreSQL tables. Downstream builds that add their own
 	// Scheme kinds should populate this so the shared /v0/apply,
 	// /v0/import, resolver, and generic route plumbing can see the same
 	// store map as any ExtraRoutes they register.
 	V1Alpha1StoreTables map[string]string
+
+	// V1Alpha1MutableStoreKinds marks extra v1alpha1 kinds that use mutable
+	// namespace/name object behavior instead of tagged artifact semantics.
+	// Downstream control-plane/config kinds are v1alpha1-shaped but are not
+	// content artifacts.
+	V1Alpha1MutableStoreKinds map[string]bool
 
 	// RegistryValidator overrides the per-package registry
 	// validator (the dispatcher consulted on apply / import to confirm
@@ -170,7 +176,7 @@ type AppOptions struct {
 	// per-registry validator and matches the public-catalogue contract
 	// the upstream modelcontextprotocol/registry project ships. That's
 	// the right behavior for the OSS public catalogue but not for
-	// private enterprise deployments where:
+	// private deployments where:
 	//
 	//   - images live in private ECR / GCR / ACR that anonymous fetch
 	//     can't reach;
@@ -211,6 +217,16 @@ type AppOptions struct {
 
 	// AuthzProvider is an optional authorization provider.
 	AuthzProvider auth.AuthzProvider
+
+	// Auditor receives audit events from the v1alpha1 store layer
+	// (e.g. ResourceTagCreated on Upsert creates). The default OSS
+	// behavior is a no-op; downstream builds plug in a real audit sink.
+	// If nil, NoopAuditor is used.
+	Auditor Auditor
+
+	// InitialFinalizers seeds finalizers atomically on create for kinds
+	// whose external teardown must be protected from a concurrent delete.
+	InitialFinalizers map[string]func(v1alpha1.Object) []string
 }
 
 // Server represents the HTTP server and provides access to the Huma API

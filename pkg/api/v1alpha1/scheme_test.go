@@ -33,7 +33,6 @@ apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   name: summarizer
-  version: "1.0.0"
   labels:
     owner: core
 spec:
@@ -46,7 +45,7 @@ spec:
   mcpServers:
     - kind: MCPServer
       name: github-tools
-      version: "0.2"
+      tag: "0.2"
   skills:
     - kind: Skill
       name: code-review
@@ -62,7 +61,7 @@ spec:
 	if agent.APIVersion != GroupVersion || agent.Kind != KindAgent {
 		t.Fatalf("envelope mismatch: %+v", agent.TypeMeta)
 	}
-	if agent.Metadata.Name != "summarizer" || agent.Metadata.Version != "1.0.0" {
+	if agent.Metadata.Name != "summarizer" {
 		t.Fatalf("metadata mismatch: %+v", agent.Metadata)
 	}
 	if agent.Metadata.Labels["owner"] != "core" {
@@ -74,7 +73,7 @@ spec:
 	if len(agent.Spec.MCPServers) != 1 ||
 		agent.Spec.MCPServers[0].Kind != KindMCPServer ||
 		agent.Spec.MCPServers[0].Name != "github-tools" ||
-		agent.Spec.MCPServers[0].Version != "0.2" {
+		agent.Spec.MCPServers[0].Tag != "0.2" {
 		t.Fatalf("mcpServers ref mismatch: %+v", agent.Spec.MCPServers)
 	}
 	if len(agent.Spec.Skills) != 1 || agent.Spec.Skills[0].Name != "code-review" {
@@ -88,7 +87,6 @@ apiVersion: ar.dev/v1alpha1
 kind: MCPServer
 metadata:
   name: github-tools
-  version: "0.2"
 spec:
   title: GitHub Tools
   source:
@@ -125,7 +123,7 @@ spec:
   targetRef:
     kind: Agent
     name: summarizer
-    version: "1.0.0"
+    tag: "1.0.0"
   runtimeRef:
     kind: Runtime
     name: local
@@ -255,7 +253,6 @@ apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   name: summarizer
-  version: "1.0.0"
 spec:
   title: Summarizer
 `)
@@ -288,13 +285,14 @@ func TestEncode_RoundTrip_YAML(t *testing.T) {
 	// Empty Namespace survives a round trip — MarshalJSON strips "default"
 	// but UnmarshalJSON intentionally does NOT re-stamp it, so callers
 	// like the importer can layer their own default on top.
+	//
 	original := &Agent{
 		TypeMeta: TypeMeta{APIVersion: GroupVersion, Kind: KindAgent},
-		Metadata: ObjectMeta{Name: "rt", Version: "v1", Labels: map[string]string{"k": "v"}},
+		Metadata: ObjectMeta{Name: "rt", Labels: map[string]string{"k": "v"}},
 		Spec: AgentSpec{
 			Title:      "Round Trip",
 			Source:     &AgentSource{Image: "img:tag"},
-			MCPServers: []ResourceRef{{Kind: KindMCPServer, Name: "mcp1", Version: "1"}},
+			MCPServers: []ResourceRef{{Kind: KindMCPServer, Name: "mcp1", Tag: "1"}},
 		},
 	}
 
@@ -319,11 +317,12 @@ func TestEncode_RoundTrip_YAML(t *testing.T) {
 }
 
 func TestEncode_RoundTrip_JSON(t *testing.T) {
+	// Deployment identity is namespace/name. The decoder must not introduce hidden identity fields during a JSON round trip.
 	original := &Deployment{
 		TypeMeta: TypeMeta{APIVersion: GroupVersion, Kind: KindDeployment},
-		Metadata: ObjectMeta{Name: "prod", Version: "1"},
+		Metadata: ObjectMeta{Name: "prod"},
 		Spec: DeploymentSpec{
-			TargetRef:    ResourceRef{Kind: KindAgent, Name: "x", Version: "1"},
+			TargetRef:    ResourceRef{Kind: KindAgent, Name: "x", Tag: "1"},
 			RuntimeRef:   ResourceRef{Kind: KindRuntime, Name: "local"},
 			DesiredState: DesiredStateDeployed,
 			Env:          map[string]string{"FOO": "bar"},

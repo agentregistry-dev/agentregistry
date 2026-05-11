@@ -175,7 +175,6 @@ func TestLoadAgent_EnvelopeFormat(t *testing.T) {
 kind: Agent
 metadata:
   name: summarizer
-  version: "1.0.0"
 spec:
   source:
     image: ghcr.io/acme/summarizer:v1
@@ -189,15 +188,15 @@ spec:
   mcpServers:
     - kind: MCPServer
       name: acme/fetch
-      version: "1.0.0"
+      tag: "1.0.0"
   skills:
     - kind: Skill
       name: acme/summarize
-      version: "1.0.0"
+      tag: "1.0.0"
   prompts:
     - kind: Prompt
       name: acme/system
-      version: "1.0.0"
+      tag: "1.0.0"
 `
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "agent.yaml"), []byte(envelopeYAML), 0o644))
 	got, err := LoadAgent(dir)
@@ -208,7 +207,6 @@ spec:
 	// later by manifest.Resolve (which makes registry calls). LoadAgent
 	// only verifies the envelope round-trips into v1alpha1.Agent.
 	assert.Equal(t, "summarizer", got.Metadata.Name)
-	assert.Equal(t, "1.0.0", got.Metadata.Version)
 	assert.Equal(t, "ghcr.io/acme/summarizer:v1", got.Spec.Source.Image)
 	assert.Equal(t, "python", got.Spec.Language)
 	assert.Equal(t, "adk", got.Spec.Framework)
@@ -217,15 +215,15 @@ spec:
 
 	require.Len(t, got.Spec.MCPServers, 1)
 	assert.Equal(t, "acme/fetch", got.Spec.MCPServers[0].Name)
-	assert.Equal(t, "1.0.0", got.Spec.MCPServers[0].Version)
+	assert.Equal(t, "1.0.0", got.Spec.MCPServers[0].Tag)
 
 	require.Len(t, got.Spec.Skills, 1)
 	assert.Equal(t, "acme/summarize", got.Spec.Skills[0].Name)
-	assert.Equal(t, "1.0.0", got.Spec.Skills[0].Version)
+	assert.Equal(t, "1.0.0", got.Spec.Skills[0].Tag)
 
 	require.Len(t, got.Spec.Prompts, 1)
 	assert.Equal(t, "acme/system", got.Spec.Prompts[0].Name)
-	assert.Equal(t, "1.0.0", got.Spec.Prompts[0].Version)
+	assert.Equal(t, "1.0.0", got.Spec.Prompts[0].Tag)
 }
 
 // TestLoadAgent_RejectsLegacyFlatFormat pins the contract that the
