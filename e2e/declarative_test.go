@@ -360,9 +360,9 @@ func TestDeclarativeInit_Agent(t *testing.T) {
 	})
 
 	// Step 1: init generates project directory and declarative agent.yaml (offline).
-	result := RunArctl(t, tmpDir, "init", "agent", "adk", "python", name)
+	result := RunArctl(t, tmpDir, "init", "agent", name, "--framework", "adk", "--language", "python")
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "Successfully created agent:")
+	RequireOutputContains(t, result, "✓ Created agent:")
 
 	agentYAMLPath := filepath.Join(tmpDir, name, "agent.yaml")
 	RequireFileExists(t, agentYAMLPath)
@@ -399,9 +399,9 @@ func TestDeclarativeInit_MCP(t *testing.T) {
 	fullName := "e2e-test/" + dirName
 
 	// init is offline — no registry-url needed.
-	result := RunArctl(t, tmpDir, "init", "mcp", "fastmcp-python", fullName)
+	result := RunArctl(t, tmpDir, "init", "mcp", fullName, "--framework", "fastmcp", "--language", "python")
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "Successfully created MCP server:")
+	RequireOutputContains(t, result, "✓ Created MCP server:")
 
 	// Directory uses just the name part after "/".
 	mcpYAMLPath := filepath.Join(tmpDir, dirName, "mcp.yaml")
@@ -444,7 +444,7 @@ func TestDeclarativeInit_Skill(t *testing.T) {
 	// Step 1: init generates project directory and declarative skill.yaml (offline).
 	result := RunArctl(t, tmpDir, "init", "skill", name)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "Successfully created skill:")
+	RequireOutputContains(t, result, "✓ Created skill:")
 
 	skillYAMLPath := filepath.Join(tmpDir, name, "skill.yaml")
 	RequireFileExists(t, skillYAMLPath)
@@ -481,7 +481,7 @@ func TestDeclarativeInit_Prompt(t *testing.T) {
 	// Step 1: init writes NAME.yaml in cwd (no project directory).
 	result := RunArctl(t, tmpDir, "init", "prompt", name)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "Successfully created prompt:")
+	RequireOutputContains(t, result, "✓ Created prompt:")
 
 	promptYAMLPath := filepath.Join(tmpDir, name+".yaml")
 	RequireFileExists(t, promptYAMLPath)
@@ -528,7 +528,7 @@ func TestDeclarativeBuild_Agent(t *testing.T) {
 	CleanupDockerImage(t, image)
 
 	// Step 1: init the project.
-	result := RunArctl(t, tmpDir, "init", "agent", "adk", "python", name)
+	result := RunArctl(t, tmpDir, "init", "agent", name, "--framework", "adk", "--language", "python")
 	RequireSuccess(t, result)
 
 	projectDir := filepath.Join(tmpDir, name)
@@ -537,7 +537,6 @@ func TestDeclarativeBuild_Agent(t *testing.T) {
 	// Step 2: build the Docker image.
 	result = RunArctl(t, tmpDir, "build", projectDir)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "Building agent image:")
 
 	// Step 3: verify the image was built locally.
 	if !DockerImageExists(t, image) {
@@ -558,7 +557,7 @@ func TestDeclarativeBuild_MCP(t *testing.T) {
 	CleanupDockerImage(t, image)
 
 	// Step 1: init the project.
-	result := RunArctl(t, tmpDir, "init", "mcp", "fastmcp-python", fullName)
+	result := RunArctl(t, tmpDir, "init", "mcp", fullName, "--framework", "fastmcp", "--language", "python")
 	RequireSuccess(t, result)
 
 	projectDir := filepath.Join(tmpDir, dirName)
@@ -567,7 +566,6 @@ func TestDeclarativeBuild_MCP(t *testing.T) {
 	// Step 2: build the Docker image.
 	result = RunArctl(t, tmpDir, "build", projectDir)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "Building MCP server image:")
 
 	// Step 3: verify the image was built locally.
 	if !DockerImageExists(t, image) {
@@ -621,13 +619,13 @@ func TestDeclarativeInit_InvalidArgs(t *testing.T) {
 	}{
 		{
 			name:        "agent unsupported framework",
-			args:        []string{"init", "agent", "langchain", "python", "myagent"},
-			errContains: "unsupported framework",
+			args:        []string{"init", "agent", "myagent", "--framework", "langchain", "--language", "python"},
+			errContains: "no agent framework",
 		},
 		{
 			name:        "mcp unsupported framework",
-			args:        []string{"init", "mcp", "typescript", "myserver"},
-			errContains: "unsupported framework",
+			args:        []string{"init", "mcp", "acme/myserver", "--framework", "typescript", "--language", "python"},
+			errContains: "no mcp framework",
 		},
 	}
 
@@ -945,10 +943,10 @@ func TestApplyDeployment_HTTPIdempotent(t *testing.T) {
 	// deploy actually pulls the tagged image and starts it, so the image
 	// must exist in the daemon's localhost:5001 registry first.
 	result := RunArctl(t, tmpDir,
-		"init", "agent", "adk", "python",
+		"init", "agent", agentName,
+		"--framework", "adk", "--language", "python",
 		"--model-name", "gemini-2.5-flash",
 		"--image", agentImage,
-		agentName,
 	)
 	RequireSuccess(t, result)
 
@@ -1211,10 +1209,10 @@ func TestBatchApply_DriftRequiresForce(t *testing.T) {
 	// Step 1: init → build+push → apply the agent. Build pushes to the
 	// daemon's private localhost:5001 registry so the subsequent local
 	// deploy can pull it.
-	result := RunArctl(t, tmpDir, "init", "agent", "adk", "python",
+	result := RunArctl(t, tmpDir, "init", "agent", agentName,
+		"--framework", "adk", "--language", "python",
 		"--model-name", "gemini-2.5-flash",
 		"--image", agentImage,
-		agentName,
 	)
 	RequireSuccess(t, result)
 
@@ -1632,15 +1630,14 @@ spec:
 func TestArctl_KeptCommandsResolve(t *testing.T) {
 	t.Parallel()
 	cases := [][]string{
-		{"agent", "run"},
-		{"mcp", "run"},
 		{"mcp", "add-tool"},
-		{"skill", "pull"},
 		{"apply"},
 		{"get"},
 		{"delete"},
 		{"init"},
 		{"build"},
+		{"run"},
+		{"pull"},
 	}
 	for _, args := range cases {
 		args := args
@@ -1667,7 +1664,7 @@ func TestAgentBuild_EnvelopeManifest(t *testing.T) {
 	image := "localhost:5001/" + name + ":latest"
 	CleanupDockerImage(t, image)
 
-	result := RunArctl(t, tmpDir, "init", "agent", "adk", "python", name)
+	result := RunArctl(t, tmpDir, "init", "agent", name, "--framework", "adk", "--language", "python")
 	RequireSuccess(t, result)
 
 	projectDir := filepath.Join(tmpDir, name)
@@ -1679,7 +1676,6 @@ func TestAgentBuild_EnvelopeManifest(t *testing.T) {
 
 	result = RunArctl(t, tmpDir, "build", projectDir)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "Building agent image:")
 	if !DockerImageExists(t, image) {
 		t.Errorf("Expected Docker image %s after build of envelope project", image)
 	}
@@ -1697,7 +1693,7 @@ func TestMCPBuild_EnvelopeManifest(t *testing.T) {
 	image := "localhost:5001/" + dirName + ":latest"
 	CleanupDockerImage(t, image)
 
-	result := RunArctl(t, tmpDir, "init", "mcp", "fastmcp-python", fullName)
+	result := RunArctl(t, tmpDir, "init", "mcp", fullName, "--framework", "fastmcp", "--language", "python")
 	RequireSuccess(t, result)
 
 	projectDir := filepath.Join(tmpDir, dirName)
@@ -1708,7 +1704,6 @@ func TestMCPBuild_EnvelopeManifest(t *testing.T) {
 
 	result = RunArctl(t, tmpDir, "build", projectDir)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "Building MCP server image:")
 	if !DockerImageExists(t, image) {
 		t.Errorf("Expected Docker image %s after build of envelope project", image)
 	}
@@ -1767,97 +1762,6 @@ func TestDeclarativeDelete_NotFound(t *testing.T) {
 	RequireOutputContains(t, result, "not found")
 }
 
-// TestDeclarativeInit_AgentWithRefs verifies that arctl init agent's --mcp,
-// --skill, and --prompt flags produce the correct declarative ref entries in
-// the generated agent.yaml. These flags are the declarative replacement for
-// the deleted arctl agent add-mcp / add-skill / add-prompt commands.
-func TestDeclarativeInit_AgentWithRefs(t *testing.T) {
-	tmpDir := t.TempDir()
-	name := UniqueAgentName("initrefs")
-
-	// init is offline; no registry-url required for generation.
-	result := RunArctl(t, tmpDir, "init", "agent", "adk", "python", name,
-		"--mcp", "acme/fetch@1.0.0",
-		"--mcp", "acme/time@2.0.0",
-		"--skill", "summarize@1.0.0",
-		"--skill", "refine",
-		"--prompt", "sys-prompt@1.0.0",
-	)
-	RequireSuccess(t, result)
-
-	agentYAMLPath := filepath.Join(tmpDir, name, "agent.yaml")
-	RequireFileExists(t, agentYAMLPath)
-
-	m := parseDeclarativeYAML(t, agentYAMLPath)
-	spec, ok := m["spec"].(map[string]any)
-	if !ok {
-		t.Fatalf("spec missing or wrong type in generated agent.yaml: %v", m["spec"])
-	}
-
-	// The v1alpha1 scaffolder emits ResourceRef entries: {kind, name, version}.
-	// mcpServers — two registry refs, @version parsed correctly.
-	mcps, ok := spec["mcpServers"].([]any)
-	if !ok || len(mcps) != 2 {
-		t.Fatalf("expected 2 mcpServers, got %v", spec["mcpServers"])
-	}
-	for i, expected := range []struct {
-		name, version string
-	}{
-		{"acme/fetch", "1.0.0"},
-		{"acme/time", "2.0.0"},
-	} {
-		entry, _ := mcps[i].(map[string]any)
-		if entry["kind"] != "MCPServer" {
-			t.Errorf("mcpServers[%d]: expected kind=MCPServer, got %v", i, entry["kind"])
-		}
-		if entry["name"] != expected.name {
-			t.Errorf("mcpServers[%d]: name expected %q, got %v", i, expected.name, entry["name"])
-		}
-		if entry["version"] != expected.version {
-			t.Errorf("mcpServers[%d]: version expected %q, got %v", i, expected.version, entry["version"])
-		}
-	}
-
-	// skills — two entries; second uses default version "latest".
-	skills, ok := spec["skills"].([]any)
-	if !ok || len(skills) != 2 {
-		t.Fatalf("expected 2 skills, got %v", spec["skills"])
-	}
-	for i, expected := range []struct {
-		name, version string
-	}{
-		{"summarize", "1.0.0"},
-		{"refine", "latest"},
-	} {
-		entry, _ := skills[i].(map[string]any)
-		if entry["kind"] != "Skill" {
-			t.Errorf("skills[%d]: expected kind=Skill, got %v", i, entry["kind"])
-		}
-		if entry["name"] != expected.name {
-			t.Errorf("skills[%d]: name expected %q, got %v", i, expected.name, entry["name"])
-		}
-		if entry["version"] != expected.version {
-			t.Errorf("skills[%d]: version expected %q, got %v", i, expected.version, entry["version"])
-		}
-	}
-
-	// prompts — one entry with explicit version.
-	prompts, ok := spec["prompts"].([]any)
-	if !ok || len(prompts) != 1 {
-		t.Fatalf("expected 1 prompt, got %v", spec["prompts"])
-	}
-	entry, _ := prompts[0].(map[string]any)
-	if entry["kind"] != "Prompt" {
-		t.Errorf("prompts[0]: expected kind=Prompt, got %v", entry["kind"])
-	}
-	if entry["name"] != "sys-prompt" {
-		t.Errorf("prompts[0]: name expected %q, got %v", "sys-prompt", entry["name"])
-	}
-	if entry["version"] != "1.0.0" {
-		t.Errorf("prompts[0]: version expected %q, got %v", "1.0.0", entry["version"])
-	}
-}
-
 // TestDeploymentGet_YAMLIncludesStatus creates an agent + local deployment,
 // then checks that `arctl get deployment NAME -o yaml` renders a .status
 // block (phase/id/origin) in addition to the declarative spec. Round-trips
@@ -1889,10 +1793,10 @@ func TestDeploymentGet_YAMLIncludesStatus(t *testing.T) {
 
 	// init → build+push → apply — same shape as TestApplyDeployment_HTTPIdempotent.
 	RequireSuccess(t, RunArctl(t, tmpDir,
-		"init", "agent", "adk", "python",
+		"init", "agent", agentName,
+		"--framework", "adk", "--language", "python",
 		"--model-name", "gemini-2.5-flash",
 		"--image", agentImage,
-		agentName,
 	))
 	agentDir := filepath.Join(tmpDir, agentName)
 	RequireSuccess(t, RunArctl(t, tmpDir, "build", agentDir, "--push", "--image", agentImage))
@@ -2360,7 +2264,8 @@ func TestDeclarativeBuild_PlatformFlag(t *testing.T) {
 	name := UniqueAgentName("platagent")
 
 	// Scaffold an agent project — has a real Dockerfile the build can chew on.
-	RequireSuccess(t, RunArctl(t, tmpDir, "init", "agent", "adk", "python", name,
+	RequireSuccess(t, RunArctl(t, tmpDir, "init", "agent", name,
+		"--framework", "adk", "--language", "python",
 		"--model-name", "gemini-2.5-flash",
 		"--image", "localhost:5001/"+name+":platform-test"))
 

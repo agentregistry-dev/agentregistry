@@ -33,6 +33,11 @@ func TestMain(m *testing.M) {
 
 	checkPrerequisites()
 
+	// Resolve the arctl binary path once now, before any test calls
+	// t.Chdir / os.Chdir. The relative fallback (`../bin/arctl`) would
+	// otherwise re-resolve against whatever cwd a test happens to be in.
+	os.Setenv("ARCTL_BINARY", resolveArctlBinaryPath())
+
 	var cleanupFns []func()
 
 	registryURL = os.Getenv("ARCTL_API_BASE_URL")

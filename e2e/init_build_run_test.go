@@ -165,20 +165,20 @@ func TestE2E_Pull_Agent_ClonesSource(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestE2E_PluginDiscovery_FromXDG(t *testing.T) {
+func TestE2E_FrameworkDiscovery_FromXDG(t *testing.T) {
 	tmp := t.TempDir()
 	xdg := filepath.Join(tmp, "xdg")
-	pluginDir := filepath.Join(xdg, "arctl", "plugins", "fakeagent")
-	templatesDir := filepath.Join(pluginDir, "templates")
+	frameworkDir := filepath.Join(xdg, "arctl", "frameworks", "fakeagent")
+	templatesDir := filepath.Join(frameworkDir, "templates")
 	require.NoError(t, os.MkdirAll(templatesDir, 0755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(pluginDir, "plugin.yaml"),
+		filepath.Join(frameworkDir, "framework.yaml"),
 		[]byte(`apiVersion: arctl.dev/v1
 name: fakeagent
 type: agent
 framework: fake
 language: a
-description: fake plugin
+description: fake framework
 templatesDir: ./templates
 build:
   command: ["true"]
@@ -187,14 +187,14 @@ run:
 `), 0644))
 	// Minimal template tree so init's render step succeeds. agent.yaml is
 	// re-emitted by the declarative writer, so we only need a stub here to
-	// prove the plugin's templates dir is honoured.
+	// prove the framework's templates dir is honoured.
 	require.NoError(t, os.WriteFile(
 		filepath.Join(templatesDir, "agent.yaml.tmpl"),
 		[]byte("# stub agent template\nname: {{.Name}}\n"), 0644))
 
 	t.Setenv("XDG_CONFIG_HOME", xdg)
 
-	// init agent picking the fake framework — only possible if the user-level plugin loaded.
+	// init agent picking the fake framework — only possible if the user-level framework loaded.
 	require.NoError(t, os.Chdir(tmp))
 	result := RunArctl(t, tmp, "init", "agent", "fakeproj",
 		"--framework", "fake", "--language", "a")
