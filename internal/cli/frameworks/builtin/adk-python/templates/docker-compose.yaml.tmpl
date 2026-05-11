@@ -57,11 +57,11 @@ services:
 {{- end }}
     volumes:
       - type: bind
-        source: ./{{.Name}}{{if .Version}}/{{.Version}}{{end}}
+        source: ./{{.Name}}
         target: /config
 {{- if .HasSkills }}
       - type: bind
-        source: ./{{.Name}}{{if .Version}}/{{.Version}}{{end}}/skills
+        source: ./{{.Name}}/skills
         target: /skills
         read_only: true
 {{- end }}

@@ -22,7 +22,7 @@ func NewPullCmd() *cobra.Command {
 }
 
 func newPullCmd() *cobra.Command {
-	var version string
+	var tag string
 	cmd := &cobra.Command{
 		Use:   "pull TYPE NAME [DIRECTORY]",
 		Short: "Fetch a registry resource's source repo to local",
@@ -33,7 +33,7 @@ Spec.Source.Repository.URL from the registry and clones it into DIRECTORY
 (defaults to NAME if omitted).`,
 		Example: `  arctl pull agent myagent
   arctl pull mcp myserver ./vendor/myserver
-  arctl pull skill myskill --version 1.2.0`,
+  arctl pull skill myskill --tag stable`,
 		SilenceUsage: true,
 		Args:         cobra.RangeArgs(2, 3),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -46,14 +46,14 @@ Spec.Source.Repository.URL from the registry and clones it into DIRECTORY
 			if err != nil {
 				return err
 			}
-			return pullResource(cmd.Context(), typ, name, version, abs)
+			return pullResource(cmd.Context(), typ, name, tag, abs)
 		},
 	}
-	cmd.Flags().StringVar(&version, "version", "", "Specific version to pull")
+	cmd.Flags().StringVar(&tag, "tag", "", "Specific tag to pull")
 	return cmd
 }
 
-func pullResource(ctx context.Context, typ, name, version, outDir string) error {
+func pullResource(ctx context.Context, typ, name, tag, outDir string) error {
 	switch typ {
 	case "agent", "mcp", "skill":
 	default:
@@ -67,7 +67,7 @@ func pullResource(ctx context.Context, typ, name, version, outDir string) error 
 	var repoURL, subfolder string
 	switch typ {
 	case "agent":
-		obj, err := client.GetTyped(ctx, apiClient, v1alpha1.KindAgent, v1alpha1.DefaultNamespace, name, version,
+		obj, err := client.GetTyped(ctx, apiClient, v1alpha1.KindAgent, v1alpha1.DefaultNamespace, name, tag,
 			func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
 		if err != nil || obj == nil {
 			return fmt.Errorf("fetch agent %q: %w", name, err)
@@ -78,7 +78,7 @@ func pullResource(ctx context.Context, typ, name, version, outDir string) error 
 		repoURL = obj.Spec.Source.Repository.URL
 		subfolder = obj.Spec.Source.Repository.Subfolder
 	case "mcp":
-		obj, err := client.GetTyped(ctx, apiClient, v1alpha1.KindMCPServer, v1alpha1.DefaultNamespace, name, version,
+		obj, err := client.GetTyped(ctx, apiClient, v1alpha1.KindMCPServer, v1alpha1.DefaultNamespace, name, tag,
 			func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} })
 		if err != nil || obj == nil {
 			return fmt.Errorf("fetch mcp %q: %w", name, err)
@@ -89,7 +89,7 @@ func pullResource(ctx context.Context, typ, name, version, outDir string) error 
 		repoURL = obj.Spec.Source.Repository.URL
 		subfolder = obj.Spec.Source.Repository.Subfolder
 	case "skill":
-		obj, err := client.GetTyped(ctx, apiClient, v1alpha1.KindSkill, v1alpha1.DefaultNamespace, name, version,
+		obj, err := client.GetTyped(ctx, apiClient, v1alpha1.KindSkill, v1alpha1.DefaultNamespace, name, tag,
 			func() *v1alpha1.Skill { return &v1alpha1.Skill{} })
 		if err != nil || obj == nil {
 			return fmt.Errorf("fetch skill %q: %w", name, err)

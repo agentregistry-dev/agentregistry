@@ -195,7 +195,9 @@ func TestInitSkillCmd_BasicScaffold(t *testing.T) {
 
 	metadata := m["metadata"].(map[string]any)
 	assert.Equal(t, "myskill", metadata["name"])
-	assert.Equal(t, "0.1.0", metadata["tag"])
+	// metadata.tag is intentionally omitted from scaffolded YAML; server
+	// fills with literal "latest" on apply.
+	assert.NotContains(t, metadata, "tag")
 
 	spec := m["spec"].(map[string]any)
 	assert.Equal(t, "myskill", spec["title"])
@@ -212,15 +214,11 @@ func TestInitSkillCmd_CustomFlags(t *testing.T) {
 	cmd := declarative.NewInitCmd()
 	cmd.SetArgs([]string{
 		"skill", "myskill",
-		"--version", "1.2.0",
 		"--description", "Text summarizer",
 	})
 	require.NoError(t, cmd.Execute())
 
 	m := readYAMLFile(t, filepath.Join(tmpDir, "myskill", "skill.yaml"))
-	metadata := m["metadata"].(map[string]any)
-	assert.Equal(t, "1.2.0", metadata["tag"])
-
 	spec := m["spec"].(map[string]any)
 	assert.Equal(t, "Text summarizer", spec["description"])
 }
@@ -262,7 +260,7 @@ func TestInitPromptCmd_BasicScaffold(t *testing.T) {
 
 	metadata := m["metadata"].(map[string]any)
 	assert.Equal(t, "myprompt", metadata["name"])
-	assert.Equal(t, "0.1.0", metadata["tag"])
+	assert.NotContains(t, metadata, "tag")
 
 	spec := m["spec"].(map[string]any)
 	assert.NotEmpty(t, spec["content"])
@@ -281,14 +279,10 @@ func TestInitPromptCmd_CustomContent(t *testing.T) {
 		"prompt", "summarizer",
 		"--description", "Summarize text",
 		"--content", "You are a text summarizer. Be concise.",
-		"--version", "2.0.0",
 	})
 	require.NoError(t, cmd.Execute())
 
 	m := readYAMLFile(t, filepath.Join(tmpDir, "summarizer.yaml"))
-	metadata := m["metadata"].(map[string]any)
-	assert.Equal(t, "2.0.0", metadata["tag"])
-
 	spec := m["spec"].(map[string]any)
 	assert.Equal(t, "Summarize text", spec["description"])
 	assert.Equal(t, "You are a text summarizer. Be concise.", spec["content"])

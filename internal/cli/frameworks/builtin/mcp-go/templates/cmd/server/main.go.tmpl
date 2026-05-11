@@ -28,7 +28,7 @@ func main() {
 
 func run() error {
 	// Create the MCP server
-	server := mcp.NewServer(&mcp.Implementation{Name: "{{.ProjectName}}", Version: "{{.Version}}"}, nil)
+	server := mcp.NewServer(&mcp.Implementation{Name: "{{.ProjectName}}", Version: "0.0.0"}, nil)
 
 	// Register tools
 	tools.AddToolsToServer(server)

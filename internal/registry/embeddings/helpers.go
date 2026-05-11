@@ -58,7 +58,7 @@ func BuildAgentEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.AgentSpe
 		spec.Title,
 		spec.Description,
 		meta.Tag,
-
+		spec.ModelProvider,
 		spec.ModelName,
 		sourceImage,
 	)
