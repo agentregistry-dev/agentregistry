@@ -2,48 +2,153 @@ package common
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/agentregistry-dev/agentregistry/internal/client"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
 
 const (
-	defaultWaitTimeout  = 5 * time.Minute
+	// DefaultWaitTimeout is the wait helper's default cap when WaitOptions.Timeout
+	// is left at its zero value via the CLI default. Exposed so callers can opt
+	// into the same default without hardcoding the duration.
+	DefaultWaitTimeout = 5 * time.Minute
+
 	defaultPollInterval = 2 * time.Second
 )
 
-// WaitForDeploymentReady polls a deployment until it reaches a terminal state
-// (deployed or failed). Returns an error if the deployment fails or the timeout
-// is exceeded.
-func WaitForDeploymentReady(c *client.Client, deploymentID string) error {
-	deadline := time.Now().Add(defaultWaitTimeout)
+// WaitOptions configures WaitForDeployment.
+//
+// Timeout semantics (modeled on `kubectl wait --timeout=`):
+//   - > 0: wait at most this long.
+//   - == 0: poll once and return immediately (one-shot).
+//   - < 0: wait forever (no deadline).
+type WaitOptions struct {
+	// TargetStatus is the deployment status the wait succeeds on
+	// (e.g. "deployed", "failed"). Ignored when TargetDeleted is true.
+	// Defaults to "deployed" when both fields are zero.
+	TargetStatus string
 
+	// TargetDeleted, when true, waits for the deployment to disappear from
+	// the registry (the resolver returns a not-found error). Mutually
+	// exclusive with TargetStatus.
+	TargetDeleted bool
+
+	// Timeout caps the total wait. See type doc for the three regimes.
+	Timeout time.Duration
+
+	// PollInterval is the delay between poll attempts. Zero uses
+	// defaultPollInterval (2s).
+	PollInterval time.Duration
+
+	// Progress, if set, is invoked after each non-terminal poll with the
+	// observed status and elapsed time. Lets the CLI render progress
+	// without coupling the helper to a specific output stream.
+	Progress func(status string, elapsed time.Duration)
+}
+
+// ResolveDeploymentFunc fetches the current deployment record.
+// Implementations must return a not-found error (database.ErrNotFound or
+// client.ErrNotFound, or anything that wraps either) when the deployment
+// no longer exists. The not-found result is the success condition when
+// WaitOptions.TargetDeleted is true.
+type ResolveDeploymentFunc func(ctx context.Context) (*DeploymentRecord, error)
+
+// WaitForDeployment polls until the deployment reaches the requested state,
+// reaches a different terminal state (failure), or the timeout is exceeded.
+//
+// Behavior:
+//   - With TargetStatus set, success means dep.Status == TargetStatus.
+//     Reaching a *different* terminal state (deployed / failed / undeployed)
+//     is reported as an error, even if the new state is itself "terminal".
+//   - With TargetDeleted, success means the resolver returns a not-found
+//     error. Any other observation keeps polling.
+//   - Context cancellation interrupts the wait and is surfaced as ctx.Err().
+func WaitForDeployment(ctx context.Context, resolve ResolveDeploymentFunc, opts WaitOptions) error {
+	if resolve == nil {
+		return errors.New("WaitForDeployment: resolve function is nil")
+	}
+
+	target := opts.TargetStatus
+	if !opts.TargetDeleted && target == "" {
+		target = "deployed"
+	}
+
+	pollInterval := opts.PollInterval
+	if pollInterval <= 0 {
+		pollInterval = defaultPollInterval
+	}
+
+	start := time.Now()
 	for {
-		dep, err := FindDeploymentByIDPrefix(context.Background(), c, deploymentID)
-		if err != nil {
+		dep, err := resolve(ctx)
+		notFound := isDeploymentNotFound(err)
+		if err != nil && !notFound {
 			return fmt.Errorf("polling deployment status: %w", err)
 		}
-		if dep == nil {
-			return fmt.Errorf("deployment %s not found", deploymentID)
-		}
 
-		switch dep.Status {
-		case "deployed":
+		switch {
+		case notFound && opts.TargetDeleted:
 			return nil
-		case "failed":
+		case notFound:
+			return errors.New("deployment not found")
+		case !opts.TargetDeleted && dep.Status == target:
+			return nil
+		case !opts.TargetDeleted && isTerminalStatus(dep.Status):
 			if dep.Error != "" {
-				return fmt.Errorf("deployment failed: %s", dep.Error)
+				return fmt.Errorf("deployment reached state %q (waiting for %q): %s",
+					dep.Status, target, dep.Error)
 			}
-			return fmt.Errorf("deployment failed")
-		case "undeployed", "terminating":
-			return fmt.Errorf("deployment is %s", dep.Status)
+			return fmt.Errorf("deployment reached state %q (waiting for %q)",
+				dep.Status, target)
 		}
 
-		if time.Now().After(deadline) {
-			return fmt.Errorf("timed out waiting for deployment to become ready (current status: %s)", dep.Status)
+		observed := "deleted"
+		if dep != nil {
+			observed = dep.Status
+		}
+		elapsed := time.Since(start)
+
+		if opts.Timeout == 0 || (opts.Timeout > 0 && elapsed >= opts.Timeout) {
+			return fmt.Errorf("timed out after %s waiting for deployment to reach %q (current status: %s)",
+				elapsed.Round(time.Second), targetDescription(opts), observed)
 		}
 
-		time.Sleep(defaultPollInterval)
+		if opts.Progress != nil {
+			opts.Progress(observed, elapsed)
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(pollInterval):
+		}
 	}
+}
+
+func isTerminalStatus(s string) bool {
+	switch s {
+	case "deployed", "failed", "undeployed":
+		return true
+	}
+	return false
+}
+
+func targetDescription(opts WaitOptions) string {
+	if opts.TargetDeleted {
+		return "deleted"
+	}
+	if opts.TargetStatus == "" {
+		return "deployed"
+	}
+	return opts.TargetStatus
+}
+
+func isDeploymentNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	return errors.Is(err, database.ErrNotFound) || errors.Is(err, client.ErrNotFound)
 }
