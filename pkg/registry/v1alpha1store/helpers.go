@@ -25,7 +25,7 @@ type rowScanner interface {
 // wire-form representations so callers can unmarshal into typed structs.
 //
 // tagged reflects the Store's private behavior and decides whether the scanned
-// identity column should populate public metadata.tag. Mutable-object queries
+// tag column should populate public metadata.tag. Mutable-object queries
 // emit an empty synthetic value to keep the column layout uniform.
 // Tagged content queries emit a synthetic 0::bigint generation and '[]'::jsonb
 // finalizers so the column layout stays uniform across modes.
@@ -38,7 +38,7 @@ func scanRow(row rowScanner, tagged bool) (*v1alpha1.RawObject, error) {
 	var (
 		namespace         string
 		name              string
-		identity          string
+		tag               string
 		uid               string
 		generation        int64
 		labelsJSON        []byte
@@ -52,7 +52,7 @@ func scanRow(row rowScanner, tagged bool) (*v1alpha1.RawObject, error) {
 	)
 
 	if err := row.Scan(
-		&namespace, &name, &identity, &uid, &generation,
+		&namespace, &name, &tag, &uid, &generation,
 		&labelsJSON, &annotationsJSON, &specJSON, &statusJSON,
 		&deletionTimestamp, &finalizersJSON,
 		&createdAt, &updatedAt,
@@ -65,7 +65,7 @@ func scanRow(row rowScanner, tagged bool) (*v1alpha1.RawObject, error) {
 
 	return decodeRow(
 		tagged,
-		namespace, name, identity, uid, generation,
+		namespace, name, tag, uid, generation,
 		labelsJSON, annotationsJSON, specJSON, statusJSON,
 		deletionTimestamp, finalizersJSON, createdAt, updatedAt,
 	)
@@ -76,11 +76,11 @@ func scanRow(row rowScanner, tagged bool) (*v1alpha1.RawObject, error) {
 // distance score) can reuse the deserialization without repeating its
 // logic.
 //
-// Tagged mode populates Metadata.Tag with the row's identity. Mutable-object
+// Tagged mode populates Metadata.Tag with the row's tag. Mutable-object
 // rows have no tag.
 func decodeRow(
 	tagged bool,
-	namespace, name, identity, uid string,
+	namespace, name, tag, uid string,
 	generation int64,
 	labelsJSON, annotationsJSON, specJSON, statusJSON []byte,
 	deletionTimestamp *time.Time,
@@ -122,7 +122,7 @@ func decodeRow(
 		Status:   json.RawMessage(statusJSON),
 	}
 	if tagged {
-		meta.Tag = identity
+		meta.Tag = tag
 		raw.Metadata = meta
 	}
 

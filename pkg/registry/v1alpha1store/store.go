@@ -42,13 +42,13 @@ const (
 // Store has two private behaviors, picked at construction time:
 //
 //   - TaggedArtifactStore (the default; produced by NewStore).
-//     Identity is (namespace, name, tag). Users may supply the tag
+//     Storage key is (namespace, name, tag). Users may supply the tag
 //     declaratively; missing tags are filled with the literal "latest".
 //     Re-applying the same tag replaces the prior row atomically when the
 //     content changes. Used for agents, mcp_servers,
 //     remote_mcp_servers, skills, and prompts.
 //
-//   - MutableObjectStore (produced by NewMutableObjectStore). Identity is
+//   - MutableObjectStore (produced by NewMutableObjectStore). Storage key is
 //     (namespace, name). Used for Runtime/Deployment and additional
 //     downstream mutable control-plane/config kinds.
 //
@@ -135,7 +135,7 @@ const (
 
 // UpsertResult is the outcome of Upsert.
 type UpsertResult struct {
-	// Tag is the content identity after the call for tagged-artifact tables.
+	// Tag is the content tag after the call for tagged-artifact tables.
 	Tag string
 	// UID is the server-managed row identity after the write.
 	UID string
@@ -230,7 +230,7 @@ type listCursor struct {
 //   - same tag and same canonical content hash → no-op
 //   - same tag and different content hash → replace the row in place
 //   - Mutable-object tables follow Kubernetes-like update-in-place
-//     semantics behind namespace/name identity.
+//     semantics behind namespace/name key.
 //
 // Status is never touched by Upsert — use PatchStatus for that.
 func (s *Store) Upsert(ctx context.Context, obj v1alpha1.Object, opts ...UpsertOpts) (UpsertResult, error) {
@@ -308,7 +308,7 @@ func (s *Store) upsertTagged(ctx context.Context, meta *v1alpha1.ObjectMeta, spe
 		// semantics: goroutines that see "no prior row" can all proceed
 		// to INSERT the same tag before one wins the unique constraint.
 		// An advisory transaction lock serializes the entire
-		// (lookup, insert) decision per identity. The lock auto-releases
+		// (lookup, insert) decision per resource name. The lock auto-releases
 		// at COMMIT/ROLLBACK because we use pg_advisory_xact_lock.
 		key := s.advisoryLockKey(s.table, meta.Namespace, meta.Name)
 		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, key); err != nil {
@@ -499,7 +499,7 @@ type PatchOpts struct {
 }
 
 // ApplyPatch atomically applies PatchOpts to one row. Tagged-artifact stores
-// require identity=metadata.tag; mutable-object stores ignore identity and use
+// require tag=metadata.tag; mutable-object stores ignore tag and use
 // namespace/name. Columns whose mutator is nil are left untouched. Returns
 // pkgdb.ErrNotFound if the row doesn't exist.
 //
@@ -507,18 +507,18 @@ type PatchOpts struct {
 // tagged-artifact tables don't carry a finalizers column. Calling
 // PatchFinalizers on a tagged-artifact Store returns an error to
 // surface the misconfiguration loudly rather than silently no-op.
-func (s *Store) ApplyPatch(ctx context.Context, namespace, name, identity string, patch PatchOpts) error {
+func (s *Store) ApplyPatch(ctx context.Context, namespace, name, tag string, patch PatchOpts) error {
 	if patch.Status == nil && patch.Annotations == nil && patch.Finalizers == nil {
 		return nil
 	}
 	if patch.Finalizers != nil && s.behavior == TaggedArtifactStore {
 		return errors.New("v1alpha1 store: finalizers patching not supported on tagged-artifact tables")
 	}
-	if identity == "" && s.behavior == TaggedArtifactStore {
+	if tag == "" && s.behavior == TaggedArtifactStore {
 		return errors.New("v1alpha1 store: tag is required")
 	}
 	return runInTx(ctx, s.pool, func(tx pgx.Tx) error {
-		statusJSON, annotationsJSON, finalizersJSON, err := s.loadPatchRow(ctx, tx, namespace, name, identity)
+		statusJSON, annotationsJSON, finalizersJSON, err := s.loadPatchRow(ctx, tx, namespace, name, tag)
 		if err != nil {
 			return err
 		}
@@ -527,7 +527,7 @@ func (s *Store) ApplyPatch(ctx context.Context, namespace, name, identity string
 		args := []any{namespace, name}
 		where := "namespace=$1 AND name=$2"
 		if s.behavior == TaggedArtifactStore {
-			args = append(args, identity)
+			args = append(args, tag)
 			where += " AND tag=$3"
 		}
 
@@ -570,7 +570,7 @@ func (s *Store) ApplyPatch(ctx context.Context, namespace, name, identity string
 // (status, annotations, and on mutable-object stores finalizers) and returns
 // pkgdb.ErrNotFound if no row matches. The finalizers payload is empty
 // for tagged-artifact stores.
-func (s *Store) loadPatchRow(ctx context.Context, tx pgx.Tx, namespace, name, identity string) (statusJSON, annotationsJSON, finalizersJSON []byte, err error) {
+func (s *Store) loadPatchRow(ctx context.Context, tx pgx.Tx, namespace, name, tag string) (statusJSON, annotationsJSON, finalizersJSON []byte, err error) {
 	if s.behavior == MutableObjectStore {
 		err = tx.QueryRow(ctx,
 			fmt.Sprintf(`
@@ -585,7 +585,7 @@ func (s *Store) loadPatchRow(ctx context.Context, tx pgx.Tx, namespace, name, id
 				SELECT status, annotations FROM %s
 				WHERE namespace=$1 AND name=$2 AND tag=$3
 				FOR UPDATE`, s.table),
-			namespace, name, identity,
+			namespace, name, tag,
 		).Scan(&statusJSON, &annotationsJSON)
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -655,28 +655,28 @@ func buildFinalizersPatch(current []byte, mutate func([]string) []string) ([]byt
 
 // PatchStatus is a thin wrapper over ApplyPatch for the single-column
 // status case.
-func (s *Store) PatchStatus(ctx context.Context, namespace, name, identity string, mutate func(current json.RawMessage) (json.RawMessage, error)) error {
-	return s.ApplyPatch(ctx, namespace, name, identity, PatchOpts{Status: mutate})
+func (s *Store) PatchStatus(ctx context.Context, namespace, name, tag string, mutate func(current json.RawMessage) (json.RawMessage, error)) error {
+	return s.ApplyPatch(ctx, namespace, name, tag, PatchOpts{Status: mutate})
 }
 
 // PatchFinalizers is a thin wrapper over ApplyPatch for the single-
 // column finalizers case. Only valid for the deployments table.
-func (s *Store) PatchFinalizers(ctx context.Context, namespace, name, identity string, mutate func([]string) []string) error {
-	return s.ApplyPatch(ctx, namespace, name, identity, PatchOpts{Finalizers: mutate})
+func (s *Store) PatchFinalizers(ctx context.Context, namespace, name, tag string, mutate func([]string) []string) error {
+	return s.ApplyPatch(ctx, namespace, name, tag, PatchOpts{Finalizers: mutate})
 }
 
 // PatchAnnotations is a thin wrapper over ApplyPatch for the single-
 // column annotations case.
-func (s *Store) PatchAnnotations(ctx context.Context, namespace, name, identity string, mutate func(map[string]string) map[string]string) error {
-	return s.ApplyPatch(ctx, namespace, name, identity, PatchOpts{Annotations: mutate})
+func (s *Store) PatchAnnotations(ctx context.Context, namespace, name, tag string, mutate func(map[string]string) map[string]string) error {
+	return s.ApplyPatch(ctx, namespace, name, tag, PatchOpts{Annotations: mutate})
 }
 
 // Get returns a single row, including terminating rows. For tagged-artifact
-// stores, identity is metadata.tag. Mutable-object stores ignore identity and
+// stores, tag is metadata.tag. Mutable-object stores ignore tag and
 // load by namespace/name. Returns pkgdb.ErrNotFound if missing.
-func (s *Store) Get(ctx context.Context, namespace, name, identity string) (*v1alpha1.RawObject, error) {
+func (s *Store) Get(ctx context.Context, namespace, name, tag string) (*v1alpha1.RawObject, error) {
 	if s.behavior == TaggedArtifactStore {
-		if identity == "" {
+		if tag == "" {
 			return nil, errors.New("v1alpha1 store: tag is required")
 		}
 		row := s.pool.QueryRow(ctx,
@@ -684,7 +684,7 @@ func (s *Store) Get(ctx context.Context, namespace, name, identity string) (*v1a
 				SELECT %s
 				FROM %s
 				WHERE namespace=$1 AND name=$2 AND tag=$3`, s.selectColumns(), s.table),
-			namespace, name, identity)
+			namespace, name, tag)
 		return scanRow(row, true)
 	}
 	row := s.pool.QueryRow(ctx,
@@ -737,12 +737,12 @@ func (s *Store) GetLatest(ctx context.Context, namespace, name string) (*v1alpha
 // finalizer drain. Tagged-artifact rows have no finalizers and are hard-deleted
 // immediately so name/tag can be reapplied without waiting for GC. Returns
 // pkgdb.ErrNotFound if the row doesn't exist.
-func (s *Store) Delete(ctx context.Context, namespace, name, identity string) error {
+func (s *Store) Delete(ctx context.Context, namespace, name, tag string) error {
 	if s.behavior == TaggedArtifactStore {
-		if identity == "" {
+		if tag == "" {
 			return errors.New("v1alpha1 store: tag is required")
 		}
-		args := []any{namespace, name, identity}
+		args := []any{namespace, name, tag}
 		return s.deleteTagged(ctx, args)
 	}
 	return s.deleteMutable(ctx, namespace, name)
@@ -771,7 +771,7 @@ func (s *Store) DeleteByRef(ctx context.Context, namespace, name, tag string) er
 // resource" and report an error.
 //
 // Returns an empty slice (no error) when no rows exist for the
-// identity: list semantics differ from the single-row Get path. The
+// tag: list semantics differ from the single-row Get path. The
 // HTTP layer surfaces empty results as 200 with `{"items": []}`.
 func (s *Store) ListTags(ctx context.Context, namespace, name string) ([]*v1alpha1.RawObject, error) {
 	if s.behavior == MutableObjectStore {
@@ -808,8 +808,8 @@ func (s *Store) ListTags(ctx context.Context, namespace, name string) ([]*v1alph
 
 // DeleteAllTags hard-deletes every tag row for (namespace, name)
 // on a tagged-artifact table. This is the contract of the
-// batch DELETE endpoint: identity is logical, callers cannot pin it to
-// a single tag unless they include metadata.tag. Returns pkgdb.ErrNotFound
+// batch DELETE endpoint when metadata.tag is omitted; callers delete a
+// single tag by including metadata.tag. Returns pkgdb.ErrNotFound
 // when no row exists for (namespace, name).
 //
 // Calling on a mutable-object Store is a programming error; the per-kind Store
@@ -822,7 +822,7 @@ func (s *Store) DeleteAllTags(ctx context.Context, namespace, name string) error
 	if namespace == "" || name == "" {
 		return errors.New("v1alpha1 store: namespace and name are required")
 	}
-	tag, err := s.pool.Exec(ctx,
+	cmdTag, err := s.pool.Exec(ctx,
 		fmt.Sprintf(`
 			DELETE FROM %s
 			WHERE namespace=$1 AND name=$2`, s.table),
@@ -830,7 +830,7 @@ func (s *Store) DeleteAllTags(ctx context.Context, namespace, name string) error
 	if err != nil {
 		return fmt.Errorf("delete all tags: %w", err)
 	}
-	if tag.RowsAffected() == 0 {
+	if cmdTag.RowsAffected() == 0 {
 		return pkgdb.ErrNotFound
 	}
 	return nil
@@ -940,15 +940,15 @@ func (s *Store) PurgeFinalized(ctx context.Context) (int64, error) {
 			WHERE deletion_timestamp IS NOT NULL
 			  AND finalizers = '[]'::jsonb`, s.table)
 	}
-	tag, err := s.pool.Exec(ctx, query)
+	cmdTag, err := s.pool.Exec(ctx, query)
 	if err != nil {
 		return 0, fmt.Errorf("purge finalized: %w", err)
 	}
-	return tag.RowsAffected(), nil
+	return cmdTag.RowsAffected(), nil
 }
 
-// List returns rows filtered by opts, ordered by (namespace, name,
-// stable resource identity ASC with updated_at as a stable tiebreaker. Pagination cursor
+// List returns rows filtered by opts, ordered by stable resource key
+// (namespace, name, tag) with updated_at as a stable tiebreaker. Pagination cursor
 // is returned when more rows are available; pass it back via
 // ListOpts.Cursor to continue. Terminating rows are excluded unless
 // IncludeTerminating is true.
@@ -988,7 +988,7 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 			return nil, "", err
 		}
 		if s.behavior == TaggedArtifactStore {
-			// Order by stable identity before updated_at so status patches do not
+			// Order by stable tag before updated_at so status patches do not
 			// let a row skip across pages.
 			args = append(args, cursor.Namespace, cursor.Name, cursor.Tag, cursor.UpdatedAt)
 			where = append(where, fmt.Sprintf(

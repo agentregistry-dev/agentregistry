@@ -527,11 +527,11 @@ func registerDelete[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T
 			if err != nil {
 				return nil, err
 			}
-			identity, err := unescapePath("tag", in.Tag)
+			tag, err := unescapePath("tag", in.Tag)
 			if err != nil {
 				return nil, err
 			}
-			return runDelete(ctx, cfg, newObj, kind, ns, name, identity, in.Force)
+			return runDelete(ctx, cfg, newObj, kind, ns, name, tag, in.Force)
 		})
 		return
 	}
@@ -565,13 +565,13 @@ func runDeleteLatest[T v1alpha1.Object](ctx context.Context, cfg Config, newObj 
 	return &deleteOutput{}, nil
 }
 
-func runDelete[T v1alpha1.Object](ctx context.Context, cfg Config, newObj func() T, kind, ns, name, identity string, force bool) (*deleteOutput, error) {
+func runDelete[T v1alpha1.Object](ctx context.Context, cfg Config, newObj func() T, kind, ns, name, tag string, force bool) (*deleteOutput, error) {
 	var preDelete v1alpha1.Object
 	runHook := cfg.PostDelete != nil && !force
 	if runHook {
-		row, err := cfg.Store.Get(ctx, ns, name, identity)
+		row, err := cfg.Store.Get(ctx, ns, name, tag)
 		if err != nil {
-			return nil, mapNotFound(err, kind, ns, name, identity)
+			return nil, mapNotFound(err, kind, ns, name, tag)
 		}
 		obj, err := v1alpha1.EnvelopeFromRaw(newObj, row, kind)
 		if err != nil {
@@ -587,8 +587,8 @@ func runDelete[T v1alpha1.Object](ctx context.Context, cfg Config, newObj func()
 	if runHook {
 		dopts.PostDelete = cfg.PostDelete
 	}
-	if ae := deleteCore(ctx, cfg.Store, kind, ns, name, identity, dopts); ae != nil {
-		return nil, mapApplyErrorToHuma(ae, kind, ns, name, identity)
+	if ae := deleteCore(ctx, cfg.Store, kind, ns, name, tag, dopts); ae != nil {
+		return nil, mapApplyErrorToHuma(ae, kind, ns, name, tag)
 	}
 	return &deleteOutput{}, nil
 }
@@ -597,7 +597,7 @@ func runDelete[T v1alpha1.Object](ctx context.Context, cfg Config, newObj func()
 // from applyCore / deleteCore into the huma error shape the
 // single-resource handlers emit. Mirrors the per-stage HTTP-status
 // policy that used to be inlined in each closure.
-func mapApplyErrorToHuma(ae *applyError, kind, ns, name, identity string) error {
+func mapApplyErrorToHuma(ae *applyError, kind, ns, name, tag string) error {
 	switch ae.Stage {
 	case stageAuth:
 		// Auth callbacks already return huma errors; propagate.
@@ -614,14 +614,14 @@ func mapApplyErrorToHuma(ae *applyError, kind, ns, name, identity string) error 
 		if ae.Terminating {
 			return huma.Error409Conflict(fmt.Sprintf(
 				"%s %s/%s/%s is terminating; delete + re-apply once GC purges the row",
-				kind, ns, name, identity))
+				kind, ns, name, tag))
 		}
 		return huma.Error500InternalServerError("upsert "+kind, ae.Err)
 	case stagePostUpsert:
 		return huma.Error500InternalServerError(kind+" post-upsert", ae.Err)
 	case stageDelete:
 		if ae.NotFound {
-			return mapNotFound(ae.Err, kind, ns, name, identity)
+			return mapNotFound(ae.Err, kind, ns, name, tag)
 		}
 		return huma.Error500InternalServerError("delete "+kind, ae.Err)
 	case stagePostDelete:
@@ -693,12 +693,12 @@ func runList[T v1alpha1.Object](
 
 // mapNotFound converts a pkgdb.ErrNotFound error into a Huma 404 with a
 // consistent message. Other errors fall through as 500.
-func mapNotFound(err error, kind, namespace, name, identity string) error {
+func mapNotFound(err error, kind, namespace, name, tag string) error {
 	if errors.Is(err, pkgdb.ErrNotFound) {
-		if identity == "" {
+		if tag == "" {
 			return huma.Error404NotFound(fmt.Sprintf("%s %q/%q not found", kind, namespace, name))
 		}
-		return huma.Error404NotFound(fmt.Sprintf("%s %q/%q@%q not found", kind, namespace, name, identity))
+		return huma.Error404NotFound(fmt.Sprintf("%s %q/%q@%q not found", kind, namespace, name, tag))
 	}
 	return huma.Error500InternalServerError("fetch "+kind, err)
 }

@@ -240,7 +240,7 @@ func TestStore_DeleteHardDeletesTaggedRow(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "stable", stable.Metadata.Tag)
 
-	// Re-apply with the same logical identity succeeds as a fresh latest tag.
+	// Re-apply with the same logical tag succeeds as a fresh latest tag.
 	res := upsertAgent(t, store, "bar", v1alpha1.AgentSpec{Title: "reborn"}, nil)
 	require.Equal(t, UpsertCreated, res.Outcome)
 	require.Equal(t, DefaultTag(), res.Tag)
@@ -406,7 +406,7 @@ func TestStore_ListRejectsInvalidCursor(t *testing.T) {
 }
 
 // TestStore_ListCursorStableUnderStatusChurn exercises the
-// reason List orders by stable resource identity before updated_at.
+// reason List orders by stable resource key before updated_at.
 // rather than updated_at DESC: a row whose updated_at moves under a
 // concurrent PatchStatus must not jump pages or get returned twice.
 func TestStore_ListCursorStableUnderStatusChurn(t *testing.T) {
@@ -433,7 +433,7 @@ func TestStore_ListCursorStableUnderStatusChurn(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, cursor2)
 	require.Len(t, page2, 2, "page2 must contain exactly the remaining rows")
-	require.Equal(t, "delta", page2[0].Metadata.Name, "identity ordering puts delta before gamma")
+	require.Equal(t, "delta", page2[0].Metadata.Name, "key ordering puts delta before gamma")
 	require.Equal(t, "gamma", page2[1].Metadata.Name)
 
 	seen := map[string]int{}

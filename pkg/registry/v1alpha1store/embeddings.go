@@ -18,7 +18,7 @@ import (
 )
 
 // SetEmbedding writes a SemanticEmbedding onto a row. Tagged-artifact stores
-// require identity=metadata.tag; mutable-object stores ignore identity and
+// require tag=metadata.tag; mutable-object stores ignore tag and
 // address rows by namespace/name. Called by the indexer after the provider
 // generates a fresh vector. Not part of Upsert: embeddings regenerate on a
 // different cadence than spec changes (the indexer reacts to status NOTIFY,
@@ -26,11 +26,11 @@ import (
 // Checksum.
 //
 // Returns pkgdb.ErrNotFound if the row doesn't exist.
-func (s *Store) SetEmbedding(ctx context.Context, namespace, name, identity string, emb semantic.SemanticEmbedding) error {
+func (s *Store) SetEmbedding(ctx context.Context, namespace, name, tag string, emb semantic.SemanticEmbedding) error {
 	if namespace == "" || name == "" {
 		return errors.New("v1alpha1 store: namespace and name are required")
 	}
-	if s.behavior == TaggedArtifactStore && identity == "" {
+	if s.behavior == TaggedArtifactStore && tag == "" {
 		return errors.New("v1alpha1 store: tag is required")
 	}
 	literal, err := VectorLiteral(emb.Vector)
@@ -41,12 +41,12 @@ func (s *Store) SetEmbedding(ctx context.Context, namespace, name, identity stri
 	where := "namespace=$1 AND name=$2"
 	next := 3
 	if s.behavior == TaggedArtifactStore {
-		args = append(args, identity)
+		args = append(args, tag)
 		where += " AND tag=$3"
 		next = 4
 	}
 	args = append(args, literal, emb.Provider, emb.Model, emb.Dimensions, emb.Checksum)
-	tag, err := s.pool.Exec(ctx,
+	cmdTag, err := s.pool.Exec(ctx,
 		fmt.Sprintf(`
 			UPDATE %s
 			SET semantic_embedding              = $%d::vector,
@@ -61,25 +61,25 @@ func (s *Store) SetEmbedding(ctx context.Context, namespace, name, identity stri
 	if err != nil {
 		return fmt.Errorf("set embedding: %w", err)
 	}
-	if tag.RowsAffected() == 0 {
+	if cmdTag.RowsAffected() == 0 {
 		return pkgdb.ErrNotFound
 	}
 	return nil
 }
 
 // GetEmbeddingMetadata returns embedding provenance columns without reading the
-// vector itself. Tagged-artifact stores require identity=metadata.tag;
-// mutable-object stores ignore identity and address rows by namespace/name.
+// vector itself. Tagged-artifact stores require tag=metadata.tag;
+// mutable-object stores ignore tag and address rows by namespace/name.
 // Used by the indexer to decide whether a row needs re-indexing (comparing
 // Checksum).
 //
 // Returns pkgdb.ErrNotFound if the row doesn't exist. Returns (nil, nil)
 // when the row exists but has no embedding yet (generated_at IS NULL).
-func (s *Store) GetEmbeddingMetadata(ctx context.Context, namespace, name, identity string) (*semantic.SemanticEmbeddingMetadata, error) {
+func (s *Store) GetEmbeddingMetadata(ctx context.Context, namespace, name, tag string) (*semantic.SemanticEmbeddingMetadata, error) {
 	if namespace == "" || name == "" {
 		return nil, errors.New("v1alpha1 store: namespace and name are required")
 	}
-	if s.behavior == TaggedArtifactStore && identity == "" {
+	if s.behavior == TaggedArtifactStore && tag == "" {
 		return nil, errors.New("v1alpha1 store: tag is required")
 	}
 	var (
@@ -92,7 +92,7 @@ func (s *Store) GetEmbeddingMetadata(ctx context.Context, namespace, name, ident
 	args := []any{namespace, name}
 	where := "namespace=$1 AND name=$2"
 	if s.behavior == TaggedArtifactStore {
-		args = append(args, identity)
+		args = append(args, tag)
 		where += " AND tag=$3"
 	}
 	err := s.pool.QueryRow(ctx,
@@ -252,7 +252,7 @@ func scanSemanticRow(rows pgx.Rows, tagged bool) (*v1alpha1.RawObject, float32, 
 	var (
 		namespace         string
 		name              string
-		identity          string
+		tag               string
 		uid               string
 		generation        int64
 		labelsJSON        []byte
@@ -267,7 +267,7 @@ func scanSemanticRow(rows pgx.Rows, tagged bool) (*v1alpha1.RawObject, float32, 
 	)
 
 	if err := rows.Scan(
-		&namespace, &name, &identity, &uid, &generation,
+		&namespace, &name, &tag, &uid, &generation,
 		&labelsJSON, &annotationsJSON, &specJSON, &statusJSON,
 		&deletionTimestamp, &finalizersJSON,
 		&createdAt, &updatedAt,
@@ -278,7 +278,7 @@ func scanSemanticRow(rows pgx.Rows, tagged bool) (*v1alpha1.RawObject, float32, 
 
 	obj, err := decodeRow(
 		tagged,
-		namespace, name, identity, uid, generation,
+		namespace, name, tag, uid, generation,
 		labelsJSON, annotationsJSON, specJSON, statusJSON,
 		deletionTimestamp, finalizersJSON, createdAt, updatedAt,
 	)

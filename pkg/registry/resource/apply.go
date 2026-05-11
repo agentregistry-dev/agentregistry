@@ -203,7 +203,7 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 // decoded body verbatim — batch callers expecting hook input matching
 // the persisted row should re-apply before deleting.
 //
-// Tagged-artifact batch delete uses logical identity: omitting metadata.tag
+// Tagged-artifact batch delete uses the logical tag selector: omitting metadata.tag
 // deletes every tag for (namespace, name); setting metadata.tag deletes that
 // exact tag. Mutable-object rows keep their single-row delete since those rows
 // are control-plane state rather than append-only tags.

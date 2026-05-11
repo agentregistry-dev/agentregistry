@@ -69,7 +69,7 @@ func (e *applyError) Error() string {
 }
 
 // applyCore runs the shared upsert pipeline on a single
-// already-decoded, identity-stamped object:
+// already-decoded, metadata-stamped object:
 //
 //	authorize → validate → resolve refs → validate registries →
 //	marshal spec → Store.Upsert → PostUpsert
@@ -171,20 +171,20 @@ type deleteOpts struct {
 func deleteCore(
 	ctx context.Context,
 	store *v1alpha1store.Store,
-	kind, namespace, name, identity string,
+	kind, namespace, name, tag string,
 	opts deleteOpts,
 ) *applyError {
 	if opts.Authorize != nil {
 		if err := opts.Authorize(ctx, AuthorizeInput{
 			Verb: "delete", Kind: kind,
-			Namespace: namespace, Name: name, Tag: identity,
+			Namespace: namespace, Name: name, Tag: tag,
 			Object: opts.PreDeleteObject,
 		}); err != nil {
 			return &applyError{Stage: stageAuth, Err: err}
 		}
 	}
 
-	if err := store.Delete(ctx, namespace, name, identity); err != nil {
+	if err := store.Delete(ctx, namespace, name, tag); err != nil {
 		return &applyError{
 			Stage:    stageDelete,
 			Err:      err,

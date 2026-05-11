@@ -523,11 +523,11 @@ func TestResourceRegister_ResolverDetectsDanglingRef(t *testing.T) {
 		if ref.Kind != v1alpha1.KindMCPServer {
 			return nil
 		}
-		identity := ref.Tag
-		if identity == "" {
-			identity = v1alpha1store.DefaultTag()
+		tag := ref.Tag
+		if tag == "" {
+			tag = v1alpha1store.DefaultTag()
 		}
-		_, err := mcpStore.Get(ctx, ref.Namespace, ref.Name, identity)
+		_, err := mcpStore.Get(ctx, ref.Namespace, ref.Name, tag)
 		return err
 	}
 
@@ -576,7 +576,7 @@ spec:
 
 // TestResourceRegister_DeleteHardDeletesFinalizerFree pins the K8s
 // fast-path: rows with no finalizers hard-delete synchronously on
-// DELETE. Without it, "DELETE then apply same identity" hits
+// DELETE. Without it, "DELETE then apply same tag" hits
 // ErrTerminating until the (currently non-existent) GC purges the row.
 // Reported by josh-pritchard on PR #455 ("Soft-delete blocks re-apply
 // for every v1alpha1 kind"); fixed at the Store layer.
@@ -610,7 +610,7 @@ spec:
 	resp = api.Get("/v0/agents/soft/latest")
 	require.Equal(t, http.StatusNotFound, resp.Code)
 
-	// Re-apply with the same logical identity succeeds — no
+	// Re-apply with the same logical tag succeeds — no
 	// "object is terminating" race since the row is fully removed.
 	// A fresh create after hard-delete recreates the latest tag.
 	res = applyAgentYAML(t, api, createYAML)
