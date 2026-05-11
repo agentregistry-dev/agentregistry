@@ -53,10 +53,10 @@ func validateDeploymentSpec(s *DeploymentSpec) FieldErrors {
 	var errs FieldErrors
 
 	// TargetRef: required. Accepts the bundled lifecycle kinds (Agent,
-	// MCPServer) and the pre-deployed MCP peer (RemoteMCPServer).
-	// Adapters dispatch on Kind: bundled goes through container/process
-	// lifecycle; remote variants do thin pass-through registration.
-	for _, e := range validateRef(s.TargetRef, KindAgent, KindMCPServer, KindRemoteMCPServer) {
+	// MCPServer). MCPServer covers both bundled (spec.source) and remote
+	// (spec.remote) variants under a single kind; adapters dispatch on
+	// whether Spec.Source or Spec.Remote is set.
+	for _, e := range validateRef(s.TargetRef, KindAgent, KindMCPServer) {
 		errs.Append("spec.targetRef."+e.Path, e.Cause)
 	}
 	// RuntimeRef: required, must name a Runtime.

@@ -366,13 +366,40 @@ func TestMCPServerValidate_OK(t *testing.T) {
 	require.NoError(t, m.Validate())
 }
 
-func TestRemoteMCPServerValidate_RejectsBadRemote(t *testing.T) {
-	r := &RemoteMCPServer{
+func TestMCPServerValidate_RejectsBadRemote(t *testing.T) {
+	r := &MCPServer{
 		Metadata: ObjectMeta{Namespace: "default", Name: "tools", Tag: "v1"},
-		Spec: RemoteMCPServerSpec{
-			Remote: MCPTransport{Type: "streamable-http"}, // missing URL
+		Spec: MCPServerSpec{
+			Remote: &MCPTransport{Type: "streamable-http"}, // missing URL
 		},
 	}
 	paths := failedFields(t, r.Validate())
 	require.Contains(t, paths, "spec.remote.url")
+}
+
+func TestMCPServerValidate_RemoteAndSourceMutuallyExclusive(t *testing.T) {
+	m := &MCPServer{
+		Metadata: ObjectMeta{Namespace: "default", Name: "tools", Tag: "v1"},
+		Spec: MCPServerSpec{
+			Source: &MCPServerSource{
+				Package: &MCPPackage{
+					RegistryType: "oci",
+					Identifier:   "ghcr.io/example/mcp-tools:1.0.0",
+					Transport:    MCPTransport{Type: "stdio"},
+				},
+			},
+			Remote: &MCPTransport{Type: "streamable-http", URL: "https://example.test/mcp"},
+		},
+	}
+	paths := failedFields(t, m.Validate())
+	require.Contains(t, paths, "spec")
+}
+
+func TestMCPServerValidate_RequiresSourceOrRemote(t *testing.T) {
+	m := &MCPServer{
+		Metadata: ObjectMeta{Namespace: "default", Name: "tools", Tag: "v1"},
+		Spec:     MCPServerSpec{},
+	}
+	paths := failedFields(t, m.Validate())
+	require.Contains(t, paths, "spec")
 }

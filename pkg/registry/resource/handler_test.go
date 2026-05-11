@@ -28,8 +28,8 @@ import (
 // into these tests.
 //
 // Direct PUT on the per-kind item URL is no longer registered for
-// content-registry kinds (Agent, MCPServer, RemoteMCPServer, Skill,
-// Prompt) — POST /v0/apply is the single create/update entry point. The
+// content-registry kinds (Agent, MCPServer, Skill, Prompt) — POST /v0/apply
+// is the single create/update entry point. The
 // helper wires both so tests can drive applies through /v0/apply and
 // reads/deletes through the per-kind GET/DELETE.
 func registerAgent(api huma.API, store *v1alpha1store.Store) {
@@ -444,7 +444,7 @@ func TestResourceRegister_ListFilter(t *testing.T) {
 // TestResourceRegister_PutNotRegisteredForContentKinds pins the
 // post-redesign contract: direct PUT on the per-kind item URL is no
 // longer registered for content-registry kinds (Agent, MCPServer,
-// RemoteMCPServer, Skill, Prompt). POST /v0/apply is the single
+// Skill, Prompt). POST /v0/apply is the single
 // create/update entry point — user-controlled tags live in metadata.tag rather
 // than the URL segment of a direct PUT. Runtime/Deployment mutable-object
 // stores still expose direct namespace/name PUT.

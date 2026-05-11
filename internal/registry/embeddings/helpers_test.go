@@ -39,13 +39,13 @@ func TestBuildMCPServerEmbeddingPayload_SkipsEmptyFields(t *testing.T) {
 	require.Equal(t, []string{"only-name"}, lines)
 }
 
-func TestBuildRemoteMCPServerEmbeddingPayload_IncludesRemoteEndpoint(t *testing.T) {
-	out := BuildRemoteMCPServerEmbeddingPayload(
+func TestBuildMCPServerEmbeddingPayload_IncludesRemoteEndpoint(t *testing.T) {
+	out := BuildMCPServerEmbeddingPayload(
 		v1alpha1.ObjectMeta{Name: "remote-search"},
-		v1alpha1.RemoteMCPServerSpec{
+		v1alpha1.MCPServerSpec{
 			Title:       "Remote Search",
 			Description: "already running",
-			Remote: v1alpha1.MCPTransport{
+			Remote: &v1alpha1.MCPTransport{
 				Type: "streamable-http",
 				URL:  "https://mcp.example.com",
 			},

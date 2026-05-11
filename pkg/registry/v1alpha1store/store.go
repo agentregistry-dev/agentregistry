@@ -45,8 +45,7 @@ const (
 //     Storage key is (namespace, name, tag). Users may supply the tag
 //     declaratively; missing tags are filled with the literal "latest".
 //     Re-applying the same tag replaces the prior row atomically when the
-//     content changes. Used for agents, mcp_servers,
-//     remote_mcp_servers, skills, and prompts.
+//     content changes. Used for agents, mcp_servers, skills, and prompts.
 //
 //   - MutableObjectStore (produced by NewMutableObjectStore). Storage key is
 //     (namespace, name). Used for Runtime/Deployment and additional

@@ -59,9 +59,9 @@ const (
 )
 
 // RemoteMCPTarget is the platform-internal DTO describing a remote MCP
-// endpoint (parsed URL components + headers). Renamed from RemoteMCPServer
-// to disambiguate from the v1alpha1.RemoteMCPServer kind and the
-// kagent.dev/v1alpha2.RemoteMCPServer CRD.
+// endpoint (parsed URL components + headers). Distinct from the
+// kagent.dev/v1alpha2.RemoteMCPServer CRD which is the on-cluster
+// representation.
 type RemoteMCPTarget struct {
 	Scheme  string
 	Host    string
