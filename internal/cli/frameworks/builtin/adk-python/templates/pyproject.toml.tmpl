@@ -1,0 +1,22 @@
+[project]
+name = "{{.Name}}"
+version = "0.1"
+description = "{{.Name}} agent"
+readme = "README.md"
+dependencies = [
+  # google-adk 1.25.1 bundles LiteLLM directly; later versions split it into
+  # the [extensions] extra which the kagent-adk:0.8.0-beta6 base image's
+  # uv-managed venv can't pick up via `pip install`. Pin to match the
+  # solo-io/agentregistry-dev-samples reference template.
+  "google-adk==1.25.1",
+{{- if eq .ModelProvider "bedrock"}}
+  # Bedrock uses anthropic.AnthropicBedrock directly (see bedrock_model.py)
+  # rather than LiteLLM, because LiteLLM's bedrock path drops tool
+  # descriptions which the Bedrock API rejects.
+  "anthropic[bedrock]>=0.40",
+{{- end}}
+{{- if eq .ModelProvider "agentgateway"}}
+  "kagent-adk=={{.KagentADKPyVersion}}",
+{{- end}}
+]
+requires-python = ">=3.13"

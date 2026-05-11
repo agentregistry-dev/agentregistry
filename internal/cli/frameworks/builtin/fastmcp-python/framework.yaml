@@ -1,0 +1,18 @@
+apiVersion: arctl.dev/v1
+name: fastmcp-python
+type: mcp
+framework: fastmcp
+language: python
+description: FastMCP Python SDK for MCP servers
+templatesDir: ./templates
+env:
+  optional:
+    - LOG_LEVEL
+build:
+  command: ["docker", "build", "{{if .Platform}}--platform={{.Platform}}{{end}}", "-t", "{{.Image}}", "{{.ProjectDir}}"]
+run:
+  # HTTP transport so the server is reachable from sibling agent projects via
+  # host.docker.internal:{{.Port}}/mcp. Stdio mode is not used by `arctl run`
+  # because it produces no useful state without an attached MCP client.
+  command: ["docker", "run", "--rm", "-p", "{{.Port}}:{{.Port}}",
+            "{{.Image}}", "--transport", "http", "--host", "0.0.0.0", "--port", "{{.Port}}"]

@@ -51,8 +51,6 @@ metadata:
 spec:
   source:
     image: ghcr.io/acme/summarizer:v1.0.0
-  language: python
-  framework: adk
   modelProvider: gemini
   modelName: gemini-2.5-flash
   description: "An agent that summarizes documents using Gemini"
@@ -60,12 +58,4 @@ spec:
   mcpServers:
     - kind: MCPServer
       name: acme/fetch
-      tag: stable
-  skills:
-    - kind: Skill
-      name: summarize
-      tag: stable
-  prompts:
-    - kind: Prompt
-      name: summarizer-system-prompt
       tag: stable

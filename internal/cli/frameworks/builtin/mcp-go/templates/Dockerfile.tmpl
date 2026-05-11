@@ -1,0 +1,28 @@
+# Build stage
+FROM golang:1.25-alpine AS builder
+
+WORKDIR /app
+
+# Glob the optional go.sum: it isn't shipped by `arctl init`. Caching the
+# module download on go.mod alone keeps subsequent code-only changes fast.
+COPY go.mod go.su[m] ./
+RUN go mod download
+
+COPY . .
+
+# `go mod tidy` ensures go.sum has entries for everything actually imported
+# (download alone doesn't always write go.sum for transitive deps when
+# starting from no go.sum). Skip if vendored, otherwise this is a no-op
+# when go.sum is already complete.
+RUN go mod tidy && CGO_ENABLED=0 GOOS=linux go build -o /app/server ./cmd/server
+
+# Final stage
+FROM alpine
+
+WORKDIR /app
+
+COPY --from=builder /app/server /app/server
+
+EXPOSE 8080
+
+ENTRYPOINT ["/app/server"] 

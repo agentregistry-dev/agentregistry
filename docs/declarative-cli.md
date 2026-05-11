@@ -5,10 +5,12 @@ Define agents, MCP servers, skills, and prompts as YAML files and manage them wi
 ## Quick Start
 
 ```bash
-arctl init agent adk python summarizer --model-provider gemini --model-name gemini-2.5-flash
-arctl build summarizer/ --push      # optional: build and push Docker image
+arctl init agent summarizer --framework adk --language python --model-provider gemini --model-name gemini-2.5-flash
+arctl build summarizer/ --push    # optional: build and push Docker image
 arctl apply -f summarizer/agent.yaml
 ```
+
+`arctl init agent NAME` and `arctl init mcp NAMESPACE/NAME` pick a framework + language interactively unless `--framework` and `--language` are provided. Run `arctl init agent NAME` (or `arctl init mcp NAMESPACE/NAME`) on its own to see the available choices.
 
 ## Tags And Mutable Objects
 
@@ -17,30 +19,62 @@ Agents, MCP servers, remote MCP servers, skills, and prompts are taggable artifa
 Providers and deployments are mutable control-plane objects. They use public namespace/name identity, not tags or versions.
 
 ```bash
-arctl get agent NAME                   # latest
-arctl get agent NAME --tag stable      # exact tag
-arctl get agent NAME --all-tags        # tag list
+arctl init agent summarizer --framework adk --language python --model-provider gemini --model-name gemini-2.5-flash
+arctl build summarizer/ --push    # optional: build and push Docker image
+arctl apply -f summarizer/agent.yaml
 
-arctl delete agent NAME                # latest
-arctl delete agent NAME --tag stable   # exact tag
-arctl delete agent NAME --all-tags     # delete every tag
+arctl get agent summarizer               # latest
+arctl get agent summarizer --tag stable  # exact tag
+arctl get agent summarizer --all-tags    # tag list
 
-arctl get provider NAME
-arctl delete provider NAME
-arctl get deployment NAME
-arctl delete deployment NAME --force
+arctl delete agent summarizer                # latest
+arctl delete agent summarizer --tag stable   # exact tag
+arctl delete agent summarizer --all-tags     # delete every tag
 ```
 
-## Resources
-
-The same shape works for every kind — substitute the alias: `agent`, `mcp`, `skill`, `prompt`.
+Run locally with `arctl run` from inside the project directory (it reads `arctl.yaml` to pick the right framework):
 
 ```bash
-arctl init <kind> <name> [flags]   # scaffold YAML
-arctl build <dir> --push           # optional: build + push image (agent, mcp)
-arctl apply -f <file>.yaml         # publish
-arctl get <kind> <name>            # read
-arctl delete <kind> <name>         # remove
+cd summarizer/
+arctl run             # build + run via the framework
+arctl run --watch     # rebuild and restart on file change
+arctl run --dry-run   # print the command without executing
+```
+
+## MCP Servers
+
+```bash
+arctl init mcp acme/my-server --framework fastmcp --language python
+arctl build my-server/ --push    # optional: build and push Docker image
+arctl apply -f my-server/mcp.yaml
+arctl get mcps
+arctl delete mcp acme/my-server --tag stable
+```
+
+`arctl run` also works for MCP server projects — it dispatches to the framework selected in `arctl.yaml`.
+
+## Skills & Prompts
+
+```bash
+arctl init skill summarize
+arctl apply -f summarize/skill.yaml
+arctl get skills
+arctl delete skill summarize --tag stable
+
+arctl init prompt summarizer-system-prompt
+arctl apply -f summarizer-system-prompt.yaml
+arctl get prompts
+arctl delete prompt summarizer-system-prompt --tag stable
+```
+
+## Pulling Resources
+
+Fetch a registered resource's source back to a local directory:
+
+```bash
+arctl pull agent summarizer
+arctl pull mcp acme/my-server ./vendor/my-server
+arctl pull skill summarize --version 1.2.0
 ```
 
 ## Tips

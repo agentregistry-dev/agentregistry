@@ -386,36 +386,15 @@ For skills supporting multiple tools/frameworks:
 - Include error handling guidance
 - Provide usage examples
 
-## Validation and Packaging
-
-Before distributing the skill:
-
-1. **Validate structure:**
-```bash
-python3 /mnt/skills/examples/skill-creator/scripts/quick_validate.py /path/to/skill
-```
-
-2. **Package for distribution:**
-```bash
-python3 /mnt/skills/examples/skill-creator/scripts/package_skill.py /path/to/skill
-```
-
-The validator checks:
-- YAML frontmatter format
-- Required fields present
-- Naming conventions
-- File organization
-
 ## Next Steps
 
 After reviewing this template:
 
-1. Copy to create your own skill
-2. Update frontmatter with your skill name and description
-3. Replace example content with domain-specific material
-4. Remove unused resource directories
-5. Test with real queries
-6. Iterate based on usage
+1. Update the frontmatter `name` and `description` (the description is what Claude uses to decide when to invoke the skill — be specific about trigger contexts).
+2. Replace example content with domain-specific material.
+3. Remove unused resource directories.
+4. Publish via `arctl apply -f skill.yaml`.
+5. Test with real queries and iterate.
 
-For detailed guidance, see the skill-creator skill in `/mnt/skills/examples/skill-creator/`.
+For detailed guidance on authoring skills, see the [Anthropic skill-creator reference](https://github.com/anthropics/skills/tree/main/skills/skill-creator).
 {{end}}

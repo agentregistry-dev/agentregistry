@@ -37,20 +37,6 @@ func (a *Agent) ResolveRefs(ctx context.Context, resolver ResolverFunc) error {
 		}
 		errs = append(errs, resolveRefWith(ctx, resolver, ref, fmt.Sprintf("spec.mcpServers[%d]", i))...)
 	}
-	for i, ref := range a.Spec.Skills {
-		ref.Kind = KindSkill
-		if ref.Namespace == "" {
-			ref.Namespace = a.Metadata.Namespace
-		}
-		errs = append(errs, resolveRefWith(ctx, resolver, ref, fmt.Sprintf("spec.skills[%d]", i))...)
-	}
-	for i, ref := range a.Spec.Prompts {
-		ref.Kind = KindPrompt
-		if ref.Namespace == "" {
-			ref.Namespace = a.Metadata.Namespace
-		}
-		errs = append(errs, resolveRefWith(ctx, resolver, ref, fmt.Sprintf("spec.prompts[%d]", i))...)
-	}
 	if len(errs) == 0 {
 		return nil
 	}
@@ -84,32 +70,6 @@ func validateAgentSpec(s *AgentSpec) FieldErrors {
 		}
 		for _, e := range validateRef(ref) {
 			errs.Append(fmt.Sprintf("spec.mcpServers[%d].%s", i, e.Path), e.Cause)
-		}
-	}
-	for i, ref := range s.Skills {
-		kind := ref.Kind
-		if kind == "" {
-			kind = KindSkill
-		}
-		if kind != KindSkill {
-			errs.Append(fmt.Sprintf("spec.skills[%d].kind", i),
-				fmt.Errorf("%w: must be %q, got %q", ErrInvalidRef, KindSkill, ref.Kind))
-		}
-		for _, e := range validateRef(ref) {
-			errs.Append(fmt.Sprintf("spec.skills[%d].%s", i, e.Path), e.Cause)
-		}
-	}
-	for i, ref := range s.Prompts {
-		kind := ref.Kind
-		if kind == "" {
-			kind = KindPrompt
-		}
-		if kind != KindPrompt {
-			errs.Append(fmt.Sprintf("spec.prompts[%d].kind", i),
-				fmt.Errorf("%w: must be %q, got %q", ErrInvalidRef, KindPrompt, ref.Kind))
-		}
-		for _, e := range validateRef(ref) {
-			errs.Append(fmt.Sprintf("spec.prompts[%d].%s", i, e.Path), e.Cause)
 		}
 	}
 

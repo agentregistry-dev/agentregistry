@@ -57,15 +57,12 @@ func BuildAgentEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.AgentSpe
 		meta.Name,
 		spec.Title,
 		spec.Description,
-		spec.Language,
-		spec.Framework,
+		meta.Tag,
 		spec.ModelProvider,
 		spec.ModelName,
 		sourceImage,
 	)
 	appendJSON(&parts, spec.MCPServers)
-	appendJSON(&parts, spec.Skills)
-	appendJSON(&parts, spec.Prompts)
 	appendJSON(&parts, sourceRepo)
 	return strings.Join(parts, "\n")
 }

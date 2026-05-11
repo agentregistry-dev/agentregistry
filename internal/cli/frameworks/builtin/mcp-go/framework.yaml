@@ -1,0 +1,18 @@
+apiVersion: arctl.dev/v1
+name: mcp-go
+type: mcp
+framework: mcp-go
+language: go
+description: MCP server using the official Go SDK
+templatesDir: ./templates
+env:
+  optional:
+    - LOG_LEVEL
+build:
+  command: ["docker", "build", "{{if .Platform}}--platform={{.Platform}}{{end}}", "-t", "{{.Image}}", "{{.ProjectDir}}"]
+run:
+  # HTTP transport via the runtime's --http flag. Stdio mode is not used by
+  # `arctl run` because it produces no useful state without an attached MCP
+  # client.
+  command: ["docker", "run", "--rm", "-p", "{{.Port}}:{{.Port}}",
+            "{{.Image}}", "--http", "0.0.0.0:{{.Port}}"]
