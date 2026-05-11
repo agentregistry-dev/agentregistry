@@ -107,7 +107,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	if registryValidator == nil {
 		registryValidator = registries.Dispatcher
 	}
-	stores, importer := buildStoresAndImporter(pool, registryValidator, options.V1Alpha1StoreTables)
+	stores, importer := buildStoresAndImporter(pool, registryValidator, options.V1Alpha1StoreTables, options.V1Alpha1MutableStoreKinds, options.Auditor)
 
 	slog.Info("starting agentregistry", "version", version.Version, "commit", version.GitCommit)
 
@@ -183,14 +183,22 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	return nil
 }
 
-func buildStoresAndImporter(pool *pgxpool.Pool, registryValidator v1alpha1.RegistryValidatorFunc, extraStoreTables map[string]string) (map[string]*v1alpha1store.Store, *pkgimporter.Importer) {
-	stores := v1alpha1store.NewStores(pool)
+func buildStoresAndImporter(pool *pgxpool.Pool, registryValidator v1alpha1.RegistryValidatorFunc, extraStoreTables map[string]string, mutableExtraKinds map[string]bool, auditor types.Auditor) (map[string]*v1alpha1store.Store, *pkgimporter.Importer) {
+	if auditor == nil {
+		auditor = types.NoopAuditor
+	}
+	stores := v1alpha1store.NewStores(pool, v1alpha1store.WithAuditor(auditor))
 	for kind, table := range extraStoreTables {
 		if kind == "" || table == "" {
 			slog.Warn("skipping v1alpha1 extra store with empty kind or table", "kind", kind, "table", table)
 			continue
 		}
-		stores[kind] = v1alpha1store.NewStore(pool, table)
+		opts := []v1alpha1store.StoreOption{v1alpha1store.WithKind(kind), v1alpha1store.WithAuditor(auditor)}
+		if mutableExtraKinds[kind] {
+			stores[kind] = v1alpha1store.NewMutableObjectStore(pool, table, opts...)
+			continue
+		}
+		stores[kind] = v1alpha1store.NewStore(pool, table, opts...)
 	}
 
 	// pool == nil is the noop/DatabaseFactory path used by gen-openapi
@@ -267,7 +275,7 @@ func crudPerKindHooks(options types.AppOptions) crud.PerKindHooks {
 			hooks.Authorizers[kind] = func(ctx context.Context, in resource.AuthorizeInput) error {
 				return f(ctx, types.AuthorizeInput{
 					Verb: in.Verb, Kind: in.Kind, Namespace: in.Namespace,
-					Name: in.Name, Version: in.Version,
+					Name: in.Name, Tag: in.Tag,
 				})
 			}
 		}
@@ -279,7 +287,7 @@ func crudPerKindHooks(options types.AppOptions) crud.PerKindHooks {
 			hooks.ListFilters[kind] = func(ctx context.Context, in resource.AuthorizeInput) (string, []any, error) {
 				return f(ctx, types.AuthorizeInput{
 					Verb: in.Verb, Kind: in.Kind, Namespace: in.Namespace,
-					Name: in.Name, Version: in.Version,
+					Name: in.Name, Tag: in.Tag,
 				})
 			}
 		}
@@ -300,9 +308,7 @@ func crudPerKindHooks(options types.AppOptions) crud.PerKindHooks {
 	}
 	if len(options.InitialFinalizers) > 0 {
 		hooks.InitialFinalizers = make(map[string]func(obj v1alpha1.Object) []string, len(options.InitialFinalizers))
-		for kind, fn := range options.InitialFinalizers {
-			hooks.InitialFinalizers[kind] = fn
-		}
+		maps.Copy(hooks.InitialFinalizers, options.InitialFinalizers)
 	}
 	// RuntimeAdapters map dispatches the KindRuntime PostUpsert /
 	// PostDelete by Spec.Type → adapter. A Runtime whose type has
@@ -452,7 +458,7 @@ func startMCPServer(
 // request context on successful authentication. On auth error or missing
 // session, the request continues with an unauthenticated context — the
 // AuthzProvider downstream decides whether the request is allowed (the
-// OSS default `PublicAuthzProvider` permits read-only access; enterprise
+// OSS default `PublicAuthzProvider` permits read-only access; downstream
 // authz can reject). Failing-open here is intentional so the MCP bridge
 // works for anonymous `list_servers` / `get_server` traffic while still
 // letting authenticated callers pick up privileged operations.

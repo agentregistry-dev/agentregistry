@@ -44,32 +44,32 @@ func NewServer(stores map[string]*v1alpha1store.Store) *mcp.Server {
 		Kind:     v1alpha1.KindAgent,
 		ListName: "list_agents",
 		GetName:  "get_agent",
-		ListDesc: "List published agents as v1alpha1 envelopes with optional namespace / substring-name / version filters.",
-		GetDesc:  "Fetch a published agent as a v1alpha1 envelope (defaults to the is_latest_version row).",
+		ListDesc: "List published agents as v1alpha1 envelopes with optional namespace, substring-name, and tag filters.",
+		GetDesc:  "Fetch a published agent as a v1alpha1 envelope (defaults to the latest tag).",
 		NewObj:   func() *v1alpha1.Agent { return &v1alpha1.Agent{} },
 	})
 	addKindTools(server, stores[v1alpha1.KindMCPServer], kindTools[*v1alpha1.MCPServer]{
 		Kind:     v1alpha1.KindMCPServer,
 		ListName: "list_servers",
 		GetName:  "get_server",
-		ListDesc: "List published MCP servers as v1alpha1 envelopes with optional namespace / substring-name / version filters.",
-		GetDesc:  "Fetch a published MCP server as a v1alpha1 envelope (defaults to the is_latest_version row).",
+		ListDesc: "List published MCP servers as v1alpha1 envelopes with optional namespace, substring-name, and tag filters.",
+		GetDesc:  "Fetch a published MCP server as a v1alpha1 envelope (defaults to the latest tag).",
 		NewObj:   func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} },
 	})
 	addKindTools(server, stores[v1alpha1.KindSkill], kindTools[*v1alpha1.Skill]{
 		Kind:     v1alpha1.KindSkill,
 		ListName: "list_skills",
 		GetName:  "get_skill",
-		ListDesc: "List published skills as v1alpha1 envelopes with optional namespace / substring-name / version filters.",
-		GetDesc:  "Fetch a published skill as a v1alpha1 envelope (defaults to the is_latest_version row).",
+		ListDesc: "List published skills as v1alpha1 envelopes with optional namespace, substring-name, and tag filters.",
+		GetDesc:  "Fetch a published skill as a v1alpha1 envelope (defaults to the latest tag).",
 		NewObj:   func() *v1alpha1.Skill { return &v1alpha1.Skill{} },
 	})
 	addKindTools(server, stores[v1alpha1.KindDeployment], kindTools[*v1alpha1.Deployment]{
 		Kind:     v1alpha1.KindDeployment,
 		ListName: "list_deployments",
 		GetName:  "get_deployment",
-		ListDesc: "List deployments as v1alpha1 envelopes with optional namespace / substring-name / version filters.",
-		GetDesc:  "Fetch a deployment as a v1alpha1 envelope (defaults to the is_latest_version row).",
+		ListDesc: "List deployments as v1alpha1 envelopes with optional namespace and substring-name filters.",
+		GetDesc:  "Fetch a deployment as a v1alpha1 envelope by namespace/name.",
 		NewObj:   func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} },
 	})
 	addMetaTools(server)
@@ -128,13 +128,13 @@ type listInput struct {
 	Cursor    string `json:"cursor,omitempty"    doc:"Pagination cursor returned by a previous call"`
 	Limit     int    `json:"limit,omitempty"     doc:"Max items (1-100, default 30)"`
 	Search    string `json:"search,omitempty"    doc:"Case-insensitive substring filter on metadata.name"`
-	Version   string `json:"version,omitempty"   doc:"'latest' to return only the is_latest_version row; empty returns every version"`
+	Tag       string `json:"tag,omitempty"       doc:"'latest' to return only the literal latest tag per (namespace, name); empty returns every tag"`
 }
 
 type getByRefInput struct {
 	Namespace string `json:"namespace,omitempty" doc:"Namespace (empty defaults to 'default')"`
 	Name      string `json:"name"                doc:"Resource name"    required:"true"`
-	Version   string `json:"version,omitempty"   doc:"Exact version; empty or 'latest' returns the is_latest_version row"`
+	Tag       string `json:"tag,omitempty"       doc:"Exact tag; empty or 'latest' returns the literal latest tag"`
 }
 
 // listOutput is the generic envelope every list_* tool returns. Items
@@ -147,8 +147,8 @@ type listOutput[T v1alpha1.Object] struct {
 
 // Deployment note: only read tools (list + get) are exposed via MCP.
 // Create + delete equivalents live on the v1alpha1 apply surface at
-// /v0/deployments/{name}/{version}?namespace={ns} — MCP clients that
-// need to deploy should PUT or DELETE against that HTTP path directly.
+// /v0/deployments/{name}?namespace={ns} — MCP clients that need to
+// deploy should PUT or DELETE against that HTTP path directly.
 
 func addMetaTools(server *mcp.Server) {
 	mcp.AddTool(server, &mcp.Tool{
@@ -180,7 +180,8 @@ func runList(ctx context.Context, store *v1alpha1store.Store, args listInput) ([
 		Limit:     clampLimit(args.Limit),
 		Cursor:    args.Cursor,
 	}
-	if strings.EqualFold(strings.TrimSpace(args.Version), "latest") {
+	tag := strings.TrimSpace(args.Tag)
+	if strings.EqualFold(tag, "latest") {
 		opts.LatestOnly = true
 	}
 	raws, next, err := store.List(ctx, opts)
@@ -229,16 +230,16 @@ func getEnvelope[T v1alpha1.Object](
 	if namespace == "" {
 		namespace = v1alpha1.DefaultNamespace
 	}
-	version := strings.TrimSpace(args.Version)
+	tag := strings.TrimSpace(args.Tag)
 
 	var (
 		raw *v1alpha1.RawObject
 		err error
 	)
-	if version == "" || strings.EqualFold(version, "latest") {
+	if tag == "" || strings.EqualFold(tag, "latest") {
 		raw, err = store.GetLatest(ctx, namespace, args.Name)
 	} else {
-		raw, err = store.Get(ctx, namespace, args.Name, version)
+		raw, err = store.Get(ctx, namespace, args.Name, tag)
 	}
 	if err != nil {
 		var zero T
@@ -284,7 +285,7 @@ func addServerPrompts(server *mcp.Server) {
 		if resourceType != "" {
 			instruction += " (filter to " + resourceType + " only)"
 		}
-		instruction += ". Use the appropriate list tool (list_servers, list_agents, list_skills, list_deployments) with the search parameter. Summarize what you find including names, descriptions, and versions."
+		instruction += ". Use the appropriate list tool (list_servers, list_agents, list_skills, list_deployments) with the search parameter. Summarize what you find including names, descriptions, and tags."
 
 		return &mcp.GetPromptResult{
 			Description: "Search the registry for resources matching a query",
@@ -305,7 +306,7 @@ func addServerPrompts(server *mcp.Server) {
 					Text: "Give me an overview of what's available in the agent registry. " +
 						"Use list_servers, list_agents, and list_skills to see what's published. " +
 						"Also check list_deployments to see what's currently deployed. " +
-						"Summarize the results in a clear table format showing name, description, and latest version for each resource type.",
+						"Summarize the results in a clear table format showing name, description, and tag for each resource type.",
 				}},
 			},
 		}, nil

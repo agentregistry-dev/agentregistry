@@ -8,7 +8,7 @@ type ApplyResult struct {
 	Kind       string `json:"kind,omitempty"`
 	Namespace  string `json:"namespace,omitempty"`
 	Name       string `json:"name"`
-	Version    string `json:"version,omitempty"`
+	Tag        string `json:"tag,omitempty"`
 	// Status is one of: created, configured, unchanged, deleted,
 	// dry-run, failed. Matches kubectl-style apply output.
 	Status string `json:"status"`

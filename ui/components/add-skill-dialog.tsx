@@ -17,7 +17,7 @@ interface AddSkillDialogProps {
 export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDialogProps) {
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
-  const [version, setVersion] = useState("latest")
+  const [tag, setTag] = useState("latest")
   const [repositoryUrl, setRepositoryUrl] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -35,8 +35,8 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
       if (!description.trim()) {
         throw new Error("Description is required")
       }
-      if (!version.trim()) {
-        throw new Error("Version is required")
+      if (!tag.trim()) {
+        throw new Error("Tag is required")
       }
       const trimmedRepositoryUrl = repositoryUrl.trim()
       if (!trimmedRepositoryUrl) {
@@ -47,7 +47,7 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
       const skillData: SkillJson = {
         name: name.trim(),
         description: description.trim(),
-        version: version.trim(),
+        tag: tag.trim(),
         source: {
           repository: {
             url: trimmedRepositoryUrl,
@@ -61,7 +61,7 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
       // Reset form
       setName("")
       setDescription("")
-      setVersion("latest")
+      setTag("latest")
       setRepositoryUrl("")
 
       // Notify parent and close dialog
@@ -77,7 +77,7 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
   const handleCancel = () => {
     setName("")
     setDescription("")
-    setVersion("latest")
+    setTag("latest")
     setRepositoryUrl("")
     setError(null)
     onOpenChange(false)
@@ -127,14 +127,14 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="version">
-              Version <span className="text-red-500">*</span>
+            <Label htmlFor="tag">
+              Tag <span className="text-red-500">*</span>
             </Label>
             <Input
-              id="version"
+              id="tag"
               placeholder="latest"
-              value={version}
-              onChange={(e) => setVersion(e.target.value)}
+              value={tag}
+              onChange={(e) => setTag(e.target.value)}
               disabled={loading}
               required
             />

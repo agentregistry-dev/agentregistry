@@ -1,5 +1,5 @@
 -- v1alpha1 enrichment findings: detailed per-scan results attached to
--- any v1alpha1 resource via (kind, namespace, name, version).
+-- any v1alpha1 resource via (kind, namespace, name, tag).
 --
 -- Summary annotations live on the resource's ObjectMeta.Annotations
 -- under the security.agentregistry.solo.io/* prefix. This table holds
@@ -13,16 +13,16 @@
 CREATE TABLE IF NOT EXISTS v1alpha1.enrichment_findings (
     id          BIGSERIAL PRIMARY KEY,
 
-    -- Resource this finding attaches to. (kind, namespace, name, version)
+    -- Resource this finding attaches to. (kind, namespace, name, tag)
     -- intentionally loose — we don't FK to the resource tables so
     -- findings can remain for audit after a resource row is purged.
     kind        VARCHAR(50)  NOT NULL,  -- "Agent" | "MCPServer" | ...
     namespace   VARCHAR(255) NOT NULL,
     name        VARCHAR(255) NOT NULL,
-    version     VARCHAR(255) NOT NULL,
+    tag         VARCHAR(255) NOT NULL,
 
     -- Scanner identity + severity/ID for filtering.
-    source      VARCHAR(50)  NOT NULL,  -- "osv" | "scorecard" | "container-scan" | enterprise-added
+    source      VARCHAR(50)  NOT NULL,  -- "osv" | "scorecard" | "container-scan" | extension-added
     severity    VARCHAR(20),            -- "critical" | "high" | "medium" | "low" | "none"
     finding_id  TEXT,                   -- "CVE-2024-12345" | "Branch-Protection" | opaque per source
 
@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS v1alpha1.enrichment_findings (
 
 -- Lookup by resource is the hot path (UI "show findings for this MCPServer").
 CREATE INDEX IF NOT EXISTS enrichment_findings_obj
-    ON v1alpha1.enrichment_findings (kind, namespace, name, version);
+    ON v1alpha1.enrichment_findings (kind, namespace, name, tag);
 
 -- Allow "show me all vulnerable rows discovered by OSV across namespace X".
 CREATE INDEX IF NOT EXISTS enrichment_findings_source

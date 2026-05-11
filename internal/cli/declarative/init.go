@@ -506,8 +506,8 @@ func writeDeclarativeAgentYAML(projectDir, name, ver, image, modelProvider, mode
 			Kind:       v1alpha1.KindAgent,
 		},
 		Metadata: v1alpha1.ObjectMeta{
-			Name:    name,
-			Version: ver,
+			Name: name,
+			Tag:  ver,
 		},
 		Spec: v1alpha1.AgentSpec{
 			ModelProvider: modelProvider,
@@ -528,9 +528,9 @@ func writeDeclarativeAgentYAML(projectDir, name, ver, image, modelProvider, mode
 	for _, raw := range mcps {
 		serverName, mcpVer := parseNameVersion(raw)
 		agent.Spec.MCPServers = append(agent.Spec.MCPServers, v1alpha1.ResourceRef{
-			Kind:    v1alpha1.KindMCPServer,
-			Name:    serverName,
-			Version: mcpVer,
+			Kind: v1alpha1.KindMCPServer,
+			Name: serverName,
+			Tag:  mcpVer,
 		})
 	}
 
@@ -714,8 +714,8 @@ func writeDeclarativeMCPYAML(projectDir, name, ver, image, description string) e
 			Kind:       v1alpha1.KindMCPServer,
 		},
 		Metadata: v1alpha1.ObjectMeta{
-			Name:    name,
-			Version: ver,
+			Name: name,
+			Tag:  ver,
 		},
 		Spec: v1alpha1.MCPServerSpec{
 			Title:       shortName,
@@ -828,8 +828,8 @@ func writeDeclarativeSkillYAML(projectDir, name, ver, description string) error 
 			Kind:       v1alpha1.KindSkill,
 		},
 		Metadata: v1alpha1.ObjectMeta{
-			Name:    name,
-			Version: ver,
+			Name: name,
+			Tag:  ver,
 		},
 		Spec: v1alpha1.SkillSpec{
 			Title:       name,
@@ -949,8 +949,8 @@ func writeDeclarativePromptYAML(path, name, ver, description, content string) er
 			Kind:       v1alpha1.KindPrompt,
 		},
 		Metadata: v1alpha1.ObjectMeta{
-			Name:    name,
-			Version: ver,
+			Name: name,
+			Tag:  ver,
 		},
 		Spec: v1alpha1.PromptSpec{
 			Description: desc,

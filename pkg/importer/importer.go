@@ -81,7 +81,6 @@ type ImportResult struct {
 	Kind      string `json:"kind,omitempty"`
 	Namespace string `json:"namespace,omitempty"`
 	Name      string `json:"name,omitempty"`
-	Version   string `json:"version,omitempty"`
 
 	// Status is one of "created" | "updated" | "unchanged" | "failed"
 	// | "dry-run". Matches the apply-handler vocabulary.
@@ -100,9 +99,8 @@ type ImportResult struct {
 	// Error is the import-level failure message for Status="failed".
 	Error string `json:"error,omitempty"`
 
-	// Generation is the server-assigned generation after Upsert. Zero
-	// for failed or dry-run results.
-	Generation int64 `json:"generation,omitempty"`
+	// Tag is the content tag after Upsert.
+	Tag string `json:"tag,omitempty"`
 }
 
 const (
@@ -122,8 +120,8 @@ const (
 
 // Importer wires decoded v1alpha1 manifests through validation,
 // enrichment, and persistence. One Importer is built per-server with
-// the kinds it knows about + the scanners enterprise or OSS
-// registered; callers invoke Import repeatedly per user request.
+// the kinds it knows about + the scanners the build registered;
+// callers invoke Import repeatedly per user request.
 type Importer struct {
 	// Stores maps Kind ("Agent", "MCPServer", ...) to the generic
 	// v1alpha1store.Store backing that kind's table. Must be populated for
@@ -288,7 +286,6 @@ func (i *Importer) importOne(ctx context.Context, source string, obj v1alpha1.Ob
 		Kind:             kind,
 		Namespace:        meta.Namespace,
 		Name:             meta.Name,
-		Version:          meta.Version,
 		EnrichmentStatus: EnrichmentStatusSkipped,
 	}
 
@@ -308,6 +305,12 @@ func (i *Importer) importOne(ctx context.Context, source string, obj v1alpha1.Ob
 		res.Status = ImportStatusFailed
 		res.Error = fmt.Sprintf("unknown or unconfigured kind %q", kind)
 		return res
+	}
+
+	if v1alpha1.IsTaggedArtifactKind(kind) && meta.Tag == "" {
+		meta.Tag = v1alpha1store.DefaultTag()
+		obj.SetMetadata(*meta)
+		res.Tag = meta.Tag
 	}
 
 	if err := v1alpha1.ValidateObject(obj); err != nil {
@@ -351,34 +354,23 @@ func (i *Importer) importOne(ctx context.Context, source string, obj v1alpha1.Ob
 		return res
 	}
 
-	specJSON, err := obj.MarshalSpec()
-	if err != nil {
-		res.Status = ImportStatusFailed
-		res.Error = "marshal spec: " + err.Error()
-		return res
-	}
-
-	upsertOpts := v1alpha1store.UpsertOpts{Labels: meta.Labels}
-	if meta.Annotations != nil {
-		upsertOpts.Annotations = meta.Annotations
-	}
-	up, err := store.Upsert(ctx, meta.Namespace, meta.Name, meta.Version, specJSON, upsertOpts)
+	up, err := store.Upsert(ctx, obj)
 	if err != nil {
 		res.Status = ImportStatusFailed
 		res.Error = "upsert: " + err.Error()
 		return res
 	}
-	switch {
-	case up.Created:
+	switch up.Outcome {
+	case v1alpha1store.UpsertCreated:
 		res.Status = ImportStatusCreated
-	case up.SpecChanged:
+	case v1alpha1store.UpsertReplaced:
 		res.Status = ImportStatusUpdated
 	default:
 		res.Status = ImportStatusUnchanged
 	}
-	res.Generation = up.Generation
+	res.Tag = up.Tag
 
-	i.writeFindings(ctx, obj, opts, pendingFindings, &res)
+	i.writeFindings(ctx, obj, opts, pendingFindings, &res, up.Tag)
 	return res
 }
 
@@ -387,19 +379,19 @@ func (i *Importer) importOne(ctx context.Context, source string, obj v1alpha1.Ob
 // (e.g. a mode that only wants annotation summaries); log and move on.
 // Per-source write failures don't roll back the Upsert but downgrade
 // EnrichmentStatus so callers see the detail table may be stale.
-func (i *Importer) writeFindings(ctx context.Context, obj v1alpha1.Object, opts Options, pending map[string][]Finding, res *ImportResult) {
+func (i *Importer) writeFindings(ctx context.Context, obj v1alpha1.Object, opts Options, pending map[string][]Finding, res *ImportResult, tag string) {
 	if len(pending) == 0 {
 		return
 	}
 	meta := obj.GetMetadata()
 	if i.findings == nil {
 		i.logger.Warn("findings produced but no FindingsStore configured; dropping",
-			"kind", obj.GetKind(), "name", meta.Name, "version", meta.Version)
+			"kind", obj.GetKind(), "name", meta.Name, "tag", tag)
 		return
 	}
 	for source, fs := range pending {
 		if err := i.findings.Replace(ctx,
-			obj.GetKind(), meta.Namespace, meta.Name, meta.Version,
+			obj.GetKind(), meta.Namespace, meta.Name, tag,
 			source, opts.ScannedBy, fs,
 		); err != nil {
 			res.EnrichmentErrors = append(res.EnrichmentErrors,
@@ -417,8 +409,8 @@ func (i *Importer) writeFindings(ctx context.Context, obj v1alpha1.Object, opts 
 //
 // When opts.WhichScans is non-empty, only scanners whose Name() matches
 // one of its entries are considered. Unknown scanner names in
-// WhichScans are silently ignored (they may be enterprise scanners
-// present in a different build).
+// WhichScans are silently ignored (they may be scanners present in a
+// different build).
 func (i *Importer) runScanners(ctx context.Context, obj v1alpha1.Object, opts Options) (map[string][]Finding, string, []string) {
 	want := opts.WhichScans
 	filtered := make([]Scanner, 0, len(i.scanners))

@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, TDataShape } from './client';
 import { client } from './client.gen';
-import type { ApplyAgentData, ApplyAgentErrors, ApplyAgentResponses, ApplyBatchData, ApplyBatchErrors, ApplyBatchResponses, ApplyDeploymentData, ApplyDeploymentErrors, ApplyDeploymentResponses, ApplyMcpserverData, ApplyMcpserverErrors, ApplyMcpserverResponses, ApplyPromptData, ApplyPromptErrors, ApplyPromptResponses, ApplyRemotemcpserverData, ApplyRemotemcpserverErrors, ApplyRemotemcpserverResponses, ApplyRuntimeData, ApplyRuntimeErrors, ApplyRuntimeResponses, ApplySkillData, ApplySkillErrors, ApplySkillResponses, DeleteAgentData, DeleteAgentErrors, DeleteAgentResponses, DeleteBatchData, DeleteBatchErrors, DeleteBatchResponses, DeleteDeploymentData, DeleteDeploymentErrors, DeleteDeploymentResponses, DeleteMcpserverData, DeleteMcpserverErrors, DeleteMcpserverResponses, DeletePromptData, DeletePromptErrors, DeletePromptResponses, DeleteRemotemcpserverData, DeleteRemotemcpserverErrors, DeleteRemotemcpserverResponses, DeleteRuntimeData, DeleteRuntimeErrors, DeleteRuntimeResponses, DeleteSkillData, DeleteSkillErrors, DeleteSkillResponses, GetAgentData, GetAgentErrors, GetAgentResponses, GetDeploymentData, GetDeploymentErrors, GetDeploymentResponses, GetHealthV0Data, GetHealthV0Errors, GetHealthV0Responses, GetLatestAgentData, GetLatestAgentErrors, GetLatestAgentResponses, GetLatestDeploymentData, GetLatestDeploymentErrors, GetLatestDeploymentResponses, GetLatestMcpserverData, GetLatestMcpserverErrors, GetLatestMcpserverResponses, GetLatestPromptData, GetLatestPromptErrors, GetLatestPromptResponses, GetLatestRemotemcpserverData, GetLatestRemotemcpserverErrors, GetLatestRemotemcpserverResponses, GetLatestRuntimeData, GetLatestRuntimeErrors, GetLatestRuntimeResponses, GetLatestSkillData, GetLatestSkillErrors, GetLatestSkillResponses, GetMcpserverData, GetMcpserverErrors, GetMcpserverResponses, GetPromptData, GetPromptErrors, GetPromptResponses, GetRemotemcpserverData, GetRemotemcpserverErrors, GetRemotemcpserverResponses, GetRuntimeData, GetRuntimeErrors, GetRuntimeResponses, GetSkillData, GetSkillErrors, GetSkillResponses, GetVersionV0Data, GetVersionV0Errors, GetVersionV0Responses, ListAgentsData, ListAgentsErrors, ListAgentsResponses, ListDeploymentsData, ListDeploymentsErrors, ListDeploymentsResponses, ListMcpserversData, ListMcpserversErrors, ListMcpserversResponses, ListPromptsData, ListPromptsErrors, ListPromptsResponses, ListRemotemcpserversData, ListRemotemcpserversErrors, ListRemotemcpserversResponses, ListRuntimesData, ListRuntimesErrors, ListRuntimesResponses, ListSkillsData, ListSkillsErrors, ListSkillsResponses, PingV0Data, PingV0Errors, PingV0Responses } from './types.gen';
+import type { ApplyBatchData, ApplyBatchErrors, ApplyBatchResponses, ApplyDeploymentData, ApplyDeploymentErrors, ApplyDeploymentResponses, ApplyRuntimeData, ApplyRuntimeErrors, ApplyRuntimeResponses, DeleteAgentData, DeleteAgentErrors, DeleteAgentResponses, DeleteBatchData, DeleteBatchErrors, DeleteBatchResponses, DeleteDeploymentData, DeleteDeploymentErrors, DeleteDeploymentResponses, DeleteMcpserverData, DeleteMcpserverErrors, DeleteMcpserverResponses, DeletePromptData, DeletePromptErrors, DeletePromptResponses, DeleteRemotemcpserverData, DeleteRemotemcpserverErrors, DeleteRemotemcpserverResponses, DeleteRuntimeData, DeleteRuntimeErrors, DeleteRuntimeResponses, DeleteSkillData, DeleteSkillErrors, DeleteSkillResponses, GetAgentData, GetAgentErrors, GetAgentResponses, GetHealthV0Data, GetHealthV0Errors, GetHealthV0Responses, GetLatestAgentData, GetLatestAgentErrors, GetLatestAgentResponses, GetLatestDeploymentData, GetLatestDeploymentErrors, GetLatestDeploymentResponses, GetLatestMcpserverData, GetLatestMcpserverErrors, GetLatestMcpserverResponses, GetLatestPromptData, GetLatestPromptErrors, GetLatestPromptResponses, GetLatestRemotemcpserverData, GetLatestRemotemcpserverErrors, GetLatestRemotemcpserverResponses, GetLatestRuntimeData, GetLatestRuntimeErrors, GetLatestRuntimeResponses, GetLatestSkillData, GetLatestSkillErrors, GetLatestSkillResponses, GetMcpserverData, GetMcpserverErrors, GetMcpserverResponses, GetPromptData, GetPromptErrors, GetPromptResponses, GetRemotemcpserverData, GetRemotemcpserverErrors, GetRemotemcpserverResponses, GetSkillData, GetSkillErrors, GetSkillResponses, GetVersionV0Data, GetVersionV0Errors, GetVersionV0Responses, ListAgentsData, ListAgentsErrors, ListAgentsResponses, ListDeploymentsData, ListDeploymentsErrors, ListDeploymentsResponses, ListMcpserversData, ListMcpserversErrors, ListMcpserversResponses, ListPromptsData, ListPromptsErrors, ListPromptsResponses, ListRemotemcpserversData, ListRemotemcpserversErrors, ListRemotemcpserversResponses, ListRuntimesData, ListRuntimesErrors, ListRuntimesResponses, ListSkillsData, ListSkillsErrors, ListSkillsResponses, ListTagsAgentData, ListTagsAgentErrors, ListTagsAgentResponses, ListTagsMcpserverData, ListTagsMcpserverErrors, ListTagsMcpserverResponses, ListTagsPromptData, ListTagsPromptErrors, ListTagsPromptResponses, ListTagsRemotemcpserverData, ListTagsRemotemcpserverErrors, ListTagsRemotemcpserverResponses, ListTagsSkillData, ListTagsSkillErrors, ListTagsSkillResponses, PingV0Data, PingV0Errors, PingV0Responses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -24,31 +24,24 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
 export const listAgents = <ThrowOnError extends boolean = false>(options?: Options<ListAgentsData, ThrowOnError>) => (options?.client ?? client).get<ListAgentsResponses, ListAgentsErrors, ThrowOnError>({ url: '/v0/agents', ...options });
 
 /**
- * Get the latest version of a Agent
+ * Get the latest Agent
  */
 export const getLatestAgent = <ThrowOnError extends boolean = false>(options: Options<GetLatestAgentData, ThrowOnError>) => (options.client ?? client).get<GetLatestAgentResponses, GetLatestAgentErrors, ThrowOnError>({ url: '/v0/agents/{name}', ...options });
 
 /**
  * Delete a Agent (soft-delete: sets deletionTimestamp)
  */
-export const deleteAgent = <ThrowOnError extends boolean = false>(options: Options<DeleteAgentData, ThrowOnError>) => (options.client ?? client).delete<DeleteAgentResponses, DeleteAgentErrors, ThrowOnError>({ url: '/v0/agents/{name}/{version}', ...options });
+export const deleteAgent = <ThrowOnError extends boolean = false>(options: Options<DeleteAgentData, ThrowOnError>) => (options.client ?? client).delete<DeleteAgentResponses, DeleteAgentErrors, ThrowOnError>({ url: '/v0/agents/{name}/{tag}', ...options });
 
 /**
- * Get a Agent by name and version
+ * Get a Agent by name and tag
  */
-export const getAgent = <ThrowOnError extends boolean = false>(options: Options<GetAgentData, ThrowOnError>) => (options.client ?? client).get<GetAgentResponses, GetAgentErrors, ThrowOnError>({ url: '/v0/agents/{name}/{version}', ...options });
+export const getAgent = <ThrowOnError extends boolean = false>(options: Options<GetAgentData, ThrowOnError>) => (options.client ?? client).get<GetAgentResponses, GetAgentErrors, ThrowOnError>({ url: '/v0/agents/{name}/{tag}', ...options });
 
 /**
- * Apply a Agent (idempotent upsert)
+ * List all tags of a Agent
  */
-export const applyAgent = <ThrowOnError extends boolean = false>(options: Options<ApplyAgentData, ThrowOnError>) => (options.client ?? client).put<ApplyAgentResponses, ApplyAgentErrors, ThrowOnError>({
-    url: '/v0/agents/{name}/{version}',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
+export const listTagsAgent = <ThrowOnError extends boolean = false>(options: Options<ListTagsAgentData, ThrowOnError>) => (options.client ?? client).get<ListTagsAgentResponses, ListTagsAgentErrors, ThrowOnError>({ url: '/v0/agents/{name}/tags', ...options });
 
 /**
  * Delete v1alpha1 resources identified by a multi-doc YAML stream
@@ -82,25 +75,20 @@ export const applyBatch = <ThrowOnError extends boolean = false>(options: Option
 export const listDeployments = <ThrowOnError extends boolean = false>(options?: Options<ListDeploymentsData, ThrowOnError>) => (options?.client ?? client).get<ListDeploymentsResponses, ListDeploymentsErrors, ThrowOnError>({ url: '/v0/deployments', ...options });
 
 /**
- * Get the latest version of a Deployment
- */
-export const getLatestDeployment = <ThrowOnError extends boolean = false>(options: Options<GetLatestDeploymentData, ThrowOnError>) => (options.client ?? client).get<GetLatestDeploymentResponses, GetLatestDeploymentErrors, ThrowOnError>({ url: '/v0/deployments/{name}', ...options });
-
-/**
  * Delete a Deployment (soft-delete: sets deletionTimestamp)
  */
-export const deleteDeployment = <ThrowOnError extends boolean = false>(options: Options<DeleteDeploymentData, ThrowOnError>) => (options.client ?? client).delete<DeleteDeploymentResponses, DeleteDeploymentErrors, ThrowOnError>({ url: '/v0/deployments/{name}/{version}', ...options });
+export const deleteDeployment = <ThrowOnError extends boolean = false>(options: Options<DeleteDeploymentData, ThrowOnError>) => (options.client ?? client).delete<DeleteDeploymentResponses, DeleteDeploymentErrors, ThrowOnError>({ url: '/v0/deployments/{name}', ...options });
 
 /**
- * Get a Deployment by name and version
+ * Get the latest Deployment
  */
-export const getDeployment = <ThrowOnError extends boolean = false>(options: Options<GetDeploymentData, ThrowOnError>) => (options.client ?? client).get<GetDeploymentResponses, GetDeploymentErrors, ThrowOnError>({ url: '/v0/deployments/{name}/{version}', ...options });
+export const getLatestDeployment = <ThrowOnError extends boolean = false>(options: Options<GetLatestDeploymentData, ThrowOnError>) => (options.client ?? client).get<GetLatestDeploymentResponses, GetLatestDeploymentErrors, ThrowOnError>({ url: '/v0/deployments/{name}', ...options });
 
 /**
  * Apply a Deployment (idempotent upsert)
  */
 export const applyDeployment = <ThrowOnError extends boolean = false>(options: Options<ApplyDeploymentData, ThrowOnError>) => (options.client ?? client).put<ApplyDeploymentResponses, ApplyDeploymentErrors, ThrowOnError>({
-    url: '/v0/deployments/{name}/{version}',
+    url: '/v0/deployments/{name}',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -121,31 +109,24 @@ export const getHealthV0 = <ThrowOnError extends boolean = false>(options?: Opti
 export const listMcpservers = <ThrowOnError extends boolean = false>(options?: Options<ListMcpserversData, ThrowOnError>) => (options?.client ?? client).get<ListMcpserversResponses, ListMcpserversErrors, ThrowOnError>({ url: '/v0/mcpservers', ...options });
 
 /**
- * Get the latest version of a MCPServer
+ * Get the latest MCPServer
  */
 export const getLatestMcpserver = <ThrowOnError extends boolean = false>(options: Options<GetLatestMcpserverData, ThrowOnError>) => (options.client ?? client).get<GetLatestMcpserverResponses, GetLatestMcpserverErrors, ThrowOnError>({ url: '/v0/mcpservers/{name}', ...options });
 
 /**
  * Delete a MCPServer (soft-delete: sets deletionTimestamp)
  */
-export const deleteMcpserver = <ThrowOnError extends boolean = false>(options: Options<DeleteMcpserverData, ThrowOnError>) => (options.client ?? client).delete<DeleteMcpserverResponses, DeleteMcpserverErrors, ThrowOnError>({ url: '/v0/mcpservers/{name}/{version}', ...options });
+export const deleteMcpserver = <ThrowOnError extends boolean = false>(options: Options<DeleteMcpserverData, ThrowOnError>) => (options.client ?? client).delete<DeleteMcpserverResponses, DeleteMcpserverErrors, ThrowOnError>({ url: '/v0/mcpservers/{name}/{tag}', ...options });
 
 /**
- * Get a MCPServer by name and version
+ * Get a MCPServer by name and tag
  */
-export const getMcpserver = <ThrowOnError extends boolean = false>(options: Options<GetMcpserverData, ThrowOnError>) => (options.client ?? client).get<GetMcpserverResponses, GetMcpserverErrors, ThrowOnError>({ url: '/v0/mcpservers/{name}/{version}', ...options });
+export const getMcpserver = <ThrowOnError extends boolean = false>(options: Options<GetMcpserverData, ThrowOnError>) => (options.client ?? client).get<GetMcpserverResponses, GetMcpserverErrors, ThrowOnError>({ url: '/v0/mcpservers/{name}/{tag}', ...options });
 
 /**
- * Apply a MCPServer (idempotent upsert)
+ * List all tags of a MCPServer
  */
-export const applyMcpserver = <ThrowOnError extends boolean = false>(options: Options<ApplyMcpserverData, ThrowOnError>) => (options.client ?? client).put<ApplyMcpserverResponses, ApplyMcpserverErrors, ThrowOnError>({
-    url: '/v0/mcpservers/{name}/{version}',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
+export const listTagsMcpserver = <ThrowOnError extends boolean = false>(options: Options<ListTagsMcpserverData, ThrowOnError>) => (options.client ?? client).get<ListTagsMcpserverResponses, ListTagsMcpserverErrors, ThrowOnError>({ url: '/v0/mcpservers/{name}/tags', ...options });
 
 /**
  * Ping
@@ -160,31 +141,24 @@ export const pingV0 = <ThrowOnError extends boolean = false>(options?: Options<P
 export const listPrompts = <ThrowOnError extends boolean = false>(options?: Options<ListPromptsData, ThrowOnError>) => (options?.client ?? client).get<ListPromptsResponses, ListPromptsErrors, ThrowOnError>({ url: '/v0/prompts', ...options });
 
 /**
- * Get the latest version of a Prompt
+ * Get the latest Prompt
  */
 export const getLatestPrompt = <ThrowOnError extends boolean = false>(options: Options<GetLatestPromptData, ThrowOnError>) => (options.client ?? client).get<GetLatestPromptResponses, GetLatestPromptErrors, ThrowOnError>({ url: '/v0/prompts/{name}', ...options });
 
 /**
  * Delete a Prompt (soft-delete: sets deletionTimestamp)
  */
-export const deletePrompt = <ThrowOnError extends boolean = false>(options: Options<DeletePromptData, ThrowOnError>) => (options.client ?? client).delete<DeletePromptResponses, DeletePromptErrors, ThrowOnError>({ url: '/v0/prompts/{name}/{version}', ...options });
+export const deletePrompt = <ThrowOnError extends boolean = false>(options: Options<DeletePromptData, ThrowOnError>) => (options.client ?? client).delete<DeletePromptResponses, DeletePromptErrors, ThrowOnError>({ url: '/v0/prompts/{name}/{tag}', ...options });
 
 /**
- * Get a Prompt by name and version
+ * Get a Prompt by name and tag
  */
-export const getPrompt = <ThrowOnError extends boolean = false>(options: Options<GetPromptData, ThrowOnError>) => (options.client ?? client).get<GetPromptResponses, GetPromptErrors, ThrowOnError>({ url: '/v0/prompts/{name}/{version}', ...options });
+export const getPrompt = <ThrowOnError extends boolean = false>(options: Options<GetPromptData, ThrowOnError>) => (options.client ?? client).get<GetPromptResponses, GetPromptErrors, ThrowOnError>({ url: '/v0/prompts/{name}/{tag}', ...options });
 
 /**
- * Apply a Prompt (idempotent upsert)
+ * List all tags of a Prompt
  */
-export const applyPrompt = <ThrowOnError extends boolean = false>(options: Options<ApplyPromptData, ThrowOnError>) => (options.client ?? client).put<ApplyPromptResponses, ApplyPromptErrors, ThrowOnError>({
-    url: '/v0/prompts/{name}/{version}',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
+export const listTagsPrompt = <ThrowOnError extends boolean = false>(options: Options<ListTagsPromptData, ThrowOnError>) => (options.client ?? client).get<ListTagsPromptResponses, ListTagsPromptErrors, ThrowOnError>({ url: '/v0/prompts/{name}/tags', ...options });
 
 /**
  * List RemoteMCPServer (scoped by ?namespace)
@@ -192,31 +166,24 @@ export const applyPrompt = <ThrowOnError extends boolean = false>(options: Optio
 export const listRemotemcpservers = <ThrowOnError extends boolean = false>(options?: Options<ListRemotemcpserversData, ThrowOnError>) => (options?.client ?? client).get<ListRemotemcpserversResponses, ListRemotemcpserversErrors, ThrowOnError>({ url: '/v0/remotemcpservers', ...options });
 
 /**
- * Get the latest version of a RemoteMCPServer
+ * Get the latest RemoteMCPServer
  */
 export const getLatestRemotemcpserver = <ThrowOnError extends boolean = false>(options: Options<GetLatestRemotemcpserverData, ThrowOnError>) => (options.client ?? client).get<GetLatestRemotemcpserverResponses, GetLatestRemotemcpserverErrors, ThrowOnError>({ url: '/v0/remotemcpservers/{name}', ...options });
 
 /**
  * Delete a RemoteMCPServer (soft-delete: sets deletionTimestamp)
  */
-export const deleteRemotemcpserver = <ThrowOnError extends boolean = false>(options: Options<DeleteRemotemcpserverData, ThrowOnError>) => (options.client ?? client).delete<DeleteRemotemcpserverResponses, DeleteRemotemcpserverErrors, ThrowOnError>({ url: '/v0/remotemcpservers/{name}/{version}', ...options });
+export const deleteRemotemcpserver = <ThrowOnError extends boolean = false>(options: Options<DeleteRemotemcpserverData, ThrowOnError>) => (options.client ?? client).delete<DeleteRemotemcpserverResponses, DeleteRemotemcpserverErrors, ThrowOnError>({ url: '/v0/remotemcpservers/{name}/{tag}', ...options });
 
 /**
- * Get a RemoteMCPServer by name and version
+ * Get a RemoteMCPServer by name and tag
  */
-export const getRemotemcpserver = <ThrowOnError extends boolean = false>(options: Options<GetRemotemcpserverData, ThrowOnError>) => (options.client ?? client).get<GetRemotemcpserverResponses, GetRemotemcpserverErrors, ThrowOnError>({ url: '/v0/remotemcpservers/{name}/{version}', ...options });
+export const getRemotemcpserver = <ThrowOnError extends boolean = false>(options: Options<GetRemotemcpserverData, ThrowOnError>) => (options.client ?? client).get<GetRemotemcpserverResponses, GetRemotemcpserverErrors, ThrowOnError>({ url: '/v0/remotemcpservers/{name}/{tag}', ...options });
 
 /**
- * Apply a RemoteMCPServer (idempotent upsert)
+ * List all tags of a RemoteMCPServer
  */
-export const applyRemotemcpserver = <ThrowOnError extends boolean = false>(options: Options<ApplyRemotemcpserverData, ThrowOnError>) => (options.client ?? client).put<ApplyRemotemcpserverResponses, ApplyRemotemcpserverErrors, ThrowOnError>({
-    url: '/v0/remotemcpservers/{name}/{version}',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
+export const listTagsRemotemcpserver = <ThrowOnError extends boolean = false>(options: Options<ListTagsRemotemcpserverData, ThrowOnError>) => (options.client ?? client).get<ListTagsRemotemcpserverResponses, ListTagsRemotemcpserverErrors, ThrowOnError>({ url: '/v0/remotemcpservers/{name}/tags', ...options });
 
 /**
  * List Runtime (scoped by ?namespace)
@@ -224,25 +191,20 @@ export const applyRemotemcpserver = <ThrowOnError extends boolean = false>(optio
 export const listRuntimes = <ThrowOnError extends boolean = false>(options?: Options<ListRuntimesData, ThrowOnError>) => (options?.client ?? client).get<ListRuntimesResponses, ListRuntimesErrors, ThrowOnError>({ url: '/v0/runtimes', ...options });
 
 /**
- * Get the latest version of a Runtime
- */
-export const getLatestRuntime = <ThrowOnError extends boolean = false>(options: Options<GetLatestRuntimeData, ThrowOnError>) => (options.client ?? client).get<GetLatestRuntimeResponses, GetLatestRuntimeErrors, ThrowOnError>({ url: '/v0/runtimes/{name}', ...options });
-
-/**
  * Delete a Runtime (soft-delete: sets deletionTimestamp)
  */
-export const deleteRuntime = <ThrowOnError extends boolean = false>(options: Options<DeleteRuntimeData, ThrowOnError>) => (options.client ?? client).delete<DeleteRuntimeResponses, DeleteRuntimeErrors, ThrowOnError>({ url: '/v0/runtimes/{name}/{version}', ...options });
+export const deleteRuntime = <ThrowOnError extends boolean = false>(options: Options<DeleteRuntimeData, ThrowOnError>) => (options.client ?? client).delete<DeleteRuntimeResponses, DeleteRuntimeErrors, ThrowOnError>({ url: '/v0/runtimes/{name}', ...options });
 
 /**
- * Get a Runtime by name and version
+ * Get the latest Runtime
  */
-export const getRuntime = <ThrowOnError extends boolean = false>(options: Options<GetRuntimeData, ThrowOnError>) => (options.client ?? client).get<GetRuntimeResponses, GetRuntimeErrors, ThrowOnError>({ url: '/v0/runtimes/{name}/{version}', ...options });
+export const getLatestRuntime = <ThrowOnError extends boolean = false>(options: Options<GetLatestRuntimeData, ThrowOnError>) => (options.client ?? client).get<GetLatestRuntimeResponses, GetLatestRuntimeErrors, ThrowOnError>({ url: '/v0/runtimes/{name}', ...options });
 
 /**
  * Apply a Runtime (idempotent upsert)
  */
 export const applyRuntime = <ThrowOnError extends boolean = false>(options: Options<ApplyRuntimeData, ThrowOnError>) => (options.client ?? client).put<ApplyRuntimeResponses, ApplyRuntimeErrors, ThrowOnError>({
-    url: '/v0/runtimes/{name}/{version}',
+    url: '/v0/runtimes/{name}',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -256,31 +218,24 @@ export const applyRuntime = <ThrowOnError extends boolean = false>(options: Opti
 export const listSkills = <ThrowOnError extends boolean = false>(options?: Options<ListSkillsData, ThrowOnError>) => (options?.client ?? client).get<ListSkillsResponses, ListSkillsErrors, ThrowOnError>({ url: '/v0/skills', ...options });
 
 /**
- * Get the latest version of a Skill
+ * Get the latest Skill
  */
 export const getLatestSkill = <ThrowOnError extends boolean = false>(options: Options<GetLatestSkillData, ThrowOnError>) => (options.client ?? client).get<GetLatestSkillResponses, GetLatestSkillErrors, ThrowOnError>({ url: '/v0/skills/{name}', ...options });
 
 /**
  * Delete a Skill (soft-delete: sets deletionTimestamp)
  */
-export const deleteSkill = <ThrowOnError extends boolean = false>(options: Options<DeleteSkillData, ThrowOnError>) => (options.client ?? client).delete<DeleteSkillResponses, DeleteSkillErrors, ThrowOnError>({ url: '/v0/skills/{name}/{version}', ...options });
+export const deleteSkill = <ThrowOnError extends boolean = false>(options: Options<DeleteSkillData, ThrowOnError>) => (options.client ?? client).delete<DeleteSkillResponses, DeleteSkillErrors, ThrowOnError>({ url: '/v0/skills/{name}/{tag}', ...options });
 
 /**
- * Get a Skill by name and version
+ * Get a Skill by name and tag
  */
-export const getSkill = <ThrowOnError extends boolean = false>(options: Options<GetSkillData, ThrowOnError>) => (options.client ?? client).get<GetSkillResponses, GetSkillErrors, ThrowOnError>({ url: '/v0/skills/{name}/{version}', ...options });
+export const getSkill = <ThrowOnError extends boolean = false>(options: Options<GetSkillData, ThrowOnError>) => (options.client ?? client).get<GetSkillResponses, GetSkillErrors, ThrowOnError>({ url: '/v0/skills/{name}/{tag}', ...options });
 
 /**
- * Apply a Skill (idempotent upsert)
+ * List all tags of a Skill
  */
-export const applySkill = <ThrowOnError extends boolean = false>(options: Options<ApplySkillData, ThrowOnError>) => (options.client ?? client).put<ApplySkillResponses, ApplySkillErrors, ThrowOnError>({
-    url: '/v0/skills/{name}/{version}',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
+export const listTagsSkill = <ThrowOnError extends boolean = false>(options: Options<ListTagsSkillData, ThrowOnError>) => (options.client ?? client).get<ListTagsSkillResponses, ListTagsSkillErrors, ThrowOnError>({ url: '/v0/skills/{name}/tags', ...options });
 
 /**
  * Get version information

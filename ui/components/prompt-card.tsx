@@ -9,10 +9,10 @@ import { FileText } from "lucide-react"
 interface PromptCardProps {
   prompt: PromptResponse
   onClick?: () => void
-  versionCount?: number
+  tagCount?: number
 }
 
-export function PromptCard({ prompt, onClick, versionCount }: PromptCardProps) {
+export function PromptCard({ prompt, onClick, tagCount }: PromptCardProps) {
   const { prompt: promptData, _meta } = prompt
   const official = _meta?.['io.modelcontextprotocol.registry/official']
 
@@ -50,9 +50,9 @@ export function PromptCard({ prompt, onClick, versionCount }: PromptCardProps) {
           )}
 
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-            <span className="font-mono">{promptData.version}</span>
-            {versionCount && versionCount > 1 && (
-              <span className="text-primary text-xs">+{versionCount - 1}</span>
+            <span className="font-mono">{promptData.tag}</span>
+            {tagCount && tagCount > 1 && (
+              <span className="text-primary text-xs">+{tagCount - 1}</span>
             )}
 
             {official?.publishedAt && (

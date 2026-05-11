@@ -12,30 +12,31 @@ arctl apply -f summarizer/agent.yaml
 
 `arctl init agent NAME` and `arctl init mcp NAMESPACE/NAME` pick a framework + language interactively unless `--framework` and `--language` are provided. Run `arctl init agent NAME` (or `arctl init mcp NAMESPACE/NAME`) on its own to see the available choices.
 
-## Resource Types
+## Tags And Mutable Objects
 
-| Kind | get | delete |
-|------|-----|--------|
-| `Agent` | `arctl get agents` | `arctl delete agent NAME --version VERSION` |
-| `MCPServer` | `arctl get mcps` | `arctl delete mcp NAME --version VERSION` |
-| `Skill` | `arctl get skills` | `arctl delete skill NAME --version VERSION` |
-| `Prompt` | `arctl get prompts` | `arctl delete prompt NAME --version VERSION` |
+Agents, MCP servers, remote MCP servers, skills, and prompts are taggable artifacts. Set `metadata.tag` to publish a deterministic name you can reference from other manifests; if you omit it, the registry uses the literal `latest` tag.
 
-## Agents
+Providers and deployments are mutable control-plane objects. They use public namespace/name identity, not tags or versions.
 
 ```bash
 arctl init agent summarizer --framework adk --language python --model-provider gemini --model-name gemini-2.5-flash
 arctl build summarizer/ --push    # optional: build and push Docker image
 arctl apply -f summarizer/agent.yaml
-arctl get agent summarizer
-arctl delete agent summarizer --version 0.1.0
+
+arctl get agent summarizer               # latest
+arctl get agent summarizer --tag stable  # exact tag
+arctl get agent summarizer --all-tags    # tag list
+
+arctl delete agent summarizer                # latest
+arctl delete agent summarizer --tag stable   # exact tag
+arctl delete agent summarizer --all-tags     # delete every tag
 ```
 
-Run locally with `arctl run` from inside the project directory (it reads `arctl.yaml` to pick the right plugin):
+Run locally with `arctl run` from inside the project directory (it reads `arctl.yaml` to pick the right framework):
 
 ```bash
 cd summarizer/
-arctl run             # build + run via the framework plugin
+arctl run             # build + run via the framework
 arctl run --watch     # rebuild and restart on file change
 arctl run --dry-run   # print the command without executing
 ```
@@ -47,23 +48,23 @@ arctl init mcp acme/my-server --framework fastmcp --language python
 arctl build my-server/ --push    # optional: build and push Docker image
 arctl apply -f my-server/mcp.yaml
 arctl get mcps
-arctl delete mcp acme/my-server --version 0.1.0
+arctl delete mcp acme/my-server --tag stable
 ```
 
-`arctl run` also works for MCP server projects — it dispatches to the plugin selected in `arctl.yaml`.
+`arctl run` also works for MCP server projects — it dispatches to the framework selected in `arctl.yaml`.
 
 ## Skills & Prompts
 
 ```bash
-arctl init skill summarize --category nlp
+arctl init skill summarize
 arctl apply -f summarize/skill.yaml
 arctl get skills
-arctl delete skill summarize --version 0.1.0
+arctl delete skill summarize --tag stable
 
 arctl init prompt summarizer-system-prompt
 arctl apply -f summarizer-system-prompt.yaml
 arctl get prompts
-arctl delete prompt summarizer-system-prompt --version 0.1.0
+arctl delete prompt summarizer-system-prompt --tag stable
 ```
 
 ## Pulling Resources
@@ -79,12 +80,12 @@ arctl pull skill summarize --version 1.2.0
 ## Tips
 
 ```bash
-# Apply multiple resources from one file (separated by ---)
-# Resources are applied in document order — define dependencies before the agent
+# Multi-resource file (separated by ---). Apply order = document order, so
+# define dependencies (MCP servers, skills, prompts) before the agent.
 arctl apply -f full-stack.yaml
 
 # List all resource types at once
 arctl get all
 ```
 
-See [`examples/`](../examples/) for ready-to-use YAML files, including [`full-stack.yaml`](../examples/full-stack.yaml) which defines an agent and all its dependencies in a single file.
+See [`examples/`](../examples/) for ready-to-use YAML, including [`full-stack.yaml`](../examples/full-stack.yaml) — an agent and all its dependencies in one file.

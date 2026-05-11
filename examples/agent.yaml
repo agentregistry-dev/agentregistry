@@ -2,7 +2,6 @@ apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   name: summarizer
-  version: "1.0.0"
 spec:
   source:
     image: ghcr.io/acme/summarizer:v1.0.0
@@ -15,5 +14,5 @@ spec:
   # mcpServers:
   #   - kind: MCPServer
   #     name: acme/fetch        # published via: arctl apply -f mcp.yaml
-  #     version: "1.0.0"
+  #     tag: stable
   # See full-stack.yaml for a complete example with all dependencies.

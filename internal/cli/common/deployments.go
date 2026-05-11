@@ -17,11 +17,10 @@ const runtimeMetadataPrefix = "runtimes.agentregistry.solo.io/"
 type DeploymentRecord struct {
 	Namespace string `json:"namespace,omitempty"`
 	Name      string `json:"name"`
-	Version   string `json:"version"`
 	ID        string `json:"id"`
 
 	TargetName        string            `json:"serverName"`
-	TargetVersion     string            `json:"targetVersion,omitempty"`
+	TargetTag         string            `json:"targetTag,omitempty"`
 	ResourceType      string            `json:"resourceType"`
 	RuntimeID         string            `json:"runtimeId,omitempty"`
 	Status            string            `json:"status"`
@@ -90,10 +89,9 @@ func DeploymentRecordFromObject(dep *v1alpha1.Deployment) *DeploymentRecord {
 	return &DeploymentRecord{
 		Namespace:         dep.Metadata.NamespaceOrDefault(),
 		Name:              dep.Metadata.Name,
-		Version:           dep.Metadata.Version,
-		ID:                DeploymentID(dep.Metadata.NamespaceOrDefault(), dep.Metadata.Name, dep.Metadata.Version),
+		ID:                DeploymentID(dep.Metadata.NamespaceOrDefault(), dep.Metadata.Name),
 		TargetName:        dep.Spec.TargetRef.Name,
-		TargetVersion:     dep.Spec.TargetRef.Version,
+		TargetTag:         dep.Spec.TargetRef.Tag,
 		ResourceType:      deploymentResourceType(dep.Spec.TargetRef.Kind),
 		RuntimeID:         dep.Spec.RuntimeRef.Name,
 		Status:            DeploymentStatus(dep),
@@ -109,8 +107,8 @@ func DeploymentRecordFromObject(dep *v1alpha1.Deployment) *DeploymentRecord {
 }
 
 // DeploymentID is the display identity used by imperative deployment commands.
-func DeploymentID(namespace, name, version string) string {
-	return fmt.Sprintf("%s/%s/%s", namespace, name, version)
+func DeploymentID(namespace, name string) string {
+	return fmt.Sprintf("%s/%s", namespace, name)
 }
 
 // DeploymentResourceName returns the generated metadata.name used by imperative

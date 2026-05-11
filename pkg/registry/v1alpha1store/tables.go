@@ -11,7 +11,7 @@ import (
 // Callers that need a *Store should prefer NewStores below
 // rather than constructing one per kind.
 //
-// Enterprise builds that register additional kinds via
+// Downstream builds that register additional kinds via
 // v1alpha1.Scheme.Register should extend their own copy of this map
 // rather than mutating this one; the OSS side treats it as effectively
 // const after init.
@@ -31,9 +31,16 @@ var TableFor = map[string]string{
 // importer layers take — they never look up tables by string literal
 // themselves.
 //
-// Iterates v1alpha1.BuiltinKinds so registration order stays stable
-// across builds (important for OpenAPI output).
-func NewStores(pool *pgxpool.Pool) map[string]*Store {
+// KindDeployment and KindRuntime are bound through NewMutableObjectStore —
+// both are infra/lifecycle state, not tagged artifacts. Every other built-in
+// kind uses NewStore (tagged-artifact behavior). Iterates v1alpha1.BuiltinKinds so
+// registration order stays stable across builds (important for
+// OpenAPI output).
+//
+// The variadic opts are applied to every Store produced. Downstream
+// callers pass WithAuditor(...) here to plumb a single audit sink
+// across all kinds in one call.
+func NewStores(pool *pgxpool.Pool, opts ...StoreOption) map[string]*Store {
 	out := make(map[string]*Store, len(v1alpha1.BuiltinKinds))
 	for _, kind := range v1alpha1.BuiltinKinds {
 		table, ok := TableFor[kind]
@@ -42,7 +49,20 @@ func NewStores(pool *pgxpool.Pool) map[string]*Store {
 			// table here is a coding error, not a runtime condition.
 			panic("v1alpha1store: no table registered for kind " + kind)
 		}
-		out[kind] = NewStore(pool, table)
+		// Prepend WithKind so per-kind audit events name the kind
+		// correctly even if the inbound object's TypeMeta is empty.
+		// Caller-supplied opts win (they appear after WithKind in the
+		// option chain).
+		kindOpts := append([]StoreOption{WithKind(kind)}, opts...)
+		if kind == v1alpha1.KindRuntime {
+			out[kind] = NewMutableObjectStore(pool, table, kindOpts...)
+			continue
+		}
+		if kind == v1alpha1.KindDeployment {
+			out[kind] = NewMutableObjectStore(pool, table, kindOpts...)
+			continue
+		}
+		out[kind] = NewStore(pool, table, kindOpts...)
 	}
 	return out
 }

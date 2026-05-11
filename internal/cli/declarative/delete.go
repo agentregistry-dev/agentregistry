@@ -22,50 +22,85 @@ func NewDeleteCmd() *cobra.Command {
 func newDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete (TYPE NAME | -f FILE)",
-		Short: "Delete a registry resource version",
+		Short: "Delete a registry resource",
 		Long: `Delete a registry resource.
 
 File mode (declarative): reads resources from the YAML file and sends DELETE /v0/apply.
   arctl delete -f agent.yaml
 
-Explicit mode: specify type and name. --version is optional and defaults to the latest version.
-  arctl delete TYPE NAME [--version VERSION]
-
-For deployments, --version is required.
+Explicit mode: specify type and name. For taggable artifacts, --tag selects an
+exact tag and defaults to latest.
+  arctl delete TYPE NAME [--tag TAG]
 
 TYPE must be one of: agent, mcp, skill, prompt, deployment
 (plural and uppercase forms also accepted)`,
 		Example: `  arctl delete -f my-agent/agent.yaml
   arctl delete -f my-server/mcp.yaml
-  arctl delete agent acme/summarizer --version 1.0.0
-  arctl delete mcp acme/fetch --version 1.0.0
-  arctl delete deployment my-agent --version 1.0.0 --force`,
+  arctl delete agent acme/summarizer --tag stable
+  arctl delete agent acme/summarizer --all-tags
+  arctl delete mcp acme/fetch --tag stable
+  arctl delete deployment my-agent --force`,
 		SilenceUsage: true,
 		RunE:         runDeclarativeDelete,
 	}
 	cmd.Flags().StringP("filename", "f", "", "YAML file to read resources from")
-	cmd.Flags().String("version", "", "Version to delete (defaults to the latest version; required for deployments)")
+	cmd.Flags().String("tag", "", "Specific tag to delete (taggable artifact kinds only; defaults to latest)")
 	cmd.Flags().Bool("force", false, "Skip provider-specific teardown and only remove the registry record (deployments only)")
+	cmd.Flags().Bool("all-tags", false, "Delete every tag of NAME (taggable artifact kinds only)")
 	return cmd
 }
 
 func runDeclarativeDelete(cmd *cobra.Command, args []string) error {
 	filename, _ := cmd.Flags().GetString("filename")
 	force, _ := cmd.Flags().GetBool("force")
+	allTags, _ := cmd.Flags().GetBool("all-tags")
+	tag, _ := cmd.Flags().GetString("tag")
+	allTagsFlag := "--all-tags"
+	tagFlag := "--tag"
 
 	if filename != "" {
 		if force {
 			return fmt.Errorf("--force cannot be used with -f; it only applies to explicit deployment deletes")
 		}
+		if allTags {
+			return fmt.Errorf("%s cannot be used with -f", allTagsFlag)
+		}
 		return deleteFromFile(cmd, filename)
 	}
 
-	// Explicit mode: TYPE NAME [--version VERSION]
+	// Explicit mode: TYPE NAME [--tag TAG | --all-tags]
 	if len(args) != 2 {
 		return fmt.Errorf("explicit mode requires TYPE and NAME arguments (or use -f FILE)")
 	}
-	version, _ := cmd.Flags().GetString("version")
-	return deleteResource(cmd, args[0], args[1], version, force)
+	if allTags {
+		if tag != "" {
+			return fmt.Errorf("%s and %s are mutually exclusive", tagFlag, allTagsFlag)
+		}
+		if force {
+			return fmt.Errorf("--force cannot be used with %s", allTagsFlag)
+		}
+		return deleteAllTagsResource(cmd, args[0], args[1])
+	}
+	return deleteResource(cmd, args[0], args[1], tag, force)
+}
+
+// deleteAllTagsResource removes every live tag of (kind, name).
+// Errors cleanly when the kind is not a taggable artifact.
+func deleteAllTagsResource(cmd *cobra.Command, typeName, name string) error {
+	k, err := scheme.Lookup(typeName)
+	if err != nil {
+		return err
+	}
+	if apiClient == nil {
+		return fmt.Errorf("API client not initialized")
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "Deleting all tags of %s %s...\n", k.Kind, name)
+	if err := deleteAllTags(k, name); err != nil {
+		return fmt.Errorf("failed to delete all tags of %s %q: %w", k.Kind, name, err)
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "Deleted: %s/%s (all tags)\n", strings.ToLower(k.Kind), name)
+	return nil
 }
 
 // deleteFromFile reads a YAML file and sends a single DELETE /v0/apply request.
@@ -101,7 +136,7 @@ func deleteFromFile(cmd *cobra.Command, filename string) error {
 }
 
 // deleteResource performs an explicit per-kind delete using the registry to resolve the kind.
-func deleteResource(cmd *cobra.Command, typeName, name, version string, force bool) error {
+func deleteResource(cmd *cobra.Command, typeName, name, tag string, force bool) error {
 	k, err := scheme.Lookup(typeName)
 	if err != nil {
 		return err
@@ -115,20 +150,20 @@ func deleteResource(cmd *cobra.Command, typeName, name, version string, force bo
 		return fmt.Errorf("API client not initialized")
 	}
 
-	if version != "" {
-		fmt.Fprintf(cmd.OutOrStdout(), "Deleting %s %s version %s...\n", k.Kind, name, version)
+	if tag != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "Deleting %s %s tag %s...\n", k.Kind, name, tag)
 	} else {
 		fmt.Fprintf(cmd.OutOrStdout(), "Deleting %s %s...\n", k.Kind, name)
 	}
-	if err := deleteItem(k, name, version, force); err != nil {
-		if version != "" {
-			return fmt.Errorf("failed to delete %s %q version %s: %w", k.Kind, name, version, err)
+	if err := deleteItem(k, name, tag, force); err != nil {
+		if tag != "" {
+			return fmt.Errorf("failed to delete %s %q tag %s: %w", k.Kind, name, tag, err)
 		}
 		return fmt.Errorf("failed to delete %s %q: %w", k.Kind, name, err)
 	}
 
-	if version != "" {
-		fmt.Fprintf(cmd.OutOrStdout(), "Deleted: %s/%s (%s)\n", strings.ToLower(k.Kind), name, version)
+	if tag != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "Deleted: %s/%s (%s)\n", strings.ToLower(k.Kind), name, tag)
 	} else {
 		fmt.Fprintf(cmd.OutOrStdout(), "Deleted: %s/%s\n", strings.ToLower(k.Kind), name)
 	}

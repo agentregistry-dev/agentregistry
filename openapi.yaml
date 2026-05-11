@@ -62,7 +62,7 @@ components:
           type: string
         status:
           type: string
-        version:
+        tag:
           type: string
       required:
       - name
@@ -517,12 +517,12 @@ components:
           type: string
         namespace:
           type: string
+        tag:
+          type: string
         uid:
           type: string
         updatedAt:
           format: date-time
-          type: string
-        version:
           type: string
       required:
       - name
@@ -613,7 +613,7 @@ components:
           type: string
         namespace:
           type: string
-        version:
+        tag:
           type: string
       required:
       - kind
@@ -759,12 +759,12 @@ paths:
         schema:
           description: 'Label selector: key=value,key2=value2.'
           type: string
-      - description: Only return rows with is_latest_version=true.
+      - description: Only return the literal latest tag per (namespace, name).
         explode: false
         in: query
         name: latestOnly
         schema:
-          description: Only return rows with is_latest_version=true.
+          description: Only return the literal latest tag per (namespace, name).
           type: boolean
       - description: Include rows with a deletionTimestamp.
         explode: false
@@ -816,8 +816,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorModel'
           description: Error
-      summary: Get the latest version of a Agent
-  /v0/agents/{name}/{version}:
+      summary: Get the latest Agent
+  /v0/agents/{name}/{tag}:
     delete:
       operationId: delete-agent
       parameters:
@@ -834,17 +834,18 @@ paths:
         schema:
           type: string
       - in: path
-        name: version
+        name: tag
         required: true
         schema:
           type: string
-      - description: Skip runtime-specific teardown and only remove the registry record.
+      - description: Skip provider-specific teardown and only remove the registry
+          record.
         explode: false
         in: query
         name: force
         schema:
           default: false
-          description: Skip runtime-specific teardown and only remove the registry
+          description: Skip provider-specific teardown and only remove the registry
             record.
           type: boolean
       responses:
@@ -873,7 +874,7 @@ paths:
         schema:
           type: string
       - in: path
-        name: version
+        name: tag
         required: true
         schema:
           type: string
@@ -890,9 +891,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorModel'
           description: Error
-      summary: Get a Agent by name and version
-    put:
-      operationId: apply-agent
+      summary: Get a Agent by name and tag
+  /v0/agents/{name}/tags:
+    get:
+      operationId: list-tags-agent
       parameters:
       - description: Namespace (internal; defaults to 'default').
         explode: false
@@ -906,22 +908,12 @@ paths:
         required: true
         schema:
           type: string
-      - in: path
-        name: version
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Agent'
       responses:
         "200":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Agent'
+                $ref: '#/components/schemas/ListOutputAgentBody'
           description: OK
         default:
           content:
@@ -929,7 +921,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorModel'
           description: Error
-      summary: Apply a Agent (idempotent upsert)
+      summary: List all tags of a Agent
   /v0/apply:
     delete:
       operationId: delete-batch
@@ -1033,12 +1025,12 @@ paths:
         schema:
           description: 'Label selector: key=value,key2=value2.'
           type: string
-      - description: Only return rows with is_latest_version=true.
+      - description: Only return the literal latest tag per (namespace, name).
         explode: false
         in: query
         name: latestOnly
         schema:
-          description: Only return rows with is_latest_version=true.
+          description: Only return the literal latest tag per (namespace, name).
           type: boolean
       - description: Include rows with a deletionTimestamp.
         explode: false
@@ -1062,6 +1054,41 @@ paths:
           description: Error
       summary: List Deployment (scoped by ?namespace)
   /v0/deployments/{name}:
+    delete:
+      operationId: delete-deployment
+      parameters:
+      - description: Namespace (internal; defaults to 'default').
+        explode: false
+        in: query
+        name: namespace
+        schema:
+          description: Namespace (internal; defaults to 'default').
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      - description: Skip provider-specific teardown and only remove the registry
+          record.
+        explode: false
+        in: query
+        name: force
+        schema:
+          default: false
+          description: Skip provider-specific teardown and only remove the registry
+            record.
+          type: boolean
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorModel'
+          description: Error
+      summary: 'Delete a Deployment (soft-delete: sets deletionTimestamp)'
     get:
       operationId: get-latest-deployment
       parameters:
@@ -1090,81 +1117,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorModel'
           description: Error
-      summary: Get the latest version of a Deployment
-  /v0/deployments/{name}/{version}:
-    delete:
-      operationId: delete-deployment
-      parameters:
-      - description: Namespace (internal; defaults to 'default').
-        explode: false
-        in: query
-        name: namespace
-        schema:
-          description: Namespace (internal; defaults to 'default').
-          type: string
-      - in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      - in: path
-        name: version
-        required: true
-        schema:
-          type: string
-      - description: Skip runtime-specific teardown and only remove the registry record.
-        explode: false
-        in: query
-        name: force
-        schema:
-          default: false
-          description: Skip runtime-specific teardown and only remove the registry
-            record.
-          type: boolean
-      responses:
-        "204":
-          description: No Content
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ErrorModel'
-          description: Error
-      summary: 'Delete a Deployment (soft-delete: sets deletionTimestamp)'
-    get:
-      operationId: get-deployment
-      parameters:
-      - description: Namespace (internal; defaults to 'default').
-        explode: false
-        in: query
-        name: namespace
-        schema:
-          description: Namespace (internal; defaults to 'default').
-          type: string
-      - in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      - in: path
-        name: version
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Deployment'
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ErrorModel'
-          description: Error
-      summary: Get a Deployment by name and version
+      summary: Get the latest Deployment
     put:
       operationId: apply-deployment
       parameters:
@@ -1177,11 +1130,6 @@ paths:
           type: string
       - in: path
         name: name
-        required: true
-        schema:
-          type: string
-      - in: path
-        name: version
         required: true
         schema:
           type: string
@@ -1258,12 +1206,12 @@ paths:
         schema:
           description: 'Label selector: key=value,key2=value2.'
           type: string
-      - description: Only return rows with is_latest_version=true.
+      - description: Only return the literal latest tag per (namespace, name).
         explode: false
         in: query
         name: latestOnly
         schema:
-          description: Only return rows with is_latest_version=true.
+          description: Only return the literal latest tag per (namespace, name).
           type: boolean
       - description: Include rows with a deletionTimestamp.
         explode: false
@@ -1315,8 +1263,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorModel'
           description: Error
-      summary: Get the latest version of a MCPServer
-  /v0/mcpservers/{name}/{version}:
+      summary: Get the latest MCPServer
+  /v0/mcpservers/{name}/{tag}:
     delete:
       operationId: delete-mcpserver
       parameters:
@@ -1333,17 +1281,18 @@ paths:
         schema:
           type: string
       - in: path
-        name: version
+        name: tag
         required: true
         schema:
           type: string
-      - description: Skip runtime-specific teardown and only remove the registry record.
+      - description: Skip provider-specific teardown and only remove the registry
+          record.
         explode: false
         in: query
         name: force
         schema:
           default: false
-          description: Skip runtime-specific teardown and only remove the registry
+          description: Skip provider-specific teardown and only remove the registry
             record.
           type: boolean
       responses:
@@ -1372,7 +1321,7 @@ paths:
         schema:
           type: string
       - in: path
-        name: version
+        name: tag
         required: true
         schema:
           type: string
@@ -1389,9 +1338,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorModel'
           description: Error
-      summary: Get a MCPServer by name and version
-    put:
-      operationId: apply-mcpserver
+      summary: Get a MCPServer by name and tag
+  /v0/mcpservers/{name}/tags:
+    get:
+      operationId: list-tags-mcpserver
       parameters:
       - description: Namespace (internal; defaults to 'default').
         explode: false
@@ -1405,22 +1355,12 @@ paths:
         required: true
         schema:
           type: string
-      - in: path
-        name: version
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/MCPServer'
       responses:
         "200":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MCPServer'
+                $ref: '#/components/schemas/ListOutputMCPServerBody'
           description: OK
         default:
           content:
@@ -1428,7 +1368,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorModel'
           description: Error
-      summary: Apply a MCPServer (idempotent upsert)
+      summary: List all tags of a MCPServer
   /v0/ping:
     get:
       description: Simple ping endpoint
@@ -1483,12 +1423,12 @@ paths:
         schema:
           description: 'Label selector: key=value,key2=value2.'
           type: string
-      - description: Only return rows with is_latest_version=true.
+      - description: Only return the literal latest tag per (namespace, name).
         explode: false
         in: query
         name: latestOnly
         schema:
-          description: Only return rows with is_latest_version=true.
+          description: Only return the literal latest tag per (namespace, name).
           type: boolean
       - description: Include rows with a deletionTimestamp.
         explode: false
@@ -1540,8 +1480,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorModel'
           description: Error
-      summary: Get the latest version of a Prompt
-  /v0/prompts/{name}/{version}:
+      summary: Get the latest Prompt
+  /v0/prompts/{name}/{tag}:
     delete:
       operationId: delete-prompt
       parameters:
@@ -1558,17 +1498,18 @@ paths:
         schema:
           type: string
       - in: path
-        name: version
+        name: tag
         required: true
         schema:
           type: string
-      - description: Skip runtime-specific teardown and only remove the registry record.
+      - description: Skip provider-specific teardown and only remove the registry
+          record.
         explode: false
         in: query
         name: force
         schema:
           default: false
-          description: Skip runtime-specific teardown and only remove the registry
+          description: Skip provider-specific teardown and only remove the registry
             record.
           type: boolean
       responses:
@@ -1597,7 +1538,7 @@ paths:
         schema:
           type: string
       - in: path
-        name: version
+        name: tag
         required: true
         schema:
           type: string
@@ -1614,9 +1555,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorModel'
           description: Error
-      summary: Get a Prompt by name and version
-    put:
-      operationId: apply-prompt
+      summary: Get a Prompt by name and tag
+  /v0/prompts/{name}/tags:
+    get:
+      operationId: list-tags-prompt
       parameters:
       - description: Namespace (internal; defaults to 'default').
         explode: false
@@ -1630,22 +1572,12 @@ paths:
         required: true
         schema:
           type: string
-      - in: path
-        name: version
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Prompt'
       responses:
         "200":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Prompt'
+                $ref: '#/components/schemas/ListOutputPromptBody'
           description: OK
         default:
           content:
@@ -1653,7 +1585,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorModel'
           description: Error
-      summary: Apply a Prompt (idempotent upsert)
+      summary: List all tags of a Prompt
   /v0/remotemcpservers:
     get:
       operationId: list-remotemcpservers
@@ -1688,12 +1620,12 @@ paths:
         schema:
           description: 'Label selector: key=value,key2=value2.'
           type: string
-      - description: Only return rows with is_latest_version=true.
+      - description: Only return the literal latest tag per (namespace, name).
         explode: false
         in: query
         name: latestOnly
         schema:
-          description: Only return rows with is_latest_version=true.
+          description: Only return the literal latest tag per (namespace, name).
           type: boolean
       - description: Include rows with a deletionTimestamp.
         explode: false
@@ -1745,8 +1677,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorModel'
           description: Error
-      summary: Get the latest version of a RemoteMCPServer
-  /v0/remotemcpservers/{name}/{version}:
+      summary: Get the latest RemoteMCPServer
+  /v0/remotemcpservers/{name}/{tag}:
     delete:
       operationId: delete-remotemcpserver
       parameters:
@@ -1763,17 +1695,18 @@ paths:
         schema:
           type: string
       - in: path
-        name: version
+        name: tag
         required: true
         schema:
           type: string
-      - description: Skip runtime-specific teardown and only remove the registry record.
+      - description: Skip provider-specific teardown and only remove the registry
+          record.
         explode: false
         in: query
         name: force
         schema:
           default: false
-          description: Skip runtime-specific teardown and only remove the registry
+          description: Skip provider-specific teardown and only remove the registry
             record.
           type: boolean
       responses:
@@ -1802,7 +1735,7 @@ paths:
         schema:
           type: string
       - in: path
-        name: version
+        name: tag
         required: true
         schema:
           type: string
@@ -1819,9 +1752,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorModel'
           description: Error
-      summary: Get a RemoteMCPServer by name and version
-    put:
-      operationId: apply-remotemcpserver
+      summary: Get a RemoteMCPServer by name and tag
+  /v0/remotemcpservers/{name}/tags:
+    get:
+      operationId: list-tags-remotemcpserver
       parameters:
       - description: Namespace (internal; defaults to 'default').
         explode: false
@@ -1835,22 +1769,12 @@ paths:
         required: true
         schema:
           type: string
-      - in: path
-        name: version
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RemoteMCPServer'
       responses:
         "200":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RemoteMCPServer'
+                $ref: '#/components/schemas/ListOutputRemoteMCPServerBody'
           description: OK
         default:
           content:
@@ -1858,7 +1782,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorModel'
           description: Error
-      summary: Apply a RemoteMCPServer (idempotent upsert)
+      summary: List all tags of a RemoteMCPServer
   /v0/runtimes:
     get:
       operationId: list-runtimes
@@ -1893,12 +1817,12 @@ paths:
         schema:
           description: 'Label selector: key=value,key2=value2.'
           type: string
-      - description: Only return rows with is_latest_version=true.
+      - description: Only return the literal latest tag per (namespace, name).
         explode: false
         in: query
         name: latestOnly
         schema:
-          description: Only return rows with is_latest_version=true.
+          description: Only return the literal latest tag per (namespace, name).
           type: boolean
       - description: Include rows with a deletionTimestamp.
         explode: false
@@ -1922,6 +1846,41 @@ paths:
           description: Error
       summary: List Runtime (scoped by ?namespace)
   /v0/runtimes/{name}:
+    delete:
+      operationId: delete-runtime
+      parameters:
+      - description: Namespace (internal; defaults to 'default').
+        explode: false
+        in: query
+        name: namespace
+        schema:
+          description: Namespace (internal; defaults to 'default').
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      - description: Skip provider-specific teardown and only remove the registry
+          record.
+        explode: false
+        in: query
+        name: force
+        schema:
+          default: false
+          description: Skip provider-specific teardown and only remove the registry
+            record.
+          type: boolean
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorModel'
+          description: Error
+      summary: 'Delete a Runtime (soft-delete: sets deletionTimestamp)'
     get:
       operationId: get-latest-runtime
       parameters:
@@ -1950,81 +1909,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorModel'
           description: Error
-      summary: Get the latest version of a Runtime
-  /v0/runtimes/{name}/{version}:
-    delete:
-      operationId: delete-runtime
-      parameters:
-      - description: Namespace (internal; defaults to 'default').
-        explode: false
-        in: query
-        name: namespace
-        schema:
-          description: Namespace (internal; defaults to 'default').
-          type: string
-      - in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      - in: path
-        name: version
-        required: true
-        schema:
-          type: string
-      - description: Skip runtime-specific teardown and only remove the registry record.
-        explode: false
-        in: query
-        name: force
-        schema:
-          default: false
-          description: Skip runtime-specific teardown and only remove the registry
-            record.
-          type: boolean
-      responses:
-        "204":
-          description: No Content
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ErrorModel'
-          description: Error
-      summary: 'Delete a Runtime (soft-delete: sets deletionTimestamp)'
-    get:
-      operationId: get-runtime
-      parameters:
-      - description: Namespace (internal; defaults to 'default').
-        explode: false
-        in: query
-        name: namespace
-        schema:
-          description: Namespace (internal; defaults to 'default').
-          type: string
-      - in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      - in: path
-        name: version
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Runtime'
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ErrorModel'
-          description: Error
-      summary: Get a Runtime by name and version
+      summary: Get the latest Runtime
     put:
       operationId: apply-runtime
       parameters:
@@ -2037,11 +1922,6 @@ paths:
           type: string
       - in: path
         name: name
-        required: true
-        schema:
-          type: string
-      - in: path
-        name: version
         required: true
         schema:
           type: string
@@ -2098,12 +1978,12 @@ paths:
         schema:
           description: 'Label selector: key=value,key2=value2.'
           type: string
-      - description: Only return rows with is_latest_version=true.
+      - description: Only return the literal latest tag per (namespace, name).
         explode: false
         in: query
         name: latestOnly
         schema:
-          description: Only return rows with is_latest_version=true.
+          description: Only return the literal latest tag per (namespace, name).
           type: boolean
       - description: Include rows with a deletionTimestamp.
         explode: false
@@ -2155,8 +2035,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorModel'
           description: Error
-      summary: Get the latest version of a Skill
-  /v0/skills/{name}/{version}:
+      summary: Get the latest Skill
+  /v0/skills/{name}/{tag}:
     delete:
       operationId: delete-skill
       parameters:
@@ -2173,17 +2053,18 @@ paths:
         schema:
           type: string
       - in: path
-        name: version
+        name: tag
         required: true
         schema:
           type: string
-      - description: Skip runtime-specific teardown and only remove the registry record.
+      - description: Skip provider-specific teardown and only remove the registry
+          record.
         explode: false
         in: query
         name: force
         schema:
           default: false
-          description: Skip runtime-specific teardown and only remove the registry
+          description: Skip provider-specific teardown and only remove the registry
             record.
           type: boolean
       responses:
@@ -2212,7 +2093,7 @@ paths:
         schema:
           type: string
       - in: path
-        name: version
+        name: tag
         required: true
         schema:
           type: string
@@ -2229,9 +2110,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorModel'
           description: Error
-      summary: Get a Skill by name and version
-    put:
-      operationId: apply-skill
+      summary: Get a Skill by name and tag
+  /v0/skills/{name}/tags:
+    get:
+      operationId: list-tags-skill
       parameters:
       - description: Namespace (internal; defaults to 'default').
         explode: false
@@ -2245,22 +2127,12 @@ paths:
         required: true
         schema:
           type: string
-      - in: path
-        name: version
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Skill'
       responses:
         "200":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Skill'
+                $ref: '#/components/schemas/ListOutputSkillBody'
           description: OK
         default:
           content:
@@ -2268,7 +2140,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorModel'
           description: Error
-      summary: Apply a Skill (idempotent upsert)
+      summary: List all tags of a Skill
   /v0/version:
     get:
       description: Returns the version, git commit, and build time of the registry

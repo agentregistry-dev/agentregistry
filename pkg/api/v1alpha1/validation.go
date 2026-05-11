@@ -15,7 +15,7 @@ import (
 var (
 	ErrRequiredField       = errors.New("required field missing")
 	ErrInvalidFormat       = errors.New("invalid format")
-	ErrInvalidVersion      = errors.New("invalid version string")
+	ErrInvalidTag          = errors.New("invalid tag")
 	ErrInvalidURL          = errors.New("invalid url")
 	ErrInvalidLabel        = errors.New("invalid label")
 	ErrInvalidRef          = errors.New("invalid resource reference")
@@ -101,46 +101,20 @@ var nameRegex = regexp.MustCompile(`^[a-zA-Z0-9]([-a-zA-Z0-9._/]{0,253}[a-zA-Z0-
 var labelKeyRegex = regexp.MustCompile(`^([a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?/)?[a-zA-Z0-9]([-a-zA-Z0-9._]{0,61}[a-zA-Z0-9])?$`)
 var labelValueRegex = regexp.MustCompile(`^([a-zA-Z0-9]([-a-zA-Z0-9._]{0,61}[a-zA-Z0-9])?)?$`)
 
-// versionRangeRegex: detects version strings that look like ranges or
-// wildcards rather than concrete versions. Pinned versions like "v1.2.3"
-// or "1.2.3-beta.1" must NOT match.
-var versionRangeRegex = regexp.MustCompile(`(\^|~|>=|<=|>|<|\|\||\*|,|\bx\b|\bX\b|\s)`)
-
-const maxVersionLen = 255
+var tagRegex = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$`)
 
 // -----------------------------------------------------------------------------
 // ObjectMeta validation — shared across every kind.
 // -----------------------------------------------------------------------------
 
-// ValidateObjectMeta checks the namespace/name/version format and label
-// shape. Server-managed fields (Generation, CreatedAt, UpdatedAt,
-// DeletionTimestamp) are ignored.
+// ValidateObjectMeta checks the namespace/name format and label shape.
+// Server-managed fields (CreatedAt, UpdatedAt, DeletionTimestamp) are ignored.
+// Content resources use metadata.tag for identity; mutable object kinds expose
+// only namespace/name.
 //
-// Use this for kinds where multiple coexisting versions of the same
-// (namespace, name) carry meaning — Agent, MCPServer, Skill, Prompt
-// (publishable artifacts). For kinds whose versioning is semantically
-// empty (Runtime is a connection handle, Deployment is a runtime
-// binding), call ValidateObjectMetaUnversioned instead so callers
-// aren't forced to fabricate a placeholder version string.
+// Taggable artifact kinds and mutable object kinds call this same validator
+// because ObjectMeta exposes one public shape for both identities.
 func ValidateObjectMeta(m ObjectMeta) FieldErrors {
-	errs := validateObjectMetaCommon(m)
-	if err := validateVersion(m.Version); err != nil {
-		errs.Append("metadata.version", err)
-	}
-	return errs
-}
-
-// ValidateObjectMetaUnversioned is ValidateObjectMeta minus the
-// version-required check. Kinds whose identity is fully captured by
-// (namespace, name) — Runtime, Deployment — call this so users
-// don't have to make up a placeholder version. The storage layer
-// still requires a version string in the 3-tuple PK, but kinds opting
-// in here treat it as opaque (typically the constant "1").
-func ValidateObjectMetaUnversioned(m ObjectMeta) FieldErrors {
-	return validateObjectMetaCommon(m)
-}
-
-func validateObjectMetaCommon(m ObjectMeta) FieldErrors {
 	var errs FieldErrors
 
 	switch {
@@ -169,20 +143,12 @@ func validateObjectMetaCommon(m ObjectMeta) FieldErrors {
 	return errs
 }
 
-// validateVersion enforces: required, length-bound, not the literal
-// "latest", and not a range-looking string.
-func validateVersion(v string) error {
-	if v == "" {
+func validateTag(tag string) error {
+	if tag == "" {
 		return fmt.Errorf("%w", ErrRequiredField)
 	}
-	if len(v) > maxVersionLen {
-		return fmt.Errorf("%w: exceeds %d characters", ErrInvalidVersion, maxVersionLen)
-	}
-	if strings.EqualFold(v, "latest") {
-		return fmt.Errorf("%w: cannot be literal %q — use an explicit version", ErrInvalidVersion, "latest")
-	}
-	if versionRangeRegex.MatchString(v) {
-		return fmt.Errorf("%w: must be a pinned version, not a range or wildcard (%q)", ErrInvalidVersion, v)
+	if !tagRegex.MatchString(tag) {
+		return fmt.Errorf("%w: must match %s", ErrInvalidTag, tagRegex.String())
 	}
 	return nil
 }
@@ -251,10 +217,12 @@ func validateRef(r ResourceRef, allowedKinds ...string) FieldErrors {
 	} else if !nameRegex.MatchString(r.Name) {
 		errs.Append("name", fmt.Errorf("%w: %q", ErrInvalidFormat, r.Name))
 	}
-	// Version is optional on a ref — blank means "resolve to latest".
-	if r.Version != "" {
-		if err := validateVersion(r.Version); err != nil {
-			errs.Append("version", err)
+	// Tag is optional on content refs — blank means "resolve to latest".
+	if r.Tag != "" {
+		if !IsTaggedArtifactKind(r.Kind) {
+			errs.Append("tag", fmt.Errorf("%w: kind %q does not support tag pinning", ErrInvalidRef, r.Kind))
+		} else if err := validateTag(r.Tag); err != nil {
+			errs.Append("tag", err)
 		}
 	}
 	return errs

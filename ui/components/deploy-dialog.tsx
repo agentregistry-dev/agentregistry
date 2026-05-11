@@ -84,9 +84,9 @@ export function DeployDialog({ open, onOpenChange, resourceType, server, agent, 
     ? server?.server.name
     : agent?.agent.name
 
-  const version = resourceType === "mcp"
-    ? server?.server.version
-    : agent?.agent.version
+  const tag = resourceType === "mcp"
+    ? server?.server.tag
+    : agent?.agent.tag
 
   const displayName = resourceType === "mcp"
     ? (server?.server.title || server?.server.name)
@@ -110,7 +110,7 @@ export function DeployDialog({ open, onOpenChange, resourceType, server, agent, 
   }
 
   const handleDeploy = async () => {
-    if (!name || !version) return
+    if (!name || !tag) return
 
     try {
       setDeploying(true)
@@ -124,7 +124,7 @@ export function DeployDialog({ open, onOpenChange, resourceType, server, agent, 
       await deployServerApi({
         body: {
           serverName: name,
-          version: version,
+          tag,
           env,
           runtimeId,
           resourceType,
@@ -178,7 +178,7 @@ export function DeployDialog({ open, onOpenChange, resourceType, server, agent, 
           <DialogDescription>
             <span className="font-mono text-xs">{name}</span>
             <span className="mx-1.5 text-muted-foreground/40">&middot;</span>
-            <span className="text-xs">v{version}</span>
+            <span className="text-xs">{tag}</span>
             <span className="mx-1.5 text-muted-foreground/40">&middot;</span>
             <span className="text-xs capitalize">{resourceLabel}</span>
           </DialogDescription>

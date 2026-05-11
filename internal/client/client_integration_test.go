@@ -43,14 +43,13 @@ func TestClient_V1Alpha1RoundTrip(t *testing.T) {
 	c := client.NewClient(ts.URL, "")
 	ctx := context.Background()
 
-	// Apply a single-doc YAML → creates the Agent.
+	// Apply a single-doc YAML → creates the Agent. metadata.tag defaults to the literal "latest" tag.
 	yamlBody := []byte(`
 apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   namespace: default
   name: acme/planner
-  version: v1.0.0
 spec:
   title: Planner
   description: planning agent
@@ -59,16 +58,13 @@ spec:
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	require.Equal(t, "created", results[0].Status)
-	// Generation is internal-only (json:"-") so ApplyResult.Generation
-	// never flows over the wire. Internal assertions go through the
-	// Store directly.
 
-	// Get by exact version.
-	raw, err := c.Get(ctx, v1alpha1.KindAgent, "default", "acme/planner", "v1.0.0")
+	// Get by exact tag.
+	raw, err := c.Get(ctx, v1alpha1.KindAgent, "default", "acme/planner", "latest")
 	require.NoError(t, err)
 	require.Equal(t, v1alpha1.KindAgent, raw.Kind)
 	require.Equal(t, "acme/planner", raw.Metadata.Name)
-	require.Equal(t, "v1.0.0", raw.Metadata.Version)
+	require.Equal(t, "latest", raw.Metadata.Tag)
 
 	// Unmarshal Spec into the typed Agent.
 	var spec v1alpha1.AgentSpec
@@ -78,7 +74,7 @@ spec:
 	// GetLatest returns the same row.
 	latest, err := c.GetLatest(ctx, v1alpha1.KindAgent, "default", "acme/planner")
 	require.NoError(t, err)
-	require.Equal(t, "v1.0.0", latest.Metadata.Version)
+	require.Equal(t, "latest", latest.Metadata.Tag)
 
 	// List (cross-namespace) returns the one row.
 	items, next, err := c.List(ctx, v1alpha1.KindAgent, client.ListOpts{})
@@ -93,11 +89,11 @@ spec:
 	require.Len(t, items, 1)
 
 	// Delete → finalizer-free Agent hard-deletes immediately. Both
-	// GetLatest and the exact-version Get return ErrNotFound; the row
-	// is gone, not soft-deleted.
-	require.NoError(t, c.Delete(ctx, v1alpha1.KindAgent, "default", "acme/planner", "v1.0.0"))
+	// GetLatest and the exact-tag Get return ErrNotFound; the row is
+	// gone, not soft-deleted.
+	require.NoError(t, c.Delete(ctx, v1alpha1.KindAgent, "default", "acme/planner", "latest"))
 
-	_, err = c.Get(ctx, v1alpha1.KindAgent, "default", "acme/planner", "v1.0.0")
+	_, err = c.Get(ctx, v1alpha1.KindAgent, "default", "acme/planner", "latest")
 	require.ErrorIs(t, err, client.ErrNotFound)
 
 	_, err = c.GetLatest(ctx, v1alpha1.KindAgent, "default", "acme/planner")
@@ -130,7 +126,6 @@ apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   namespace: default
-  version: v1.0.0
 spec:
   title: Missing name
 `)
@@ -155,7 +150,7 @@ func TestClient_V1Alpha1_NotFound(t *testing.T) {
 
 	c := client.NewClient(ts.URL, "")
 
-	_, err := c.Get(context.Background(), v1alpha1.KindAgent, "default", "does-not-exist", "v1")
+	_, err := c.Get(context.Background(), v1alpha1.KindAgent, "default", "does-not-exist", "latest")
 	require.Error(t, err)
 	require.True(t, errors.Is(err, client.ErrNotFound))
 }

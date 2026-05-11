@@ -25,7 +25,7 @@ type AgentSpec struct {
 	Source *AgentSource `json:"source,omitempty" yaml:"source,omitempty"`
 
 	// References to top-level resources. Each entry's Kind must match the
-	// field name's singular form (MCPServer). Version empty means
+	// field name's singular form (MCPServer). Tag empty means
 	// "resolve latest at reference time".
 	//
 	// Skills + Prompts removed per audit; refs were ADK-Python-runtime-specific

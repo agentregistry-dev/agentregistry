@@ -20,7 +20,7 @@ func loadFromEnvelope(data []byte) (*ProjectManifest, error) {
 	}
 	out := &ProjectManifest{
 		Name:        server.Metadata.Name,
-		Version:     server.Metadata.Version,
+		Version:     server.Metadata.Tag,
 		Description: server.Spec.Description,
 	}
 	// Extract the runtime hint from the bundled OCI package, if present.

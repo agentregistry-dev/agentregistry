@@ -11,18 +11,12 @@ These four kinds share the same endpoint shape. `{kind}` = `agent` | `server` | 
 | Operation | HTTP | Required permissions | Notes |
 | --- | --- | --- | --- |
 | List | `GET /v0/{kind}s` | none | Filtering is delegated to the provider implementation; the list boundary intentionally skips checks. |
-| Get version | `GET /v0/{kind}s/{name}/versions/{version}` | `Read` on `{kind}:{name}` | |
-| Get versions | `GET /v0/{kind}s/{name}/versions` | `Read` on `{kind}:{name}` | |
-| Publish | `POST /v0/{kind}s` | `Read` + `Publish` on `{kind}:{name}` | Creates a new name+version. Duplicate name+version is rejected — update paths are `PATCH /v0/servers/...` (servers only) or `POST /v0/apply` (any kind). `Read` covers pre-create lookups (version existence, latest resolution). |
-| Delete version | `DELETE /v0/{kind}s/{name}/versions/{version}` | `Delete` on `{kind}:{name}` | |
-
-## MCP Server-only endpoints
-
-| Operation | HTTP | Required permissions | Notes |
-| --- | --- | --- | --- |
-| Edit | `PATCH /v0/servers/{name}/versions/{version}` | `Read` + `Edit` on `server:{name}` | Handler fetches the current version before applying the patch. No equivalent endpoint exists for agents, skills, or prompts — updates to those kinds go through `POST /v0/apply`. |
-| Get latest readme | `GET /v0/servers/{name}/readme` | `Read` on `server:{name}` | |
-| Get version readme | `GET /v0/servers/{name}/versions/{version}/readme` | `Read` on `server:{name}` | |
+| Get latest tag | `GET /v0/{kind}s/{name}` | `Read` on `{kind}:{name}` | Resolves the literal `latest` tag. |
+| Get exact tag | `GET /v0/{kind}s/{name}/{tag}` | `Read` on `{kind}:{name}` | |
+| List tags | `GET /v0/{kind}s/{name}/tags` | `Read` on `{kind}:{name}` | |
+| Apply | `POST /v0/apply` | `Read` + `Publish` or `Read` + `Edit` on `{kind}:{name}` | Creates or replaces `metadata.tag`; omitted tags resolve to literal `latest`. |
+| Delete latest tag | `DELETE /v0/{kind}s/{name}` | `Delete` on `{kind}:{name}` | Deletes the literal `latest` tag. |
+| Delete exact tag | `DELETE /v0/{kind}s/{name}/{tag}` | `Delete` on `{kind}:{name}` | |
 
 ## Runtimes
 
@@ -37,17 +31,17 @@ These four kinds share the same endpoint shape. `{kind}` = `agent` | `server` | 
 
 ## Deployments
 
-Deployments are identified by `{namespace}/{name}/{version}` and authz always evaluates against the underlying artifact (`server` or `agent`) the deployment references. Artifact kind is inferred from `Deployment.Spec.TargetRef.Kind`.
+Deployments are identified by `{namespace}/{name}` and authz always evaluates against the underlying artifact (`server` or `agent`) the deployment references. Artifact kind is inferred from `Deployment.Spec.TargetRef.Kind`.
 
-Every deployment lifecycle operation — launching, undeploying, cancelling — gates on `Deploy` against the underlying artifact. The `Delete` verb is reserved for deleting the artifact itself (e.g. `DELETE /v0/servers/{name}/versions/{v}`), not tearing down a running deployment of it.
+Every deployment lifecycle operation — launching, undeploying, cancelling — gates on `Deploy` against the underlying artifact. The `Delete` verb is reserved for deleting the artifact itself (e.g. `DELETE /v0/servers/{name}/{tag}`), not tearing down a running deployment of it.
 
 | Operation | HTTP | Required permissions |
 | --- | --- | --- |
 | List | `GET /v0/deployments` | none — filtering delegated to provider implementation |
-| Get | `GET /v0/deployments/{name}/{version}?namespace={namespace}` | `Read` on target `{agent,server}:{name}` |
-| Create / update desired state | `PUT /v0/deployments/{name}/{version}?namespace={namespace}` | `Read` on `provider:{id}`; `Read` + `Deploy` on target |
-| Delete | `DELETE /v0/deployments/{name}/{version}?namespace={namespace}` | `Read` + `Deploy` on target |
-| Logs | `GET /v0/deployments/{name}/{version}/logs?namespace={namespace}` | `Read` on target (read-only) |
+| Get | `GET /v0/deployments/{name}?namespace={namespace}` | `Read` on target `{agent,server}:{name}` |
+| Create / update desired state | `PUT /v0/deployments/{name}?namespace={namespace}` | `Read` on `provider:{id}`; `Read` + `Deploy` on target |
+| Delete | `DELETE /v0/deployments/{name}?namespace={namespace}` | `Read` + `Deploy` on target |
+| Logs | `GET /v0/deployments/{name}/logs?namespace={namespace}` | `Read` on target |
 
 Agent deployments additionally invoke `Read` on each referenced `skill:{ref}` and `prompt:{ref}` when the platform adapter resolves the agent's manifest before deploying. These reads run under the caller's session (not a system context), so the user triggering the deployment must have `Read` on every manifest-referenced skill and prompt.
 
@@ -57,7 +51,7 @@ Agent deployments additionally invoke `Read` on each referenced `skill:{ref}` an
 
 | Operation | HTTP | Required permissions | Notes |
 | --- | --- | --- | --- |
-| Apply | `POST /v0/apply` | Per-document; depends on kind and whether the version already exists | Each document dispatches to its kind handler individually; partial failure is allowed. Artifacts (`agent`/`server`/`skill`/`prompt`): `Read` + `Publish` if the version is new, `Read` + `Edit` if it already exists. `provider`: `Read` + `Edit` if it exists, `Read` + `Publish` if new (there is no direct provider update endpoint; apply is the only update path). `deployment`: same as `PUT /v0/deployments/{name}/{version}?namespace={namespace}`. |
+| Apply | `POST /v0/apply` | Per-document; depends on kind and whether the row already exists | Each document dispatches to its kind handler individually; partial failure is allowed. Artifacts (`agent`/`server`/`skill`/`prompt`): `Read` + `Publish` if the tag is new, `Read` + `Edit` if it already exists. `provider`: `Read` + `Edit` if it exists, `Read` + `Publish` if new. `deployment`: same as `PUT /v0/deployments/{name}?namespace={namespace}`. |
 | Delete | `DELETE /v0/apply` | Per-document; depends on kind | Artifacts: `Delete` on `{kind}:{name}`. `provider`: `Read` + `Delete` on `provider:{name}`. `deployment`: `Deploy` on target (see Deployments section). |
 
 ## Public

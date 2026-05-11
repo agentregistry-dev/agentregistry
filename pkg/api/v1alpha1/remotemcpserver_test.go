@@ -12,7 +12,6 @@ apiVersion: ar.dev/v1alpha1
 kind: RemoteMCPServer
 metadata:
   name: weather
-  version: "1.0.0"
 spec:
   title: Weather (remote)
   description: Hosted weather endpoint
@@ -46,7 +45,7 @@ func TestRemoteMCPServer_Validate(t *testing.T) {
 		{
 			name: "ok",
 			obj: RemoteMCPServer{
-				Metadata: ObjectMeta{Namespace: "default", Name: "weather", Version: "1"},
+				Metadata: ObjectMeta{Namespace: "default", Name: "weather", Tag: "1"},
 				Spec: RemoteMCPServerSpec{
 					Remote: MCPTransport{Type: "streamable-http", URL: "https://example.test/mcp"},
 				},
@@ -55,7 +54,7 @@ func TestRemoteMCPServer_Validate(t *testing.T) {
 		{
 			name: "missing remote.type",
 			obj: RemoteMCPServer{
-				Metadata: ObjectMeta{Namespace: "default", Name: "weather", Version: "1"},
+				Metadata: ObjectMeta{Namespace: "default", Name: "weather", Tag: "1"},
 				Spec: RemoteMCPServerSpec{
 					Remote: MCPTransport{URL: "https://example.test/mcp"},
 				},
@@ -66,7 +65,7 @@ func TestRemoteMCPServer_Validate(t *testing.T) {
 		{
 			name: "missing remote.url",
 			obj: RemoteMCPServer{
-				Metadata: ObjectMeta{Namespace: "default", Name: "weather", Version: "1"},
+				Metadata: ObjectMeta{Namespace: "default", Name: "weather", Tag: "1"},
 				Spec: RemoteMCPServerSpec{
 					Remote: MCPTransport{Type: "streamable-http"},
 				},
@@ -77,7 +76,7 @@ func TestRemoteMCPServer_Validate(t *testing.T) {
 		{
 			name: "empty remote",
 			obj: RemoteMCPServer{
-				Metadata: ObjectMeta{Namespace: "default", Name: "weather", Version: "1"},
+				Metadata: ObjectMeta{Namespace: "default", Name: "weather", Tag: "1"},
 				Spec:     RemoteMCPServerSpec{},
 			},
 			wantErr: true,

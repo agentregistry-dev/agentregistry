@@ -2,7 +2,6 @@ apiVersion: ar.dev/v1alpha1
 kind: RemoteMCPServer
 metadata:
   name: com.databricks.cloud.workspace/unity-catalog
-  version: "1.0.0"
 spec:
   title: Databricks Unity Catalog
   description: "Pre-deployed Unity Catalog MCP server"

@@ -18,27 +18,27 @@ import {
 
 interface PromptDetailProps {
   prompt: PromptResponse
-  allVersions?: PromptResponse[]
+  allTags?: PromptResponse[]
 }
 
-export function PromptDetail({ prompt, allVersions: allVersionsProp }: PromptDetailProps) {
+export function PromptDetail({ prompt, allTags: allTagsProp }: PromptDetailProps) {
   const [activeTab, setActiveTab] = useState("overview")
   const [jsonCopied, setJsonCopied] = useState(false)
-  const [selectedVersion, setSelectedVersion] = useState<PromptResponse>(prompt)
+  const [selectedTag, setSelectedTag] = useState<PromptResponse>(prompt)
 
-  const allVersions = allVersionsProp || [prompt]
+  const allTags = allTagsProp || [prompt]
 
-  const { prompt: promptData, _meta } = selectedVersion
+  const { prompt: promptData, _meta } = selectedTag
   const official = _meta?.['io.modelcontextprotocol.registry/official']
 
-  const handleVersionChange = (version: string) => {
-    const newVersion = allVersions.find(v => v.prompt.version === version)
-    if (newVersion) setSelectedVersion(newVersion)
+  const handleTagChange = (tag: string) => {
+    const newTag = allTags.find(v => v.prompt.tag === tag)
+    if (newTag) setSelectedTag(newTag)
   }
 
   const handleCopyJson = async () => {
     try {
-      await navigator.clipboard.writeText(JSON.stringify(selectedVersion, null, 2))
+      await navigator.clipboard.writeText(JSON.stringify(selectedTag, null, 2))
       setJsonCopied(true)
       setTimeout(() => setJsonCopied(false), 2000)
     } catch (err) {
@@ -75,20 +75,20 @@ export function PromptDetail({ prompt, allVersions: allVersionsProp }: PromptDet
           </div>
         </div>
 
-        {/* Version selector */}
-        {allVersions.length > 1 && (
+        {/* Tag selector */}
+        {allTags.length > 1 && (
           <div className="flex items-center gap-3 px-3 py-2 bg-accent/50 border border-primary/10 rounded-md">
             <History className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm">{allVersions.length} versions</span>
-            <Select value={selectedVersion.prompt.version} onValueChange={handleVersionChange}>
+            <span className="text-sm">{allTags.length} tags</span>
+            <Select value={selectedTag.prompt.tag} onValueChange={handleTagChange}>
               <SelectTrigger className="w-[160px] h-7 text-sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {allVersions.map((version) => (
-                  <SelectItem key={version.prompt.version} value={version.prompt.version}>
-                    {version.prompt.version}
-                    {version.prompt.version === prompt.prompt.version && " (latest)"}
+                {allTags.map((tag) => (
+                  <SelectItem key={tag.prompt.tag} value={tag.prompt.tag}>
+                    {tag.prompt.tag}
+                    {tag.prompt.tag === prompt.prompt.tag && " (latest)"}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -99,9 +99,9 @@ export function PromptDetail({ prompt, allVersions: allVersionsProp }: PromptDet
         {/* Quick info */}
         <div className="flex flex-wrap gap-2">
           <span className="flex items-center gap-1.5 px-2.5 py-1 bg-muted rounded text-sm">
-            <span className="font-mono">{promptData.version}</span>
-            {allVersions.length > 1 && (
-              <Badge variant="secondary" className="text-[10px] px-1 py-0 h-3.5">{allVersions.length} total</Badge>
+            <span className="font-mono">{promptData.tag}</span>
+            {allTags.length > 1 && (
+              <Badge variant="secondary" className="text-[10px] px-1 py-0 h-3.5">{allTags.length} total</Badge>
             )}
           </span>
           {official?.publishedAt && (
@@ -152,7 +152,7 @@ export function PromptDetail({ prompt, allVersions: allVersionsProp }: PromptDet
                 </Button>
               </div>
               <pre className="bg-muted p-3 rounded-md overflow-x-auto text-xs leading-relaxed">
-                {JSON.stringify(selectedVersion, null, 2)}
+                {JSON.stringify(selectedTag, null, 2)}
               </pre>
             </div>
           </TabsContent>

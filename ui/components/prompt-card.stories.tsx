@@ -7,7 +7,7 @@ const mockPrompt: PromptResponse = {
     name: "code-explainer",
     description:
       "Explains code snippets in plain language, breaking down complex logic into understandable steps with examples.",
-    version: "1.2.0",
+    tag: "1.2.0",
     content: "You are a code explainer. Given a code snippet, explain what it does step by step.",
   },
   _meta: {
@@ -23,7 +23,7 @@ const mockPrompt: PromptResponse = {
 const minimalPrompt: PromptResponse = {
   prompt: {
     name: "hello-prompt",
-    version: "0.1.0",
+    tag: "0.1.0",
     content: "Say hello.",
   },
   _meta: {},

@@ -38,7 +38,7 @@ const (
 // BuiltinKinds is the stable ordered list of Kind names this package
 // defines. Iteration order is deterministic; callers building parallel
 // structures (table maps, route registrations, etc.) should range over
-// this slice so they stay aligned as kinds are added. Enterprise-added
+// this slice so they stay aligned as kinds are added. Extension
 // kinds registered via Scheme.Register are NOT included here — those
 // consumers bring their own list.
 var BuiltinKinds = []string{

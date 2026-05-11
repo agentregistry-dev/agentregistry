@@ -39,7 +39,7 @@ func TestK8sV1Alpha1Apply_MCPServerTarget_CreatesResource(t *testing.T) {
 
 	runtime := &v1alpha1.Runtime{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindRuntime},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "kube-local", Version: "1"},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "kube-local"},
 		Spec: v1alpha1.RuntimeSpec{
 			Type:   v1alpha1.TypeKubernetes,
 			Config: map[string]any{"namespace": "kagent"},
@@ -47,17 +47,17 @@ func TestK8sV1Alpha1Apply_MCPServerTarget_CreatesResource(t *testing.T) {
 	}
 	target := &v1alpha1.RemoteMCPServer{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindRemoteMCPServer},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather", Version: "1.0.0"},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather"},
 		Spec: v1alpha1.RemoteMCPServerSpec{
 			Remote: v1alpha1.MCPTransport{Type: "streamable-http", URL: "https://api.weather.example/mcp"},
 		},
 	}
 	deployment := &v1alpha1.Deployment{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindDeployment},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-kube", Version: "1", Generation: 4},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-kube", Generation: 4},
 		Spec: v1alpha1.DeploymentSpec{
-			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindRemoteMCPServer, Name: "weather", Version: "1.0.0"},
-			RuntimeRef:   v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "kube-local", Version: "1"},
+			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindRemoteMCPServer, Name: "weather"},
+			RuntimeRef:   v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "kube-local"},
 			DesiredState: v1alpha1.DesiredStateDeployed,
 		},
 	}
@@ -113,11 +113,11 @@ func TestK8sV1Alpha1Remove_DeletesResourcesByDeploymentID(t *testing.T) {
 	adapter := NewKubernetesDeploymentAdapter()
 
 	runtime := &v1alpha1.Runtime{
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "kube-local", Version: "1"},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "kube-local"},
 		Spec:     v1alpha1.RuntimeSpec{Type: v1alpha1.TypeKubernetes, Config: map[string]any{"namespace": "kagent"}},
 	}
 	deployment := &v1alpha1.Deployment{
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: deploymentID, Version: "1", Generation: 5},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: deploymentID, Generation: 5},
 	}
 
 	res, err := adapter.Remove(context.Background(), adapterpkgtypes.RemoveInput{
@@ -189,7 +189,7 @@ func TestK8sV1Alpha1Discover_SkipsManagedResources(t *testing.T) {
 
 	adapter := NewKubernetesDeploymentAdapter()
 	runtime := &v1alpha1.Runtime{
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "kube-local", Version: "1"},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "kube-local"},
 		Spec:     v1alpha1.RuntimeSpec{Type: v1alpha1.TypeKubernetes, Config: map[string]any{"namespace": "kagent"}},
 	}
 	results, err := adapter.Discover(context.Background(), adapterpkgtypes.DiscoverInput{Runtime: runtime})

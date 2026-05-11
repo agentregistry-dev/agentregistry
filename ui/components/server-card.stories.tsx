@@ -9,7 +9,7 @@ const mockServer: ServerResponse = {
     title: "Database Server",
     description:
       "A production-ready MCP server that provides read and write access to PostgreSQL databases with connection pooling and query optimization.",
-    version: "3.2.1",
+    tag: "3.2.1",
     source: {
       repository: {
         url: "https://github.com/acme/database-server",
@@ -36,7 +36,7 @@ const minimalServer: ServerResponse = {
     $schema: "https://modelcontextprotocol.io/schemas/server.json",
     name: "test/minimal-server",
     description: "A bare-bones server with no extras.",
-    version: "0.0.1",
+    tag: "0.0.1",
   },
   _meta: {},
 }
@@ -83,9 +83,9 @@ export const WithDelete: Story = {
   },
 }
 
-export const WithVersionCount: Story = {
+export const WithTagCount: Story = {
   args: {
     server: mockServer,
-    versionCount: 5,
+    tagCount: 5,
   },
 }

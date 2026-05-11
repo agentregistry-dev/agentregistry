@@ -10,7 +10,7 @@ const mockServer: ServerResponse = {
     name: "acme/database-server",
     title: "Database Server",
     description: "MCP server for PostgreSQL with connection pooling.",
-    version: "3.2.1",
+    tag: "3.2.1",
     source: {
       repository: {
         url: "https://github.com/acme/database-server",
@@ -38,7 +38,7 @@ describe("ServerCard", () => {
     expect(screen.getByText("Database Server")).toBeInTheDocument()
   })
 
-  it("renders description and version", () => {
+  it("renders description and tag", () => {
     render(<ServerCard server={mockServer} />)
     expect(screen.getByText("MCP server for PostgreSQL with connection pooling.")).toBeInTheDocument()
     expect(screen.getByText("3.2.1")).toBeInTheDocument()
@@ -59,8 +59,8 @@ describe("ServerCard", () => {
     expect(screen.getByText("acme/database-server")).toBeInTheDocument()
   })
 
-  it("shows version count when provided", () => {
-    render(<ServerCard server={mockServer} versionCount={5} />)
+  it("shows tag count when provided", () => {
+    render(<ServerCard server={mockServer} tagCount={5} />)
     expect(screen.getByText("+4")).toBeInTheDocument()
   })
 
@@ -116,7 +116,7 @@ describe("ServerCard", () => {
         $schema: "https://modelcontextprotocol.io/schemas/server.json",
         name: "test/minimal",
         description: "Bare minimum.",
-        version: "0.0.1",
+        tag: "0.0.1",
       },
       _meta: {},
     }

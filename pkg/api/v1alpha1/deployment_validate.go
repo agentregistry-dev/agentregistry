@@ -7,27 +7,19 @@ import (
 
 // Validate runs Deployment's structural checks.
 //
-// Deployment is unversioned: it's a runtime binding ("deploy resource X
-// to runtime Y"). The thing being deployed already carries its own
-// version via spec.targetRef.version; the Deployment row's own
-// metadata.version doesn't track anything observable. (namespace, name)
-// is the identity; callers pin metadata.version to a constant ("1").
+// Deployment is unversioned: it's a runtime binding ("deploy resource X to
+// runtime Y"). The thing being deployed carries its own tag via
+// spec.targetRef.tag; when that tag is omitted, reference resolution uses the
+// literal "latest" tag. Deployment's public identity is (namespace, name).
 func (d *Deployment) Validate() error {
 	var errs FieldErrors
-	errs = append(errs, ValidateObjectMetaUnversioned(d.Metadata)...)
+	errs = append(errs, ValidateObjectMeta(d.Metadata)...)
 	errs = append(errs, validateDeploymentSpec(&d.Spec)...)
 	if len(errs) == 0 {
 		return nil
 	}
 	return errs
 }
-
-// DefaultMetadataVersion satisfies MetadataVersionDefaulter so YAML
-// manifests for Deployment can omit metadata.version. The constant
-// "1" goes into the (namespace, name, version) PK; the thing being
-// deployed already carries its own semantic version via
-// spec.targetRef.version.
-func (d *Deployment) DefaultMetadataVersion() string { return "1" }
 
 // ResolveRefs checks that TargetRef and RuntimeRef both resolve. The
 // referenced objects must live in the referenced namespace; when
@@ -70,6 +62,12 @@ func validateDeploymentSpec(s *DeploymentSpec) FieldErrors {
 	// RuntimeRef: required, must name a Runtime.
 	for _, e := range validateRef(s.RuntimeRef, KindRuntime) {
 		errs.Append("spec.runtimeRef."+e.Path, e.Cause)
+	}
+
+	if s.TargetRef.Tag != "" {
+		if err := validateTag(s.TargetRef.Tag); err != nil {
+			errs.Append("spec.targetRef.tag", err)
+		}
 	}
 
 	switch s.DesiredState {
