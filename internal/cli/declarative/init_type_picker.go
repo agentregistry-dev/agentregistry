@@ -82,7 +82,7 @@ func (m initTypeModel) View() string {
 		return ""
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s %s\n\n", tpHeaderStyle.Render("?"), tpHeaderStyle.Render("What kind of resource?"))
+	fmt.Fprintf(&b, "%s %s\n\n", tpHeaderStyle.Render("?"), tpHeaderStyle.Render("What would you like to create?"))
 	for i, row := range initTypeRows {
 		label := fmt.Sprintf("%s — %s", row.display, row.description)
 		if i == m.cursor {
