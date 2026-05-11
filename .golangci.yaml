@@ -100,6 +100,14 @@ formatters:
   enable:
     - gofmt
     - goimports
+    # TODO: format imports later
+    # - gci
+  # settings:
+  #   gci:
+  #     sections:
+  #       - standard
+  #       - default
+  #       - localmodule
   exclusions:
     generated: strict
     paths:

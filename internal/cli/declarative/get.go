@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
-	"github.com/agentregistry-dev/agentregistry/pkg/printer"
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
+
+	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
+	"github.com/agentregistry-dev/agentregistry/pkg/printer"
 )
 
 // GetCmd is the cobra command for "get".
@@ -27,7 +28,7 @@ func newGetCmd() *cobra.Command {
 		Short: "List or retrieve registry resources",
 		Long: `List or retrieve registry resources by type.
 
-Supported types: agents, mcps, skills, prompts, providers, deployments
+Supported types: agents, mcps, skills, prompts, runtimes, deployments
 (singular and uppercase forms also accepted, e.g. Agent, agent, agents)
 
 Examples:

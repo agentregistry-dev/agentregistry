@@ -517,8 +517,13 @@ lint: ## Run golangci-lint linter
 lint-ui: install-ui ## Run eslint on UI code
 	cd ui && npm run lint
 
+.PHONY: fmt
+fmt: ## Run the Go formatter
+	$(GOLANGCI_LINT) fmt
+	git diff --name-only --cached --diff-filter=ACMR -- '**/*.go' | sed 's|^go/||' | xargs -r go tool gci write --skip-generated -s standard -s default -s localmodule
+
 .PHONY: verify
-verify: mod-tidy gen-client ## Run all verification checks
+verify: fmt mod-tidy gen-client ## Run all verification checks
 	git diff --exit-code
 
 .PHONY: mod-tidy

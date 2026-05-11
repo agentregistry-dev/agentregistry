@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
@@ -22,12 +21,12 @@ import (
 // Deployment row via PatchStatus + annotation merges.
 //
 // Responsibilities:
-//  1. resolve TargetRef + ProviderRef via the supplied GetterFunc.
-//  2. dispatch to the adapter keyed by Provider.Spec.Platform.
+//  1. resolve TargetRef + RuntimeRef via the supplied GetterFunc.
+//  2. dispatch to the adapter keyed by lowercased Runtime.Spec.Type.
 //  3. merge returned conditions into Deployment.Status and adapter-owned
 //     annotations into Deployment.Metadata.Annotations.
 //  4. surface a structured error when no adapter is registered for a
-//     provider's platform.
+//     runtime's type.
 //
 // Coordinator is NOT responsible for Upserting the Deployment row — that
 // happens upstream at the apply handler. Coordinator.Apply MUST be called
@@ -43,12 +42,12 @@ type Dependencies struct {
 	// Stores is the per-Kind generic Store map — output of
 	// internaldb.NewStores.
 	Stores map[string]*v1alpha1store.Store
-	// Adapters is the platform → adapter map. Coordinator looks up by
-	// Provider.Spec.Platform; unmapped platforms surface
-	// UnsupportedDeploymentPlatformError.
+	// Adapters is the type → adapter map. Coordinator looks up by
+	// lowercased Runtime.Spec.Type; unmapped types surface
+	// UnsupportedDeploymentRuntimeError.
 	Adapters map[string]types.DeploymentAdapter
 	// Getter fetches typed Objects by ref. Coordinator uses it for
-	// TargetRef + ProviderRef; adapters may use the same GetterFunc for
+	// TargetRef + RuntimeRef; adapters may use the same GetterFunc for
 	// nested refs (e.g. AgentSpec.MCPServers).
 	Getter v1alpha1.GetterFunc
 }
@@ -71,13 +70,13 @@ func NewCoordinator(deps Dependencies) *Coordinator {
 	}
 }
 
-// Apply drives a Deployment to its desired state on the backing platform.
+// Apply drives a Deployment to its desired state on the backing runtime.
 // Preconditions: the Deployment row exists (Store.Upsert has run); the
-// TargetRef + ProviderRef resolve via the coordinator's Getter.
+// TargetRef + RuntimeRef resolve via the coordinator's Getter.
 //
 // Flow:
-//  1. resolve target (Agent or MCPServer) and provider via Getter.
-//  2. pick the DeploymentAdapter keyed by Provider.Spec.Platform.
+//  1. resolve target (Agent or MCPServer) and runtime via Getter.
+//  2. pick the DeploymentAdapter keyed by lowercased Runtime.Spec.Type.
 //  3. reject the apply if the adapter doesn't support the target Kind.
 //  4. call adapter.Apply with the resolved inputs.
 //  5. merge returned conditions into Deployment.Status via PatchStatus.
@@ -97,28 +96,28 @@ func (c *Coordinator) Apply(ctx context.Context, deployment *v1alpha1.Deployment
 	if err != nil {
 		return err
 	}
-	provider, err := c.resolveProvider(ctx, deployment)
+	runtime, err := c.resolveRuntime(ctx, deployment)
 	if err != nil {
 		return err
 	}
 
-	adapter, err := c.resolveAdapter(provider.Spec.Platform)
+	adapter, err := c.resolveAdapter(runtime.Spec.Type)
 	if err != nil {
 		return err
 	}
 	if !adapterSupportsKind(adapter, target.GetKind()) {
 		return fmt.Errorf("%w: adapter %q does not support target kind %q",
-			pkgdb.ErrInvalidInput, adapter.Platform(), target.GetKind())
+			pkgdb.ErrInvalidInput, adapter.Type(), target.GetKind())
 	}
 
 	result, err := adapter.Apply(ctx, types.ApplyInput{
 		Deployment: deployment,
 		Target:     target,
-		Provider:   provider,
+		Runtime:    runtime,
 		Getter:     c.getter,
 	})
 	if err != nil {
-		return fmt.Errorf("adapter %q apply: %w", adapter.Platform(), err)
+		return fmt.Errorf("adapter %q apply: %w", adapter.Type(), err)
 	}
 
 	return c.persistApplyResult(ctx, deployment, result)
@@ -136,37 +135,37 @@ func (c *Coordinator) Remove(ctx context.Context, deployment *v1alpha1.Deploymen
 	if deployment == nil {
 		return fmt.Errorf("%w: deployment is required", pkgdb.ErrInvalidInput)
 	}
-	provider, err := c.resolveProvider(ctx, deployment)
+	runtime, err := c.resolveRuntime(ctx, deployment)
 	if err != nil {
 		return err
 	}
-	adapter, err := c.resolveAdapter(provider.Spec.Platform)
+	adapter, err := c.resolveAdapter(runtime.Spec.Type)
 	if err != nil {
 		return err
 	}
 
 	result, err := adapter.Remove(ctx, types.RemoveInput{
 		Deployment: deployment,
-		Provider:   provider,
+		Runtime:    runtime,
 	})
 	if err != nil {
-		return fmt.Errorf("adapter %q remove: %w", adapter.Platform(), err)
+		return fmt.Errorf("adapter %q remove: %w", adapter.Type(), err)
 	}
 
 	return c.persistRemoveResult(ctx, deployment, result)
 }
 
 // Logs streams logs from the deployed workload. Returns an
-// UnsupportedDeploymentPlatformError if no adapter matches the provider.
+// UnsupportedDeploymentRuntimeError if no adapter matches the runtime.
 func (c *Coordinator) Logs(ctx context.Context, deployment *v1alpha1.Deployment, in types.LogsInput) (<-chan types.LogLine, error) {
 	if deployment == nil {
 		return nil, fmt.Errorf("%w: deployment is required", pkgdb.ErrInvalidInput)
 	}
-	provider, err := c.resolveProvider(ctx, deployment)
+	runtime, err := c.resolveRuntime(ctx, deployment)
 	if err != nil {
 		return nil, err
 	}
-	adapter, err := c.resolveAdapter(provider.Spec.Platform)
+	adapter, err := c.resolveAdapter(runtime.Spec.Type)
 	if err != nil {
 		return nil, err
 	}
@@ -174,18 +173,18 @@ func (c *Coordinator) Logs(ctx context.Context, deployment *v1alpha1.Deployment,
 	return adapter.Logs(ctx, in)
 }
 
-// Discover enumerates out-of-band workloads for the supplied Provider.
+// Discover enumerates out-of-band workloads for the supplied Runtime.
 // Empty slice + nil error means the adapter found nothing; mismatched
-// platforms surface UnsupportedDeploymentPlatformError.
-func (c *Coordinator) Discover(ctx context.Context, provider *v1alpha1.Provider) ([]types.DiscoveryResult, error) {
-	if provider == nil {
-		return nil, fmt.Errorf("%w: provider is required", pkgdb.ErrInvalidInput)
+// types surface UnsupportedDeploymentRuntimeError.
+func (c *Coordinator) Discover(ctx context.Context, runtime *v1alpha1.Runtime) ([]types.DiscoveryResult, error) {
+	if runtime == nil {
+		return nil, fmt.Errorf("%w: runtime is required", pkgdb.ErrInvalidInput)
 	}
-	adapter, err := c.resolveAdapter(provider.Spec.Platform)
+	adapter, err := c.resolveAdapter(runtime.Spec.Type)
 	if err != nil {
 		return nil, err
 	}
-	return adapter.Discover(ctx, types.DiscoverInput{Provider: provider})
+	return adapter.Discover(ctx, types.DiscoverInput{Runtime: runtime})
 }
 
 // resolveTarget fetches the Deployment.Spec.TargetRef. Blank ref namespaces
@@ -207,43 +206,44 @@ func (c *Coordinator) resolveTarget(ctx context.Context, deployment *v1alpha1.De
 	return obj, nil
 }
 
-// resolveProvider fetches the Deployment.Spec.ProviderRef with the same
+// resolveRuntime fetches the Deployment.Spec.RuntimeRef with the same
 // blank-namespace inheritance rule as resolveTarget, then type-asserts to
-// *v1alpha1.Provider.
-func (c *Coordinator) resolveProvider(ctx context.Context, deployment *v1alpha1.Deployment) (*v1alpha1.Provider, error) {
-	ref := deployment.Spec.ProviderRef
+// *v1alpha1.Runtime.
+func (c *Coordinator) resolveRuntime(ctx context.Context, deployment *v1alpha1.Deployment) (*v1alpha1.Runtime, error) {
+	ref := deployment.Spec.RuntimeRef
 	if ref.Namespace == "" {
 		ref.Namespace = deployment.Metadata.Namespace
 	}
 	obj, err := c.getter(ctx, ref)
 	if err != nil {
-		return nil, fmt.Errorf("resolve providerRef %s/%s@%s: %w", ref.Namespace, ref.Name, ref.Version, err)
+		return nil, fmt.Errorf("resolve runtimeRef %s/%s@%s: %w", ref.Namespace, ref.Name, ref.Version, err)
 	}
-	provider, ok := obj.(*v1alpha1.Provider)
-	if !ok || provider == nil {
-		return nil, fmt.Errorf("providerRef %s/%s did not resolve to a Provider", ref.Namespace, ref.Name)
+	runtime, ok := obj.(*v1alpha1.Runtime)
+	if !ok || runtime == nil {
+		return nil, fmt.Errorf("runtimeRef %s/%s did not resolve to a Runtime", ref.Namespace, ref.Name)
 	}
-	return provider, nil
+	return runtime, nil
 }
 
-// resolveAdapter looks up the registered DeploymentAdapter for a platform
-// string. Returns a sentinel UnsupportedDeploymentPlatformError so callers
-// (MCP tool surface, HTTP handler) can discriminate "no adapter" from
-// transient plumbing errors.
-func (c *Coordinator) resolveAdapter(platform string) (types.DeploymentAdapter, error) {
-	normalized := strings.ToLower(strings.TrimSpace(platform))
-	if normalized == "" {
-		return nil, fmt.Errorf("%w: provider platform is empty", pkgdb.ErrInvalidInput)
+// resolveAdapter looks up the registered DeploymentAdapter for a runtime
+// type string. Spec.Type is canonicalized at admission time
+// (Runtime.Validate), so this lookup is exact-match against
+// adapter.Type(). Returns a sentinel UnsupportedDeploymentRuntimeError
+// so callers (MCP tool surface, HTTP handler) can discriminate "no
+// adapter" from transient plumbing errors.
+func (c *Coordinator) resolveAdapter(runtimeType string) (types.DeploymentAdapter, error) {
+	if runtimeType == "" {
+		return nil, fmt.Errorf("%w: runtime type is empty", pkgdb.ErrInvalidInput)
 	}
-	adapter, ok := c.adapters[normalized]
+	adapter, ok := c.adapters[runtimeType]
 	if !ok {
-		return nil, &UnsupportedDeploymentPlatformError{Platform: normalized}
+		return nil, &UnsupportedDeploymentRuntimeError{Type: runtimeType}
 	}
 	return adapter, nil
 }
 
 // persistApplyResult merges adapter-returned Conditions and
-// ProviderMetadata into the Deployment row in a single atomic patch —
+// RuntimeMetadata into the Deployment row in a single atomic patch —
 // one observation of the adapter equals one row update, so operators
 // never see partial state (status updated but annotations missing, etc).
 //
@@ -267,12 +267,12 @@ func (c *Coordinator) persistApplyResult(ctx context.Context, deployment *v1alph
 			}
 		})
 	}
-	if len(result.ProviderMetadata) > 0 {
+	if len(result.RuntimeMetadata) > 0 {
 		patch.Annotations = func(annotations map[string]string) map[string]string {
 			if annotations == nil {
 				annotations = map[string]string{}
 			}
-			maps.Copy(annotations, result.ProviderMetadata)
+			maps.Copy(annotations, result.RuntimeMetadata)
 			return annotations
 		}
 	}

@@ -8,30 +8,30 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
 
-// UnsupportedDeploymentPlatformError reports that no deployment adapter
-// exists for a provider platform. Coordinator returns this when
-// the provider's Spec.Platform string has no registered adapter so
-// callers (MCP tool surface, HTTP handler) can distinguish "no adapter"
-// from transient plumbing failures.
-type UnsupportedDeploymentPlatformError struct {
-	Platform string
+// UnsupportedDeploymentRuntimeError reports that no deployment adapter
+// exists for a runtime type. Coordinator returns this when the runtime's
+// Spec.Type string has no registered adapter so callers (MCP tool
+// surface, HTTP handler) can distinguish "no adapter" from transient
+// plumbing failures.
+type UnsupportedDeploymentRuntimeError struct {
+	Type string
 }
 
-func (e *UnsupportedDeploymentPlatformError) Error() string {
-	platform := strings.TrimSpace(e.Platform)
-	if platform == "" {
-		platform = "unknown"
+func (e *UnsupportedDeploymentRuntimeError) Error() string {
+	runtimeType := strings.TrimSpace(e.Type)
+	if runtimeType == "" {
+		runtimeType = "unknown"
 	}
-	return fmt.Sprintf("unsupported deployment platform: %s", platform)
+	return fmt.Sprintf("unsupported deployment runtime: %s", runtimeType)
 }
 
-func (e *UnsupportedDeploymentPlatformError) Unwrap() error {
+func (e *UnsupportedDeploymentRuntimeError) Unwrap() error {
 	return database.ErrInvalidInput
 }
 
-// IsUnsupportedDeploymentPlatformError reports whether err wraps an
-// UnsupportedDeploymentPlatformError.
-func IsUnsupportedDeploymentPlatformError(err error) bool {
-	var target *UnsupportedDeploymentPlatformError
+// IsUnsupportedDeploymentRuntimeError reports whether err wraps an
+// UnsupportedDeploymentRuntimeError.
+func IsUnsupportedDeploymentRuntimeError(err error) bool {
+	var target *UnsupportedDeploymentRuntimeError
 	return errors.As(err, &target)
 }

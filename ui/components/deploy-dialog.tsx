@@ -26,18 +26,18 @@ interface DeployDialogProps {
   onDeploySuccess?: () => void
 }
 
-interface ProviderOption {
+interface RuntimeOption {
   id: string
   label: string
   description: string
 }
 
-const DOCKER_PROVIDERS: ProviderOption[] = [
+const DOCKER_RUNTIMES: RuntimeOption[] = [
   { id: "local", label: "Local (Docker)", description: "Deploy as a Docker container on this machine" },
   { id: "kubernetes-default", label: "Kubernetes", description: "Deploy to the connected Kubernetes cluster" },
 ]
 
-const KUBERNETES_PROVIDERS: ProviderOption[] = [
+const KUBERNETES_RUNTIMES: RuntimeOption[] = [
   { id: "kubernetes-default", label: "Kubernetes", description: "Deploy to the local Kubernetes cluster" },
 ]
 
@@ -48,13 +48,13 @@ export function DeployDialog({ open, onOpenChange, resourceType, server, agent, 
   const [config, setConfig] = useState<Record<string, string>>({})
   const [newKey, setNewKey] = useState("")
   const [newValue, setNewValue] = useState("")
-  const [providerId, setProviderId] = useState("local")
+  const [runtimeId, setRuntimeId] = useState("local")
   const [namespace, setNamespace] = useState("")
   const [platformMode, setPlatformMode] = useState<string>("docker")
   const [loadingPlatform, setLoadingPlatform] = useState(true)
   const keyInputRef = useRef<HTMLInputElement>(null)
 
-  const availableProviders = platformMode === "kubernetes" ? KUBERNETES_PROVIDERS : DOCKER_PROVIDERS
+  const availableRuntimes = platformMode === "kubernetes" ? KUBERNETES_RUNTIMES : DOCKER_RUNTIMES
 
   useEffect(() => {
     if (open) {
@@ -64,7 +64,7 @@ export function DeployDialog({ open, onOpenChange, resourceType, server, agent, 
 
   useEffect(() => {
     if (platformMode === "kubernetes") {
-      setProviderId("kubernetes-default")
+      setRuntimeId("kubernetes-default")
     }
   }, [platformMode])
 
@@ -92,7 +92,7 @@ export function DeployDialog({ open, onOpenChange, resourceType, server, agent, 
     ? (server?.server.title || server?.server.name)
     : agent?.agent.name
 
-  const isKubernetesProvider = providerId.startsWith("kubernetes")
+  const isKubernetesRuntime = runtimeId.startsWith("kubernetes")
 
   const handleAddConfig = () => {
     if (newKey.trim() && newValue.trim()) {
@@ -117,7 +117,7 @@ export function DeployDialog({ open, onOpenChange, resourceType, server, agent, 
       setError(null)
 
       const env: Record<string, string> = { ...config }
-      if (isKubernetesProvider) {
+      if (isKubernetesRuntime) {
         env["KAGENT_NAMESPACE"] = namespace || "default"
       }
 
@@ -126,7 +126,7 @@ export function DeployDialog({ open, onOpenChange, resourceType, server, agent, 
           serverName: name,
           version: version,
           env,
-          providerId,
+          runtimeId,
           resourceType,
         },
         throwOnError: true,
@@ -151,7 +151,7 @@ export function DeployDialog({ open, onOpenChange, resourceType, server, agent, 
     setConfig({})
     setNewKey("")
     setNewValue("")
-    setProviderId("local")
+    setRuntimeId("local")
     setNamespace("")
   }
 
@@ -199,9 +199,9 @@ export function DeployDialog({ open, onOpenChange, resourceType, server, agent, 
             className="space-y-5"
             onSubmit={(e) => { e.preventDefault(); handleDeploy() }}
           >
-            {/* Provider Selection */}
+            {/* Runtime Selection */}
             <fieldset className="space-y-2">
-              <Label htmlFor="deploy-provider">Target</Label>
+              <Label htmlFor="deploy-runtime">Target</Label>
               {loadingPlatform ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground" aria-live="polite">
                   <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
@@ -209,27 +209,27 @@ export function DeployDialog({ open, onOpenChange, resourceType, server, agent, 
                 </div>
               ) : (
                 <>
-                  <Select value={providerId} onValueChange={setProviderId}>
-                    <SelectTrigger id="deploy-provider">
+                  <Select value={runtimeId} onValueChange={setRuntimeId}>
+                    <SelectTrigger id="deploy-runtime">
                       <SelectValue placeholder="Select target&hellip;" />
                     </SelectTrigger>
                     <SelectContent>
-                      {availableProviders.map((provider) => (
-                        <SelectItem key={provider.id} value={provider.id}>
-                          {provider.label}
+                      {availableRuntimes.map((runtime) => (
+                        <SelectItem key={runtime.id} value={runtime.id}>
+                          {runtime.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    {availableProviders.find(p => p.id === providerId)?.description}
+                    {availableRuntimes.find(p => p.id === runtimeId)?.description}
                   </p>
                 </>
               )}
             </fieldset>
 
             {/* Kubernetes Namespace */}
-            {isKubernetesProvider && (
+            {isKubernetesRuntime && (
               <div className="space-y-2">
                 <Label htmlFor="deploy-namespace">Namespace</Label>
                 <Input
@@ -338,7 +338,7 @@ export function DeployDialog({ open, onOpenChange, resourceType, server, agent, 
               <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-md" role="alert">
                 <p className="text-sm text-destructive">{error}</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Check configuration and try again, or verify the provider is reachable.
+                  Check configuration and try again, or verify the runtime is reachable.
                 </p>
               </div>
             )}

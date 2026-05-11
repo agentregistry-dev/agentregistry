@@ -49,7 +49,7 @@ func newDefaultScheme() *Scheme {
 	s.MustRegister(KindSkill, SkillSpec{}, func() any { return &Skill{} })
 	s.MustRegister(KindPrompt, PromptSpec{}, func() any { return &Prompt{} })
 	s.MustRegister(KindDeployment, DeploymentSpec{}, func() any { return &Deployment{} })
-	s.MustRegister(KindProvider, ProviderSpec{}, func() any { return &Provider{} })
+	s.MustRegister(KindRuntime, RuntimeSpec{}, func() any { return &Runtime{} })
 	return s
 }
 

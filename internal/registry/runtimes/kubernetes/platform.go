@@ -8,11 +8,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/agentregistry-dev/agentregistry/internal/cli/common/gitutil"
-	"github.com/agentregistry-dev/agentregistry/internal/constants"
-	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
-	platformutils "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
-	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	v1alpha2 "github.com/kagent-dev/kagent/go/api/v1alpha2"
 	kmcpv1alpha1 "github.com/kagent-dev/kmcp/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -25,6 +20,12 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
+
+	"github.com/agentregistry-dev/agentregistry/internal/cli/common/gitutil"
+	"github.com/agentregistry-dev/agentregistry/internal/constants"
+	runtimetypes "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
+	runtimeutils "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/utils"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
 const (
@@ -60,14 +61,14 @@ func kubernetesDefaultNamespace() string {
 	return ns
 }
 
-type kubernetesProviderSettings struct {
+type kubernetesRuntimeSettings struct {
 	Kubeconfig     string `json:"kubeconfig,omitempty"`
 	KubeconfigPath string `json:"kubeconfigPath,omitempty"`
 	Context        string `json:"context,omitempty"`
 	Namespace      string `json:"namespace,omitempty"`
 }
 
-func decodeProviderConfig(config map[string]any, dst any) error {
+func decodeRuntimeConfig(config map[string]any, dst any) error {
 	if len(config) == 0 {
 		return nil
 	}
@@ -78,30 +79,30 @@ func decodeProviderConfig(config map[string]any, dst any) error {
 	return json.Unmarshal(body, dst)
 }
 
-func kubernetesProviderConfig(provider *v1alpha1.Provider) (*kubernetesProviderSettings, error) {
-	if provider == nil || len(provider.Spec.Config) == 0 {
-		return &kubernetesProviderSettings{}, nil
+func kubernetesRuntimeConfig(runtime *v1alpha1.Runtime) (*kubernetesRuntimeSettings, error) {
+	if runtime == nil || len(runtime.Spec.Config) == 0 {
+		return &kubernetesRuntimeSettings{}, nil
 	}
 
-	cfg := &kubernetesProviderSettings{}
-	if err := decodeProviderConfig(provider.Spec.Config, cfg); err != nil {
-		return nil, fmt.Errorf("decode kubernetes provider config for %s: %w", provider.Metadata.Name, err)
+	cfg := &kubernetesRuntimeSettings{}
+	if err := decodeRuntimeConfig(runtime.Spec.Config, cfg); err != nil {
+		return nil, fmt.Errorf("decode kubernetes runtime config for %s: %w", runtime.Metadata.Name, err)
 	}
 	return cfg, nil
 }
 
-func kubernetesRESTConfig(provider *v1alpha1.Provider) (*rest.Config, error) {
-	providerCfg, err := kubernetesProviderConfig(provider)
+func kubernetesRESTConfig(runtime *v1alpha1.Runtime) (*rest.Config, error) {
+	runtimeCfg, err := kubernetesRuntimeConfig(runtime)
 	if err != nil {
 		return nil, err
 	}
 
-	if kubeconfig := strings.TrimSpace(providerCfg.Kubeconfig); kubeconfig != "" {
-		return kubernetesRESTConfigFromInlineKubeconfig(provider, providerCfg, kubeconfig)
+	if kubeconfig := strings.TrimSpace(runtimeCfg.Kubeconfig); kubeconfig != "" {
+		return kubernetesRESTConfigFromInlineKubeconfig(runtime, runtimeCfg, kubeconfig)
 	}
 
-	if kubeconfigPath := strings.TrimSpace(providerCfg.KubeconfigPath); kubeconfigPath != "" || strings.TrimSpace(providerCfg.Context) != "" {
-		return kubernetesRESTConfigFromPath(providerCfg, kubeconfigPath)
+	if kubeconfigPath := strings.TrimSpace(runtimeCfg.KubeconfigPath); kubeconfigPath != "" || strings.TrimSpace(runtimeCfg.Context) != "" {
+		return kubernetesRESTConfigFromPath(runtimeCfg, kubeconfigPath)
 	}
 
 	restConfig, err := kubernetesGetAmbientRESTConfig()
@@ -112,42 +113,42 @@ func kubernetesRESTConfig(provider *v1alpha1.Provider) (*rest.Config, error) {
 }
 
 func kubernetesRESTConfigFromInlineKubeconfig(
-	provider *v1alpha1.Provider,
-	providerCfg *kubernetesProviderSettings,
+	runtime *v1alpha1.Runtime,
+	runtimeCfg *kubernetesRuntimeSettings,
 	kubeconfig string,
 ) (*rest.Config, error) {
 	clientCfg, err := clientcmd.NewClientConfigFromBytes([]byte(kubeconfig))
 	if err != nil {
-		return nil, fmt.Errorf("load kubernetes provider kubeconfig for %s: %w", provider.Metadata.Name, err)
+		return nil, fmt.Errorf("load kubernetes runtime kubeconfig for %s: %w", runtime.Metadata.Name, err)
 	}
 	rawConfig, err := clientCfg.RawConfig()
 	if err != nil {
-		return nil, fmt.Errorf("read kubernetes provider kubeconfig for %s: %w", provider.Metadata.Name, err)
+		return nil, fmt.Errorf("read kubernetes runtime kubeconfig for %s: %w", runtime.Metadata.Name, err)
 	}
-	return clientcmd.NewDefaultClientConfig(rawConfig, kubernetesConfigOverrides(providerCfg)).ClientConfig()
+	return clientcmd.NewDefaultClientConfig(rawConfig, kubernetesConfigOverrides(runtimeCfg)).ClientConfig()
 }
 
-func kubernetesRESTConfigFromPath(providerCfg *kubernetesProviderSettings, kubeconfigPath string) (*rest.Config, error) {
+func kubernetesRESTConfigFromPath(runtimeCfg *kubernetesRuntimeSettings, kubeconfigPath string) (*rest.Config, error) {
 	loadingRules := &clientcmd.ClientConfigLoadingRules{}
 	if kubeconfigPath != "" {
 		loadingRules.ExplicitPath = kubeconfigPath
 	}
-	return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, kubernetesConfigOverrides(providerCfg)).ClientConfig()
+	return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, kubernetesConfigOverrides(runtimeCfg)).ClientConfig()
 }
 
-func kubernetesConfigOverrides(providerCfg *kubernetesProviderSettings) *clientcmd.ConfigOverrides {
+func kubernetesConfigOverrides(runtimeCfg *kubernetesRuntimeSettings) *clientcmd.ConfigOverrides {
 	overrides := &clientcmd.ConfigOverrides{}
-	if providerCfg == nil {
+	if runtimeCfg == nil {
 		return overrides
 	}
-	if contextName := strings.TrimSpace(providerCfg.Context); contextName != "" {
+	if contextName := strings.TrimSpace(runtimeCfg.Context); contextName != "" {
 		overrides.CurrentContext = contextName
 	}
 	return overrides
 }
 
-func kubernetesGetClient(provider *v1alpha1.Provider) (client.Client, error) {
-	restConfig, err := kubernetesRESTConfig(provider)
+func kubernetesGetClient(runtime *v1alpha1.Runtime) (client.Client, error) {
+	restConfig, err := kubernetesRESTConfig(runtime)
 	if err != nil {
 		return nil, err
 	}
@@ -159,19 +160,19 @@ func kubernetesGetClient(provider *v1alpha1.Provider) (client.Client, error) {
 	return c, nil
 }
 
-func kubernetesProviderNamespace(provider *v1alpha1.Provider) string {
-	providerCfg, err := kubernetesProviderConfig(provider)
-	if err != nil || providerCfg == nil {
+func kubernetesRuntimeNamespace(runtime *v1alpha1.Runtime) string {
+	runtimeCfg, err := kubernetesRuntimeConfig(runtime)
+	if err != nil || runtimeCfg == nil {
 		return ""
 	}
-	return strings.TrimSpace(providerCfg.Namespace)
+	return strings.TrimSpace(runtimeCfg.Namespace)
 }
 
-func kubernetesApplyPlatformConfig(ctx context.Context, provider *v1alpha1.Provider, cfg *platformtypes.KubernetesPlatformConfig, verbose bool) error {
+func kubernetesApplyRuntimeConfig(ctx context.Context, runtime *v1alpha1.Runtime, cfg *runtimetypes.KubernetesRuntimeConfig, verbose bool) error {
 	if cfg == nil || (len(cfg.Agents) == 0 && len(cfg.RemoteMCPServers) == 0 && len(cfg.MCPServers) == 0 && len(cfg.ConfigMaps) == 0) {
 		return nil
 	}
-	c, err := kubernetesGetClient(provider)
+	c, err := kubernetesGetClient(runtime)
 	if err != nil {
 		return err
 	}
@@ -203,11 +204,11 @@ func kubernetesApplyPlatformConfig(ctx context.Context, provider *v1alpha1.Provi
 	return nil
 }
 
-func kubernetesDeleteResourcesByDeploymentID(ctx context.Context, provider *v1alpha1.Provider, deploymentID, resourceType, namespace string) error {
+func kubernetesDeleteResourcesByDeploymentID(ctx context.Context, runtime *v1alpha1.Runtime, deploymentID, resourceType, namespace string) error {
 	if deploymentID == "" {
 		return fmt.Errorf("deployment id is required")
 	}
-	c, err := kubernetesGetClient(provider)
+	c, err := kubernetesGetClient(runtime)
 	if err != nil {
 		return err
 	}
@@ -221,8 +222,8 @@ func kubernetesDeleteResourcesByDeploymentID(ctx context.Context, provider *v1al
 	}
 }
 
-func kubernetesListAgents(ctx context.Context, provider *v1alpha1.Provider, namespace string) ([]*v1alpha2.Agent, error) {
-	c, err := kubernetesGetClient(provider)
+func kubernetesListAgents(ctx context.Context, runtime *v1alpha1.Runtime, namespace string) ([]*v1alpha2.Agent, error) {
+	c, err := kubernetesGetClient(runtime)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
@@ -241,8 +242,8 @@ func kubernetesListAgents(ctx context.Context, provider *v1alpha1.Provider, name
 	return agents, nil
 }
 
-func kubernetesListMCPServers(ctx context.Context, provider *v1alpha1.Provider, namespace string) ([]*kmcpv1alpha1.MCPServer, error) {
-	c, err := kubernetesGetClient(provider)
+func kubernetesListMCPServers(ctx context.Context, runtime *v1alpha1.Runtime, namespace string) ([]*kmcpv1alpha1.MCPServer, error) {
+	c, err := kubernetesGetClient(runtime)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
@@ -261,8 +262,8 @@ func kubernetesListMCPServers(ctx context.Context, provider *v1alpha1.Provider, 
 	return servers, nil
 }
 
-func kubernetesListRemoteMCPServers(ctx context.Context, provider *v1alpha1.Provider, namespace string) ([]*v1alpha2.RemoteMCPServer, error) {
-	c, err := kubernetesGetClient(provider)
+func kubernetesListRemoteMCPServers(ctx context.Context, runtime *v1alpha1.Runtime, namespace string) ([]*v1alpha2.RemoteMCPServer, error) {
+	c, err := kubernetesGetClient(runtime)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
@@ -281,7 +282,7 @@ func kubernetesListRemoteMCPServers(ctx context.Context, provider *v1alpha1.Prov
 	return servers, nil
 }
 
-func kubernetesTranslatePlatformConfig(ctx context.Context, desired *platformtypes.DesiredState) (*platformtypes.KubernetesPlatformConfig, error) {
+func kubernetesTranslateRuntimeConfig(ctx context.Context, desired *runtimetypes.DesiredState) (*runtimetypes.KubernetesRuntimeConfig, error) {
 	_ = ctx
 
 	agents := make([]*v1alpha2.Agent, 0, len(desired.Agents))
@@ -308,7 +309,7 @@ func kubernetesTranslatePlatformConfig(ctx context.Context, desired *platformtyp
 	mcpServers := make([]*kmcpv1alpha1.MCPServer, 0)
 	for _, server := range desired.MCPServers {
 		switch server.MCPServerType {
-		case platformtypes.MCPServerTypeRemote:
+		case runtimetypes.MCPServerTypeRemote:
 			if server.Remote == nil {
 				continue
 			}
@@ -317,7 +318,7 @@ func kubernetesTranslatePlatformConfig(ctx context.Context, desired *platformtyp
 				return nil, err
 			}
 			remoteMCPs = append(remoteMCPs, resource)
-		case platformtypes.MCPServerTypeLocal:
+		case runtimetypes.MCPServerTypeLocal:
 			if server.Local == nil {
 				continue
 			}
@@ -329,7 +330,7 @@ func kubernetesTranslatePlatformConfig(ctx context.Context, desired *platformtyp
 		}
 	}
 
-	return &platformtypes.KubernetesPlatformConfig{
+	return &runtimetypes.KubernetesRuntimeConfig{
 		Agents:           agents,
 		RemoteMCPServers: remoteMCPs,
 		MCPServers:       mcpServers,
@@ -337,7 +338,7 @@ func kubernetesTranslatePlatformConfig(ctx context.Context, desired *platformtyp
 	}, nil
 }
 
-func kubernetesTranslateAgent(agent *platformtypes.Agent) (*v1alpha2.Agent, error) {
+func kubernetesTranslateAgent(agent *runtimetypes.Agent) (*v1alpha2.Agent, error) {
 	if agent.Deployment.Image == "" {
 		return nil, fmt.Errorf("image must be specified for Agent %s", agent.Name)
 	}
@@ -411,7 +412,7 @@ func kubernetesTranslateAgent(agent *platformtypes.Agent) (*v1alpha2.Agent, erro
 	}, nil
 }
 
-func kubernetesTranslateSkillsForAgent(skills []platformtypes.AgentSkillRef) (*v1alpha2.SkillForAgent, error) {
+func kubernetesTranslateSkillsForAgent(skills []runtimetypes.AgentSkillRef) (*v1alpha2.SkillForAgent, error) {
 	if len(skills) == 0 {
 		return nil, nil
 	}
@@ -456,7 +457,7 @@ func kubernetesTranslateSkillsForAgent(skills []platformtypes.AgentSkillRef) (*v
 	return result, nil
 }
 
-func kubernetesBuildGitRepo(skill platformtypes.AgentSkillRef) (v1alpha2.GitRepo, error) {
+func kubernetesBuildGitRepo(skill runtimetypes.AgentSkillRef) (v1alpha2.GitRepo, error) {
 	if skill.Name == "" {
 		return v1alpha2.GitRepo{}, fmt.Errorf("skill name is required for git-based skill (repo %q)", skill.RepoURL)
 	}
@@ -483,12 +484,12 @@ func kubernetesBuildGitRepo(skill platformtypes.AgentSkillRef) (v1alpha2.GitRepo
 	return gr, nil
 }
 
-func kubernetesTranslateRemoteMCPServer(server *platformtypes.MCPServer) (*v1alpha2.RemoteMCPServer, error) {
+func kubernetesTranslateRemoteMCPServer(server *runtimetypes.MCPServer) (*v1alpha2.RemoteMCPServer, error) {
 	if server.Remote == nil {
 		return nil, fmt.Errorf("remote MCP server config missing for %s", server.Name)
 	}
 
-	url := platformutils.BuildRemoteMCPURL(server.Remote)
+	url := runtimeutils.BuildRemoteMCPURL(server.Remote)
 	return &v1alpha2.RemoteMCPServer{
 		TypeMeta: metav1.TypeMeta{APIVersion: "kagent.dev/v1alpha2", Kind: "RemoteMCPServer"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -505,11 +506,11 @@ func kubernetesTranslateRemoteMCPServer(server *platformtypes.MCPServer) (*v1alp
 	}, nil
 }
 
-func kubernetesTranslateLocalMCPServer(server *platformtypes.MCPServer) (*kmcpv1alpha1.MCPServer, error) {
+func kubernetesTranslateLocalMCPServer(server *runtimetypes.MCPServer) (*kmcpv1alpha1.MCPServer, error) {
 	if server.Local == nil {
 		return nil, fmt.Errorf("local MCP server config missing for %s", server.Name)
 	}
-	if server.Local.TransportType == platformtypes.TransportTypeHTTP && server.Local.HTTP == nil {
+	if server.Local.TransportType == runtimetypes.TransportTypeHTTP && server.Local.HTTP == nil {
 		return nil, fmt.Errorf("HTTP transport config missing for %s", server.Name)
 	}
 
@@ -526,7 +527,7 @@ func kubernetesTranslateLocalMCPServer(server *platformtypes.MCPServer) (*kmcpv1
 
 	spec := kmcpv1alpha1.MCPServerSpec{Deployment: deployment}
 	switch server.Local.TransportType {
-	case platformtypes.TransportTypeHTTP:
+	case runtimetypes.TransportTypeHTTP:
 		spec.TransportType = kmcpv1alpha1.TransportType("http")
 		spec.HTTPTransport = &kmcpv1alpha1.HTTPTransport{
 			TargetPort: server.Local.HTTP.Port,
@@ -535,7 +536,7 @@ func kubernetesTranslateLocalMCPServer(server *platformtypes.MCPServer) (*kmcpv1
 		if server.Local.HTTP.Port > 0 {
 			spec.Deployment.Port = uint16(server.Local.HTTP.Port)
 		}
-	case platformtypes.TransportTypeStdio:
+	case runtimetypes.TransportTypeStdio:
 		spec.TransportType = kmcpv1alpha1.TransportType("stdio")
 		spec.StdioTransport = &kmcpv1alpha1.StdioTransport{}
 	default:
@@ -554,7 +555,7 @@ func kubernetesTranslateLocalMCPServer(server *platformtypes.MCPServer) (*kmcpv1
 	}, nil
 }
 
-func kubernetesTranslateAgentConfigMap(agent *platformtypes.Agent) (*corev1.ConfigMap, error) {
+func kubernetesTranslateAgentConfigMap(agent *runtimetypes.Agent) (*corev1.ConfigMap, error) {
 	namespace := agent.Deployment.Env[constants.EnvKagentNamespace]
 
 	data := make(map[string]string)

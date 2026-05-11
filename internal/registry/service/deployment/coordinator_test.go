@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/noop"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/noop"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
@@ -40,14 +40,14 @@ func seedV1Alpha1Fixtures(t *testing.T) (map[string]*v1alpha1store.Store, *v1alp
 	_, err = stores[v1alpha1.KindMCPServer].Upsert(ctx, "default", "weather", "1.0.0", mcpSpec, v1alpha1store.UpsertOpts{})
 	require.NoError(t, err)
 
-	providerSpec, err := json.Marshal(v1alpha1.ProviderSpec{Platform: noop.Platform})
+	providerSpec, err := json.Marshal(v1alpha1.RuntimeSpec{Type: noop.RuntimeType})
 	require.NoError(t, err)
-	_, err = stores[v1alpha1.KindProvider].Upsert(ctx, "default", "noop-provider", "1", providerSpec, v1alpha1store.UpsertOpts{})
+	_, err = stores[v1alpha1.KindRuntime].Upsert(ctx, "default", "noop-provider", "1", providerSpec, v1alpha1store.UpsertOpts{})
 	require.NoError(t, err)
 
 	depSpec, err := json.Marshal(v1alpha1.DeploymentSpec{
 		TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Version: "1.0.0"},
-		ProviderRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindProvider, Name: "noop-provider", Version: "1"},
+		RuntimeRef:   v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "noop-provider", Version: "1"},
 		DesiredState: v1alpha1.DesiredStateDeployed,
 	})
 	require.NoError(t, err)
@@ -59,7 +59,7 @@ func seedV1Alpha1Fixtures(t *testing.T) (map[string]*v1alpha1store.Store, *v1alp
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-noop", Version: "1", Generation: upsertRes.Generation},
 		Spec: v1alpha1.DeploymentSpec{
 			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Version: "1.0.0"},
-			ProviderRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindProvider, Name: "noop-provider", Version: "1"},
+			RuntimeRef:   v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "noop-provider", Version: "1"},
 			DesiredState: v1alpha1.DesiredStateDeployed,
 		},
 	}
@@ -72,7 +72,7 @@ func TestCoordinator_ApplyWritesConditionsAndAnnotations(t *testing.T) {
 
 	coord := NewCoordinator(Dependencies{
 		Stores:   stores,
-		Adapters: map[string]types.DeploymentAdapter{noop.Platform: noop.New()},
+		Adapters: map[string]types.DeploymentAdapter{noop.RuntimeType: noop.New()},
 		Getter:   internaldb.NewGetter(stores),
 	})
 
@@ -86,7 +86,7 @@ func TestCoordinator_ApplyWritesConditionsAndAnnotations(t *testing.T) {
 	var status v1alpha1.Status
 	require.NoError(t, v1alpha1.UnmarshalStatusFromStorage(raw.Status, &status))
 	require.NotNil(t, status.GetCondition("Ready"), "noop adapter should have written Ready condition")
-	require.Contains(t, raw.Metadata.Annotations, "platforms.agentregistry.solo.io/noop/applied-at")
+	require.Contains(t, raw.Metadata.Annotations, "runtimes.agentregistry.solo.io/noop/applied-at")
 	require.Equal(t, deployment.Metadata.Generation, status.ObservedGeneration)
 }
 
@@ -102,7 +102,7 @@ func TestCoordinator_ApplyPreservesExistingAnnotations(t *testing.T) {
 
 	coord := NewCoordinator(Dependencies{
 		Stores:   stores,
-		Adapters: map[string]types.DeploymentAdapter{noop.Platform: noop.New()},
+		Adapters: map[string]types.DeploymentAdapter{noop.RuntimeType: noop.New()},
 		Getter:   internaldb.NewGetter(stores),
 	})
 
@@ -111,7 +111,7 @@ func TestCoordinator_ApplyPreservesExistingAnnotations(t *testing.T) {
 	raw, err := stores[v1alpha1.KindDeployment].Get(ctx, "default", "weather-noop", "1")
 	require.NoError(t, err)
 	require.Equal(t, "me", raw.Metadata.Annotations["keep"])
-	require.Contains(t, raw.Metadata.Annotations, "platforms.agentregistry.solo.io/noop/applied-at")
+	require.Contains(t, raw.Metadata.Annotations, "runtimes.agentregistry.solo.io/noop/applied-at")
 }
 
 func TestCoordinator_RemoveWritesRemovedCondition(t *testing.T) {
@@ -120,7 +120,7 @@ func TestCoordinator_RemoveWritesRemovedCondition(t *testing.T) {
 
 	coord := NewCoordinator(Dependencies{
 		Stores:   stores,
-		Adapters: map[string]types.DeploymentAdapter{noop.Platform: noop.New()},
+		Adapters: map[string]types.DeploymentAdapter{noop.RuntimeType: noop.New()},
 		Getter:   internaldb.NewGetter(stores),
 	})
 
@@ -136,7 +136,7 @@ func TestCoordinator_RemoveWritesRemovedCondition(t *testing.T) {
 	require.Equal(t, v1alpha1.ConditionFalse, ready.Status)
 }
 
-func TestCoordinator_UnsupportedPlatform(t *testing.T) {
+func TestCoordinator_UnsupportedRuntime(t *testing.T) {
 	stores, deployment := seedV1Alpha1Fixtures(t)
 	ctx := context.Background()
 
@@ -148,9 +148,9 @@ func TestCoordinator_UnsupportedPlatform(t *testing.T) {
 
 	err := coord.Apply(ctx, deployment)
 	require.Error(t, err)
-	var unsupported *UnsupportedDeploymentPlatformError
-	require.True(t, errors.As(err, &unsupported), "expected UnsupportedDeploymentPlatformError, got %v", err)
-	require.Equal(t, noop.Platform, unsupported.Platform)
+	var unsupported *UnsupportedDeploymentRuntimeError
+	require.True(t, errors.As(err, &unsupported), "expected UnsupportedDeploymentRuntimeError, got %v", err)
+	require.Equal(t, noop.RuntimeType, unsupported.Type)
 }
 
 func TestCoordinator_DanglingTargetRef(t *testing.T) {
@@ -162,7 +162,7 @@ func TestCoordinator_DanglingTargetRef(t *testing.T) {
 
 	coord := NewCoordinator(Dependencies{
 		Stores:   stores,
-		Adapters: map[string]types.DeploymentAdapter{noop.Platform: noop.New()},
+		Adapters: map[string]types.DeploymentAdapter{noop.RuntimeType: noop.New()},
 		Getter:   internaldb.NewGetter(stores),
 	})
 
@@ -177,13 +177,13 @@ func TestCoordinator_Discover_ReturnsAdapterResults(t *testing.T) {
 
 	coord := NewCoordinator(Dependencies{
 		Stores:   stores,
-		Adapters: map[string]types.DeploymentAdapter{noop.Platform: noop.New()},
+		Adapters: map[string]types.DeploymentAdapter{noop.RuntimeType: noop.New()},
 		Getter:   internaldb.NewGetter(stores),
 	})
 
-	provider := &v1alpha1.Provider{
+	provider := &v1alpha1.Runtime{
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "noop-provider", Version: "1"},
-		Spec:     v1alpha1.ProviderSpec{Platform: noop.Platform},
+		Spec:     v1alpha1.RuntimeSpec{Type: noop.RuntimeType},
 	}
 	results, err := coord.Discover(ctx, provider)
 	require.NoError(t, err)

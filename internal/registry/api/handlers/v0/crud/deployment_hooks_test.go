@@ -14,7 +14,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/crud"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/deploymentlogs"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/noop"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/noop"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
@@ -45,14 +45,14 @@ func seedDeploymentFixtures(t *testing.T) (humatest.TestAPI, map[string]*v1alpha
 	_, err = stores[v1alpha1.KindMCPServer].Upsert(ctx, "default", "weather", "1.0.0", mcpSpec, v1alpha1store.UpsertOpts{})
 	require.NoError(t, err)
 
-	providerSpec, err := json.Marshal(v1alpha1.ProviderSpec{Platform: noop.Platform})
+	providerSpec, err := json.Marshal(v1alpha1.RuntimeSpec{Type: noop.RuntimeType})
 	require.NoError(t, err)
-	_, err = stores[v1alpha1.KindProvider].Upsert(ctx, "default", "noop-provider", "1", providerSpec, v1alpha1store.UpsertOpts{})
+	_, err = stores[v1alpha1.KindRuntime].Upsert(ctx, "default", "noop-provider", "1", providerSpec, v1alpha1store.UpsertOpts{})
 	require.NoError(t, err)
 
 	coord := deploymentsvc.NewCoordinator(deploymentsvc.Dependencies{
 		Stores:   stores,
-		Adapters: map[string]types.DeploymentAdapter{noop.Platform: noop.New()},
+		Adapters: map[string]types.DeploymentAdapter{noop.RuntimeType: noop.New()},
 		Getter:   database.NewGetter(stores),
 	})
 
@@ -90,7 +90,7 @@ func TestDeploymentPut_TriggersAdapterApply(t *testing.T) {
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-noop", Version: "1"},
 		Spec: v1alpha1.DeploymentSpec{
 			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Version: "1.0.0"},
-			ProviderRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindProvider, Name: "noop-provider", Version: "1"},
+			RuntimeRef:   v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "noop-provider", Version: "1"},
 			DesiredState: v1alpha1.DesiredStateDeployed,
 		},
 	}
@@ -122,7 +122,7 @@ func TestDeploymentDelete_TriggersAdapterRemove(t *testing.T) {
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-noop", Version: "1"},
 		Spec: v1alpha1.DeploymentSpec{
 			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Version: "1.0.0"},
-			ProviderRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindProvider, Name: "noop-provider", Version: "1"},
+			RuntimeRef:   v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "noop-provider", Version: "1"},
 			DesiredState: v1alpha1.DesiredStateDeployed,
 		},
 	}
@@ -149,7 +149,7 @@ func TestDeploymentLogs_EmptyForNoopAdapter(t *testing.T) {
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-noop", Version: "1"},
 		Spec: v1alpha1.DeploymentSpec{
 			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Version: "1.0.0"},
-			ProviderRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindProvider, Name: "noop-provider", Version: "1"},
+			RuntimeRef:   v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "noop-provider", Version: "1"},
 			DesiredState: v1alpha1.DesiredStateDeployed,
 		},
 	}

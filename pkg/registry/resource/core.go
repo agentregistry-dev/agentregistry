@@ -109,7 +109,7 @@ func applyCore(
 	}
 
 	// Stamp default metadata.version for kinds that opt out of the
-	// version-required validator (Provider, Deployment) — see
+	// version-required validator (Runtime, Deployment) — see
 	// v1alpha1.MetadataVersionDefaulter. Without this, a YAML manifest
 	// for an unversioned kind could pass Validate but fail at the
 	// store's `version != ""` check since the 3-tuple PK still

@@ -7,26 +7,26 @@ import (
 	"time"
 
 	"github.com/agentregistry-dev/agentregistry/internal/constants"
-	platformtypes "github.com/agentregistry-dev/agentregistry/internal/registry/platforms/types"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/platforms/utils"
+	runtimetypes "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/utils"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
 // kubernetesDeploymentAdapter serves Deployments onto a kagent-equipped
 // Kubernetes cluster. Stateless — each Apply/Remove/Discover builds a
-// fresh controller-runtime client from the supplied v1alpha1.Provider's
+// fresh controller-runtime client from the supplied v1alpha1.Runtime's
 // Spec.Config map.
 type kubernetesDeploymentAdapter struct{}
 
 // NewKubernetesDeploymentAdapter constructs an adapter that resolves
-// every per-call target cluster from the supplied v1alpha1.Provider's
+// every per-call target cluster from the supplied v1alpha1.Runtime's
 // Spec.Config map.
 func NewKubernetesDeploymentAdapter() *kubernetesDeploymentAdapter {
 	return &kubernetesDeploymentAdapter{}
 }
 
-func (a *kubernetesDeploymentAdapter) Platform() string { return "kubernetes" }
+func (a *kubernetesDeploymentAdapter) Type() string { return v1alpha1.TypeKubernetes }
 
 // SupportedTargetKinds reports the v1alpha1 Kinds this adapter can
 // deploy: Agent and MCPServer.
@@ -38,7 +38,7 @@ func (a *kubernetesDeploymentAdapter) SupportedTargetKinds() []string {
 	}
 }
 
-// Apply translates + applies kagent/kmcp CRDs onto the provider's cluster.
+// Apply translates + applies kagent/kmcp CRDs onto the runtime's cluster.
 // Returns Progressing=True immediately; the reconciler's (Phase 2 KRT) watch
 // loop is responsible for flipping Ready=True once the rollout converges.
 // Adapters MAY produce a Degraded condition on permanent translation or
@@ -47,20 +47,20 @@ func (a *kubernetesDeploymentAdapter) Apply(ctx context.Context, in types.ApplyI
 	if in.Deployment == nil {
 		return nil, fmt.Errorf("apply: deployment is required")
 	}
-	namespace := namespaceFromV1Alpha1(in.Deployment, in.Provider)
+	namespace := namespaceFromV1Alpha1(in.Deployment, in.Runtime)
 
 	desired, err := a.buildDesiredStateFromV1Alpha1(ctx, in, namespace)
 	if err != nil {
 		return nil, err
 	}
-	cfg, err := kubernetesTranslatePlatformConfig(ctx, desired)
+	cfg, err := kubernetesTranslateRuntimeConfig(ctx, desired)
 	if err != nil {
 		return nil, fmt.Errorf("translate kubernetes platform config: %w", err)
 	}
 	if cfg == nil {
 		return nil, fmt.Errorf("kubernetes platform config is required")
 	}
-	if err := kubernetesApplyPlatformConfig(ctx, in.Provider, cfg, false); err != nil {
+	if err := kubernetesApplyRuntimeConfig(ctx, in.Runtime, cfg, false); err != nil {
 		return nil, fmt.Errorf("apply kubernetes platform config: %w", err)
 	}
 
@@ -75,10 +75,10 @@ func (a *kubernetesDeploymentAdapter) Apply(ctx context.Context, in types.ApplyI
 			LastTransitionTime: now,
 			ObservedGeneration: gen,
 		}, {
-			Type:               "ProviderConfigured",
+			Type:               "RuntimeConfigured",
 			Status:             v1alpha1.ConditionTrue,
-			Reason:             "KubernetesProvider",
-			Message:            "kubernetes provider reachable",
+			Reason:             "KubernetesRuntime",
+			Message:            "kubernetes runtime reachable",
 			LastTransitionTime: now,
 			ObservedGeneration: gen,
 		}},
@@ -93,12 +93,12 @@ func (a *kubernetesDeploymentAdapter) Remove(ctx context.Context, in types.Remov
 	if in.Deployment == nil {
 		return nil, fmt.Errorf("remove: deployment is required")
 	}
-	namespace := namespaceFromV1Alpha1(in.Deployment, in.Provider)
+	namespace := namespaceFromV1Alpha1(in.Deployment, in.Runtime)
 	deploymentID := in.Deployment.Metadata.Name
 
 	// Sweep both kinds — delete-by-label is a no-op when nothing matches.
 	for _, resourceType := range []string{"agent", "mcp"} {
-		if err := kubernetesDeleteResourcesByDeploymentID(ctx, in.Provider, deploymentID, resourceType, namespace); err != nil {
+		if err := kubernetesDeleteResourcesByDeploymentID(ctx, in.Runtime, deploymentID, resourceType, namespace); err != nil {
 			return nil, fmt.Errorf("remove %s resources: %w", resourceType, err)
 		}
 	}
@@ -125,21 +125,21 @@ func (a *kubernetesDeploymentAdapter) Logs(ctx context.Context, in types.LogsInp
 	return ch, nil
 }
 
-// Discover enumerates unmanaged kagent/kmcp workloads in the provider's
+// Discover enumerates unmanaged kagent/kmcp workloads in the runtime's
 // namespace and returns them as DiscoveryResult entries. The Syncer (OSS
 // or enterprise) persists these into the discovered_kubernetes table.
 //
 // Rows carrying aregistry.ai/managed=true are skipped because they
 // already correspond to existing Deployment rows.
 func (a *kubernetesDeploymentAdapter) Discover(ctx context.Context, in types.DiscoverInput) ([]types.DiscoveryResult, error) {
-	namespace := kubernetesProviderNamespace(in.Provider)
+	namespace := kubernetesRuntimeNamespace(in.Runtime)
 
 	isManaged := func(labels map[string]string) bool {
 		return labels != nil && labels[kubernetesManagedLabelKey] == "true"
 	}
 
 	var out []types.DiscoveryResult
-	agents, err := kubernetesListAgents(ctx, in.Provider, namespace)
+	agents, err := kubernetesListAgents(ctx, in.Runtime, namespace)
 	if err == nil {
 		for _, agent := range agents {
 			if isManaged(agent.Labels) {
@@ -153,7 +153,7 @@ func (a *kubernetesDeploymentAdapter) Discover(ctx context.Context, in types.Dis
 		}
 	}
 
-	mcpServers, err := kubernetesListMCPServers(ctx, in.Provider, namespace)
+	mcpServers, err := kubernetesListMCPServers(ctx, in.Runtime, namespace)
 	if err == nil {
 		for _, mcp := range mcpServers {
 			if isManaged(mcp.Labels) {
@@ -167,7 +167,7 @@ func (a *kubernetesDeploymentAdapter) Discover(ctx context.Context, in types.Dis
 		}
 	}
 
-	remoteMCPs, err := kubernetesListRemoteMCPServers(ctx, in.Provider, namespace)
+	remoteMCPs, err := kubernetesListRemoteMCPServers(ctx, in.Runtime, namespace)
 	if err == nil {
 		for _, remote := range remoteMCPs {
 			if isManaged(remote.Labels) {
@@ -184,7 +184,7 @@ func (a *kubernetesDeploymentAdapter) Discover(ctx context.Context, in types.Dis
 	return out, nil
 }
 
-// buildDesiredStateFromV1Alpha1 constructs a *platformtypes.DesiredState from
+// buildDesiredStateFromV1Alpha1 constructs a *runtimetypes.DesiredState from
 // the v1alpha1 ApplyInput. Target dispatches by Kind — MCPServer goes
 // straight through translate; Agent walks every MCPServers ref via
 // in.Getter to build the gateway-free kagent resource graph.
@@ -192,7 +192,7 @@ func (a *kubernetesDeploymentAdapter) buildDesiredStateFromV1Alpha1(
 	ctx context.Context,
 	in types.ApplyInput,
 	namespace string,
-) (*platformtypes.DesiredState, error) {
+) (*runtimetypes.DesiredState, error) {
 	if in.Target == nil {
 		return nil, fmt.Errorf("apply: target is required")
 	}
@@ -210,7 +210,7 @@ func (a *kubernetesDeploymentAdapter) buildDesiredStateFromV1Alpha1(
 		if err != nil {
 			return nil, err
 		}
-		return &platformtypes.DesiredState{MCPServers: []*platformtypes.MCPServer{server}}, nil
+		return &runtimetypes.DesiredState{MCPServers: []*runtimetypes.MCPServer{server}}, nil
 	case *v1alpha1.RemoteMCPServer:
 		server, err := utils.SpecToPlatformRemoteMCPServer(ctx, target.Metadata, target.Spec, utils.RemoteMCPServerTranslateOpts{
 			DeploymentID: deploymentID,
@@ -220,11 +220,11 @@ func (a *kubernetesDeploymentAdapter) buildDesiredStateFromV1Alpha1(
 		if err != nil {
 			return nil, err
 		}
-		return &platformtypes.DesiredState{MCPServers: []*platformtypes.MCPServer{server}}, nil
+		return &runtimetypes.DesiredState{MCPServers: []*runtimetypes.MCPServer{server}}, nil
 	case *v1alpha1.Agent:
 		var telemetryEndpoint string
-		if in.Provider != nil {
-			telemetryEndpoint = in.Provider.Spec.TelemetryEndpoint
+		if in.Runtime != nil {
+			telemetryEndpoint = in.Runtime.Spec.TelemetryEndpoint
 		}
 		agent, servers, err := utils.SpecToPlatformAgent(ctx, target.Metadata, target.Spec, utils.AgentTranslateOpts{
 			DeploymentID:      deploymentID,
@@ -238,8 +238,8 @@ func (a *kubernetesDeploymentAdapter) buildDesiredStateFromV1Alpha1(
 		if err != nil {
 			return nil, err
 		}
-		return &platformtypes.DesiredState{
-			Agents:     []*platformtypes.Agent{agent},
+		return &runtimetypes.DesiredState{
+			Agents:     []*runtimetypes.Agent{agent},
 			MCPServers: servers,
 		}, nil
 	default:
@@ -249,15 +249,15 @@ func (a *kubernetesDeploymentAdapter) buildDesiredStateFromV1Alpha1(
 
 // namespaceFromV1Alpha1 picks the target kubernetes namespace:
 //  1. Deployment.Spec.Env[KAGENT_NAMESPACE] (user override).
-//  2. Provider.Spec.Config.namespace.
+//  2. Runtime.Spec.Config.namespace.
 //  3. Ambient kubeconfig default.
-func namespaceFromV1Alpha1(deployment *v1alpha1.Deployment, provider *v1alpha1.Provider) string {
+func namespaceFromV1Alpha1(deployment *v1alpha1.Deployment, runtime *v1alpha1.Runtime) string {
 	if deployment != nil {
 		if ns := strings.TrimSpace(deployment.Spec.Env[constants.EnvKagentNamespace]); ns != "" {
 			return ns
 		}
 	}
-	if ns := kubernetesProviderNamespace(provider); ns != "" {
+	if ns := kubernetesRuntimeNamespace(runtime); ns != "" {
 		return ns
 	}
 	return kubernetesDefaultNamespace()

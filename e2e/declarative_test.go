@@ -966,9 +966,13 @@ metadata:
   name: %s
   version: latest
 spec:
-  resourceType: agent
-  providerId: local
-`, agentName)
+  targetRef:
+    kind: Agent
+    name: %s
+  runtimeRef:
+    kind: Runtime
+    name: local
+`, agentName, agentName)
 
 	httpClient := &http.Client{Timeout: 60 * time.Second}
 	doApply := func(t *testing.T) string {
@@ -1068,18 +1072,14 @@ func TestBatchApply_MultiResource(t *testing.T) {
 
 	agentName := UniqueAgentName("batchagent")
 	agentVersion := "0.0.1-e2e"
-	providerName := "e2e-batch-prov-" + UniqueNameWithPrefix("prov")
+	runtimeName := "e2e-batch-rt-" + UniqueNameWithPrefix("rt")
+	runtimeVersion := "1.0.0"
 
 	// Pre-clean and register cleanup for both resources.
 	RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", agentVersion, "--registry-url", regURL)
 	t.Cleanup(func() {
 		RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", agentVersion, "--registry-url", regURL)
-		req, _ := http.NewRequest(http.MethodDelete,
-			regURL+"/providers/"+providerName+"?platform=local", nil)
-		client := &http.Client{Timeout: 10 * time.Second}
-		if resp, err := client.Do(req); err == nil {
-			resp.Body.Close()
-		}
+		RunArctl(t, tmpDir, "delete", "runtime", runtimeName, "--version", runtimeVersion, "--registry-url", regURL)
 	})
 
 	multiYAML := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
@@ -1095,13 +1095,13 @@ spec:
   modelName: gemini-2.0-flash
 ---
 apiVersion: ar.dev/v1alpha1
-kind: Provider
+kind: Runtime
 metadata:
   name: %s
-  version: "1.0.0"
+  version: "%s"
 spec:
-  platform: local
-`, agentName, agentVersion, providerName)
+  type: Local
+`, agentName, agentVersion, runtimeName, runtimeVersion)
 
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "multi.yaml", multiYAML)
 
@@ -1111,7 +1111,7 @@ spec:
 	// Each resource must appear in the output as "applied".
 	RequireOutputContains(t, result, "Agent/"+agentName)
 	RequireOutputContains(t, result, "✓")
-	RequireOutputContains(t, result, "Provider/"+providerName)
+	RequireOutputContains(t, result, "Runtime/"+runtimeName)
 
 	// Verify agent exists via HTTP.
 	verifyAgentExists(t, regURL, agentName, agentVersion)
@@ -1127,17 +1127,13 @@ func TestBatchApply_Idempotent(t *testing.T) {
 
 	agentName := UniqueAgentName("idempbatch")
 	agentVersion := "0.0.1-e2e"
-	providerName := "e2e-idemp-prov-" + UniqueNameWithPrefix("prov")
+	runtimeName := "e2e-idemp-rt-" + UniqueNameWithPrefix("rt")
+	runtimeVersion := "1.0.0"
 
 	RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", agentVersion, "--registry-url", regURL)
 	t.Cleanup(func() {
 		RunArctl(t, tmpDir, "delete", "agent", agentName, "--version", agentVersion, "--registry-url", regURL)
-		req, _ := http.NewRequest(http.MethodDelete,
-			regURL+"/providers/"+providerName+"?platform=local", nil)
-		client := &http.Client{Timeout: 10 * time.Second}
-		if resp, err := client.Do(req); err == nil {
-			resp.Body.Close()
-		}
+		RunArctl(t, tmpDir, "delete", "runtime", runtimeName, "--version", runtimeVersion, "--registry-url", regURL)
 	})
 
 	multiYAML := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
@@ -1153,13 +1149,13 @@ spec:
   modelName: gemini-2.0-flash
 ---
 apiVersion: ar.dev/v1alpha1
-kind: Provider
+kind: Runtime
 metadata:
   name: %s
-  version: "1.0.0"
+  version: "%s"
 spec:
-  platform: local
-`, agentName, agentVersion, providerName)
+  type: Local
+`, agentName, agentVersion, runtimeName, runtimeVersion)
 
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "multi.yaml", multiYAML)
 
@@ -1204,7 +1200,7 @@ func TestBatchApply_DriftRequiresForce(t *testing.T) {
 	agentName := UniqueAgentName("driftbatch")
 	agentImage := fmt.Sprintf("localhost:5001/%s:e2e", agentName)
 	agentVersion := "0.1.0"
-	providerID := "local"
+	runtimeID := "local"
 
 	t.Cleanup(func() {
 		RemoveDeploymentsByServerName(t, regURL, agentName)
@@ -1236,9 +1232,14 @@ metadata:
   name: %s
   version: "%s"
 spec:
-  providerId: %s
-  resourceType: agent
-`, agentName, agentVersion, providerID)
+  targetRef:
+    kind: Agent
+    name: %s
+    version: "%s"
+  runtimeRef:
+    kind: Runtime
+    name: %s
+`, agentName, agentVersion, agentName, agentVersion, runtimeID)
 
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "deploy.yaml", deployYAML)
 	result = RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
@@ -1253,11 +1254,16 @@ metadata:
   name: %s
   version: "%s"
 spec:
-  providerId: %s
-  resourceType: agent
+  targetRef:
+    kind: Agent
+    name: %s
+    version: "%s"
+  runtimeRef:
+    kind: Runtime
+    name: %s
   env:
     NEW_VAR: "drift-value"
-`, agentName, agentVersion, providerID)
+`, agentName, agentVersion, agentName, agentVersion, runtimeID)
 
 	driftPath := writeDeclarativeYAML(t, tmpDir, "deploy-drift.yaml", driftYAML)
 
@@ -1899,9 +1905,14 @@ metadata:
   name: %s
   version: "%s"
 spec:
-  resourceType: agent
-  providerId: local
-`, agentName, version)
+  targetRef:
+    kind: Agent
+    name: %s
+    version: "%s"
+  runtimeRef:
+    kind: Runtime
+    name: local
+`, agentName, version, agentName, version)
 	deployPath := writeDeclarativeYAML(t, tmpDir, "deployment.yaml", deployYAML)
 	RequireSuccess(t, RunArctl(t, tmpDir, "apply", "-f", deployPath, "--registry-url", regURL))
 
@@ -1911,8 +1922,9 @@ spec:
 	RequireOutputContains(t, result, "apiVersion: ar.dev/v1alpha1")
 	RequireOutputContains(t, result, "kind: Deployment")
 	// Spec fields — declarative, round-trippable.
-	RequireOutputContains(t, result, "providerId: local")
-	RequireOutputContains(t, result, "resourceType: agent")
+	RequireOutputContains(t, result, "runtimeRef:")
+	RequireOutputContains(t, result, "name: local")
+	RequireOutputContains(t, result, "kind: Runtime")
 	// Status block — server-managed.
 	RequireOutputContains(t, result, "status:")
 	// phase may be "deploying" or "deployed" depending on how fast the
@@ -1955,8 +1967,8 @@ spec:
     kind: Agent
     name: %s
     version: "0.1.0"
-  providerRef:
-    kind: Provider
+  runtimeRef:
+    kind: Runtime
     name: local
 `, missingName, missingName)
 	deployPath := writeDeclarativeYAML(t, tmpDir, "deployment.yaml", deployYAML)

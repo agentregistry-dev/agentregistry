@@ -19,7 +19,7 @@ var (
 	ErrInvalidURL          = errors.New("invalid url")
 	ErrInvalidLabel        = errors.New("invalid label")
 	ErrInvalidRef          = errors.New("invalid resource reference")
-	ErrUnknownPlatform     = errors.New("unknown provider platform")
+	ErrUnknownRuntimeType  = errors.New("unknown runtime type")
 	ErrInvalidDesiredState = errors.New("invalid deployment desired state")
 	// ErrDanglingRef is returned by ResolverFunc implementations when the
 	// referenced resource does not exist. Tests + callers identify
@@ -119,7 +119,7 @@ const maxVersionLen = 255
 // Use this for kinds where multiple coexisting versions of the same
 // (namespace, name) carry meaning — Agent, MCPServer, Skill, Prompt
 // (publishable artifacts). For kinds whose versioning is semantically
-// empty (Provider is a connection handle, Deployment is a runtime
+// empty (Runtime is a connection handle, Deployment is a runtime
 // binding), call ValidateObjectMetaUnversioned instead so callers
 // aren't forced to fabricate a placeholder version string.
 func ValidateObjectMeta(m ObjectMeta) FieldErrors {
@@ -132,7 +132,7 @@ func ValidateObjectMeta(m ObjectMeta) FieldErrors {
 
 // ValidateObjectMetaUnversioned is ValidateObjectMeta minus the
 // version-required check. Kinds whose identity is fully captured by
-// (namespace, name) — Provider, Deployment — call this so users
+// (namespace, name) — Runtime, Deployment — call this so users
 // don't have to make up a placeholder version. The storage layer
 // still requires a version string in the 3-tuple PK, but kinds opting
 // in here treat it as opaque (typically the constant "1").

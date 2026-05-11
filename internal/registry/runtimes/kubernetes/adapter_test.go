@@ -4,8 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
-	adapterpkgtypes "github.com/agentregistry-dev/agentregistry/pkg/types"
 	v1alpha2 "github.com/kagent-dev/kagent/go/api/v1alpha2"
 	kmcpv1alpha1 "github.com/kagent-dev/kmcp/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -13,6 +11,9 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	adapterpkgtypes "github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
 func withFakeKubeClient(t *testing.T, objs ...client.Object) client.Client {
@@ -36,12 +37,12 @@ func withFakeKubeClient(t *testing.T, objs ...client.Object) client.Client {
 func TestK8sV1Alpha1Apply_MCPServerTarget_CreatesResource(t *testing.T) {
 	fakeClient := withFakeKubeClient(t)
 
-	provider := &v1alpha1.Provider{
-		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindProvider},
+	runtime := &v1alpha1.Runtime{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindRuntime},
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "kube-local", Version: "1"},
-		Spec: v1alpha1.ProviderSpec{
-			Platform: v1alpha1.PlatformKubernetes,
-			Config:   map[string]any{"namespace": "kagent"},
+		Spec: v1alpha1.RuntimeSpec{
+			Type:   v1alpha1.TypeKubernetes,
+			Config: map[string]any{"namespace": "kagent"},
 		},
 	}
 	target := &v1alpha1.RemoteMCPServer{
@@ -56,7 +57,7 @@ func TestK8sV1Alpha1Apply_MCPServerTarget_CreatesResource(t *testing.T) {
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-kube", Version: "1", Generation: 4},
 		Spec: v1alpha1.DeploymentSpec{
 			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindRemoteMCPServer, Name: "weather", Version: "1.0.0"},
-			ProviderRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindProvider, Name: "kube-local", Version: "1"},
+			RuntimeRef:   v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "kube-local", Version: "1"},
 			DesiredState: v1alpha1.DesiredStateDeployed,
 		},
 	}
@@ -65,7 +66,7 @@ func TestK8sV1Alpha1Apply_MCPServerTarget_CreatesResource(t *testing.T) {
 	res, err := adapter.Apply(context.Background(), adapterpkgtypes.ApplyInput{
 		Deployment: deployment,
 		Target:     target,
-		Provider:   provider,
+		Runtime:    runtime,
 	})
 	if err != nil {
 		t.Fatalf("Apply: %v", err)
@@ -111,9 +112,9 @@ func TestK8sV1Alpha1Remove_DeletesResourcesByDeploymentID(t *testing.T) {
 
 	adapter := NewKubernetesDeploymentAdapter()
 
-	provider := &v1alpha1.Provider{
+	runtime := &v1alpha1.Runtime{
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "kube-local", Version: "1"},
-		Spec:     v1alpha1.ProviderSpec{Platform: v1alpha1.PlatformKubernetes, Config: map[string]any{"namespace": "kagent"}},
+		Spec:     v1alpha1.RuntimeSpec{Type: v1alpha1.TypeKubernetes, Config: map[string]any{"namespace": "kagent"}},
 	}
 	deployment := &v1alpha1.Deployment{
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: deploymentID, Version: "1", Generation: 5},
@@ -121,7 +122,7 @@ func TestK8sV1Alpha1Remove_DeletesResourcesByDeploymentID(t *testing.T) {
 
 	res, err := adapter.Remove(context.Background(), adapterpkgtypes.RemoveInput{
 		Deployment: deployment,
-		Provider:   provider,
+		Runtime:    runtime,
 	})
 	if err != nil {
 		t.Fatalf("Remove: %v", err)
@@ -187,11 +188,11 @@ func TestK8sV1Alpha1Discover_SkipsManagedResources(t *testing.T) {
 	withFakeKubeClient(t, unmanaged, unmanagedRemote, managed, managedRemote)
 
 	adapter := NewKubernetesDeploymentAdapter()
-	provider := &v1alpha1.Provider{
+	runtime := &v1alpha1.Runtime{
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "kube-local", Version: "1"},
-		Spec:     v1alpha1.ProviderSpec{Platform: v1alpha1.PlatformKubernetes, Config: map[string]any{"namespace": "kagent"}},
+		Spec:     v1alpha1.RuntimeSpec{Type: v1alpha1.TypeKubernetes, Config: map[string]any{"namespace": "kagent"}},
 	}
-	results, err := adapter.Discover(context.Background(), adapterpkgtypes.DiscoverInput{Provider: provider})
+	results, err := adapter.Discover(context.Background(), adapterpkgtypes.DiscoverInput{Runtime: runtime})
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
