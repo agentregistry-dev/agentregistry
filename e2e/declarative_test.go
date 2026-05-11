@@ -2278,7 +2278,8 @@ func TestDeclarativeBuild_PlatformFlag(t *testing.T) {
 		"--platform", "linux/amd64",
 		"--image", "localhost:5001/"+name+":platform-test")
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "Successfully built Docker image")
+	RequireOutputContains(t, result, "--platform=linux/amd64")
+	RequireOutputContains(t, result, "✓ Built")
 }
 
 // TestAPI_DirectNotFound asserts that hitting the registry's kind endpoints

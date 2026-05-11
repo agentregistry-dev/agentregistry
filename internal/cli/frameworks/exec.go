@@ -38,10 +38,12 @@ func renderPathComponents(rel string, vars map[string]any) (string, error) {
 }
 
 // RenderArgs runs Go text/template substitution on each arg independently.
-// Missing values cause an error.
+// Missing values cause an error. Args that render to an empty string are
+// dropped so framework commands can use `{{if .X}}--flag={{.X}}{{end}}` to
+// emit-or-skip optional flags without breaking the argv.
 func RenderArgs(args []string, vars map[string]any) ([]string, error) {
-	out := make([]string, len(args))
-	for i, raw := range args {
+	out := make([]string, 0, len(args))
+	for _, raw := range args {
 		t, err := template.New("arg").Option("missingkey=error").Parse(raw)
 		if err != nil {
 			return nil, fmt.Errorf("parse arg %q: %w", raw, err)
@@ -50,7 +52,10 @@ func RenderArgs(args []string, vars map[string]any) ([]string, error) {
 		if err := t.Execute(&buf, vars); err != nil {
 			return nil, fmt.Errorf("substitute arg %q: %w", raw, err)
 		}
-		out[i] = buf.String()
+		if buf.Len() == 0 {
+			continue
+		}
+		out = append(out, buf.String())
 	}
 	return out, nil
 }

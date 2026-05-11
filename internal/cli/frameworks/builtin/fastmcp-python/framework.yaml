@@ -9,7 +9,7 @@ env:
   optional:
     - LOG_LEVEL
 build:
-  command: ["docker", "build", "-t", "{{.Image}}", "{{.ProjectDir}}"]
+  command: ["docker", "build", "{{if .Platform}}--platform={{.Platform}}{{end}}", "-t", "{{.Image}}", "{{.ProjectDir}}"]
 run:
   # HTTP transport so the server is reachable from sibling agent projects via
   # host.docker.internal:{{.Port}}/mcp. Stdio mode is not used by `arctl run`
