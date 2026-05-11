@@ -39,12 +39,12 @@ tests/                  # Generated tests
    ```bash
    # Stdio mode (default MCP transport)
    uv run python src/main.py
-   
-   # HTTP mode with WebSocket MCP endpoint
-   uv run python src/main.py --http
-   
+
+   # HTTP mode
+   uv run python src/main.py --transport http
+
    # HTTP mode with custom host/port
-   uv run python src/main.py --http --host 0.0.0.0 --port 8080
+   uv run python src/main.py --transport http --host 0.0.0.0 --port 8080
    ```
 
 3. **Using uv Scripts**:

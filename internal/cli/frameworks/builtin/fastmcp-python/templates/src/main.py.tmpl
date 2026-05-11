@@ -57,8 +57,8 @@ def main() -> None:
 
     parser.add_argument(
         "--stateless-http",
-        type=bool,
-        default=bool(os.getenv("MCP_STATELESS_HTTP", "false").lower() == "true"),
+        action="store_true",
+        default=os.getenv("MCP_STATELESS_HTTP", "false").lower() == "true",
         help="Enable stateless HTTP mode (default: false)"
     )
 
