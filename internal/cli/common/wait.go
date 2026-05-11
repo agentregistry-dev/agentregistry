@@ -11,9 +11,7 @@ import (
 )
 
 const (
-	// DefaultWaitTimeout is the wait helper's default cap when WaitOptions.Timeout
-	// is left at its zero value via the CLI default. Exposed so callers can opt
-	// into the same default without hardcoding the duration.
+	// DefaultWaitTimeout is used when WaitOptions.Timeout is zero.
 	DefaultWaitTimeout = 5 * time.Minute
 
 	defaultPollInterval = 2 * time.Second
@@ -21,19 +19,19 @@ const (
 
 // WaitOptions configures WaitForDeployment.
 //
-// Timeout semantics (modeled on `kubectl wait --timeout=`):
+// Timeout regimes:
 //   - > 0: wait at most this long.
-//   - == 0: poll once and return immediately (one-shot).
-//   - < 0: wait forever (no deadline).
+//   - == 0: poll once and return.
+//   - < 0: wait forever.
 type WaitOptions struct {
 	// TargetStatus is the deployment status the wait succeeds on
 	// (e.g. "deployed", "failed"). Ignored when TargetDeleted is true.
 	// Defaults to "deployed" when both fields are zero.
 	TargetStatus string
 
-	// TargetDeleted, when true, waits for the deployment to disappear from
-	// the registry (the resolver returns a not-found error). Mutually
-	// exclusive with TargetStatus.
+	// TargetDeleted, when true, waits for the deployment to disappear
+	// (the resolver returns a not-found error). Mutually exclusive
+	// with TargetStatus.
 	TargetDeleted bool
 
 	// Timeout caps the total wait. See type doc for the three regimes.
@@ -43,29 +41,24 @@ type WaitOptions struct {
 	// defaultPollInterval (2s).
 	PollInterval time.Duration
 
-	// Progress, if set, is invoked after each non-terminal poll with the
-	// observed status and elapsed time. Lets the CLI render progress
-	// without coupling the helper to a specific output stream.
+	// Progress is called once after each non-terminal poll with the
+	// observed status and elapsed time.
 	Progress func(status string, elapsed time.Duration)
 }
 
 // ResolveDeploymentFunc fetches the current deployment record.
-// Implementations must return a not-found error (database.ErrNotFound or
-// client.ErrNotFound, or anything that wraps either) when the deployment
-// no longer exists. The not-found result is the success condition when
-// WaitOptions.TargetDeleted is true.
+// Implementations must return a not-found error (database.ErrNotFound,
+// client.ErrNotFound, or any error wrapping either) when the deployment
+// no longer exists.
 type ResolveDeploymentFunc func(ctx context.Context) (*DeploymentRecord, error)
 
 // WaitForDeployment polls until the deployment reaches the requested state,
-// reaches a different terminal state (failure), or the timeout is exceeded.
+// reaches a different terminal state, or the timeout is exceeded.
 //
-// Behavior:
-//   - With TargetStatus set, success means dep.Status == TargetStatus.
-//     Reaching a *different* terminal state (deployed / failed / undeployed)
-//     is reported as an error, even if the new state is itself "terminal".
-//   - With TargetDeleted, success means the resolver returns a not-found
-//     error. Any other observation keeps polling.
-//   - Context cancellation interrupts the wait and is surfaced as ctx.Err().
+// With TargetStatus set, the wait succeeds on dep.Status == TargetStatus
+// and fails on any other terminal state (deployed / failed / undeployed).
+// With TargetDeleted, the wait succeeds on a not-found error and keeps
+// polling otherwise. Context cancellation surfaces as ctx.Err().
 func WaitForDeployment(ctx context.Context, resolve ResolveDeploymentFunc, opts WaitOptions) error {
 	if resolve == nil {
 		return errors.New("WaitForDeployment: resolve function is nil")

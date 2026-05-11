@@ -26,14 +26,13 @@ func newWaitCmd() *cobra.Command {
 		Short: "Wait for a registry resource to reach a target state",
 		Long: `Wait for a registry resource to reach a target state.
 
-Only deployments are supported today. The command polls the registry until
-the deployment reaches the requested state. Exit codes:
+Only deployments are supported. Exit codes:
 
   0  the deployment reached the requested state
   1  the deployment reached a different terminal state, doesn't exist, or
      the timeout was exceeded
 
-Modeled on ` + "`kubectl wait`" + `. Timeout regimes:
+Timeout regimes:
 
   --timeout=5m   (default) wait up to 5 minutes
   --timeout=0    poll once and return the current state

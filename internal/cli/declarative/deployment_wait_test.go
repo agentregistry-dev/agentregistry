@@ -14,8 +14,8 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
-// deploymentWaitTestServer serves the /v0/deployments listing the wait
-// command consumes. Returns a fresh server bound to t.Cleanup.
+// deploymentWaitTestServer returns an httptest server serving /v0/deployments
+// from the given list.
 func deploymentWaitTestServer(t *testing.T, deployments []v1alpha1.Deployment) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -32,7 +32,7 @@ func deploymentWaitTestServer(t *testing.T, deployments []v1alpha1.Deployment) *
 	return srv
 }
 
-// (1) Already-deployed: wait returns immediately with the success line.
+// Already-deployed: wait returns immediately with the success line.
 func TestDeploymentWait_DeployedReturnsImmediately(t *testing.T) {
 	srv := deploymentWaitTestServer(t, []v1alpha1.Deployment{
 		deploymentFixture("aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "deployed"),
@@ -48,12 +48,8 @@ func TestDeploymentWait_DeployedReturnsImmediately(t *testing.T) {
 	assert.Contains(t, out.String(), "deployment/summarizer deployed")
 }
 
-// (2) Terminal failure when waiting for "deployed": surface the failure as an
-// error, regardless of how long the helper would otherwise be willing to wait.
-// (The Error-message surfacing path is covered by TestWaitForDeployment_TerminalFailureMismatch
-// at the helper level — at the CLI level the DeploymentRecord.Error projection
-// depends on which condition the server set, which the fixture deliberately
-// keeps coarse.)
+// Terminal failure when waiting for "deployed" surfaces an error rather than
+// waiting until the timeout. Error-message content is covered at the helper level.
 func TestDeploymentWait_FailedSurfacesError(t *testing.T) {
 	srv := deploymentWaitTestServer(t, []v1alpha1.Deployment{
 		deploymentFixture("aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "failed"),
@@ -70,7 +66,7 @@ func TestDeploymentWait_FailedSurfacesError(t *testing.T) {
 	assert.Contains(t, err.Error(), `reached state "failed"`)
 }
 
-// (3) `--for=failed` flips the semantics: failed is the success condition.
+// --for=failed treats "failed" as the success condition.
 func TestDeploymentWait_ForFailedSucceedsOnFailed(t *testing.T) {
 	srv := deploymentWaitTestServer(t, []v1alpha1.Deployment{
 		deploymentFixture("aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "failed"),
@@ -86,8 +82,7 @@ func TestDeploymentWait_ForFailedSucceedsOnFailed(t *testing.T) {
 	assert.Contains(t, out.String(), "deployment/summarizer failed")
 }
 
-// (4) `--for=delete` against a registry with no matching deployment is a
-// success — the resource we were waiting on is gone.
+// --for=delete against a registry with no matching deployment succeeds.
 func TestDeploymentWait_ForDeleteSucceedsWhenAbsent(t *testing.T) {
 	srv := deploymentWaitTestServer(t, []v1alpha1.Deployment{
 		deploymentFixture("other", "unrelated", "1.0.0", "my-aws", "agent", "deployed"),
@@ -103,8 +98,6 @@ func TestDeploymentWait_ForDeleteSucceedsWhenAbsent(t *testing.T) {
 	assert.Contains(t, out.String(), "deployment/summarizer deleted")
 }
 
-// (5) Wait targets the deployment's TARGET name, not its metadata name —
-// matches how `get deployment` and `delete deployment` already address rows.
 // A missing target name fails with "not found".
 func TestDeploymentWait_NotFoundOnMissingTarget(t *testing.T) {
 	srv := deploymentWaitTestServer(t, []v1alpha1.Deployment{
@@ -122,8 +115,8 @@ func TestDeploymentWait_NotFoundOnMissingTarget(t *testing.T) {
 	assert.Contains(t, err.Error(), "not found")
 }
 
-// (6) --version restricts the wait to a specific target version. Two
-// deployments share a target name; only the requested version is acted on.
+// --version restricts the wait to one target version when two deployments
+// share a target name.
 func TestDeploymentWait_VersionFilter(t *testing.T) {
 	srv := deploymentWaitTestServer(t, []v1alpha1.Deployment{
 		deploymentFixture("aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "deploying"),
@@ -141,7 +134,7 @@ func TestDeploymentWait_VersionFilter(t *testing.T) {
 	assert.Contains(t, out.String(), "deployment/summarizer deployed")
 }
 
-// (7) Non-deployment kinds are rejected — wait only supports deployments today.
+// Non-deployment kinds are rejected.
 func TestDeploymentWait_RejectsNonDeploymentKinds(t *testing.T) {
 	srv := deploymentWaitTestServer(t, nil)
 	setupClientForServer(t, srv)
