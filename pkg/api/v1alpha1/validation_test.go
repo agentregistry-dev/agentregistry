@@ -111,6 +111,45 @@ func TestAgentValidate_AccumulatesErrors(t *testing.T) {
 	require.Contains(t, paths, "spec.title")
 }
 
+func TestAgentValidate_AcceptsRepositoryWithBranchAndCommit(t *testing.T) {
+	a := &Agent{
+		Metadata: ObjectMeta{Namespace: "default", Name: "a"},
+		Spec: AgentSpec{
+			Source: &AgentSource{
+				Repository: &Repository{
+					URL:    "https://github.com/example/repo",
+					Branch: "feature/x",
+					Commit: "abc1234def",
+				},
+			},
+		},
+	}
+	require.NoError(t, a.Validate())
+}
+
+func TestAgentValidate_RejectsBranchOrCommitWithoutURL(t *testing.T) {
+	cases := []struct {
+		name string
+		repo Repository
+		want string
+	}{
+		{"branch without url", Repository{Branch: "feature/x"}, "spec.source.repository.branch"},
+		{"commit without url", Repository{Commit: "abc1234"}, "spec.source.repository.commit"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := &Agent{
+				Metadata: ObjectMeta{Namespace: "default", Name: "a"},
+				Spec: AgentSpec{
+					Source: &AgentSource{Repository: &tc.repo},
+				},
+			}
+			paths := failedFields(t, a.Validate())
+			require.Contains(t, paths, tc.want)
+		})
+	}
+}
+
 func TestAgentResolveRefs_OK(t *testing.T) {
 	resolver := func(ctx context.Context, ref ResourceRef) error { return nil }
 	a := &Agent{

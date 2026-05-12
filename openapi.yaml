@@ -599,6 +599,10 @@ components:
     Repository:
       additionalProperties: false
       properties:
+        branch:
+          type: string
+        commit:
+          type: string
         subfolder:
           type: string
         url:

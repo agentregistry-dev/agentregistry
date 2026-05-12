@@ -64,7 +64,7 @@ func pullResource(ctx context.Context, typ, name, tag, outDir string) error {
 		return fmt.Errorf("API client not initialized")
 	}
 
-	var repoURL, subfolder string
+	var repo *v1alpha1.Repository
 	switch typ {
 	case "agent":
 		obj, err := client.GetTyped(ctx, apiClient, v1alpha1.KindAgent, v1alpha1.DefaultNamespace, name, tag,
@@ -75,8 +75,7 @@ func pullResource(ctx context.Context, typ, name, tag, outDir string) error {
 		if obj.Spec.Source == nil || obj.Spec.Source.Repository == nil || obj.Spec.Source.Repository.URL == "" {
 			return fmt.Errorf("agent %q has no source repository URL set", name)
 		}
-		repoURL = obj.Spec.Source.Repository.URL
-		subfolder = obj.Spec.Source.Repository.Subfolder
+		repo = obj.Spec.Source.Repository
 	case "mcp":
 		obj, err := client.GetTyped(ctx, apiClient, v1alpha1.KindMCPServer, v1alpha1.DefaultNamespace, name, tag,
 			func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} })
@@ -86,8 +85,7 @@ func pullResource(ctx context.Context, typ, name, tag, outDir string) error {
 		if obj.Spec.Source == nil || obj.Spec.Source.Repository == nil || obj.Spec.Source.Repository.URL == "" {
 			return fmt.Errorf("mcp %q has no source repository URL set", name)
 		}
-		repoURL = obj.Spec.Source.Repository.URL
-		subfolder = obj.Spec.Source.Repository.Subfolder
+		repo = obj.Spec.Source.Repository
 	case "skill":
 		obj, err := client.GetTyped(ctx, apiClient, v1alpha1.KindSkill, v1alpha1.DefaultNamespace, name, tag,
 			func() *v1alpha1.Skill { return &v1alpha1.Skill{} })
@@ -97,19 +95,25 @@ func pullResource(ctx context.Context, typ, name, tag, outDir string) error {
 		if obj.Spec.Source == nil || obj.Spec.Source.Repository == nil || obj.Spec.Source.Repository.URL == "" {
 			return fmt.Errorf("skill %q has no source repository URL set", name)
 		}
-		repoURL = obj.Spec.Source.Repository.URL
-		subfolder = obj.Spec.Source.Repository.Subfolder
+		repo = obj.Spec.Source.Repository
 	}
 
 	if err := os.MkdirAll(outDir, 0755); err != nil {
 		return err
 	}
-	fmt.Printf("Cloning %s into %s\n", repoURL, outDir)
-	if err := gitutil.CloneAndCopy(repoURL, outDir, false); err != nil {
+	switch {
+	case repo.Commit != "":
+		fmt.Printf("Cloning %s @ %s into %s\n", repo.URL, repo.Commit, outDir)
+	case repo.Branch != "":
+		fmt.Printf("Cloning %s (branch %s) into %s\n", repo.URL, repo.Branch, outDir)
+	default:
+		fmt.Printf("Cloning %s into %s\n", repo.URL, outDir)
+	}
+	if err := gitutil.CloneAndCopy(repo.URL, repo.Branch, repo.Commit, repo.Subfolder, outDir, false); err != nil {
 		return err
 	}
-	if subfolder != "" {
-		fmt.Printf("(subfolder hint: %s)\n", subfolder)
+	if repo.Subfolder != "" {
+		fmt.Printf("(subfolder hint: %s)\n", repo.Subfolder)
 	}
 	fmt.Printf("Pulled %s\n", name)
 	return nil
