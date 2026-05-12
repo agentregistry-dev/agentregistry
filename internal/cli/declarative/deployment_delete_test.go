@@ -69,10 +69,11 @@ func setupClientForServer(t *testing.T, srv *httptest.Server) {
 	t.Cleanup(func() { declarative.SetAPIClient(nil) })
 }
 
-// (1) Tagged target delete removes all runtime-specific deployments matching
-// (name, tag). Deployments on other runtimes for the same (name, tag) get
-// deleted; deployments on other tags are left alone.
-func TestDeploymentDelete_RemovesAllProviderMatchesForTag(t *testing.T) {
+// (1) Target-name delete fans out across every runtime variant AND every tag
+// for that target — deployments don't carry a tag of their own, so the CLI
+// can't (and shouldn't) narrow the cut by target tag here. Unrelated targets
+// are left alone.
+func TestDeploymentDelete_RemovesAllMatchesByTargetName(t *testing.T) {
 	deployments := []v1alpha1.Deployment{
 		deploymentFixture("aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "pending"),
 		deploymentFixture("gcp-v1", "summarizer", "1.0.0", "my-gcp", "agent", "pending"),
@@ -83,23 +84,23 @@ func TestDeploymentDelete_RemovesAllProviderMatchesForTag(t *testing.T) {
 	setupClientForServer(t, srv)
 
 	cmd := declarative.NewDeleteCmd()
-	cmd.SetArgs([]string{"deployment", "summarizer", "--tag", "1.0.0"})
+	cmd.SetArgs([]string{"deployment", "summarizer"})
 	require.NoError(t, cmd.Execute())
 
-	assert.ElementsMatch(t, []string{"default/aws-v1", "default/gcp-v1"}, *deleted,
-		"both runtime variants of summarizer 1.0.0 should be deleted; nothing else")
+	assert.ElementsMatch(t, []string{"default/aws-v1", "default/gcp-v1", "default/aws-v2"}, *deleted,
+		"every deployment targeting summarizer should be deleted; unrelated targets untouched")
 }
 
-// (2) When no deployment matches (name, tag), returns a not-found error.
+// (2) When no deployment matches the target name, returns a not-found error.
 func TestDeploymentDelete_NotFound(t *testing.T) {
 	deployments := []v1alpha1.Deployment{
-		deploymentFixture("aws-v2", "summarizer", "2.0.0", "my-aws", "agent", "pending"),
+		deploymentFixture("aws-v2", "other-target", "2.0.0", "my-aws", "agent", "pending"),
 	}
 	srv, deleted := deploymentTestServer(t, deployments, nil)
 	setupClientForServer(t, srv)
 
 	cmd := declarative.NewDeleteCmd()
-	cmd.SetArgs([]string{"deployment", "summarizer", "--tag", "1.0.0"})
+	cmd.SetArgs([]string{"deployment", "summarizer"})
 	err := cmd.Execute()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found",
@@ -119,7 +120,7 @@ func TestDeploymentDelete_PartialFailure(t *testing.T) {
 	setupClientForServer(t, srv)
 
 	cmd := declarative.NewDeleteCmd()
-	cmd.SetArgs([]string{"deployment", "summarizer", "--tag", "1.0.0"})
+	cmd.SetArgs([]string{"deployment", "summarizer"})
 	err := cmd.Execute()
 	require.Error(t, err, "partial failure must propagate")
 	assert.Contains(t, err.Error(), "default/gcp-v1", "error should identify which deployment failed")
@@ -129,23 +130,19 @@ func TestDeploymentDelete_PartialFailure(t *testing.T) {
 		"both matching deployments should be attempted even when one fails")
 }
 
-// (4) Guard against the earlier wildcard bug: empty --tag must be rejected
-// before issuing any HTTP call, to prevent accidental bulk deployment deletes.
-func TestDeploymentDelete_RejectsEmptyTag(t *testing.T) {
-	deployments := []v1alpha1.Deployment{
-		deploymentFixture("aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "pending"),
-		deploymentFixture("aws-v2", "summarizer", "2.0.0", "my-aws", "agent", "pending"),
+// (4) --tag is rejected for deployments and runtimes: neither kind has a tag
+// of its own, so accepting one would let users confuse the target's tag (or
+// nothing at all, for runtime) with the resource's identity.
+func TestDelete_RejectsTagForDeploymentAndRuntime(t *testing.T) {
+	for _, kind := range []string{"deployment", "runtime"} {
+		t.Run(kind, func(t *testing.T) {
+			cmd := declarative.NewDeleteCmd()
+			cmd.SetArgs([]string{kind, "anything", "--tag", "1.0.0"})
+			err := cmd.Execute()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "--tag is not supported for "+kind)
+		})
 	}
-	srv, deleted := deploymentTestServer(t, deployments, nil)
-	setupClientForServer(t, srv)
-
-	cmd := declarative.NewDeleteCmd()
-	cmd.SetArgs([]string{"deployment", "summarizer"})
-	err := cmd.Execute()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "tag",
-		"empty tag should error with a tag-required message")
-	assert.Empty(t, *deleted, "no DELETE requests should be issued when tag is missing")
 }
 
 // (5) --force sends ?force=true query param to the server.
@@ -172,7 +169,7 @@ func TestDeploymentDelete_ForcePassesQueryParam(t *testing.T) {
 	setupClientForServer(t, srv)
 
 	cmd := declarative.NewDeleteCmd()
-	cmd.SetArgs([]string{"deployment", "summarizer", "--tag", "1.0.0", "--force"})
+	cmd.SetArgs([]string{"deployment", "summarizer", "--force"})
 	require.NoError(t, cmd.Execute())
 
 	require.Len(t, capturedForce, 1)
@@ -212,7 +209,7 @@ func TestDeploymentDelete_NoForceFlagOmitsQueryParam(t *testing.T) {
 	setupClientForServer(t, srv)
 
 	cmd := declarative.NewDeleteCmd()
-	cmd.SetArgs([]string{"deployment", "summarizer", "--tag", "1.0.0"})
+	cmd.SetArgs([]string{"deployment", "summarizer"})
 	require.NoError(t, cmd.Execute())
 
 	require.Len(t, capturedQuery, 1)
