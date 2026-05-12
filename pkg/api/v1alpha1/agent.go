@@ -10,16 +10,13 @@ type Agent struct {
 
 // AgentSpec is the agent resource's declarative body.
 //
-// References to other resources (MCP servers, skills, prompts) are pure
-// ResourceRefs — no inline runtime configuration. To deploy an agent with a
-// specific MCP server wired in, define a top-level MCPServer resource and
-// reference it here.
+// References to other resources (MCP servers) are pure ResourceRefs — no
+// inline runtime configuration. To deploy an agent with a specific MCP server
+// wired in, define a top-level MCPServer resource and reference it here.
 type AgentSpec struct {
 	// Core fields.
 	Title         string `json:"title,omitempty" yaml:"title,omitempty"`
 	Description   string `json:"description,omitempty" yaml:"description,omitempty"`
-	Language      string `json:"language,omitempty" yaml:"language,omitempty"`
-	Framework     string `json:"framework,omitempty" yaml:"framework,omitempty"`
 	ModelProvider string `json:"modelProvider,omitempty" yaml:"modelProvider,omitempty"`
 	ModelName     string `json:"modelName,omitempty" yaml:"modelName,omitempty"`
 
@@ -28,11 +25,12 @@ type AgentSpec struct {
 	Source *AgentSource `json:"source,omitempty" yaml:"source,omitempty"`
 
 	// References to top-level resources. Each entry's Kind must match the
-	// field name's singular form (MCPServer, Skill, Prompt). Version empty
-	// means "resolve latest at reference time".
+	// field name's singular form (MCPServer). Tag empty means
+	// "resolve latest at reference time".
+	//
+	// Skills + Prompts removed per audit; refs were ADK-Python-runtime-specific
+	// and not generalizable.
 	MCPServers []ResourceRef `json:"mcpServers,omitempty" yaml:"mcpServers,omitempty"`
-	Skills     []ResourceRef `json:"skills,omitempty" yaml:"skills,omitempty"`
-	Prompts    []ResourceRef `json:"prompts,omitempty" yaml:"prompts,omitempty"`
 }
 
 // AgentSource is the distribution origin of an agent — Image (the runtime

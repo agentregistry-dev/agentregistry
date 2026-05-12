@@ -13,6 +13,11 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
+    "types": [
+      "node",
+      "react",
+      "react-dom"
+    ],
     "isolatedModules": true,
     "jsx": "react-jsx",
     "incremental": true,

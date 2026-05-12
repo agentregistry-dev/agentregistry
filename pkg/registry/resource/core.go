@@ -19,28 +19,20 @@ type applyOpts struct {
 	Resolver          v1alpha1.ResolverFunc
 	RegistryValidator v1alpha1.RegistryValidatorFunc
 	PostUpsert        func(ctx context.Context, obj v1alpha1.Object) error
-	// InitialFinalizers, when non-nil, is called on every apply to
-	// compute the finalizer slice handed to Upsert. The store uses the
-	// result only on create — updates preserve existing finalizers — so
-	// callers should keep the implementation cheap and side-effect-free.
-	// Computing eagerly here (rather than deferring to a thunk inside
-	// Upsert) keeps the apply pipeline straight-line; the alternative
-	// would force the create-vs-update detection out of the FOR UPDATE
-	// transaction.
-	//
-	// Used by kinds whose teardown is owned by a reconciler — without
-	// atomic seeding, a concurrent DELETE arriving between Upsert
-	// commit and a subsequent PatchFinalizers call hits Store.Delete's
-	// "finalizers empty → hard-delete fast path" and orphans whatever
-	// the reconciler was going to clean up.
 	InitialFinalizers func(obj v1alpha1.Object) []string
 }
 
 // upsertResult is the outcome of a successful applyCore call.
 type upsertResult struct {
-	Created     bool
-	SpecChanged bool
-	Generation  int64
+	// Outcome categorises what the underlying Store.Upsert did. Callers
+	// map this onto their wire status (ApplyStatusCreated, etc.).
+	Outcome v1alpha1store.UpsertOutcome
+	// Tag is the content tag after apply for tagged artifact stores.
+	Tag string
+	// Generation is the internal row generation after apply.
+	Generation int64
+	// UID is the server-managed row identity after production upsert.
+	UID string
 }
 
 // applyStage tags which step of the pipeline produced an error so
@@ -77,10 +69,10 @@ func (e *applyError) Error() string {
 }
 
 // applyCore runs the shared upsert pipeline on a single
-// already-decoded, identity-stamped object:
+// already-decoded, metadata-stamped object:
 //
-//	authorize → validate → resolve refs → validate registries →
-//	marshal spec → Store.Upsert → PostUpsert
+//	canonicalize metadata → authorize → validate → resolve refs →
+//	validate registries → marshal spec → Store.Upsert → PostUpsert
 //
 // dryRun=true skips Upsert + PostUpsert; everything else still runs so
 // clients get the same 400-class error surface they would on a real
@@ -95,43 +87,20 @@ func applyCore(
 	meta := obj.GetMetadata()
 	kind := obj.GetKind()
 
-	// Strip caller-supplied metadata.uid before any downstream stage
-	// observes it. UID is server-managed (Postgres assigns it via the
-	// column default on first insert and preserves it across re-applies),
-	// and Authorize/PostUpsert hooks must not be able to see — let alone
-	// branch on — a forged UID. Centralizing the strip here covers every
-	// applyCore caller: the single-resource PUT handler and the multi-doc
-	// batch endpoint alike. Mirrors Kubernetes' read-only metadata.uid.
-	mutated := false
 	if meta.UID != "" {
 		meta.UID = ""
-		mutated = true
+		obj.SetMetadata(*meta)
 	}
 
-	// Stamp default metadata.version for kinds that opt out of the
-	// version-required validator (Runtime, Deployment) — see
-	// v1alpha1.MetadataVersionDefaulter. Without this, a YAML manifest
-	// for an unversioned kind could pass Validate but fail at the
-	// store's `version != ""` check since the 3-tuple PK still
-	// requires it. Stamping here keeps the path uniform: every kind
-	// reaches Upsert with a non-empty version regardless of whether
-	// the caller supplied one.
-	if meta.Version == "" {
-		if defaulter, ok := obj.(v1alpha1.MetadataVersionDefaulter); ok {
-			if def := defaulter.DefaultMetadataVersion(); def != "" {
-				meta.Version = def
-				mutated = true
-			}
-		}
-	}
-	if mutated {
+	if v1alpha1.IsTaggedArtifactKind(kind) && meta.Tag == "" {
+		meta.Tag = v1alpha1store.DefaultTag()
 		obj.SetMetadata(*meta)
 	}
 
 	if opts.Authorize != nil {
 		if err := opts.Authorize(ctx, AuthorizeInput{
 			Verb: "apply", Kind: kind,
-			Namespace: meta.Namespace, Name: meta.Name, Version: meta.Version,
+			Namespace: meta.Namespace, Name: meta.Name, Tag: meta.Tag,
 			Object: obj,
 		}); err != nil {
 			return upsertResult{}, &applyError{Stage: stageAuth, Err: err}
@@ -152,19 +121,11 @@ func applyCore(
 		return upsertResult{}, nil
 	}
 
-	specJSON, err := obj.MarshalSpec()
-	if err != nil {
-		return upsertResult{}, &applyError{Stage: stageMarshal, Err: err}
-	}
-
-	upsertOpts := v1alpha1store.UpsertOpts{Labels: meta.Labels}
-	if meta.Annotations != nil {
-		upsertOpts.Annotations = meta.Annotations
-	}
+	upsertOpts := v1alpha1store.UpsertOpts{}
 	if opts.InitialFinalizers != nil {
 		upsertOpts.InitialFinalizers = opts.InitialFinalizers(obj)
 	}
-	up, err := store.Upsert(ctx, meta.Namespace, meta.Name, meta.Version, specJSON, upsertOpts)
+	up, err := store.Upsert(ctx, obj, upsertOpts)
 	if err != nil {
 		return upsertResult{}, &applyError{
 			Stage:       stageUpsert,
@@ -173,17 +134,15 @@ func applyCore(
 		}
 	}
 	res := upsertResult{
-		Created:     up.Created,
-		SpecChanged: up.SpecChanged,
-		Generation:  up.Generation,
+		Outcome:    up.Outcome,
+		Tag:        up.Tag,
+		Generation: up.Generation,
+		UID:        up.UID,
 	}
 
-	// Stamp the freshly-assigned generation onto the body so PostUpsert
-	// hooks (e.g. Deployment → Coordinator.Apply, which writes
-	// status.conditions[].observedGeneration) see the correct value
-	// instead of the zero from the request body.
 	if opts.PostUpsert != nil {
 		meta.Generation = up.Generation
+		meta.UID = up.UID
 		obj.SetMetadata(*meta)
 		if err := opts.PostUpsert(ctx, obj); err != nil {
 			return res, &applyError{Stage: stagePostUpsert, Err: err}
@@ -203,29 +162,29 @@ type deleteOpts struct {
 	PreDeleteObject v1alpha1.Object
 }
 
-// deleteCore runs Authorize → Store.Delete → PostDelete for a single
-// (kind, namespace, name, version) tuple. Validation is intentionally
-// skipped — deleting a row should not require its spec to validate.
+// deleteCore runs Authorize → Store.Delete → PostDelete for a single resource.
+// Validation is intentionally skipped — deleting a row should not require its
+// spec to validate.
 //
 // Returns NotFound=true on the missing-row case so callers can map it
 // to 404 (single PUT) or "not found" Result (batch).
 func deleteCore(
 	ctx context.Context,
 	store *v1alpha1store.Store,
-	kind, namespace, name, version string,
+	kind, namespace, name, tag string,
 	opts deleteOpts,
 ) *applyError {
 	if opts.Authorize != nil {
 		if err := opts.Authorize(ctx, AuthorizeInput{
 			Verb: "delete", Kind: kind,
-			Namespace: namespace, Name: name, Version: version,
+			Namespace: namespace, Name: name, Tag: tag,
 			Object: opts.PreDeleteObject,
 		}); err != nil {
 			return &applyError{Stage: stageAuth, Err: err}
 		}
 	}
 
-	if err := store.Delete(ctx, namespace, name, version); err != nil {
+	if err := store.Delete(ctx, namespace, name, tag); err != nil {
 		return &applyError{
 			Stage:    stageDelete,
 			Err:      err,

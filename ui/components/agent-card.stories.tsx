@@ -6,9 +6,7 @@ const mockAgent: AgentResponse = {
   agent: {
     name: "code-review-agent",
     description: "An AI agent that reviews pull requests, identifies bugs, and suggests improvements based on best practices.",
-    version: "2.1.0",
-    framework: "langchain",
-    language: "python",
+    tag: "2.1.0",
     modelProvider: "openai",
     modelName: "gpt-4o",
     source: {
@@ -32,9 +30,7 @@ const minimalAgent: AgentResponse = {
   agent: {
     name: "simple-bot",
     description: "",
-    version: "0.1.0",
-    framework: "custom",
-    language: "go",
+    tag: "0.1.0",
     modelProvider: "",
     modelName: "",
   },

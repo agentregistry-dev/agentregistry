@@ -12,11 +12,12 @@ import (
 
 func TestMCPManagerLoad_EnvelopeFormat(t *testing.T) {
 	dir := t.TempDir()
+	// local manifests for `arctl build` / `arctl run` source their
+	// runtime manifest version from metadata.tag.
 	envelopeYAML := `apiVersion: ar.dev/v1alpha1
 kind: MCPServer
 metadata:
   name: acme/fetch
-  version: "1.0.0"
 spec:
   title: Fetch Server
   description: "Fetches content"
@@ -36,7 +37,6 @@ spec:
 	require.NotNil(t, got)
 
 	assert.Equal(t, "acme/fetch", got.Name)
-	assert.Equal(t, "1.0.0", got.Version)
 	assert.Equal(t, "Fetches content", got.Description)
 	assert.Equal(t, "docker", got.RuntimeHint)
 }
@@ -76,7 +76,6 @@ func TestMCPManagerLoad_EnvelopeNoPackages(t *testing.T) {
 kind: MCPServer
 metadata:
   name: acme/no-pkgs
-  version: "1.0.0"
 spec:
   title: No Packages
   description: "No packages in this spec"

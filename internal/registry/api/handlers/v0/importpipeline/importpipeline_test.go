@@ -69,7 +69,6 @@ kind: Agent
 metadata:
   namespace: default
   name: alice
-  version: v1
 spec:
   title: Alice
 `
@@ -84,19 +83,19 @@ func TestRegisterImport_Create(t *testing.T) {
 
 	var out struct {
 		Results []struct {
-			Status     string `json:"status"`
-			Kind       string `json:"kind"`
-			Name       string `json:"name"`
-			Generation int64  `json:"generation"`
+			Status string `json:"status"`
+			Kind   string `json:"kind"`
+			Name   string `json:"name"`
+			Tag    string `json:"tag"`
 		} `json:"results"`
 	}
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
 	require.Len(t, out.Results, 1)
 	require.Equal(t, "created", out.Results[0].Status)
 	require.Equal(t, "Agent", out.Results[0].Kind)
-	require.EqualValues(t, 1, out.Results[0].Generation)
+	require.Equal(t, "latest", out.Results[0].Tag)
 
-	obj, err := agents.Get(context.Background(), "default", "alice", "v1")
+	obj, err := agents.Get(context.Background(), "default", "alice", "latest")
 	require.NoError(t, err)
 	require.Equal(t, "alice", obj.Metadata.Name)
 }
@@ -120,12 +119,12 @@ func TestRegisterImport_EnrichInvokesScanners(t *testing.T) {
 	require.Equal(t, 1, sc.calls)
 
 	// Annotation landed on the row.
-	obj, err := agents.Get(context.Background(), "default", "alice", "v1")
+	obj, err := agents.Get(context.Background(), "default", "alice", "latest")
 	require.NoError(t, err)
 	require.Equal(t, "clean", obj.Metadata.Annotations["security.agentregistry.solo.io/fake-status"])
 
 	// Finding landed in the side table.
-	fs, err := findings.List(context.Background(), v1alpha1.KindAgent, "default", "alice", "v1")
+	fs, err := findings.List(context.Background(), v1alpha1.KindAgent, "default", "alice", "latest")
 	require.NoError(t, err)
 	require.Len(t, fs, 1)
 	require.Equal(t, "FAKE-1", fs[0].ID)
@@ -171,7 +170,7 @@ func TestRegisterImport_DryRunDoesNotWrite(t *testing.T) {
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
 	require.Equal(t, "dry-run", out.Results[0].Status)
 
-	_, err := agents.Get(context.Background(), "default", "alice", "v1")
+	_, err := agents.Get(context.Background(), "default", "alice", "latest")
 	require.Error(t, err) // not found
 }
 
@@ -233,7 +232,6 @@ kind: Agent
 metadata:
   namespace: default
   name: secret
-  version: v1
 spec:
   title: Secret
 ---
@@ -242,7 +240,6 @@ kind: Agent
 metadata:
   namespace: default
   name: ok
-  version: v1
 spec:
   title: Ok
 `
@@ -272,10 +269,10 @@ spec:
 	require.Equal(t, "created", out.Results[1].Status)
 
 	// Denied row was NOT persisted.
-	_, err = agents.Get(context.Background(), "default", "secret", "v1")
+	_, err = agents.Get(context.Background(), "default", "secret", "latest")
 	require.Error(t, err)
 	// Allowed row IS persisted.
-	row, err := agents.Get(context.Background(), "default", "ok", "v1")
+	row, err := agents.Get(context.Background(), "default", "ok", "latest")
 	require.NoError(t, err)
 	require.Equal(t, "ok", row.Metadata.Name)
 }
@@ -283,10 +280,10 @@ spec:
 // TestRegisterImport_DeniesKindWithNoAuthorizer pins the
 // defense-in-depth fail-closed: when Authorizers is non-empty (the
 // caller intends to gate writes), a decoded doc whose Kind has no
-// entry in the map must DENY rather than silently allow. The
-// enterprise H2 boot guard already ensures every OSS BuiltinKinds
-// entry has an authorizer; this catches downstream kinds an operator
-// adds without updating the import config.
+// entry in the map must DENY rather than silently allow. Downstream
+// boot guards can ensure every OSS BuiltinKinds entry has an
+// authorizer; this catches extension kinds an operator adds without
+// updating the import config.
 //
 // Configures the importer with two kinds (Agent + MCPServer) but
 // only an Agent authorizer. POST an MCPServer doc → fail-closed.
@@ -316,7 +313,6 @@ kind: MCPServer
 metadata:
   namespace: default
   name: anything
-  version: v1
 spec:
   title: Anything
 `
@@ -338,7 +334,7 @@ spec:
 		"missing-authorizer must fail closed when Authorizers is non-empty")
 
 	// Row is NOT persisted.
-	_, err = stores[v1alpha1.KindMCPServer].Get(context.Background(), "default", "anything", "v1")
+	_, err = stores[v1alpha1.KindMCPServer].Get(context.Background(), "default", "anything", "latest")
 	require.Error(t, err)
 }
 
@@ -351,7 +347,6 @@ kind: Agent
 metadata:
   namespace: default
   name: bob
-  version: v1
 spec:
   title: Bob
 `

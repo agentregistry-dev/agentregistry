@@ -18,27 +18,27 @@ import {
 
 interface SkillDetailProps {
   skill: SkillResponse
-  allVersions?: SkillResponse[]
+  allTags?: SkillResponse[]
 }
 
-export function SkillDetail({ skill, allVersions: allVersionsProp }: SkillDetailProps) {
+export function SkillDetail({ skill, allTags: allTagsProp }: SkillDetailProps) {
   const [activeTab, setActiveTab] = useState("overview")
   const [jsonCopied, setJsonCopied] = useState(false)
-  const [selectedVersion, setSelectedVersion] = useState<SkillResponse>(skill)
+  const [selectedTag, setSelectedTag] = useState<SkillResponse>(skill)
 
-  const allVersions = allVersionsProp || [skill]
+  const allTags = allTagsProp || [skill]
 
-  const { skill: skillData, _meta } = selectedVersion
+  const { skill: skillData, _meta } = selectedTag
   const official = _meta?.['io.modelcontextprotocol.registry/official']
 
-  const handleVersionChange = (version: string) => {
-    const newVersion = allVersions.find(v => v.skill.version === version)
-    if (newVersion) setSelectedVersion(newVersion)
+  const handleTagChange = (tag: string) => {
+    const newTag = allTags.find(v => v.skill.tag === tag)
+    if (newTag) setSelectedTag(newTag)
   }
 
   const handleCopyJson = async () => {
     try {
-      await navigator.clipboard.writeText(JSON.stringify(selectedVersion, null, 2))
+      await navigator.clipboard.writeText(JSON.stringify(selectedTag, null, 2))
       setJsonCopied(true)
       setTimeout(() => setJsonCopied(false), 2000)
     } catch (err) {
@@ -73,20 +73,20 @@ export function SkillDetail({ skill, allVersions: allVersionsProp }: SkillDetail
           </div>
         </div>
 
-        {/* Version selector */}
-        {allVersions.length > 1 && (
+        {/* Tag selector */}
+        {allTags.length > 1 && (
           <div className="flex items-center gap-3 px-3 py-2 bg-accent/50 border border-primary/10 rounded-md">
             <History className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm">{allVersions.length} versions</span>
-            <Select value={selectedVersion.skill.version} onValueChange={handleVersionChange}>
+            <span className="text-sm">{allTags.length} tags</span>
+            <Select value={selectedTag.skill.tag} onValueChange={handleTagChange}>
               <SelectTrigger className="w-[160px] h-7 text-sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {allVersions.map((version) => (
-                  <SelectItem key={version.skill.version} value={version.skill.version}>
-                    {version.skill.version}
-                    {version.skill.version === skill.skill.version && " (latest)"}
+                {allTags.map((tag) => (
+                  <SelectItem key={tag.skill.tag} value={tag.skill.tag}>
+                    {tag.skill.tag}
+                    {tag.skill.tag === skill.skill.tag && " (latest)"}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -97,9 +97,9 @@ export function SkillDetail({ skill, allVersions: allVersionsProp }: SkillDetail
         {/* Quick info */}
         <div className="flex flex-wrap gap-2">
           <span className="flex items-center gap-1.5 px-2.5 py-1 bg-muted rounded text-sm">
-            <span className="font-mono">{skillData.version}</span>
-            {allVersions.length > 1 && (
-              <Badge variant="secondary" className="text-[10px] px-1 py-0 h-3.5">{allVersions.length} total</Badge>
+            <span className="font-mono">{skillData.tag}</span>
+            {allTags.length > 1 && (
+              <Badge variant="secondary" className="text-[10px] px-1 py-0 h-3.5">{allTags.length} total</Badge>
             )}
           </span>
           {official?.publishedAt && (
@@ -158,7 +158,7 @@ export function SkillDetail({ skill, allVersions: allVersionsProp }: SkillDetail
                 </Button>
               </div>
               <pre className="bg-muted p-3 rounded-md overflow-x-auto text-xs leading-relaxed">
-                {JSON.stringify(selectedVersion, null, 2)}
+                {JSON.stringify(selectedTag, null, 2)}
               </pre>
             </div>
           </TabsContent>

@@ -23,7 +23,6 @@ const agentYAML = `apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   name: acme/bot
-  version: "1.0.0"
 spec:
   image: ghcr.io/acme/bot:latest
   description: "A bot"
@@ -75,7 +74,7 @@ func writeTempYAML(t *testing.T, content string) string {
 // TestApplyPostsToBatchEndpoint verifies that apply sends POST to /v0/apply.
 func TestApplyPostsToBatchEndpoint(t *testing.T) {
 	results := []arv0.ApplyResult{
-		{Kind: "agent", Name: "acme/bot", Version: "1.0.0", Status: arv0.ApplyStatusConfigured},
+		{Kind: "agent", Name: "acme/bot", Tag: "1.0.0", Status: arv0.ApplyStatusConfigured},
 	}
 	srv, captured := newApplyTestServer(t, results)
 	setupApplyClient(t, srv)
@@ -94,7 +93,7 @@ func TestApplyPostsToBatchEndpoint(t *testing.T) {
 // TestApplyPrintsPerResourceStatus verifies stdout contains per-resource lines.
 func TestApplyPrintsPerResourceStatus(t *testing.T) {
 	results := []arv0.ApplyResult{
-		{Kind: "agent", Name: "a", Version: "1.0", Status: arv0.ApplyStatusConfigured},
+		{Kind: "agent", Name: "a", Tag: "1.0", Status: arv0.ApplyStatusConfigured},
 		{Kind: "deployment", Name: "x", Status: arv0.ApplyStatusFailed, Error: "drift detected"},
 	}
 	srv, _ := newApplyTestServer(t, results)
@@ -132,7 +131,7 @@ func TestApplyReturnsErrorOnAnyFailure(t *testing.T) {
 // TestApplyDryRunFlag verifies --dry-run sets ?dryRun=true on the request.
 func TestApplyDryRunFlag(t *testing.T) {
 	results := []arv0.ApplyResult{
-		{Kind: "agent", Name: "acme/bot", Version: "1.0.0", Status: arv0.ApplyStatusDryRun},
+		{Kind: "agent", Name: "acme/bot", Tag: "1.0.0", Status: arv0.ApplyStatusDryRun},
 	}
 	srv, captured := newApplyTestServer(t, results)
 	setupApplyClient(t, srv)
@@ -172,7 +171,6 @@ func TestApplyRejectsUnknownKind(t *testing.T) {
 kind: UnknownKind
 metadata:
   name: acme/test
-  version: "1.0.0"
 spec:
   description: "test"
 `
@@ -188,8 +186,8 @@ spec:
 // and reports the status returned by the server (created/configured).
 func TestApplyDryRunOutputAnnotated(t *testing.T) {
 	results := []arv0.ApplyResult{
-		{Kind: "agent", Name: "acme/bot", Version: "1.0.0", Status: arv0.ApplyStatusCreated},
-		{Kind: "skill", Name: "my-skill", Version: "2.0.0", Status: arv0.ApplyStatusConfigured},
+		{Kind: "agent", Name: "acme/bot", Tag: "1.0.0", Status: arv0.ApplyStatusCreated},
+		{Kind: "skill", Name: "my-skill", Tag: "2.0.0", Status: arv0.ApplyStatusConfigured},
 	}
 	srv, _ := newApplyTestServer(t, results)
 	setupApplyClient(t, srv)
@@ -219,4 +217,89 @@ func TestApplyNoAPIClient(t *testing.T) {
 	err := cmd.Execute()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "API client not initialized")
+}
+
+// TestApply_InjectsLabelsFromArctlYAML verifies that injectArctlLabels reads a
+// sibling arctl.yaml and merges arctl.dev/framework + arctl.dev/language into
+// metadata.labels on the envelope.
+func TestApply_InjectsLabelsFromArctlYAML(t *testing.T) {
+	tmp := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(tmp, "arctl.yaml"),
+		[]byte("framework: adk\nlanguage: python\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(tmp, "agent.yaml"), []byte(`apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  name: foo
+  version: "1"
+spec:
+  title: Foo
+`), 0644))
+
+	got, err := declarative.InjectArctlLabels(filepath.Join(tmp, "agent.yaml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(got), "arctl.dev/framework: adk")
+	assert.Contains(t, string(got), "arctl.dev/language: python")
+}
+
+// TestApply_InjectArctlLabels_PassThroughWithoutArctlYAML verifies that when no
+// sibling arctl.yaml exists, the original bytes are returned unchanged.
+func TestApply_InjectArctlLabels_PassThroughWithoutArctlYAML(t *testing.T) {
+	tmp := t.TempDir()
+	original := []byte(`apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  name: foo
+  version: "1"
+spec:
+  title: Foo
+`)
+	require.NoError(t, os.WriteFile(filepath.Join(tmp, "agent.yaml"), original, 0644))
+
+	got, err := declarative.InjectArctlLabels(filepath.Join(tmp, "agent.yaml"))
+	require.NoError(t, err)
+	assert.Equal(t, string(original), string(got))
+}
+
+// TestApply_InjectArctlLabels_SkipsNonAgentKinds verifies that injection is
+// limited to Agent and MCPServer kinds (skill, prompt, etc. are pass-through).
+func TestApply_InjectArctlLabels_SkipsNonAgentKinds(t *testing.T) {
+	tmp := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(tmp, "arctl.yaml"),
+		[]byte("framework: adk\nlanguage: python\n"), 0644))
+	skillYAML := `apiVersion: ar.dev/v1alpha1
+kind: Skill
+metadata:
+  name: foo
+  version: "1"
+spec:
+  title: Foo
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmp, "skill.yaml"), []byte(skillYAML), 0644))
+
+	got, err := declarative.InjectArctlLabels(filepath.Join(tmp, "skill.yaml"))
+	require.NoError(t, err)
+	assert.NotContains(t, string(got), "arctl.dev/framework")
+	assert.NotContains(t, string(got), "arctl.dev/language")
+}
+
+// TestApply_InjectArctlLabels_MCPServer verifies that MCPServer kind also gets
+// labels injected.
+func TestApply_InjectArctlLabels_MCPServer(t *testing.T) {
+	tmp := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(tmp, "arctl.yaml"),
+		[]byte("framework: fastmcp\nlanguage: python\n"), 0644))
+	mcpYAML := `apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: foo
+  version: "1"
+spec:
+  description: A server
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmp, "mcp.yaml"), []byte(mcpYAML), 0644))
+
+	got, err := declarative.InjectArctlLabels(filepath.Join(tmp, "mcp.yaml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(got), "arctl.dev/framework: fastmcp")
+	assert.Contains(t, string(got), "arctl.dev/language: python")
 }

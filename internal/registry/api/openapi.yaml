@@ -68,28 +68,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ServerList'
-  /v0/servers/{serverName}/versions:
+  /v0/mcpservers/{name}/tags:
     get:
       tags: [servers]
-      summary: List all versions of an MCP server
-      description: Returns all available versions for a specific MCP server, ordered by publication date (newest first)
+      summary: List all tags of an MCPServer
+      description: Returns all tags for a specific MCPServer name.
       parameters:
-        - name: serverName
-          in: path
-          required: true
-          description: URL-encoded server name (e.g., "com.example%2Fmy-server")
+        - name: namespace
+          in: query
+          required: false
+          description: Namespace (internal; defaults to 'default').
           schema:
             type: string
-            example: "com.example%2Fmy-server"
+            example: "default"
+        - name: name
+          in: path
+          required: true
+          description: MCPServer name.
+          schema:
+            type: string
+            example: "filesystem"
       responses:
         '200':
-          description: A list of all versions for the server
+          description: A list of tags for the MCPServer
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ServerList'
         '404':
-          description: Server not found
+          description: MCPServer not found
           content:
             application/json:
               schema:
@@ -97,36 +104,43 @@ paths:
                 properties:
                   error:
                     type: string
-                    example: "Server not found"
-  /v0/servers/{serverName}/versions/{version}:
+                    example: "MCPServer not found"
+  /v0/mcpservers/{name}/{tag}:
     get:
       tags: [servers]
-      summary: Get specific MCP server version
-      description: Returns detailed information about a specific version of an MCP server. Use the special version `latest` to get the latest version.
+      summary: Get an MCPServer by name and tag
+      description: Returns detailed information about a specific MCPServer tag. Use the literal tag `latest` to get the latest entry.
       parameters:
-        - name: serverName
-          in: path
-          required: true
-          description: URL-encoded server name (e.g., "com.example%2Fmy-server")
+        - name: namespace
+          in: query
+          required: false
+          description: Namespace (internal; defaults to 'default').
           schema:
             type: string
-            example: "com.example%2Fmy-server"
-        - name: version
+            example: "default"
+        - name: name
           in: path
           required: true
-          description: URL-encoded version to retrieve (e.g., "1.0.0" or "1.0.0%2B20130313144700" for versions with build metadata)
+          description: MCPServer name.
           schema:
             type: string
-            example: "1.0.0"
+            example: "filesystem"
+        - name: tag
+          in: path
+          required: true
+          description: Tag to retrieve (for example, "latest" or a pinned declarative tag).
+          schema:
+            type: string
+            example: "latest"
       responses:
         '200':
-          description: Detailed server information
+          description: Detailed MCPServer information
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ServerResponse'
         '404':
-          description: Server or version not found
+          description: MCPServer or tag not found
           content:
             application/json:
               schema:
@@ -134,7 +148,7 @@ paths:
                 properties:
                   error:
                     type: string
-                    example: "Server not found"
+                    example: "MCPServer not found"
   /v0/publish:
     post:
       tags: [publish]

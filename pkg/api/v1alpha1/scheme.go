@@ -37,8 +37,7 @@ func NewScheme() *Scheme {
 }
 
 // Default is the package-level Scheme pre-registered with every kind defined
-// in this package. Extensions (e.g. enterprise-added kinds) may register onto
-// it at init.
+// in this package. Extension kinds may register onto it at init.
 var Default = newDefaultScheme()
 
 func newDefaultScheme() *Scheme {
@@ -138,6 +137,23 @@ func (s *Scheme) Decode(data []byte) (any, error) {
 		return nil, fmt.Errorf("v1alpha1: decode %s: %w", raw.Kind, err)
 	}
 	return obj, nil
+}
+
+// IsContentRegistryKind reports whether a kind belongs to the tagged
+// content-registry bucket.
+func IsContentRegistryKind(kind string) bool {
+	return IsTaggedArtifactKind(kind)
+}
+
+// IsTaggedArtifactKind reports whether refs to kind may use tag pinning and
+// whether the private store behavior keys rows by namespace/name/tag.
+func IsTaggedArtifactKind(kind string) bool {
+	switch kind {
+	case KindAgent, KindMCPServer, KindRemoteMCPServer, KindSkill, KindPrompt:
+		return true
+	default:
+		return false
+	}
 }
 
 // DecodeMulti parses a YAML stream (possibly containing multiple `---`-

@@ -2,6 +2,7 @@ package resource
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -9,6 +10,7 @@ import (
 
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
@@ -33,13 +35,13 @@ type ApplyConfig struct {
 	Scheme *v1alpha1.Scheme
 	// Authorizers, when non-empty, gates each decoded document on apply
 	// against the same per-kind hook the generic resource handler
-	// consults at PUT /v0/{plural}/{name}/{version}. Without this,
+	// consults on direct mutable-object PUT. Without this,
 	// /v0/apply (the multi-doc batch endpoint arctl uses) bypasses the
 	// per-kind authz wired through crud.PerKindHooks. Missing keys
 	// authorize-allow (matches resource.Config.Authorize == nil).
 	//
 	// Each document gets its own AuthorizeInput (Verb="apply", Kind +
-	// Name + Version + Namespace from the decoded metadata) so the
+	// Name + Tag + Namespace from the decoded metadata) so the
 	// caller can deny per-resource. Errors fail the document; the rest
 	// of the batch continues — same per-doc isolation the upsert path
 	// already has.
@@ -59,13 +61,7 @@ type ApplyConfig struct {
 	// state.
 	PostDeletes map[string]func(ctx context.Context, obj v1alpha1.Object) error
 
-	// InitialFinalizers mirrors resource.Config.InitialFinalizers per
-	// kind. Without it, /v0/apply on a kind whose teardown is
-	// reconciler-owned creates rows with finalizers=[] and a concurrent
-	// DELETE between Upsert commit and any post-upsert finalizer write
-	// hits Store.Delete's "finalizers empty → hard-delete fast path",
-	// orphaning whatever the reconciler was going to clean up. Missing
-	// keys leave the row's finalizers empty (today's behavior).
+	// InitialFinalizers mirrors resource.Config.InitialFinalizers per kind.
 	InitialFinalizers map[string]func(obj v1alpha1.Object) []string
 }
 
@@ -91,10 +87,10 @@ type applyOutput struct {
 // (when Resolver is set), runs registry + uniqueness checks, and
 // Upserts via the kind-matched Store.
 //
-// DELETE: for each document, calls Store.Delete on the (namespace,
-// name, version) triple — soft-delete semantics (sets deletionTimestamp,
-// finalizers own hard-deletion). Validation still runs so clients get
-// the same error surface as apply.
+// DELETE: for each document, calls Store.Delete on the named resource. Tagged
+// artifacts use metadata.tag when supplied; omitted tag deletes all tags for
+// that namespace/name. Mutable objects delete by namespace/name. Validation
+// still runs so clients get the same error surface as apply.
 //
 // Both endpoints always return 200 with a per-document Results slice;
 // document-level failures are surfaced as Status="failed" entries and
@@ -163,7 +159,6 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 		Kind:       obj.GetKind(),
 		Namespace:  meta.Namespace,
 		Name:       meta.Name,
-		Version:    meta.Version,
 	}
 	if ae != nil {
 		return failResult(res, ae)
@@ -184,23 +179,34 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 		res.Status = arv0.ApplyStatusDryRun
 		return res
 	}
-	switch {
-	case up.Created:
+	// Map the Store outcome onto the wire status. Tagged-artifact creates
+	// surface as created, same-tag replacements as configured, and exact
+	// re-applies as unchanged.
+	switch up.Outcome {
+	case v1alpha1store.UpsertCreated:
 		res.Status = arv0.ApplyStatusCreated
-	case up.SpecChanged:
+	case v1alpha1store.UpsertReplaced:
 		res.Status = arv0.ApplyStatusConfigured
-	default:
+	case v1alpha1store.UpsertNoOp:
 		res.Status = arv0.ApplyStatusUnchanged
+	}
+	if up.Tag != "" {
+		res.Tag = up.Tag
 	}
 	res.Generation = up.Generation
 	return res
 }
 
-// deleteOne runs a single document through Authorize + Store.Delete +
-// PostDelete. No validation: deleting a row should not require its spec
-// to validate. The PostDelete hook receives the decoded body verbatim
-// — batch callers expecting hook input matching the persisted row
-// should re-apply before deleting.
+// deleteOne runs a single document through Authorize + the per-mode
+// store delete + PostDelete. No validation: deleting a row should not
+// require its spec to validate. The PostDelete hook receives the
+// decoded body verbatim — batch callers expecting hook input matching
+// the persisted row should re-apply before deleting.
+//
+// Tagged-artifact batch delete uses the logical tag selector: omitting metadata.tag
+// deletes every tag for (namespace, name); setting metadata.tag deletes that
+// exact tag. Mutable-object rows keep their single-row delete since those rows
+// are control-plane state rather than append-only tags.
 func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun bool) arv0.ApplyResult {
 	store, meta, ae := resolveBatchTarget(cfg, obj, "delete")
 	res := arv0.ApplyResult{
@@ -208,7 +214,6 @@ func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun
 		Kind:       obj.GetKind(),
 		Namespace:  meta.Namespace,
 		Name:       meta.Name,
-		Version:    meta.Version,
 	}
 	if ae != nil {
 		return failResult(res, ae)
@@ -219,13 +224,31 @@ func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun
 		return res
 	}
 
-	dopts := deleteOpts{
-		Authorize:       batchAuthorize(cfg, obj.GetKind()),
-		PostDelete:      cfg.PostDeletes[obj.GetKind()],
-		PreDeleteObject: obj,
+	authz := batchAuthorize(cfg, obj.GetKind())
+	if authz != nil {
+		if err := authz(ctx, AuthorizeInput{
+			Verb: "delete", Kind: obj.GetKind(),
+			Namespace: meta.Namespace, Name: meta.Name, Tag: meta.Tag,
+			Object: obj,
+		}); err != nil {
+			return failResult(res, &applyError{Stage: stageAuth, Err: err})
+		}
 	}
-	if ae := deleteCore(ctx, store, obj.GetKind(), meta.Namespace, meta.Name, meta.Version, dopts); ae != nil {
-		return failResult(res, ae)
+
+	err := store.DeleteByRef(ctx, meta.Namespace, meta.Name, meta.Tag)
+	if err != nil {
+		return failResult(res, &applyError{
+			Stage:    stageDelete,
+			Err:      err,
+			NotFound: errors.Is(err, pkgdb.ErrNotFound),
+		})
+	}
+
+	res.Tag = meta.Tag
+	if hook := cfg.PostDeletes[obj.GetKind()]; hook != nil {
+		if err := hook(ctx, obj); err != nil {
+			return failResult(res, &applyError{Stage: stagePostDelete, Err: err})
+		}
 	}
 	res.Status = arv0.ApplyStatusDeleted
 	return res
@@ -253,21 +276,17 @@ func resolveBatchTarget(cfg ApplyConfig, obj v1alpha1.Object, verb string) (*v1a
 	// Default namespace before authorize/applyCore see it. The handler.go
 	// PUT path stamps namespace from the URL; the batch path has only the
 	// YAML body to look at, so default explicitly here.
-	//
-	// metadata.uid is stripped centrally inside applyCore so the single
-	// PUT path benefits from the same sanitization — no need to repeat it
-	// here.
 	if meta.Namespace == "" {
 		meta.Namespace = v1alpha1.DefaultNamespace
 		obj.SetMetadata(*meta)
 	}
 
 	// Defense-in-depth: when any Authorizers are wired, a kind without
-	// an entry must DENY rather than silently allow. The enterprise H2
-	// boot guard already ensures every OSS BuiltinKinds entry has an
-	// authorizer when authz is enabled, so this only fires for downstream
-	// kinds the operator added without updating PerKindHooks — fail
-	// closed there. Mirrors the same contract on the import handler.
+	// an entry must DENY rather than silently allow. Downstream boot guards
+	// can ensure every OSS BuiltinKinds entry has an authorizer when authz
+	// is enabled, so this only fires for extension kinds the operator added
+	// without updating PerKindHooks — fail closed there. Mirrors the same
+	// contract on the import handler.
 	if len(cfg.Authorizers) > 0 {
 		if authz, ok := cfg.Authorizers[kind]; !ok || authz == nil {
 			return nil, *meta, &applyError{
@@ -300,14 +319,14 @@ func failResult(res arv0.ApplyResult, ae *applyError) arv0.ApplyResult {
 		res.Error = "forbidden: " + ae.Err.Error()
 	case stageUpsert:
 		if ae.Terminating {
-			res.Error = fmt.Sprintf("object %s/%s/%s is terminating; delete + re-apply once GC purges the row",
-				res.Namespace, res.Name, res.Version)
+			res.Error = fmt.Sprintf("object %s/%s is terminating; delete + re-apply once GC purges the row",
+				res.Namespace, res.Name)
 		} else {
 			res.Error = "upsert: " + ae.Err.Error()
 		}
 	case stageDelete:
 		if ae.NotFound {
-			res.Error = fmt.Sprintf("not found: %s/%s/%s", res.Namespace, res.Name, res.Version)
+			res.Error = fmt.Sprintf("not found: %s/%s", res.Namespace, res.Name)
 		} else {
 			res.Error = "delete: " + ae.Err.Error()
 		}

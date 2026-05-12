@@ -22,7 +22,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
-// seedDeploymentFixtures prepares the DB with a noop Provider + MCPServer
+// seedDeploymentFixtures prepares the DB with a noop Runtime + MCPServer
 // so a Deployment PUT has refs to resolve. Returns the wired-up humatest
 // API + the underlying stores for assertions.
 func seedDeploymentFixtures(t *testing.T) (humatest.TestAPI, map[string]*v1alpha1store.Store) {
@@ -31,23 +31,25 @@ func seedDeploymentFixtures(t *testing.T) (humatest.TestAPI, map[string]*v1alpha
 	stores := v1alpha1store.NewStores(pool)
 	ctx := t.Context()
 
-	mcpSpec, err := json.Marshal(v1alpha1.MCPServerSpec{
-		Description: "noop server",
-		Source: &v1alpha1.MCPServerSource{
-			Package: &v1alpha1.MCPPackage{
-				RegistryType: v1alpha1.RegistryTypeOCI,
-				Identifier:   "ghcr.io/example/weather:1.0.0",
-				Transport:    v1alpha1.MCPTransport{Type: "stdio"},
+	_, err := stores[v1alpha1.KindMCPServer].Upsert(ctx, &v1alpha1.MCPServer{
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather"},
+		Spec: v1alpha1.MCPServerSpec{
+			Description: "noop server",
+			Source: &v1alpha1.MCPServerSource{
+				Package: &v1alpha1.MCPPackage{
+					RegistryType: v1alpha1.RegistryTypeOCI,
+					Identifier:   "ghcr.io/example/weather:1.0.0",
+					Transport:    v1alpha1.MCPTransport{Type: "stdio"},
+				},
 			},
 		},
 	})
 	require.NoError(t, err)
-	_, err = stores[v1alpha1.KindMCPServer].Upsert(ctx, "default", "weather", "1.0.0", mcpSpec, v1alpha1store.UpsertOpts{})
-	require.NoError(t, err)
 
-	providerSpec, err := json.Marshal(v1alpha1.RuntimeSpec{Type: noop.RuntimeType})
-	require.NoError(t, err)
-	_, err = stores[v1alpha1.KindRuntime].Upsert(ctx, "default", "noop-provider", "1", providerSpec, v1alpha1store.UpsertOpts{})
+	_, err = stores[v1alpha1.KindRuntime].Upsert(ctx, &v1alpha1.Runtime{
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "noop-runtime"},
+		Spec:     v1alpha1.RuntimeSpec{Type: noop.RuntimeType},
+	})
 	require.NoError(t, err)
 
 	coord := deploymentsvc.NewCoordinator(deploymentsvc.Dependencies{
@@ -87,14 +89,14 @@ func TestDeploymentPut_TriggersAdapterApply(t *testing.T) {
 
 	body := v1alpha1.Deployment{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindDeployment},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-noop", Version: "1"},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-noop"},
 		Spec: v1alpha1.DeploymentSpec{
-			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Version: "1.0.0"},
-			RuntimeRef:   v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "noop-provider", Version: "1"},
+			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Tag: v1alpha1store.DefaultTag()},
+			RuntimeRef:   v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "noop-runtime"},
 			DesiredState: v1alpha1.DesiredStateDeployed,
 		},
 	}
-	resp := api.Put("/v0/deployments/weather-noop/1", body)
+	resp := api.Put("/v0/deployments/weather-noop", body)
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 
 	// Response should reflect the PostUpsert status writes.
@@ -103,7 +105,7 @@ func TestDeploymentPut_TriggersAdapterApply(t *testing.T) {
 	require.NotEmpty(t, got.Status.Conditions, "expected status conditions from coordinator.Apply")
 
 	// Row in DB: status JSONB carries the Ready condition.
-	raw, err := stores[v1alpha1.KindDeployment].Get(t.Context(), "default", "weather-noop", "1")
+	raw, err := stores[v1alpha1.KindDeployment].Get(t.Context(), "default", "weather-noop", "")
 	require.NoError(t, err)
 	// RawObject.Status is opaque bytes at the envelope layer; decode
 	// with the Status storage codec to inspect conditions.
@@ -119,17 +121,17 @@ func TestDeploymentDelete_TriggersAdapterRemove(t *testing.T) {
 
 	body := v1alpha1.Deployment{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindDeployment},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-noop", Version: "1"},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-noop"},
 		Spec: v1alpha1.DeploymentSpec{
-			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Version: "1.0.0"},
-			RuntimeRef:   v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "noop-provider", Version: "1"},
+			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Tag: v1alpha1store.DefaultTag()},
+			RuntimeRef:   v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "noop-runtime"},
 			DesiredState: v1alpha1.DesiredStateDeployed,
 		},
 	}
-	putResp := api.Put("/v0/deployments/weather-noop/1", body)
+	putResp := api.Put("/v0/deployments/weather-noop", body)
 	require.Equal(t, http.StatusOK, putResp.Code, putResp.Body.String())
 
-	delResp := api.Delete("/v0/deployments/weather-noop/1")
+	delResp := api.Delete("/v0/deployments/weather-noop")
 	require.Equal(t, http.StatusNoContent, delResp.Code, delResp.Body.String())
 
 	// Deployment carries no finalizers, so DELETE hard-deletes the row
@@ -137,7 +139,7 @@ func TestDeploymentDelete_TriggersAdapterRemove(t *testing.T) {
 	// with the same identity then succeeds without an ErrTerminating
 	// race — see commit fixing josh-pritchard's PR #455 report
 	// "Soft-delete blocks re-apply for every v1alpha1 kind."
-	_, err := stores[v1alpha1.KindDeployment].Get(t.Context(), "default", "weather-noop", "1")
+	_, err := stores[v1alpha1.KindDeployment].Get(t.Context(), "default", "weather-noop", "")
 	require.ErrorIs(t, err, pkgdb.ErrNotFound, "finalizer-free row must hard-delete")
 }
 
@@ -146,16 +148,16 @@ func TestDeploymentLogs_EmptyForNoopAdapter(t *testing.T) {
 
 	body := v1alpha1.Deployment{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindDeployment},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-noop", Version: "1"},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-noop"},
 		Spec: v1alpha1.DeploymentSpec{
-			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Version: "1.0.0"},
-			RuntimeRef:   v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "noop-provider", Version: "1"},
+			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Tag: v1alpha1store.DefaultTag()},
+			RuntimeRef:   v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "noop-runtime"},
 			DesiredState: v1alpha1.DesiredStateDeployed,
 		},
 	}
-	require.Equal(t, http.StatusOK, api.Put("/v0/deployments/weather-noop/1", body).Code)
+	require.Equal(t, http.StatusOK, api.Put("/v0/deployments/weather-noop", body).Code)
 
-	resp := api.Get("/v0/deployments/weather-noop/1/logs")
+	resp := api.Get("/v0/deployments/weather-noop/logs")
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 	var body2 struct {
 		Lines []struct {

@@ -1,9 +1,7 @@
 // Package deploymentlogs owns the Deployment logs subresource:
-// `/v0/deployments/{name}/{version}/logs`. Drains
-// adapter.Logs through the Coordinator and returns the captured
-// lines as JSON. The endpoint is bound to one specific kind
-// (Deployment); the rest of the v1alpha1 CRUD surface lives in
-// crud.
+// `/v0/deployments/{name}/logs`. Drains adapter.Logs through the Coordinator
+// and returns the captured lines as JSON. The endpoint is bound to one specific
+// kind (Deployment); the rest of the v1alpha1 CRUD surface lives in crud.
 package deploymentlogs
 
 import (
@@ -43,12 +41,11 @@ type Config struct {
 }
 
 // deploymentLogsInput is the request body — query flags for the stream +
-// path segments for the deployment identity. Namespace rides on the
+// path segment for the deployment identity. Namespace rides on the
 // ?namespace= query to match the main resource handler shape.
 type deploymentLogsInput struct {
 	Namespace string `query:"namespace" doc:"Namespace (internal; defaults to 'default')."`
 	Name      string `path:"name"`
-	Version   string `path:"version"`
 	Follow    bool   `query:"follow" doc:"Stream indefinitely until client disconnects."`
 	TailLines int    `query:"tailLines" doc:"Max backlog lines before live tail; 0 = unbounded."`
 }
@@ -71,18 +68,17 @@ type deploymentLogsOutput struct {
 	}
 }
 
-// Register wires GET
-// {basePrefix}/deployments/{name}/{version}/logs?namespace=default. The
-// response is a JSON payload of log records drained from
-// coordinator.Logs; follow=true keeps the channel open until the client
-// disconnects (or until the adapter's context is cancelled).
+// Register wires GET {basePrefix}/deployments/{name}/logs?namespace=default.
+// The response is a JSON payload of log records drained from coordinator.Logs;
+// follow=true keeps the channel open until the client disconnects (or until the
+// adapter's context is cancelled).
 //
 // Non-streaming for now — huma lacks first-class SSE output and the
 // kubernetes/local adapters still return closed channels. When real log
 // streaming lands upstream, swap this for an SSE/chunked handler at the
 // same path without touching the coordinator surface.
 func Register(api huma.API, cfg Config) {
-	path := cfg.BasePrefix + "/deployments/{name}/{version}/logs"
+	path := cfg.BasePrefix + "/deployments/{name}/logs"
 
 	huma.Register(api, huma.Operation{
 		OperationID: "get-deployment-logs",
@@ -110,22 +106,18 @@ func Register(api huma.API, cfg Config) {
 		if err != nil {
 			return nil, huma.Error400BadRequest(fmt.Sprintf("invalid name path segment: %v", err))
 		}
-		version, err := url.PathUnescape(in.Version)
-		if err != nil {
-			return nil, huma.Error400BadRequest(fmt.Sprintf("invalid version path segment: %v", err))
-		}
 		if cfg.Authorize != nil {
 			if err := cfg.Authorize(ctx, resource.AuthorizeInput{
 				Verb: "get", Kind: v1alpha1.KindDeployment,
-				Namespace: ns, Name: name, Version: version,
+				Namespace: ns, Name: name,
 			}); err != nil {
 				return nil, err
 			}
 		}
-		row, err := cfg.Store.Get(ctx, ns, name, version)
+		row, err := cfg.Store.GetLatest(ctx, ns, name)
 		if err != nil {
 			if errors.Is(err, pkgdb.ErrNotFound) {
-				return nil, huma.Error404NotFound(fmt.Sprintf("Deployment %q/%q@%q not found", ns, name, version))
+				return nil, huma.Error404NotFound(fmt.Sprintf("Deployment %q/%q not found", ns, name))
 			}
 			return nil, huma.Error500InternalServerError("fetch Deployment", err)
 		}

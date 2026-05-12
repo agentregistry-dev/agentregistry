@@ -175,8 +175,8 @@ func NewHumaAPI(
 			Description: "Operations for discovering and retrieving Agentic skills",
 		},
 		{
-			Name:        "providers",
-			Description: "Operations for managing deployment provider instances",
+			Name:        "runtimes",
+			Description: "Operations for managing deployment runtime instances",
 		},
 		{
 			Name:        "publish",

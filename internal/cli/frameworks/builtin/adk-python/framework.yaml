@@ -1,0 +1,19 @@
+apiVersion: arctl.dev/v1
+name: adk-python
+type: agent
+framework: adk
+language: python
+description: Google Agent Development Kit (Python)
+templatesDir: ./templates
+env:
+  # Model-provider keys are computed by arctl from spec.modelProvider; the
+  # plugin only declares its infra/framework env (none for adk-python today).
+  optional:
+    - LOG_LEVEL
+build:
+  command: ["docker", "build", "{{if .Platform}}--platform={{.Platform}}{{end}}", "-t", "{{.Image}}", "{{.ProjectDir}}"]
+run:
+  # `--build` so source/pyproject changes always pick up; docker layer cache
+  # makes the no-op case fast. Chat-mode rewrites this to `up -d --build` for
+  # detached lifecycle (composeUpDetachedArgs).
+  command: ["docker", "compose", "-f", "{{.ProjectDir}}/docker-compose.yaml", "up", "--build"]

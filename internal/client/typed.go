@@ -8,11 +8,11 @@ import (
 )
 
 // GetTyped fetches one resource and materializes its typed v1alpha1 envelope.
-// Empty version resolves the latest version for (kind, namespace, name).
+// Empty tag resolves the latest tag for taggable resources.
 func GetTyped[T v1alpha1.Object](
 	ctx context.Context,
 	c *Client,
-	kind, namespace, name, version string,
+	kind, namespace, name, tag string,
 	newObj func() T,
 ) (T, error) {
 	var zero T
@@ -24,10 +24,10 @@ func GetTyped[T v1alpha1.Object](
 		raw *v1alpha1.RawObject
 		err error
 	)
-	if version == "" {
+	if tag == "" {
 		raw, err = c.GetLatest(ctx, kind, namespace, name)
 	} else {
-		raw, err = c.Get(ctx, kind, namespace, name, version)
+		raw, err = c.Get(ctx, kind, namespace, name, tag)
 	}
 	if err != nil {
 		return zero, err
@@ -88,48 +88,29 @@ func ListAllTyped[T v1alpha1.Object](
 	}
 }
 
-// ListVersionsOfName returns every version of one named resource with the
-// latest version first.
-func ListVersionsOfName[T v1alpha1.Object](
+// ListTagsOfName returns every tag of one named resource with
+// the latest tag first. Wraps GET /v0/{plural}/{name}/tags and
+// materializes each row into a typed envelope.
+func ListTagsOfName[T v1alpha1.Object](
 	ctx context.Context,
 	c *Client,
 	kind, namespace, name string,
 	newObj func() T,
 ) ([]T, error) {
-	latest, err := GetTyped(ctx, c, kind, namespace, name, "", newObj)
+	if c == nil {
+		return nil, fmt.Errorf("client is nil")
+	}
+	rows, err := c.ListTags(ctx, kind, namespace, name)
 	if err != nil {
 		return nil, err
 	}
-
-	items, err := ListAllTyped(
-		ctx,
-		c,
-		kind,
-		ListOpts{
-			Namespace: namespace,
-			Limit:     200,
-		},
-		newObj,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	out := make([]T, 0, len(items))
-	seen := map[string]bool{}
-
-	latestMD := latest.GetMetadata()
-	out = append(out, latest)
-	seen[latestMD.Version] = true
-
-	for _, item := range items {
-		md := item.GetMetadata()
-		if md.Name != name || seen[md.Version] {
-			continue
+	out := make([]T, 0, len(rows))
+	for i := range rows {
+		obj, err := v1alpha1.EnvelopeFromRaw(newObj, &rows[i], kind)
+		if err != nil {
+			return nil, fmt.Errorf("decode %s row %d: %w", kind, i, err)
 		}
-		seen[md.Version] = true
-		out = append(out, item)
+		out = append(out, obj)
 	}
-
 	return out, nil
 }

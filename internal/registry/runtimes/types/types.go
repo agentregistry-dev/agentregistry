@@ -5,8 +5,6 @@ import (
 	v1alpha2 "github.com/kagent-dev/kagent/go/api/v1alpha2"
 	kmcpv1alpha1 "github.com/kagent-dev/kmcp/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
-
-	"github.com/agentregistry-dev/agentregistry/internal/cli/agent/frameworks/common"
 )
 
 type DesiredState struct {
@@ -14,17 +12,9 @@ type DesiredState struct {
 	Agents     []*Agent     `json:"agents"`
 }
 
-type ResolvedAgentConfig struct {
-	Agent                   *Agent
-	ResolvedPlatformServers []*MCPServer
-	ResolvedConfigServers   []ResolvedMCPServerConfig
-	ResolvedPrompts         []ResolvedPrompt
-	PythonConfigServers     []common.PythonMCPServer
-}
-
 type Agent struct {
 	Name               string                    `json:"name"`
-	Version            string                    `json:"version"`
+	Tag                string                    `json:"tag"`
 	DeploymentID       string                    `json:"deploymentId,omitempty"`
 	Deployment         AgentDeployment           `json:"deployment"`
 	ResolvedMCPServers []ResolvedMCPServerConfig `json:"resolvedMCPServers,omitempty"`

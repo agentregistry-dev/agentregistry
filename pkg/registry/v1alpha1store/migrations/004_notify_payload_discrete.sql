@@ -1,8 +1,8 @@
 -- 004_notify_payload_discrete.sql
 --
 -- Replace the notify_status_change trigger function so its payload
--- carries the (namespace, name, version) identity as three discrete JSON
--- fields instead of one concatenated "ns/name/version" string.
+-- carries the (namespace, name, optional tag) identity as discrete JSON
+-- fields instead of one concatenated "ns/name/tag" string.
 --
 -- Motivation: resource names may contain `/` (the nameRegex explicitly
 -- supports DNS-subdomain-style names like `ai.exa/exa`), which makes the
@@ -12,7 +12,9 @@
 -- downstream needs migrating.
 --
 -- New payload shape:
---   {"op":"INSERT|UPDATE|DELETE","namespace":"<ns>","name":"<name>","version":"<version>"}
+--   {"op":"INSERT|UPDATE|DELETE","namespace":"<ns>","name":"<name>","tag":"<tag>"}
+--
+-- Mutable-object rows omit tag because namespace/name is the complete identity.
 --
 -- `id` is no longer emitted. Consumers that previously parsed it should
 -- read the three discrete fields directly.
@@ -32,7 +34,7 @@ BEGIN
             'op', op,
             'namespace', OLD.namespace,
             'name', OLD.name,
-            'version', OLD.version);
+            'tag', to_jsonb(OLD)->>'tag');
         PERFORM pg_notify(channel, payload::text);
         RETURN OLD;
     ELSE
@@ -45,7 +47,7 @@ BEGIN
         'op', op,
         'namespace', NEW.namespace,
         'name', NEW.name,
-        'version', NEW.version);
+        'tag', to_jsonb(NEW)->>'tag');
     PERFORM pg_notify(channel, payload::text);
     RETURN NEW;
 END;

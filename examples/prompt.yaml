@@ -2,7 +2,6 @@ apiVersion: ar.dev/v1alpha1
 kind: Prompt
 metadata:
   name: summarizer-system-prompt
-  version: "1.0.0"
 spec:
   description: "Default system prompt for summarization agents"
   content: |

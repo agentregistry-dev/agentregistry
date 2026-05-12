@@ -49,9 +49,10 @@ func (f *fakeProvider) Generate(ctx context.Context, p pkgemb.Payload) (*pkgemb.
 
 func seedAgent(t *testing.T, store *v1alpha1store.Store, name string) {
 	t.Helper()
-	spec, err := json.Marshal(v1alpha1.AgentSpec{Title: name, Description: name})
-	require.NoError(t, err)
-	_, err = store.Upsert(context.Background(), "default", name, "v1", spec, v1alpha1store.UpsertOpts{})
+	_, err := store.Upsert(context.Background(), &v1alpha1.Agent{
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: name},
+		Spec:     v1alpha1.AgentSpec{Title: name, Description: name},
+	})
 	require.NoError(t, err)
 }
 
@@ -99,7 +100,7 @@ func TestHandler_StartIndexJob_ReturnsJobID(t *testing.T) {
 	var body IndexJobResponse
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &body))
 	require.NotEmpty(t, body.JobID)
-	require.Equal(t, "pending", body.Status)
+	require.Contains(t, []string{"pending", "running"}, body.Status)
 }
 
 func TestHandler_GetJobStatus_ReportsCompletion(t *testing.T) {
@@ -148,7 +149,7 @@ func TestHandler_GetJobStatus_ReportsCompletion(t *testing.T) {
 	require.Equal(t, 2, status.Result.PerKind[v1alpha1.KindAgent].Skipped)
 
 	// Row-side sanity check: embeddings persisted.
-	meta, err := store.GetEmbeddingMetadata(context.Background(), "default", "one", "v1")
+	meta, err := store.GetEmbeddingMetadata(context.Background(), "default", "one", "latest")
 	require.NoError(t, err)
 	require.NotNil(t, meta)
 	require.Equal(t, "fake", meta.Provider)

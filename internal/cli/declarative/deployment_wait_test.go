@@ -115,9 +115,8 @@ func TestDeploymentWait_NotFoundOnMissingTarget(t *testing.T) {
 	assert.Contains(t, err.Error(), "not found")
 }
 
-// --version restricts the wait to one target version when two deployments
-// share a target name.
-func TestDeploymentWait_VersionFilter(t *testing.T) {
+// --tag restricts the wait to one target tag when two deployments share a target name.
+func TestDeploymentWait_TagFilter(t *testing.T) {
 	srv := deploymentWaitTestServer(t, []v1alpha1.Deployment{
 		deploymentFixture("aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "deploying"),
 		deploymentFixture("aws-v2", "summarizer", "2.0.0", "my-aws", "agent", "deployed"),
@@ -127,10 +126,10 @@ func TestDeploymentWait_VersionFilter(t *testing.T) {
 	out := &bytes.Buffer{}
 	cmd := declarative.NewWaitCmd()
 	cmd.SetOut(out)
-	cmd.SetArgs([]string{"deployment", "summarizer", "--version=2.0.0", "--interval=1ms", "--timeout=1s"})
+	cmd.SetArgs([]string{"deployment", "summarizer", "--tag=2.0.0", "--interval=1ms", "--timeout=1s"})
 
 	require.NoError(t, cmd.Execute(),
-		"wait must pick the matching version even when an older version is still deploying")
+		"wait must pick the matching tag even when another tag is still deploying")
 	assert.Contains(t, out.String(), "deployment/summarizer deployed")
 }
 

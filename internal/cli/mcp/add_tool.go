@@ -85,7 +85,8 @@ func runAddTool(_ *cobra.Command, args []string) error {
 
 	// Check if tool already exists
 	toolPath := filepath.Join("src", "tools", toolName+".py")
-	toolExists := fileExists(toolPath)
+	_, statErr := os.Stat(toolPath)
+	toolExists := statErr == nil
 
 	if toolExists && !addToolForce {
 		return fmt.Errorf("tool '%s' already exists. Use --force to overwrite", toolName)

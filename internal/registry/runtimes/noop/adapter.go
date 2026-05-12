@@ -56,7 +56,6 @@ func (a *Adapter) Apply(ctx context.Context, in types.ApplyInput) (*types.ApplyR
 				Reason:             "NoopComplete",
 				Message:            "noop adapter — no real workload was started",
 				LastTransitionTime: now,
-				ObservedGeneration: in.Deployment.Metadata.Generation,
 			},
 			{
 				Type:               "RuntimeConfigured",
@@ -64,7 +63,6 @@ func (a *Adapter) Apply(ctx context.Context, in types.ApplyInput) (*types.ApplyR
 				Reason:             "NoopRuntime",
 				Message:            "noop runtime requires no configuration",
 				LastTransitionTime: now,
-				ObservedGeneration: in.Deployment.Metadata.Generation,
 			},
 		},
 		RuntimeMetadata: map[string]string{
@@ -85,7 +83,6 @@ func (a *Adapter) Remove(ctx context.Context, in types.RemoveInput) (*types.Remo
 				Reason:             "Removed",
 				Message:            "noop adapter — teardown complete",
 				LastTransitionTime: now,
-				ObservedGeneration: in.Deployment.Metadata.Generation,
 			},
 		},
 	}, nil

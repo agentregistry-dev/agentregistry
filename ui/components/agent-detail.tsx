@@ -11,8 +11,6 @@ import {
   Code,
   Cpu,
   Brain,
-  Languages,
-  Box,
   Clock,
   Github,
   ExternalLink,
@@ -21,22 +19,22 @@ import {
 
 interface AgentDetailProps {
   agent: AgentResponse
-  allVersions?: AgentResponse[]
+  allTags?: AgentResponse[]
 }
 
-export function AgentDetail({ agent, allVersions: allVersionsProp }: AgentDetailProps) {
+export function AgentDetail({ agent, allTags: allTagsProp }: AgentDetailProps) {
   const [activeTab, setActiveTab] = useState("overview")
-  const [selectedVersion, setSelectedVersion] = useState<AgentResponse>(agent)
+  const [selectedTag, setSelectedTag] = useState<AgentResponse>(agent)
 
-  const allVersions = allVersionsProp || [agent]
+  const allTags = allTagsProp || [agent]
 
-  const { agent: agentData, _meta } = selectedVersion
+  const { agent: agentData, _meta } = selectedTag
   const official = _meta?.['io.modelcontextprotocol.registry/official']
   const source = agentData.source
 
-  const handleVersionChange = (version: string) => {
-    const newVersion = allVersions.find(v => v.agent.version === version)
-    if (newVersion) setSelectedVersion(newVersion)
+  const handleTagChange = (tag: string) => {
+    const newTag = allTags.find(v => v.agent.tag === tag)
+    if (newTag) setSelectedTag(newTag)
   }
 
   const formatDate = (dateString: string) => {
@@ -63,8 +61,6 @@ export function AgentDetail({ agent, allVersions: allVersionsProp }: AgentDetail
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <h1 className="text-2xl font-bold truncate">{agentData.name}</h1>
-              <Badge variant="outline" className="text-sm">{agentData.framework}</Badge>
-              <Badge variant="secondary" className="text-sm">{agentData.language}</Badge>
             </div>
             {agentData.description && (
               <p className="text-[15px] text-muted-foreground">{agentData.description}</p>
@@ -72,20 +68,20 @@ export function AgentDetail({ agent, allVersions: allVersionsProp }: AgentDetail
           </div>
         </div>
 
-        {/* Version selector */}
-        {allVersions.length > 1 && (
+        {/* Tag selector */}
+        {allTags.length > 1 && (
           <div className="flex items-center gap-3 px-3 py-2 bg-accent/50 border border-primary/10 rounded-md">
             <History className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm">{allVersions.length} versions</span>
-            <Select value={selectedVersion.agent.version} onValueChange={handleVersionChange}>
+            <span className="text-sm">{allTags.length} tags</span>
+            <Select value={selectedTag.agent.tag} onValueChange={handleTagChange}>
               <SelectTrigger className="w-[160px] h-7 text-sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {allVersions.map((version) => (
-                  <SelectItem key={version.agent.version} value={version.agent.version}>
-                    {version.agent.version}
-                    {version.agent.version === agent.agent.version && " (latest)"}
+                {allTags.map((tag) => (
+                  <SelectItem key={tag.agent.tag} value={tag.agent.tag}>
+                    {tag.agent.tag}
+                    {tag.agent.tag === agent.agent.tag && " (latest)"}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -96,9 +92,9 @@ export function AgentDetail({ agent, allVersions: allVersionsProp }: AgentDetail
         {/* Quick info */}
         <div className="flex flex-wrap gap-2">
           <span className="flex items-center gap-1.5 px-2.5 py-1 bg-muted rounded text-sm">
-            <span className="font-mono">{agentData.version}</span>
-            {allVersions.length > 1 && (
-              <Badge variant="secondary" className="text-[10px] px-1 py-0 h-3.5">{allVersions.length} total</Badge>
+            <span className="font-mono">{agentData.tag}</span>
+            {allTags.length > 1 && (
+              <Badge variant="secondary" className="text-[10px] px-1 py-0 h-3.5">{allTags.length} total</Badge>
             )}
           </span>
           <span className="flex items-center gap-1.5 px-2.5 py-1 bg-muted rounded text-sm">
@@ -136,20 +132,6 @@ export function AgentDetail({ agent, allVersions: allVersionsProp }: AgentDetail
             <section>
               <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">Details</h3>
               <div className="grid grid-cols-2 gap-4">
-                <div className="flex items-center gap-2.5">
-                  <Languages className="h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Language</p>
-                    <p className="text-[15px] font-medium">{agentData.language}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2.5">
-                  <Box className="h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Framework</p>
-                    <p className="text-[15px] font-medium">{agentData.framework}</p>
-                  </div>
-                </div>
                 <div className="flex items-center gap-2.5">
                   <Brain className="h-4 w-4 text-muted-foreground" />
                   <div>
@@ -241,7 +223,7 @@ export function AgentDetail({ agent, allVersions: allVersionsProp }: AgentDetail
                 Raw JSON
               </h3>
               <pre className="bg-muted p-3 rounded-md overflow-x-auto text-xs leading-relaxed">
-                {JSON.stringify(selectedVersion, null, 2)}
+                {JSON.stringify(selectedTag, null, 2)}
               </pre>
             </div>
           </TabsContent>

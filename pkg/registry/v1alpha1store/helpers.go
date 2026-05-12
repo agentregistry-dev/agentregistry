@@ -24,19 +24,21 @@ type rowScanner interface {
 // queries) into a v1alpha1.RawObject. Spec and Status are retained as their
 // wire-form representations so callers can unmarshal into typed structs.
 //
+// tagged reflects the Store's private behavior and decides whether the scanned
+// tag column should populate public metadata.tag. Mutable-object queries
+// emit an empty synthetic value to keep the column layout uniform.
+// Tagged content queries emit a synthetic 0::bigint generation and '[]'::jsonb
+// finalizers so the column layout stays uniform across modes.
+//
 // Column order must match:
 //
-//	namespace, name, version, uid, generation, labels, annotations, spec, status,
+//	namespace, name, tag-or-empty, uid, generation, labels, annotations, spec, status,
 //	deletion_timestamp, finalizers, created_at, updated_at
-//
-// `uid` is selected as `uid::text` so it scans into a Go string without
-// requiring a pgtype UUID codec — keeps the column types in this scan
-// path uniformly textual / numeric / timestamptz.
-func scanRow(row rowScanner) (*v1alpha1.RawObject, error) {
+func scanRow(row rowScanner, tagged bool) (*v1alpha1.RawObject, error) {
 	var (
 		namespace         string
 		name              string
-		version           string
+		tag               string
 		uid               string
 		generation        int64
 		labelsJSON        []byte
@@ -48,8 +50,9 @@ func scanRow(row rowScanner) (*v1alpha1.RawObject, error) {
 		createdAt         time.Time
 		updatedAt         time.Time
 	)
+
 	if err := row.Scan(
-		&namespace, &name, &version, &uid, &generation,
+		&namespace, &name, &tag, &uid, &generation,
 		&labelsJSON, &annotationsJSON, &specJSON, &statusJSON,
 		&deletionTimestamp, &finalizersJSON,
 		&createdAt, &updatedAt,
@@ -61,7 +64,8 @@ func scanRow(row rowScanner) (*v1alpha1.RawObject, error) {
 	}
 
 	return decodeRow(
-		namespace, name, version, uid, generation,
+		tagged,
+		namespace, name, tag, uid, generation,
 		labelsJSON, annotationsJSON, specJSON, statusJSON,
 		deletionTimestamp, finalizersJSON, createdAt, updatedAt,
 	)
@@ -71,8 +75,12 @@ func scanRow(row rowScanner) (*v1alpha1.RawObject, error) {
 // from scanRow so callers that scan extra trailing columns (SemanticList's
 // distance score) can reuse the deserialization without repeating its
 // logic.
+//
+// Tagged mode populates Metadata.Tag with the row's tag. Mutable-object
+// rows have no tag.
 func decodeRow(
-	namespace, name, version, uid string,
+	tagged bool,
+	namespace, name, tag, uid string,
 	generation int64,
 	labelsJSON, annotationsJSON, specJSON, statusJSON []byte,
 	deletionTimestamp *time.Time,
@@ -94,45 +102,31 @@ func decodeRow(
 	}
 
 	// finalizersJSON intentionally not parsed onto ObjectMeta — there
-	// is no public API for finalizers anymore. The DB column is kept
-	// for the orphan-reconciler follow-up; until then, scanRow leaves
-	// it inaccessible from Go callers.
+	// is no public API for finalizers anymore.
 	_ = finalizersJSON
 
-	return &v1alpha1.RawObject{
-		Metadata: v1alpha1.ObjectMeta{
-			Namespace:         namespace,
-			Name:              name,
-			Version:           version,
-			UID:               uid,
-			Labels:            labels,
-			Annotations:       annotations,
-			Generation:        generation,
-			CreatedAt:         createdAt,
-			UpdatedAt:         updatedAt,
-			DeletionTimestamp: deletionTimestamp,
-		},
-		Spec:   json.RawMessage(specJSON),
-		Status: json.RawMessage(statusJSON),
-	}, nil
-}
+	meta := v1alpha1.ObjectMeta{
+		Namespace:         namespace,
+		Name:              name,
+		UID:               uid,
+		Labels:            labels,
+		Annotations:       annotations,
+		Generation:        generation,
+		CreatedAt:         createdAt,
+		UpdatedAt:         updatedAt,
+		DeletionTimestamp: deletionTimestamp,
+	}
+	raw := &v1alpha1.RawObject{
+		Metadata: meta,
+		Spec:     json.RawMessage(specJSON),
+		Status:   json.RawMessage(statusJSON),
+	}
+	if tagged {
+		meta.Tag = tag
+		raw.Metadata = meta
+	}
 
-// normalizeJSON re-marshals a JSON document so byte-level equality reflects
-// semantic equality (key order, whitespace). Used by Upsert's spec-change
-// detection so that re-serialized input doesn't falsely bump generation.
-func normalizeJSON(b []byte) []byte {
-	if len(b) == 0 {
-		return nil
-	}
-	var v any
-	if err := json.Unmarshal(b, &v); err != nil {
-		return b
-	}
-	out, err := json.Marshal(v)
-	if err != nil {
-		return b
-	}
-	return out
+	return raw, nil
 }
 
 // runInTx executes fn within a read-committed transaction, committing on nil

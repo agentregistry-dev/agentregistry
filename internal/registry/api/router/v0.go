@@ -26,7 +26,7 @@ import (
 
 // Stores is the per-kind Store map used by the v1alpha1
 // resource handler, keyed by v1alpha1 Kind name (e.g. "Agent",
-// "MCPServer"). Produced by v1alpha1store.NewStores; enterprise
+// "MCPServer"). Produced by v1alpha1store.NewStores; downstream
 // builds may extend the map with additional kinds before passing it
 // in.
 type Stores = map[string]*v1alpha1store.Store
@@ -39,9 +39,11 @@ type Stores = map[string]*v1alpha1store.Store
 // than silently no-op'ing — a misconfigured boot fails loud.
 type RouteOptions struct {
 	// Stores is the per-kind v1alpha1store map that drives the
-	// generic CRUD handlers at `/v0/{plural}/{name}/{version}?namespace={ns}`
-	// (namespace is a query param defaulting to "default";
-	// `?namespace=all` widens list scope across every namespace).
+	// generic CRUD handlers. Tagged artifacts expose
+	// `/v0/{plural}/{name}/{tag}?namespace={ns}`; mutable objects expose
+	// `/v0/{plural}/{name}?namespace={ns}`. Namespace defaults to
+	// "default"; `?namespace=all` widens list scope across every
+	// namespace.
 	// REQUIRED — RegisterRoutes errors when this is nil/empty.
 	Stores Stores
 
@@ -61,10 +63,10 @@ type RouteOptions struct {
 	DeploymentCoordinator *deploymentsvc.Coordinator
 
 	// PerKindHooks injects per-kind Authorize + ListFilter
-	// callbacks into the generic resource handler. Enterprise builds
+	// callbacks into the generic resource handler. Downstream integrations
 	// thread their RBAC engine through here so reader / publisher /
 	// admin gates fire on the OSS-registered Agent / MCPServer / Skill
-	// / Prompt / Provider / Deployment endpoints. Zero-value matches
+	// / Prompt / Runtime / Deployment endpoints. Zero-value matches
 	// the public OSS default (no per-kind gates).
 	PerKindHooks crud.PerKindHooks
 
@@ -135,18 +137,27 @@ func RegisterRoutes(
 }
 
 // registerKindRoutes wires the generic resource handler for every
-// built-in kind at `{basePrefix}/{plural}/{name}/{version}` (with
-// namespace as a `?namespace={ns}` query param, default "default";
-// `?namespace=all` on list widens scope across every namespace), plus
-// the multi-doc apply endpoint at `{basePrefix}/apply`. Cross-kind ResourceRef
-// existence dispatches through the shared
+// built-in kind. Tagged artifacts use
+// `{basePrefix}/{plural}/{name}/{tag}`; mutable objects use
+// `{basePrefix}/{plural}/{name}`. Namespace is a `?namespace={ns}`
+// query param defaulting to "default"; `?namespace=all` on list
+// widens scope across every namespace. The multi-doc apply endpoint
+// lives at `{basePrefix}/apply`. Cross-kind ResourceRef existence
+// dispatches through the shared
 // internaldb.NewResolver so the router and any server-side
 // Importer both see the same ref-existence semantics.
 //
 // When coord is non-nil, Deployment PUT/DELETE fire
-// coord.Apply/coord.Remove after the row is persisted so the platform
+// coord.Apply/coord.Remove after the row is persisted so the type
 // adapter converges runtime state synchronously with the API call.
-func registerKindRoutes(api huma.API, basePrefix string, stores Stores, coord *deploymentsvc.Coordinator, perKind crud.PerKindHooks, registryValidator v1alpha1.RegistryValidatorFunc) {
+func registerKindRoutes(
+	api huma.API,
+	basePrefix string,
+	stores Stores,
+	coord *deploymentsvc.Coordinator,
+	perKind crud.PerKindHooks,
+	registryValidator v1alpha1.RegistryValidatorFunc,
+) {
 	resolver := internaldb.NewResolver(stores)
 	if registryValidator == nil {
 		registryValidator = registries.Dispatcher
@@ -155,7 +166,7 @@ func registerKindRoutes(api huma.API, basePrefix string, stores Stores, coord *d
 	// as the KindDeployment PostUpsert/PostDelete. Deployment
 	// reconciliation is a reserved seam in the v1alpha1 generic handler:
 	// the coordinator hooks override any caller-supplied Deployment
-	// hook so PUT/DELETE always drive the platform adapter. The same
+	// hook so PUT/DELETE always drive the type adapter. The same
 	// hook table feeds both the per-kind PUT/DELETE handlers and the
 	// /v0/apply batch path so a Deployment in a multi-doc apply
 	// reconciles identically to a single-resource apply.

@@ -21,7 +21,7 @@ const (
 	mcpTable      = "v1alpha1.mcp_servers"
 	skillsTable   = "v1alpha1.skills"
 	promptsTable  = "v1alpha1.prompts"
-	runtimesTable = "v1alpha1.runtimes"
+	provTable     = "v1alpha1.runtimes"
 	deployTable   = "v1alpha1.deployments"
 	testScanner   = "test-scanner"
 	failedScanner = "failing-scanner"
@@ -37,8 +37,8 @@ func newTestImporter(t *testing.T, extra ...Scanner) (*Importer, *v1alpha1store.
 		v1alpha1.KindMCPServer:  v1alpha1store.NewStore(pool, mcpTable),
 		v1alpha1.KindSkill:      v1alpha1store.NewStore(pool, skillsTable),
 		v1alpha1.KindPrompt:     v1alpha1store.NewStore(pool, promptsTable),
-		v1alpha1.KindRuntime:    v1alpha1store.NewStore(pool, runtimesTable),
-		v1alpha1.KindDeployment: v1alpha1store.NewStore(pool, deployTable),
+		v1alpha1.KindRuntime:    v1alpha1store.NewMutableObjectStore(pool, provTable),
+		v1alpha1.KindDeployment: v1alpha1store.NewMutableObjectStore(pool, deployTable),
 	}
 	findings := NewFindingsStore(pool)
 	imp, err := New(Config{
@@ -63,7 +63,6 @@ kind: Agent
 metadata:
   namespace: default
   name: demo
-  version: v1.0.0
 spec:
   title: Demo Agent
   description: A test agent
@@ -80,10 +79,10 @@ func TestImport_CreatesAgent(t *testing.T) {
 
 	r := results[0]
 	require.Equal(t, ImportStatusCreated, r.Status, "error=%s", r.Error)
-	require.EqualValues(t, 1, r.Generation)
+	require.Equal(t, v1alpha1store.DefaultTag(), r.Tag)
 	require.Equal(t, EnrichmentStatusSkipped, r.EnrichmentStatus)
 
-	obj, err := agents.Get(context.Background(), testNS, "demo", "v1.0.0")
+	obj, err := agents.Get(context.Background(), testNS, "demo", v1alpha1store.DefaultTag())
 	require.NoError(t, err)
 	require.Equal(t, "demo", obj.Metadata.Name)
 }
@@ -99,7 +98,7 @@ func TestImport_ReimportUnchanged(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	require.Equal(t, ImportStatusUnchanged, results[0].Status)
-	require.EqualValues(t, 1, results[0].Generation)
+	require.Equal(t, v1alpha1store.DefaultTag(), results[0].Tag)
 }
 
 func TestImport_InvalidValidationFails(t *testing.T) {
@@ -111,7 +110,6 @@ apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   namespace: default
-  version: v1
 spec:
   title: X
 `)
@@ -131,7 +129,6 @@ kind: NotAKind
 metadata:
   namespace: default
   name: x
-  version: v1
 spec: {}
 `)
 	results, err := imp.Import(context.Background(), Options{Path: dir})
@@ -152,7 +149,7 @@ func TestImport_DryRunDoesNotWrite(t *testing.T) {
 	require.Len(t, results, 1)
 	require.Equal(t, ImportStatusDryRun, results[0].Status)
 
-	_, err = agents.Get(context.Background(), testNS, "demo", "v1.0.0")
+	_, err = agents.Get(context.Background(), testNS, "demo", v1alpha1store.DefaultTag())
 	require.Error(t, err) // not found
 }
 
@@ -164,7 +161,6 @@ apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   name: noNS
-  version: v1
 spec:
   title: no-ns
 `)
@@ -174,7 +170,7 @@ spec:
 	require.Equal(t, ImportStatusCreated, results[0].Status, "error=%s", results[0].Error)
 	require.Equal(t, "team-a", results[0].Namespace)
 
-	obj, err := agents.Get(context.Background(), "team-a", "noNS", "v1")
+	obj, err := agents.Get(context.Background(), "team-a", "noNS", v1alpha1store.DefaultTag())
 	require.NoError(t, err)
 	require.Equal(t, "team-a", obj.Metadata.Namespace)
 }
@@ -236,7 +232,7 @@ func TestImport_EnrichMergesAnnotationsAndFindings(t *testing.T) {
 	require.Equal(t, 1, scanner.callCount)
 
 	// Row carries merged annotations + labels + last-scanned-at.
-	obj, err := agents.Get(context.Background(), testNS, "demo", "v1.0.0")
+	obj, err := agents.Get(context.Background(), testNS, "demo", v1alpha1store.DefaultTag())
 	require.NoError(t, err)
 	require.Equal(t, "clean", obj.Metadata.Annotations[AnnoOSVStatus])
 	require.Equal(t, "clean", obj.Metadata.Labels[AnnoOSVStatus])
@@ -244,7 +240,7 @@ func TestImport_EnrichMergesAnnotationsAndFindings(t *testing.T) {
 	require.Equal(t, defaultScannedBy, obj.Metadata.Annotations[AnnoLastScannedBy])
 
 	// Findings row landed.
-	fs, err := findings.List(context.Background(), v1alpha1.KindAgent, testNS, "demo", "v1.0.0")
+	fs, err := findings.List(context.Background(), v1alpha1.KindAgent, testNS, "demo", v1alpha1store.DefaultTag())
 	require.NoError(t, err)
 	require.Len(t, fs, 1)
 	require.Equal(t, "CVE-2024-0001", fs[0].ID)
@@ -272,7 +268,7 @@ func TestImport_EnrichReplacesFindingsOnRescan(t *testing.T) {
 	_, err = imp.Import(context.Background(), Options{Path: dir, Enrich: true})
 	require.NoError(t, err)
 
-	fs, err := findings.List(context.Background(), v1alpha1.KindAgent, testNS, "demo", "v1.0.0")
+	fs, err := findings.List(context.Background(), v1alpha1.KindAgent, testNS, "demo", v1alpha1store.DefaultTag())
 	require.NoError(t, err)
 	require.Len(t, fs, 1)
 	require.Equal(t, "CVE-2024-NEW", fs[0].ID)
@@ -355,7 +351,6 @@ kind: Agent
 metadata:
   namespace: default
   name: demo2
-  version: v1
 spec:
   title: Demo 2
 `)

@@ -1,7 +1,6 @@
 "use client"
 
 import { AgentResponse } from "@/lib/admin-api"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Tooltip,
@@ -19,10 +18,10 @@ interface AgentCardProps {
   showDeploy?: boolean
   showExternalLinks?: boolean
   onClick?: () => void
-  versionCount?: number
+  tagCount?: number
 }
 
-export function AgentCard({ agent, onDeploy, showDeploy = false, onClick, versionCount }: AgentCardProps) {
+export function AgentCard({ agent, onDeploy, showDeploy = false, onClick, tagCount }: AgentCardProps) {
   const { agent: agentData, _meta } = agent
   const official = _meta?.['io.modelcontextprotocol.registry/official']
   const source = agentData.source
@@ -53,16 +52,6 @@ export function AgentCard({ agent, onDeploy, showDeploy = false, onClick, versio
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
             <h3 className="text-lg font-semibold truncate">{agentData.name}</h3>
-            {agentData.framework && (
-              <Badge variant="outline" className="text-[13px] px-2 py-0.5 font-normal">
-                {agentData.framework}
-              </Badge>
-            )}
-            {agentData.language && (
-              <Badge variant="secondary" className="text-[13px] px-2 py-0.5 font-normal">
-                {agentData.language}
-              </Badge>
-            )}
           </div>
 
           {agentData.description && (
@@ -72,9 +61,9 @@ export function AgentCard({ agent, onDeploy, showDeploy = false, onClick, versio
           )}
 
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-            <span className="font-mono">{agentData.version}</span>
-            {versionCount && versionCount > 1 && (
-              <span className="text-primary text-xs">+{versionCount - 1}</span>
+            <span className="font-mono">{agentData.tag}</span>
+            {tagCount && tagCount > 1 && (
+              <span className="text-primary text-xs">+{tagCount - 1}</span>
             )}
 
             {official?.publishedAt && (

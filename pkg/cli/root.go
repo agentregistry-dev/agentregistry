@@ -8,14 +8,11 @@ import (
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli"
-	"github.com/agentregistry-dev/agentregistry/internal/cli/agent"
-	agentutils "github.com/agentregistry-dev/agentregistry/internal/cli/agent/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/configure"
 	clidaemon "github.com/agentregistry-dev/agentregistry/internal/cli/daemon"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
-	"github.com/agentregistry-dev/agentregistry/internal/cli/skill"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/cli/annotations"
@@ -110,7 +107,7 @@ func Root() *cobra.Command {
 var rootCmd = &cobra.Command{
 	Use:   "arctl",
 	Short: "Agent Registry CLI",
-	Long:  `arctl is a CLI tool for managing agents, MCP servers and skills.`,
+	Long:  `arctl is a CLI tool for managing agents, MCP servers, skills, and prompts.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		baseURL, token := resolveRegistryTarget(os.Getenv)
 		if preRunBehavior(cmd) {
@@ -122,10 +119,6 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 
-		agentutils.SetDefaultRegistryURL(c.BaseURL)
-		mcp.SetAPIClient(c)
-		agent.SetAPIClient(c)
-		skill.SetAPIClient(c)
 		cli.SetAPIClient(c)
 		declarative.SetAPIClient(c)
 		return nil
@@ -138,8 +131,6 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&registryToken, "registry-token", "", "Registry bearer token (defaults to value of ARCTL_API_TOKEN env var)")
 
 	rootCmd.AddCommand(mcp.McpCmd)
-	rootCmd.AddCommand(agent.AgentCmd)
-	rootCmd.AddCommand(skill.SkillCmd)
 	rootCmd.AddCommand(configure.ConfigureCmd)
 	rootCmd.AddCommand(cli.VersionCmd)
 	rootCmd.AddCommand(clidaemon.New(dockercompose.NewManager(dockercompose.DefaultConfig())))
@@ -148,6 +139,8 @@ func init() {
 	rootCmd.AddCommand(declarative.DeleteCmd)
 	rootCmd.AddCommand(declarative.InitCmd)
 	rootCmd.AddCommand(declarative.BuildCmd)
+	rootCmd.AddCommand(declarative.RunCmd)
+	rootCmd.AddCommand(declarative.PullCmd)
 	rootCmd.AddCommand(declarative.WaitCmd)
 }
 

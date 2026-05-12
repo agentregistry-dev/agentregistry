@@ -40,7 +40,7 @@ Timeout regimes:
 		Example: `  arctl wait deployment my-agent
   arctl wait deployment my-agent --for=failed
   arctl wait deployment my-agent --for=delete --timeout=10m
-  arctl wait deployment my-agent --version 1.0.0`,
+  arctl wait deployment my-agent --tag 1.0.0`,
 		Args:         cobra.ExactArgs(2),
 		SilenceUsage: true,
 		RunE:         runDeclarativeWait,
@@ -49,8 +49,8 @@ Timeout regimes:
 	cmd.Flags().Duration("timeout", cliCommon.DefaultWaitTimeout,
 		"Maximum time to wait. 0 polls once and exits; negative waits forever.")
 	cmd.Flags().Duration("interval", 2*time.Second, "How often to poll the registry")
-	cmd.Flags().String("version", "",
-		"Restrict the wait to a specific target version (defaults to any version of the named target)")
+	cmd.Flags().String("tag", "",
+		"Restrict the wait to a specific target tag (defaults to any tag of the named target)")
 	return cmd
 }
 
@@ -70,7 +70,7 @@ func runDeclarativeWait(cmd *cobra.Command, args []string) error {
 	forFlag, _ := cmd.Flags().GetString("for")
 	timeout, _ := cmd.Flags().GetDuration("timeout")
 	interval, _ := cmd.Flags().GetDuration("interval")
-	version, _ := cmd.Flags().GetString("version")
+	tag, _ := cmd.Flags().GetString("tag")
 
 	opts := cliCommon.WaitOptions{
 		Timeout:      timeout,
@@ -90,7 +90,7 @@ func runDeclarativeWait(cmd *cobra.Command, args []string) error {
 	}
 
 	resolve := func(ctx context.Context) (*cliCommon.DeploymentRecord, error) {
-		return resolveDeploymentForWait(ctx, name, version)
+		return resolveDeploymentForWait(ctx, name, tag)
 	}
 
 	if err := cliCommon.WaitForDeployment(cmd.Context(), resolve, opts); err != nil {
@@ -105,7 +105,7 @@ func runDeclarativeWait(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func resolveDeploymentForWait(ctx context.Context, name, version string) (*cliCommon.DeploymentRecord, error) {
+func resolveDeploymentForWait(ctx context.Context, name, tag string) (*cliCommon.DeploymentRecord, error) {
 	deployments, err := cliCommon.ListDeployments(ctx, apiClient)
 	if err != nil {
 		return nil, err
@@ -114,7 +114,7 @@ func resolveDeploymentForWait(ctx context.Context, name, version string) (*cliCo
 		if dep == nil || dep.TargetName != name {
 			continue
 		}
-		if version != "" && dep.TargetVersion != version {
+		if tag != "" && dep.TargetTag != tag {
 			continue
 		}
 		return dep, nil

@@ -8,7 +8,7 @@ const mockPrompt: PromptResponse = {
   prompt: {
     name: "code-explainer",
     description: "Explains code snippets in plain language.",
-    version: "1.2.0",
+    tag: "1.2.0",
     content: "You are a code explainer.",
   },
   _meta: {
@@ -28,7 +28,7 @@ describe("PromptCard", () => {
     expect(screen.getByText("Explains code snippets in plain language.")).toBeInTheDocument()
   })
 
-  it("renders version", () => {
+  it("renders tag", () => {
     render(<PromptCard prompt={mockPrompt} />)
     expect(screen.getByText("1.2.0")).toBeInTheDocument()
   })
@@ -49,7 +49,7 @@ describe("PromptCard", () => {
     const noDesc: PromptResponse = {
       prompt: {
         name: "bare-prompt",
-        version: "0.1.0",
+        tag: "0.1.0",
         content: "Hello.",
       },
       _meta: {},
@@ -64,7 +64,7 @@ describe("PromptCard", () => {
     const noMeta: PromptResponse = {
       prompt: {
         name: "no-meta-prompt",
-        version: "1.0.0",
+        tag: "1.0.0",
         content: "Test.",
       },
       _meta: {},

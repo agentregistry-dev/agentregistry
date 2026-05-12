@@ -1,0 +1,67 @@
+package frameworks
+
+import (
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestRenderArgs_SubstitutesPerArg(t *testing.T) {
+	args := []string{"docker", "build", "-t", "{{.Image}}", "{{.ProjectDir}}"}
+	out, err := RenderArgs(args, map[string]any{
+		"Image":      "myagent:dev",
+		"ProjectDir": "/path/to/proj",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"docker", "build", "-t", "myagent:dev", "/path/to/proj"}, out)
+}
+
+func TestRenderArgs_OptionalConditionalFlagDrops(t *testing.T) {
+	// Conditional flag pattern: {{if .X}}...{{end}} renders to "" when X is
+	// missing, then RenderArgs drops the empty arg. Lets each command supply
+	// only the vars it owns — e.g. arctl run doesn't need to know about
+	// docker --platform when an MCP framework's build step is rendered.
+	args := []string{
+		"docker", "build",
+		`{{if .Platform}}--platform={{.Platform}}{{end}}`,
+		"-t", "{{.Image}}",
+	}
+	out, err := RenderArgs(args, map[string]any{"Image": "img:tag"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"docker", "build", "-t", "img:tag"}, out)
+}
+
+func TestExec_Smoke(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("posix-only smoke test")
+	}
+	cmd := Command{Command: []string{"echo", "{{.Greeting}}"}}
+	out, err := ExecCapture(cmd, "/tmp", map[string]any{"Greeting": "hello"})
+	require.NoError(t, err)
+	assert.True(t, strings.HasPrefix(out, "hello"))
+}
+
+func TestRenderTemplates_CopiesAndSubstitutes(t *testing.T) {
+	frameworkDir := t.TempDir()
+	tplDir := filepath.Join(frameworkDir, "templates")
+	require.NoError(t, os.MkdirAll(tplDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(tplDir, "agent.py.tmpl"), []byte(`name = "{{.Name}}"`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(tplDir, "static.txt"), []byte(`no template here`), 0644))
+
+	dst := t.TempDir()
+	p := &Framework{TemplatesDir: "./templates", SourceDir: frameworkDir}
+	require.NoError(t, RenderTemplates(p, dst, map[string]any{"Name": "myagent"}))
+
+	got, err := os.ReadFile(filepath.Join(dst, "agent.py"))
+	require.NoError(t, err)
+	assert.Equal(t, `name = "myagent"`, string(got))
+
+	got2, err := os.ReadFile(filepath.Join(dst, "static.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "no template here", string(got2))
+}

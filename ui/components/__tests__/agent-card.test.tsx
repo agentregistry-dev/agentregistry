@@ -8,9 +8,7 @@ const mockAgent: AgentResponse = {
   agent: {
     name: "test-agent",
     description: "A test agent for unit testing",
-    version: "1.0.0",
-    framework: "langchain",
-    language: "python",
+    tag: "1.0.0",
     modelProvider: "openai",
     modelName: "gpt-4",
     source: {
@@ -34,13 +32,7 @@ describe("AgentCard", () => {
     expect(screen.getByText("A test agent for unit testing")).toBeInTheDocument()
   })
 
-  it("renders framework and language badges", () => {
-    render(<AgentCard agent={mockAgent} />)
-    expect(screen.getByText("langchain")).toBeInTheDocument()
-    expect(screen.getByText("python")).toBeInTheDocument()
-  })
-
-  it("renders version", () => {
+  it("renders tag", () => {
     render(<AgentCard agent={mockAgent} />)
     expect(screen.getByText("1.0.0")).toBeInTheDocument()
   })
@@ -63,9 +55,7 @@ describe("AgentCard", () => {
       agent: {
         name: "minimal-agent",
         description: "",
-        version: "0.1.0",
-        framework: "custom",
-        language: "go",
+        tag: "0.1.0",
         modelProvider: "",
         modelName: "",
       },
