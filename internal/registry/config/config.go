@@ -7,7 +7,6 @@ import (
 	"os"
 
 	env "github.com/caarlos0/env/v11"
-	"github.com/joho/godotenv"
 )
 
 // Config holds the application configuration
@@ -54,12 +53,8 @@ type EmbeddingsConfig struct {
 
 // NewConfig creates a new configuration with default values
 func NewConfig() *Config {
-	err := godotenv.Load()
-	if err != nil {
-		slog.Info("no .env file found or error loading .env file", "error", err)
-	}
 	var cfg Config
-	err = env.ParseWithOptions(&cfg, env.Options{
+	err := env.ParseWithOptions(&cfg, env.Options{
 		Prefix: "AGENT_REGISTRY_",
 	})
 	if err != nil {
