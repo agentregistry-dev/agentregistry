@@ -289,6 +289,8 @@ export type RemoteMcpServerSpec = {
 };
 
 export type Repository = {
+    branch?: string;
+    commit?: string;
     subfolder?: string;
     url?: string;
 };

@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 )
 
@@ -61,10 +60,23 @@ func ParseGitHubURL(rawURL string) (cloneURL, branch, subPath string, err error)
 
 // CloneAndCopy clones a GitHub repository URL and copies its contents to targetDir.
 // It handles parsing the URL, shallow cloning, navigating to subpaths, and cleanup.
-func CloneAndCopy(repoURL, targetDir string, verbose bool) error {
-	cloneURL, branch, subPath, err := ParseGitHubURL(repoURL)
+//
+// branch, commit, and subPath are explicit overrides. When branch and subPath
+// are empty, the values parsed from the URL (e.g.
+// https://github.com/o/r/tree/<branch>/<sub>) are used. The URL-derived ref is
+// always treated as a branch; callers wanting to pin a commit SHA must set the
+// commit argument explicitly. branch is passed to `git clone --branch`; commit
+// triggers a fetch + checkout after the clone.
+func CloneAndCopy(repoURL, branch, commit, subPath, targetDir string, verbose bool) error {
+	cloneURL, urlBranch, urlSubPath, err := ParseGitHubURL(repoURL)
 	if err != nil {
 		return fmt.Errorf("parse GitHub URL: %w", err)
+	}
+	if branch == "" {
+		branch = urlBranch
+	}
+	if subPath == "" {
+		subPath = urlSubPath
 	}
 
 	tempDir, err := os.MkdirTemp("", "arctl-git-clone-*")
@@ -73,12 +85,8 @@ func CloneAndCopy(repoURL, targetDir string, verbose bool) error {
 	}
 	defer func() { _ = os.RemoveAll(tempDir) }()
 
-	// git clone --branch works for branches and tags but not commit SHAs.
-	// For SHAs, clone the default branch then checkout the specific commit.
-	isSHA := isCommitSHA(branch)
-
 	cloneArgs := []string{"clone", "--depth", "1"}
-	if branch != "" && !isSHA {
+	if branch != "" {
 		cloneArgs = append(cloneArgs, "--branch", branch)
 	}
 	cloneArgs = append(cloneArgs, cloneURL, tempDir)
@@ -92,15 +100,14 @@ func CloneAndCopy(repoURL, targetDir string, verbose bool) error {
 		return fmt.Errorf("clone repository: %w", err)
 	}
 
-	// For commit SHAs, fetch the specific commit and check it out.
-	if isSHA {
-		fetchCmd := exec.Command("git", "-C", tempDir, "fetch", "--depth", "1", "origin", branch)
+	if commit != "" {
+		fetchCmd := exec.Command("git", "-C", tempDir, "fetch", "--depth", "1", "origin", commit)
 		if verbose {
 			fetchCmd.Stdout = os.Stdout
 			fetchCmd.Stderr = os.Stderr
 		}
 		if err := fetchCmd.Run(); err != nil {
-			return fmt.Errorf("fetch commit %s: %w", branch, err)
+			return fmt.Errorf("fetch commit %s: %w", commit, err)
 		}
 
 		checkoutCmd := exec.Command("git", "-C", tempDir, "checkout", "FETCH_HEAD")
@@ -109,7 +116,7 @@ func CloneAndCopy(repoURL, targetDir string, verbose bool) error {
 			checkoutCmd.Stderr = os.Stderr
 		}
 		if err := checkoutCmd.Run(); err != nil {
-			return fmt.Errorf("checkout commit %s: %w", branch, err)
+			return fmt.Errorf("checkout commit %s: %w", commit, err)
 		}
 	}
 
@@ -266,14 +273,4 @@ func RepoNameFromCloneURL(cloneURL string) string {
 		return ""
 	}
 	return strings.TrimSuffix(cloneURL[idx+1:], ".git")
-}
-
-// commitSHAPattern matches full (40-char) and abbreviated (7-40 char)
-// hexadecimal commit SHAs.
-var commitSHAPattern = regexp.MustCompile(`^[0-9a-fA-F]{7,40}$`)
-
-// isCommitSHA returns true if ref looks like a Git commit SHA rather than a
-// branch or tag name. This is a heuristic: a 7-40 character hex string.
-func isCommitSHA(ref string) bool {
-	return commitSHAPattern.MatchString(ref)
 }
