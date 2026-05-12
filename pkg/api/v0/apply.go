@@ -9,7 +9,7 @@ type ApplyResult struct {
 	Namespace  string `json:"namespace,omitempty"`
 	Name       string `json:"name"`
 	Tag        string `json:"tag,omitempty"`
-	// Status is one of: created, configured, unchanged, deleted,
+	// Status is one of: created, configured, unchanged, staged, deleted,
 	// dry-run, failed. Matches kubectl-style apply output.
 	Status string `json:"status"`
 	// Generation is the server-managed generation after the apply.
@@ -26,6 +26,7 @@ const (
 	ApplyStatusCreated    = "created"
 	ApplyStatusConfigured = "configured"
 	ApplyStatusUnchanged  = "unchanged"
+	ApplyStatusStaged     = "staged"
 	ApplyStatusDeleted    = "deleted"
 	ApplyStatusDryRun     = "dry-run"
 	ApplyStatusFailed     = "failed"

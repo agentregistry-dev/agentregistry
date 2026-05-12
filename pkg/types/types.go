@@ -15,11 +15,11 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/danielgtaylor/huma/v2"
-
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	"github.com/danielgtaylor/huma/v2"
 )
 
 // DatabaseFactory is a function type that creates a store implementation.
@@ -66,6 +66,37 @@ type PostUpsert func(ctx context.Context, obj v1alpha1.Object) error
 // resource. Wired into resource.Config.PostDelete + the apply
 // batch's per-doc delete hook.
 type PostDelete func(ctx context.Context, obj v1alpha1.Object) error
+
+// ApplyInterceptor can accept a validated apply before the object reaches
+// production storage. Store is intentionally opaque to keep pkg/types free of
+// registry/store implementation imports; integrations that need it can type
+// assert against the concrete store package they already depend on.
+type ApplyInterceptor func(ctx context.Context, in ApplyInterceptorInput) (ApplyInterceptorResult, error)
+
+type ApplyInterceptorInput struct {
+	Kind      string
+	Namespace string
+	Name      string
+	Tag       string
+	Object    v1alpha1.Object
+	Store     any
+}
+
+type ApplyInterceptorResult struct {
+	Handled bool
+	Status  string
+	Tag     string
+}
+
+// ResourceRouteContext exposes the finalized v1alpha1 route wiring to
+// downstream integrations that need adjacent routes against the same stores
+// and hooks as /v0/apply.
+type ResourceRouteContext struct {
+	Stores            map[string]any
+	Resolver          v1alpha1.ResolverFunc
+	RegistryValidator v1alpha1.RegistryValidatorFunc
+	Apply             func(ctx context.Context, obj v1alpha1.Object, dryRun bool) v0.ApplyResult
+}
 
 // Auditor receives audit events for state changes that the OSS layer
 // considers significant. The default OSS implementation is a no-op;
@@ -152,6 +183,18 @@ type AppOptions struct {
 	// PostDeletes mirror PostUpserts on the delete path.
 	PostDeletes map[string]PostDelete
 
+	// ApplyInterceptor optionally accepts a validated apply before the row
+	// reaches production storage. Nil preserves normal direct writes.
+	ApplyInterceptor ApplyInterceptor
+
+	// ImportAuthorizers optionally overrides Authorizers for /v0/import.
+	// Nil makes import use the regular Authorizers map.
+	ImportAuthorizers map[string]Authorizer
+
+	// ResolverWrapper decorates the shared ResourceRef resolver before route
+	// registration. Nil preserves the default store-backed resolver.
+	ResolverWrapper func(v1alpha1.ResolverFunc) v1alpha1.ResolverFunc
+
 	// V1Alpha1StoreTables registers additional v1alpha1 kinds with their
 	// backing PostgreSQL tables. Downstream builds that add their own
 	// Scheme kinds should populate this so the shared /v0/apply,
@@ -197,6 +240,10 @@ type AppOptions struct {
 	// routes using the same API instance and path prefix as OSS core
 	// routes.
 	ExtraRoutes func(api huma.API, pathPrefix string)
+
+	// ExtraResourceRoutes is like ExtraRoutes, but runs after the v1alpha1
+	// resource route context has been finalized.
+	ExtraResourceRoutes func(api huma.API, pathPrefix string, ctx ResourceRouteContext)
 
 	// HTTPServerFactory is an optional function to create a server that
 	// adds new API routes.

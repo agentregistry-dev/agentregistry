@@ -20,6 +20,7 @@ type applyOpts struct {
 	RegistryValidator v1alpha1.RegistryValidatorFunc
 	PostUpsert        func(ctx context.Context, obj v1alpha1.Object) error
 	InitialFinalizers func(obj v1alpha1.Object) []string
+	ApplyInterceptor  ApplyInterceptor
 }
 
 // upsertResult is the outcome of a successful applyCore call.
@@ -33,6 +34,43 @@ type upsertResult struct {
 	Generation int64
 	// UID is the server-managed row identity after production upsert.
 	UID string
+	// Intercepted reports that a downstream hook handled the apply before
+	// production upsert. No production PostUpsert hook has run.
+	Intercepted bool
+	// InterceptStatus is the ApplyResult status to report when Intercepted
+	// is true. Empty defaults to ApplyStatusStaged at the batch layer.
+	InterceptStatus string
+	// InterceptTag is the optional tag to report when Intercepted is true.
+	InterceptTag string
+}
+
+// ApplyInterceptor can accept a validated apply request before the object is
+// written to the production Store. Downstream builds use this as a neutral
+// admission seam for workflows that persist the object somewhere else first.
+//
+// The hook runs after authorization, validation, reference resolution, and
+// registry validation, but before Store.Upsert and PostUpsert. Returning
+// Handled=true short-circuits the production upsert and skips PostUpsert.
+type ApplyInterceptor func(ctx context.Context, in ApplyInterceptorInput) (ApplyInterceptorResult, error)
+
+// ApplyInterceptorInput describes the apply request seen by ApplyInterceptor.
+// Store is the production store the object would otherwise be written to.
+type ApplyInterceptorInput struct {
+	Kind      string
+	Namespace string
+	Name      string
+	Tag       string
+	Object    v1alpha1.Object
+	Store     *v1alpha1store.Store
+}
+
+// ApplyInterceptorResult reports whether the hook handled the apply.
+// Status is copied into ApplyResult.Status when Handled is true; leave it empty
+// to use the generic "staged" status.
+type ApplyInterceptorResult struct {
+	Handled bool
+	Status  string
+	Tag     string
 }
 
 // applyStage tags which step of the pipeline produced an error so
@@ -45,6 +83,7 @@ const (
 	stageValidation applyStage = "validation"
 	stageRefs       applyStage = "refs"
 	stageRegistries applyStage = "registries"
+	stageAdmission  applyStage = "admission"
 	stageMarshal    applyStage = "marshal"
 	stageUpsert     applyStage = "upsert"
 	stagePostUpsert applyStage = "post-upsert"
@@ -119,6 +158,27 @@ func applyCore(
 
 	if dryRun {
 		return upsertResult{}, nil
+	}
+
+	if opts.ApplyInterceptor != nil {
+		intercept, err := opts.ApplyInterceptor(ctx, ApplyInterceptorInput{
+			Kind:      kind,
+			Namespace: meta.Namespace,
+			Name:      meta.Name,
+			Tag:       meta.Tag,
+			Object:    obj,
+			Store:     store,
+		})
+		if err != nil {
+			return upsertResult{}, &applyError{Stage: stageAdmission, Err: err}
+		}
+		if intercept.Handled {
+			return upsertResult{
+				Intercepted:     true,
+				InterceptStatus: intercept.Status,
+				InterceptTag:    intercept.Tag,
+			}, nil
+		}
 	}
 
 	upsertOpts := v1alpha1store.UpsertOpts{}

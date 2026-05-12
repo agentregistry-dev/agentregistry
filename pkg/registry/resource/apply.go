@@ -63,6 +63,10 @@ type ApplyConfig struct {
 
 	// InitialFinalizers mirrors resource.Config.InitialFinalizers per kind.
 	InitialFinalizers map[string]func(obj v1alpha1.Object) []string
+
+	// ApplyInterceptor optionally accepts a validated apply before
+	// production Upsert. Nil preserves normal direct-write behavior.
+	ApplyInterceptor ApplyInterceptor
 }
 
 // applyInput receives a raw multi-doc YAML stream. RawBody keeps bytes
@@ -150,6 +154,14 @@ func runApplyBatch(ctx context.Context, cfg ApplyConfig, scheme *v1alpha1.Scheme
 	return out
 }
 
+// ApplyObject runs one already-decoded object through the same production
+// apply path used by POST /v0/apply. Downstream routes can call this to replay
+// a previously accepted object without duplicating validation, authz,
+// persistence, or post-upsert behavior.
+func ApplyObject(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun bool) arv0.ApplyResult {
+	return applyOne(ctx, cfg, obj, dryRun)
+}
+
 // applyOne runs a single document through the shared apply pipeline.
 // Never errors; encodes any failure into the returned ApplyResult.
 func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun bool) arv0.ApplyResult {
@@ -170,6 +182,7 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 		RegistryValidator: cfg.RegistryValidator,
 		PostUpsert:        cfg.PostUpserts[obj.GetKind()],
 		InitialFinalizers: cfg.InitialFinalizers[obj.GetKind()],
+		ApplyInterceptor:  cfg.ApplyInterceptor,
 	}, dryRun)
 	if ae != nil {
 		return failResult(res, ae)
@@ -182,12 +195,21 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 	// Map the Store outcome onto the wire status. Tagged-artifact creates
 	// surface as created, same-tag replacements as configured, and exact
 	// re-applies as unchanged.
-	switch up.Outcome {
-	case v1alpha1store.UpsertCreated:
+	switch {
+	case up.Intercepted:
+		res.Status = up.InterceptStatus
+		if res.Status == "" {
+			res.Status = arv0.ApplyStatusStaged
+		}
+		if up.InterceptTag != "" {
+			res.Tag = up.InterceptTag
+		}
+		return res
+	case up.Outcome == v1alpha1store.UpsertCreated:
 		res.Status = arv0.ApplyStatusCreated
-	case v1alpha1store.UpsertReplaced:
+	case up.Outcome == v1alpha1store.UpsertReplaced:
 		res.Status = arv0.ApplyStatusConfigured
-	case v1alpha1store.UpsertNoOp:
+	case up.Outcome == v1alpha1store.UpsertNoOp:
 		res.Status = arv0.ApplyStatusUnchanged
 	}
 	if up.Tag != "" {

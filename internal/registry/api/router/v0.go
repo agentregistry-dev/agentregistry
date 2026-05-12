@@ -21,6 +21,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/importer"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/danielgtaylor/huma/v2"
 )
 
@@ -80,6 +81,22 @@ type RouteOptions struct {
 
 	// Optional callback for integration-owned route registration.
 	ExtraRoutes func(api huma.API, pathPrefix string)
+
+	// ApplyInterceptor optionally accepts a validated apply before
+	// production Upsert. Nil preserves normal direct writes.
+	ApplyInterceptor resource.ApplyInterceptor
+
+	// ResolverWrapper decorates the shared ResourceRef resolver before
+	// resource and apply routes are registered.
+	ResolverWrapper func(v1alpha1.ResolverFunc) v1alpha1.ResolverFunc
+
+	// ExtraResourceRoutes registers adjacent routes with access to the same
+	// v1alpha1 stores and hooks used by /v0/apply.
+	ExtraResourceRoutes func(api huma.API, pathPrefix string, ctx types.ResourceRouteContext)
+
+	// ImportAuthorizers overrides PerKindHooks.Authorizers for /v0/import.
+	// Nil preserves the regular authorizer map.
+	ImportAuthorizers map[string]func(ctx context.Context, in resource.AuthorizeInput) error
 }
 
 // RegisterRoutes registers all API routes under /v0. Required
@@ -116,6 +133,9 @@ func RegisterRoutes(
 		opts.DeploymentCoordinator,
 		opts.PerKindHooks,
 		opts.RegistryValidator,
+		opts.ApplyInterceptor,
+		opts.ResolverWrapper,
+		opts.ExtraResourceRoutes,
 	)
 
 	// POST /v0/import — runs decoded manifests through the enrichment
@@ -123,10 +143,14 @@ func RegisterRoutes(
 	// Authorizers wires the same per-kind RBAC the regular apply path
 	// uses; without it the import endpoint would be a write-bypass.
 	if opts.Importer != nil {
+		importAuthorizers := opts.PerKindHooks.Authorizers
+		if opts.ImportAuthorizers != nil {
+			importAuthorizers = opts.ImportAuthorizers
+		}
 		importpipeline.Register(api, importpipeline.Config{
 			BasePrefix:  pathPrefix,
 			Importer:    opts.Importer,
-			Authorizers: opts.PerKindHooks.Authorizers,
+			Authorizers: importAuthorizers,
 		})
 	}
 
@@ -157,8 +181,14 @@ func registerKindRoutes(
 	coord *deploymentsvc.Coordinator,
 	perKind crud.PerKindHooks,
 	registryValidator v1alpha1.RegistryValidatorFunc,
+	applyInterceptor resource.ApplyInterceptor,
+	resolverWrapper func(v1alpha1.ResolverFunc) v1alpha1.ResolverFunc,
+	extraResourceRoutes func(api huma.API, pathPrefix string, ctx types.ResourceRouteContext),
 ) {
 	resolver := internaldb.NewResolver(stores)
+	if resolverWrapper != nil {
+		resolver = resolverWrapper(resolver)
+	}
 	if registryValidator == nil {
 		registryValidator = registries.Dispatcher
 	}
@@ -212,7 +242,7 @@ func registerKindRoutes(
 	// same per-kind hook table populated above, so Deployment reconciliation
 	// and any caller-supplied PostUpsert/PostDelete fire identically on
 	// the batch path.
-	resource.RegisterApply(api, resource.ApplyConfig{
+	applyCfg := resource.ApplyConfig{
 		BasePrefix:        basePrefix,
 		Stores:            stores,
 		Resolver:          resolver,
@@ -221,5 +251,24 @@ func registerKindRoutes(
 		PostUpserts:       perKind.PostUpserts,
 		PostDeletes:       perKind.PostDeletes,
 		InitialFinalizers: perKind.InitialFinalizers,
-	})
+		ApplyInterceptor:  applyInterceptor,
+	}
+	productionApplyCfg := applyCfg
+	productionApplyCfg.ApplyInterceptor = nil
+	resource.RegisterApply(api, applyCfg)
+
+	if extraResourceRoutes != nil {
+		opaqueStores := make(map[string]any, len(stores))
+		for kind, store := range stores {
+			opaqueStores[kind] = store
+		}
+		extraResourceRoutes(api, basePrefix, types.ResourceRouteContext{
+			Stores:            opaqueStores,
+			Resolver:          resolver,
+			RegistryValidator: registryValidator,
+			Apply: func(ctx context.Context, obj v1alpha1.Object, dryRun bool) arv0.ApplyResult {
+				return resource.ApplyObject(ctx, productionApplyCfg, obj, dryRun)
+			},
+		})
+	}
 }

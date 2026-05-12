@@ -242,11 +242,15 @@ func buildRouteOptions(
 	adapters map[string]types.DeploymentAdapter,
 ) *router.RouteOptions {
 	routeOpts := &router.RouteOptions{
-		ExtraRoutes:       options.ExtraRoutes,
-		Stores:            stores,
-		Importer:          importer,
-		PerKindHooks:      crudPerKindHooks(options),
-		RegistryValidator: options.RegistryValidator,
+		ExtraRoutes:         options.ExtraRoutes,
+		Stores:              stores,
+		Importer:            importer,
+		PerKindHooks:        crudPerKindHooks(options),
+		RegistryValidator:   options.RegistryValidator,
+		ApplyInterceptor:    adaptApplyInterceptor(options.ApplyInterceptor),
+		ResolverWrapper:     options.ResolverWrapper,
+		ExtraResourceRoutes: options.ExtraResourceRoutes,
+		ImportAuthorizers:   adaptAuthorizers(options.ImportAuthorizers),
 	}
 
 	if stores != nil {
@@ -258,6 +262,47 @@ func buildRouteOptions(
 	}
 
 	return routeOpts
+}
+
+func adaptAuthorizers(in map[string]types.Authorizer) map[string]func(context.Context, resource.AuthorizeInput) error {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]func(context.Context, resource.AuthorizeInput) error, len(in))
+	for kind, fn := range in {
+		f := fn
+		out[kind] = func(ctx context.Context, in resource.AuthorizeInput) error {
+			return f(ctx, types.AuthorizeInput{
+				Verb: in.Verb, Kind: in.Kind, Namespace: in.Namespace,
+				Name: in.Name, Tag: in.Tag,
+			})
+		}
+	}
+	return out
+}
+
+func adaptApplyInterceptor(fn types.ApplyInterceptor) resource.ApplyInterceptor {
+	if fn == nil {
+		return nil
+	}
+	return func(ctx context.Context, in resource.ApplyInterceptorInput) (resource.ApplyInterceptorResult, error) {
+		out, err := fn(ctx, types.ApplyInterceptorInput{
+			Kind:      in.Kind,
+			Namespace: in.Namespace,
+			Name:      in.Name,
+			Tag:       in.Tag,
+			Object:    in.Object,
+			Store:     in.Store,
+		})
+		if err != nil {
+			return resource.ApplyInterceptorResult{}, err
+		}
+		return resource.ApplyInterceptorResult{
+			Handled: out.Handled,
+			Status:  out.Status,
+			Tag:     out.Tag,
+		}, nil
+	}
 }
 
 // crudPerKindHooks adapts the AppOptions per-kind authorizer +
