@@ -71,6 +71,10 @@ type PostDelete func(ctx context.Context, obj v1alpha1.Object) error
 // production storage. Store is intentionally opaque to keep pkg/types free of
 // registry/store implementation imports; integrations that need it can type
 // assert against the concrete store package they already depend on.
+//
+// TODO(krt): this belongs to the synchronous handler architecture. Prefer a
+// reconciler-owned admission/staging model when KRT becomes the write path, and
+// delete this bridge once no downstream route depends on it.
 type ApplyInterceptor func(ctx context.Context, in ApplyInterceptorInput) (ApplyInterceptorResult, error)
 
 type ApplyInterceptorInput struct {
@@ -91,6 +95,10 @@ type ApplyInterceptorResult struct {
 // ResourceRouteContext exposes the finalized v1alpha1 route wiring to
 // downstream integrations that need adjacent routes against the same stores
 // and hooks as /v0/apply.
+//
+// TODO(krt): this is a temporary way for downstream synchronous routes to reuse
+// production apply wiring. KRT should make this unnecessary by owning the
+// staging-to-production transition outside HTTP route callbacks.
 type ResourceRouteContext struct {
 	Stores            map[string]any
 	Resolver          v1alpha1.ResolverFunc
@@ -185,6 +193,8 @@ type AppOptions struct {
 
 	// ApplyInterceptor optionally accepts a validated apply before the row
 	// reaches production storage. Nil preserves normal direct writes.
+	// TODO(krt): temporary synchronous-handler bridge; remove with reconciler
+	// admission/staging.
 	ApplyInterceptor ApplyInterceptor
 
 	// ImportAuthorizers optionally overrides Authorizers for /v0/import.
@@ -193,6 +203,7 @@ type AppOptions struct {
 
 	// ResolverWrapper decorates the shared ResourceRef resolver before route
 	// registration. Nil preserves the default store-backed resolver.
+	// TODO(krt): temporary bridge for pending staged refs in HTTP apply.
 	ResolverWrapper func(v1alpha1.ResolverFunc) v1alpha1.ResolverFunc
 
 	// V1Alpha1StoreTables registers additional v1alpha1 kinds with their
@@ -243,6 +254,7 @@ type AppOptions struct {
 
 	// ExtraResourceRoutes is like ExtraRoutes, but runs after the v1alpha1
 	// resource route context has been finalized.
+	// TODO(krt): temporary bridge for downstream synchronous approval routes.
 	ExtraResourceRoutes func(api huma.API, pathPrefix string, ctx ResourceRouteContext)
 
 	// HTTPServerFactory is an optional function to create a server that

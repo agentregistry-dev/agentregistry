@@ -48,6 +48,10 @@ type upsertResult struct {
 // written to the production Store. Downstream builds use this as a neutral
 // admission seam for workflows that persist the object somewhere else first.
 //
+// TODO(krt): this is a synchronous-handler bridge for the pre-KRT apply path.
+// Remove or collapse it when reconciler-owned admission/staging becomes the
+// production architecture.
+//
 // The hook runs after authorization, validation, reference resolution, and
 // registry validation, but before Store.Upsert and PostUpsert. Returning
 // Handled=true short-circuits the production upsert and skips PostUpsert.
