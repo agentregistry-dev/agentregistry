@@ -15,7 +15,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/agentregistry-dev/agentregistry/pkg/api/v0"
+	v0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
