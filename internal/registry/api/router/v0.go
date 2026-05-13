@@ -82,8 +82,8 @@ type RouteOptions struct {
 	// Optional callback for integration-owned route registration.
 	ExtraRoutes func(api huma.API, pathPrefix string)
 
-	// Admission optionally accepts a validated write before production
-	// Upsert. Nil preserves normal direct writes.
+	// Admission optionally owns the final apply write. Nil preserves OSS
+	// production writes through resource.ProductionAdmission.
 	// TODO(krt): temporary synchronous-handler bridge; remove when KRT owns
 	// admission/staging.
 	Admission types.Admission

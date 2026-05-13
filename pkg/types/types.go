@@ -72,31 +72,34 @@ const (
 	AdmissionSourceImport = "import"
 )
 
-// Admission can accept or reject a validated write before the object reaches
-// production storage. Store is intentionally any-typed so downstream
-// integrations can use this public contract without forcing pkg/types to
-// depend on the concrete registry store package.
+// Admission owns the final write decision for an apply request after authz,
+// validation, reference resolution, and registry checks have passed. The OSS
+// default writes to production; downstream integrations can wrap that behavior
+// to stage, reject, or otherwise route the write.
 //
 // TODO(krt): this belongs to the synchronous handler architecture. Prefer a
 // reconciler-owned admission/staging model when KRT becomes the write path, and
 // delete this bridge once no downstream route depends on it.
-type Admission func(ctx context.Context, in AdmissionInput) (AdmissionDecision, error)
+type Admission func(ctx context.Context, in AdmissionInput) (AdmissionResult, error)
 
 type AdmissionInput struct {
-	Source    string
-	Verb      string
-	Kind      string
-	Namespace string
-	Name      string
-	Tag       string
-	Object    v1alpha1.Object
-	Store     any
+	Source            string
+	Verb              string
+	DryRun            bool
+	Kind              string
+	Namespace         string
+	Name              string
+	Tag               string
+	Object            v1alpha1.Object
+	Store             any
+	PostUpsert        PostUpsert
+	InitialFinalizers func(v1alpha1.Object) []string
 }
 
-type AdmissionDecision struct {
-	Handled bool
-	Status  string
-	Tag     string
+type AdmissionResult struct {
+	Status     string
+	Tag        string
+	Generation int64
 }
 
 // ResourceRouteContext exposes the finalized v1alpha1 route wiring to

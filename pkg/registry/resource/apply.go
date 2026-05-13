@@ -69,12 +69,12 @@ type ApplyConfig struct {
 	// Empty defaults to types.AdmissionSourceApply.
 	Source string
 
-	// Admission optionally accepts a validated write before production Upsert.
-	// Nil preserves normal direct-write behavior.
+	// Admission optionally owns the final apply write. Nil uses
+	// ProductionAdmission, which writes to the configured production Store.
 	Admission types.Admission
 
-	// Prepare optionally mutates an object after validation/admission and
-	// before Upsert. Import uses this to merge scanner output while still
+	// Prepare optionally mutates an object after validation and before
+	// admission. Import uses this to merge scanner output while still
 	// persisting through the shared apply path.
 	Prepare func(ctx context.Context, obj v1alpha1.Object) error
 }
@@ -186,7 +186,7 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 		return failResult(res, ae)
 	}
 
-	up, ae := applyCore(ctx, store, obj, applyOpts{
+	admitted, ae := applyCore(ctx, store, obj, applyOpts{
 		Authorize:         batchAuthorize(cfg, obj.GetKind()),
 		Resolver:          cfg.Resolver,
 		RegistryValidator: cfg.RegistryValidator,
@@ -200,34 +200,12 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 		return failResult(res, ae)
 	}
 
-	if dryRun {
-		res.Status = arv0.ApplyStatusDryRun
-		return res
-	}
-	// Map the Store outcome onto the wire status. Tagged-artifact creates
-	// surface as created, same-tag replacements as configured, and exact
-	// re-applies as unchanged.
-	switch {
-	case up.Admitted:
-		res.Status = up.AdmitStatus
-		if res.Status == "" {
-			res.Status = arv0.ApplyStatusStaged
-		}
-		if up.AdmitTag != "" {
-			res.Tag = up.AdmitTag
-		}
-		return res
-	case up.Outcome == v1alpha1store.UpsertCreated:
-		res.Status = arv0.ApplyStatusCreated
-	case up.Outcome == v1alpha1store.UpsertReplaced:
-		res.Status = arv0.ApplyStatusConfigured
-	case up.Outcome == v1alpha1store.UpsertNoOp:
+	res.Status = admitted.Status
+	if res.Status == "" {
 		res.Status = arv0.ApplyStatusUnchanged
 	}
-	if up.Tag != "" {
-		res.Tag = up.Tag
-	}
-	res.Generation = up.Generation
+	res.Tag = admitted.Tag
+	res.Generation = admitted.Generation
 	return res
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
@@ -24,27 +25,6 @@ type applyOpts struct {
 	Admission         types.Admission
 	Source            string
 	Prepare           func(ctx context.Context, obj v1alpha1.Object) error
-}
-
-// upsertResult is the outcome of a successful applyCore call.
-type upsertResult struct {
-	// Outcome categorises what the underlying Store.Upsert did. Callers
-	// map this onto their wire status (ApplyStatusCreated, etc.).
-	Outcome v1alpha1store.UpsertOutcome
-	// Tag is the content tag after apply for tagged artifact stores.
-	Tag string
-	// Generation is the internal row generation after apply.
-	Generation int64
-	// UID is the server-managed row identity after production upsert.
-	UID string
-	// Admitted reports that a downstream hook handled the apply before
-	// production upsert. No production PostUpsert hook has run.
-	Admitted bool
-	// AdmitStatus is the ApplyResult status to report when Admitted
-	// is true. Empty defaults to ApplyStatusStaged at the batch layer.
-	AdmitStatus string
-	// AdmitTag is the optional tag to report when Admitted is true.
-	AdmitTag string
 }
 
 // applyStage tags which step of the pipeline produced an error so
@@ -86,18 +66,18 @@ func (e *applyError) Error() string {
 // already-decoded, metadata-stamped object:
 //
 //	canonicalize metadata → authorize → validate → resolve refs →
-//	validate registries → marshal spec → Store.Upsert → PostUpsert
+//	validate registries → prepare → admission
 //
-// dryRun=true skips Upsert + PostUpsert; everything else still runs so
-// clients get the same 400-class error surface they would on a real
-// apply. Returns a stage-tagged applyError on failure; nil otherwise.
+// The admission implementation owns the final write result. The OSS default
+// ProductionAdmission maps dry-runs to ApplyStatusDryRun and real writes to
+// Store.Upsert + PostUpsert. Returns a stage-tagged applyError on failure.
 func applyCore(
 	ctx context.Context,
 	store *v1alpha1store.Store,
 	obj v1alpha1.Object,
 	opts applyOpts,
 	dryRun bool,
-) (upsertResult, *applyError) {
+) (types.AdmissionResult, *applyError) {
 	meta := obj.GetMetadata()
 	kind := obj.GetKind()
 
@@ -117,85 +97,109 @@ func applyCore(
 			Namespace: meta.Namespace, Name: meta.Name, Tag: meta.Tag,
 			Object: obj,
 		}); err != nil {
-			return upsertResult{}, &applyError{Stage: stageAuth, Err: err}
+			return types.AdmissionResult{}, &applyError{Stage: stageAuth, Err: err}
 		}
 	}
 
 	if err := v1alpha1.ValidateObject(obj); err != nil {
-		return upsertResult{}, &applyError{Stage: stageValidation, Err: err}
+		return types.AdmissionResult{}, &applyError{Stage: stageValidation, Err: err}
 	}
 	if err := v1alpha1.ResolveObjectRefs(ctx, obj, opts.Resolver); err != nil {
-		return upsertResult{}, &applyError{Stage: stageRefs, Err: err}
+		return types.AdmissionResult{}, &applyError{Stage: stageRefs, Err: err}
 	}
 	if err := v1alpha1.ValidateObjectRegistries(ctx, obj, opts.RegistryValidator); err != nil {
-		return upsertResult{}, &applyError{Stage: stageRegistries, Err: err}
-	}
-
-	if !dryRun && opts.Admission != nil {
-		source := opts.Source
-		if source == "" {
-			source = types.AdmissionSourceApply
-		}
-		decision, err := opts.Admission(ctx, types.AdmissionInput{
-			Source:    source,
-			Verb:      "apply",
-			Kind:      kind,
-			Namespace: meta.Namespace,
-			Name:      meta.Name,
-			Tag:       meta.Tag,
-			Object:    obj,
-			Store:     store,
-		})
-		if err != nil {
-			return upsertResult{}, &applyError{Stage: stageAdmission, Err: err}
-		}
-		if decision.Handled {
-			return upsertResult{
-				Admitted:    true,
-				AdmitStatus: decision.Status,
-				AdmitTag:    decision.Tag,
-			}, nil
-		}
+		return types.AdmissionResult{}, &applyError{Stage: stageRegistries, Err: err}
 	}
 
 	if opts.Prepare != nil {
 		if err := opts.Prepare(ctx, obj); err != nil {
-			return upsertResult{}, &applyError{Stage: stagePrepare, Err: err}
+			return types.AdmissionResult{}, &applyError{Stage: stagePrepare, Err: err}
 		}
 	}
 
-	if dryRun {
-		return upsertResult{}, nil
+	source := opts.Source
+	if source == "" {
+		source = types.AdmissionSourceApply
+	}
+	admission := opts.Admission
+	if admission == nil {
+		admission = ProductionAdmission
+	}
+	result, err := admission(ctx, types.AdmissionInput{
+		Source:            source,
+		Verb:              "apply",
+		DryRun:            dryRun,
+		Kind:              kind,
+		Namespace:         meta.Namespace,
+		Name:              meta.Name,
+		Tag:               meta.Tag,
+		Object:            obj,
+		Store:             store,
+		PostUpsert:        opts.PostUpsert,
+		InitialFinalizers: opts.InitialFinalizers,
+	})
+	if err != nil {
+		if ae, ok := err.(*applyError); ok {
+			return types.AdmissionResult{}, ae
+		}
+		return types.AdmissionResult{}, &applyError{Stage: stageAdmission, Err: err}
+	}
+	return result, nil
+}
+
+// ProductionAdmission is the OSS admission implementation: dry-runs stop after
+// validation, and real writes upsert the object into the production store and
+// run the per-kind post-upsert hook.
+func ProductionAdmission(ctx context.Context, in types.AdmissionInput) (types.AdmissionResult, error) {
+	if in.DryRun {
+		return types.AdmissionResult{Status: arv0.ApplyStatusDryRun, Tag: in.Tag}, nil
+	}
+	store, ok := in.Store.(*v1alpha1store.Store)
+	if !ok || store == nil {
+		return types.AdmissionResult{}, errors.New("production store is required")
 	}
 
 	upsertOpts := v1alpha1store.UpsertOpts{}
-	if opts.InitialFinalizers != nil {
-		upsertOpts.InitialFinalizers = opts.InitialFinalizers(obj)
+	if in.InitialFinalizers != nil {
+		upsertOpts.InitialFinalizers = in.InitialFinalizers(in.Object)
 	}
-	up, err := store.Upsert(ctx, obj, upsertOpts)
+	up, err := store.Upsert(ctx, in.Object, upsertOpts)
 	if err != nil {
-		return upsertResult{}, &applyError{
+		return types.AdmissionResult{}, &applyError{
 			Stage:       stageUpsert,
 			Err:         err,
 			Terminating: errors.Is(err, v1alpha1store.ErrTerminating),
 		}
 	}
-	res := upsertResult{
-		Outcome:    up.Outcome,
-		Tag:        up.Tag,
-		Generation: up.Generation,
-		UID:        up.UID,
-	}
 
-	if opts.PostUpsert != nil {
+	if in.PostUpsert != nil {
+		meta := in.Object.GetMetadata()
 		meta.Generation = up.Generation
 		meta.UID = up.UID
-		obj.SetMetadata(*meta)
-		if err := opts.PostUpsert(ctx, obj); err != nil {
-			return res, &applyError{Stage: stagePostUpsert, Err: err}
+		in.Object.SetMetadata(*meta)
+		if err := in.PostUpsert(ctx, in.Object); err != nil {
+			return types.AdmissionResult{}, &applyError{Stage: stagePostUpsert, Err: err}
 		}
 	}
-	return res, nil
+
+	return types.AdmissionResult{
+		Status:     applyStatusFromUpsert(up.Outcome),
+		Tag:        up.Tag,
+		Generation: up.Generation,
+	}, nil
+}
+
+func applyStatusFromUpsert(outcome v1alpha1store.UpsertOutcome) string {
+	switch outcome {
+	case v1alpha1store.UpsertCreated:
+		return arv0.ApplyStatusCreated
+	case v1alpha1store.UpsertReplaced:
+		return arv0.ApplyStatusConfigured
+	case v1alpha1store.UpsertNoOp:
+		return arv0.ApplyStatusUnchanged
+	default:
+		return arv0.ApplyStatusUnchanged
+	}
 }
 
 // deleteOpts threads the per-kind dependencies into deleteCore. As with

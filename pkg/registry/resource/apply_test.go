@@ -117,7 +117,7 @@ spec:
 	require.Contains(t, out.Results[1].Error, "unknown or unconfigured kind")
 }
 
-func TestRegisterApply_AdmissionCanHandleBeforeProductionUpsert(t *testing.T) {
+func TestRegisterApply_AdmissionCanStageInsteadOfProductionUpsert(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
 	agents := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
@@ -135,9 +135,9 @@ func TestRegisterApply_AdmissionCanHandleBeforeProductionUpsert(t *testing.T) {
 				return nil
 			},
 		},
-		Admission: func(ctx context.Context, in types.AdmissionInput) (types.AdmissionDecision, error) {
+		Admission: func(ctx context.Context, in types.AdmissionInput) (types.AdmissionResult, error) {
 			admitted = in
-			return types.AdmissionDecision{Handled: true, Tag: in.Tag}, nil
+			return types.AdmissionResult{Status: arv0.ApplyStatusStaged, Tag: in.Tag}, nil
 		},
 	})
 
