@@ -762,4 +762,64 @@ func TestResourceRegister_IncludeTerminatingByDefault(t *testing.T) {
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &list))
 	require.Len(t, list.Items, 1)
 	require.Equal(t, "draining", list.Items[0].Metadata.Name)
+
+	// GET-latest must mirror LIST: kinds with IncludeTerminatingByDefault
+	// return the terminating row (with deletionTimestamp) instead of 404.
+	// Without this, LIST and GET contradict each other for operators
+	// watching teardown progress.
+	resp = api.Get("/v0/runtimes/draining?namespace=" + testNamespace)
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	var got v1alpha1.Runtime
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &got))
+	require.Equal(t, "draining", got.Metadata.Name)
+	require.NotNil(t, got.Metadata.DeletionTimestamp,
+		"GET-latest must surface the deletionTimestamp on terminating rows")
+
+	// DELETE-latest must be idempotent on terminating rows. Repeating the
+	// soft-delete on a row that's already mid-teardown should succeed
+	// (204), not 404; the Store.Delete path is a no-op in that case and
+	// the handler must not short-circuit on the terminating filter.
+	resp = api.Delete("/v0/runtimes/draining?namespace=" + testNamespace)
+	require.Equal(t, http.StatusNoContent, resp.Code, resp.Body.String())
+}
+
+// TestResourceRegister_DeleteIdempotentOnTerminating pins the
+// idempotent-DELETE contract for mutable-object kinds: even without
+// IncludeTerminatingByDefault, a DELETE on an already-terminating row
+// returns 204 rather than 404. The handler uses the terminating-aware
+// lookup so retry scripts get a coherent response shape.
+func TestResourceRegister_DeleteIdempotentOnTerminating(t *testing.T) {
+	pool := v1alpha1store.NewTestPool(t)
+	store := v1alpha1store.NewMutableObjectStore(pool, "v1alpha1.runtimes")
+	const testNamespace = "delete-idempotent"
+
+	_, api := humatest.New(t)
+	resource.Register[*v1alpha1.Runtime](api, resource.Config{
+		Kind:       v1alpha1.KindRuntime,
+		BasePrefix: "/v0",
+		Store:      store,
+	}, func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} })
+
+	_, err := store.Upsert(t.Context(), &v1alpha1.Runtime{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindRuntime},
+		Metadata: v1alpha1.ObjectMeta{Namespace: testNamespace, Name: "draining"},
+		Spec:     v1alpha1.RuntimeSpec{Type: "noop"},
+	})
+	require.NoError(t, err)
+
+	// Attach a finalizer so the first DELETE soft-deletes (leaves the row
+	// in terminating state) instead of hard-deleting.
+	require.NoError(t, store.PatchFinalizers(t.Context(), testNamespace, "draining", "",
+		func([]string) []string { return []string{"finalizer.example.com"} }))
+
+	// First DELETE → soft-delete, 204.
+	resp := api.Delete("/v0/runtimes/draining?namespace=" + testNamespace)
+	require.Equal(t, http.StatusNoContent, resp.Code, resp.Body.String())
+
+	// Second DELETE on the terminating row must remain 204 (idempotent),
+	// not 404; otherwise retry scripts can't distinguish "still
+	// terminating" from "fully purged".
+	resp = api.Delete("/v0/runtimes/draining?namespace=" + testNamespace)
+	require.Equal(t, http.StatusNoContent, resp.Code, resp.Body.String(),
+		"DELETE on an already-terminating row must stay idempotent")
 }
