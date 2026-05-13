@@ -267,6 +267,11 @@ func adaptAdmission(fn types.Admission) resource.AdmissionFunc {
 	if fn == nil {
 		return nil
 	}
+	// AppOptions exposes the public pkg/types admission contract so downstream
+	// integrations do not need to import the internal resource package. The
+	// route layer still needs resource.AdmissionFunc, so this adapter keeps the
+	// composition root as the only place that translates between the two
+	// field-compatible shapes.
 	return func(ctx context.Context, in resource.AdmissionInput) (resource.AdmissionDecision, error) {
 		out, err := fn(ctx, types.AdmissionInput{
 			Source:    string(in.Source),
