@@ -141,6 +141,7 @@ func init() {
 	rootCmd.AddCommand(declarative.BuildCmd)
 	rootCmd.AddCommand(declarative.RunCmd)
 	rootCmd.AddCommand(declarative.PullCmd)
+	rootCmd.AddCommand(declarative.WaitCmd)
 }
 
 // resolveRegistryTarget returns base URL and token from flags and env.
