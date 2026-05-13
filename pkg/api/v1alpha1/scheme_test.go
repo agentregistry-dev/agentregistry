@@ -11,7 +11,7 @@ import (
 
 func TestScheme_RegisterAllBuiltins(t *testing.T) {
 	got := Default.Kinds()
-	want := []string{"agent", "deployment", "mcpserver", "prompt", "remotemcpserver", "runtime", "skill"}
+	want := []string{"agent", "deployment", "mcpserver", "prompt", "runtime", "skill"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("built-in kinds = %v, want %v", got, want)
 	}

@@ -32,9 +32,9 @@ const DefaultLocalAgentPort uint16 = 8080
 // carries the authoritative description of what's being run; the *Values
 // maps carry per-deployment runtime overrides supplied on apply.
 //
-// MCPServer (the bundled kind) carries Source.Package; the translator now only
-// produces local transport. RemoteMCPServer is its own kind handled by
-// TranslateRemoteMCPServer.
+// MCPServer is the single kind for both bundled (Spec.Source.Package) and
+// remote (Spec.Remote) servers. TranslateMCPServer dispatches on which
+// field is populated and produces MCPServerType=local or =remote accordingly.
 type MCPServerRunRequest struct {
 	// Name is metadata.name of the v1alpha1.MCPServer; used to derive the
 	// platform-internal container/resource name via generateInternalName.
@@ -49,54 +49,38 @@ type MCPServerRunRequest struct {
 	// bundled local server. Nil is treated as an empty map.
 	EnvValues map[string]string
 	ArgValues map[string]string
-	// HeaderValues is retained on the request struct for callers that
-	// historically passed it through; it is unused by local translation
-	// and ignored. Header overrides for remote endpoints flow through
-	// TranslateRemoteMCPServer instead.
+	// HeaderValues are per-deployment header overrides resolved against
+	// Spec.Remote.Headers when the server is remote. Ignored for bundled.
 	HeaderValues map[string]string
 }
 
 // TranslateMCPServer maps a v1alpha1 MCPServerSpec onto the platform-internal
-// MCPServer. The kind only carries a bundled package — output is always
-// MCPServerType=local.
+// MCPServer. Dispatches on Spec.Source (bundled → local transport) vs
+// Spec.Remote (pre-running → remote transport). Validation enforces exactly
+// one of the two is set.
 func TranslateMCPServer(ctx context.Context, req *MCPServerRunRequest) (*runtimetypes.MCPServer, error) {
 	if req == nil {
 		return nil, fmt.Errorf("mcp server run request is required")
 	}
+	if req.Spec.Remote != nil {
+		return translateRemoteMCPServer(req.Name, req.Spec.Remote, req.DeploymentID, req.HeaderValues)
+	}
 	if req.Spec.Source == nil || req.Spec.Source.Package == nil {
-		return nil, fmt.Errorf("no valid deployment method found for server: %s (no package)", req.Name)
+		return nil, fmt.Errorf("no valid deployment method found for server: %s (no package or remote)", req.Name)
 	}
 	return translateLocalMCPServer(ctx, req.Name, req.Spec, req.DeploymentID, req.EnvValues, req.ArgValues)
 }
 
-// RemoteMCPServerRunRequest carries inputs for projecting a v1alpha1
-// RemoteMCPServer onto a platform-internal MCPServer with remote transport.
-type RemoteMCPServerRunRequest struct {
-	// Name is metadata.name of the v1alpha1.RemoteMCPServer; used to derive
-	// the platform-internal resource name via generateInternalName.
-	Name string
-	// Spec is the v1alpha1 RemoteMCPServerSpec authored in the manifest.
-	Spec v1alpha1.RemoteMCPServerSpec
-	// DeploymentID is the unique identifier this invocation carries.
-	DeploymentID string
-	// HeaderValues are per-deployment header overrides resolved against
-	// the remote's declared header inputs.
-	HeaderValues map[string]string
-}
-
-// TranslateRemoteMCPServer projects a v1alpha1 RemoteMCPServer onto a
-// platform-internal MCPServer configured for remote transport. Header
-// overrides resolve against the remote's header input list with
-// required/default semantics matching the MCP spec.
-func TranslateRemoteMCPServer(_ context.Context, req *RemoteMCPServerRunRequest) (*runtimetypes.MCPServer, error) {
-	if req == nil {
-		return nil, fmt.Errorf("remote mcp server run request is required")
-	}
-	if req.Spec.Remote.URL == "" {
-		return nil, fmt.Errorf("remote mcp server %s has no URL", req.Name)
+// translateRemoteMCPServer emits a runtimetypes.MCPServer for a
+// pre-running remote endpoint. Header overrides resolve against the
+// transport's declared header inputs with required/default semantics
+// matching the MCP spec.
+func translateRemoteMCPServer(name string, remote *v1alpha1.MCPTransport, deploymentID string, headerValues map[string]string) (*runtimetypes.MCPServer, error) {
+	if remote.URL == "" {
+		return nil, fmt.Errorf("remote mcp server %s has no URL", name)
 	}
 
-	headersMap, err := processHeaders(req.Spec.Remote.Headers, req.HeaderValues)
+	headersMap, err := processHeaders(remote.Headers, headerValues)
 	if err != nil {
 		return nil, err
 	}
@@ -105,14 +89,14 @@ func TranslateRemoteMCPServer(_ context.Context, req *RemoteMCPServerRunRequest)
 		headers = append(headers, runtimetypes.HeaderValue{Name: k, Value: v})
 	}
 
-	u, err := parseURL(req.Spec.Remote.URL)
+	u, err := parseURL(remote.URL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse remote server url: %v", err)
 	}
 
 	return &runtimetypes.MCPServer{
-		Name:          generateInternalName(req.Name),
-		DeploymentID:  req.DeploymentID,
+		Name:          generateInternalName(name),
+		DeploymentID:  deploymentID,
 		MCPServerType: runtimetypes.MCPServerTypeRemote,
 		Remote: &runtimetypes.RemoteMCPTarget{
 			Scheme:  u.scheme,

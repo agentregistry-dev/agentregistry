@@ -117,9 +117,25 @@ components:
       - apiVersion
       - kind
       type: object
+    DeploymentRef:
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+        namespace:
+          type: string
+      required:
+      - name
+      type: object
     DeploymentSpec:
       additionalProperties: false
       properties:
+        deploymentRefs:
+          items:
+            $ref: '#/components/schemas/DeploymentRef'
+          type:
+          - array
+          - "null"
         desiredState:
           type: string
         env:
@@ -259,20 +275,6 @@ components:
         items:
           items:
             $ref: '#/components/schemas/Prompt'
-          type:
-          - array
-          - "null"
-        nextCursor:
-          type: string
-      required:
-      - items
-      type: object
-    ListOutputRemoteMCPServerBody:
-      additionalProperties: false
-      properties:
-        items:
-          items:
-            $ref: '#/components/schemas/RemoteMCPServer'
           type:
           - array
           - "null"
@@ -475,6 +477,8 @@ components:
       properties:
         description:
           type: string
+        remote:
+          $ref: '#/components/schemas/MCPTransport'
         source:
           $ref: '#/components/schemas/MCPServerSource'
         title:
@@ -564,37 +568,6 @@ components:
           type: string
         description:
           type: string
-      type: object
-    RemoteMCPServer:
-      additionalProperties: false
-      properties:
-        apiVersion:
-          type: string
-        kind:
-          type: string
-        metadata:
-          $ref: '#/components/schemas/ObjectMeta'
-        spec:
-          $ref: '#/components/schemas/RemoteMCPServerSpec'
-        status:
-          $ref: '#/components/schemas/Status'
-      required:
-      - metadata
-      - spec
-      - apiVersion
-      - kind
-      type: object
-    RemoteMCPServerSpec:
-      additionalProperties: false
-      properties:
-        description:
-          type: string
-        remote:
-          $ref: '#/components/schemas/MCPTransport'
-        title:
-          type: string
-      required:
-      - remote
       type: object
     Repository:
       additionalProperties: false
@@ -763,12 +736,23 @@ paths:
         schema:
           description: 'Label selector: key=value,key2=value2.'
           type: string
-      - description: Only return the literal latest tag per (namespace, name).
+      - description: Restrict the result set to one tag value (tagged artifact kinds
+          only).
+        explode: false
+        in: query
+        name: tag
+        schema:
+          description: Restrict the result set to one tag value (tagged artifact kinds
+            only).
+          type: string
+      - description: Only return the literal latest tag per (namespace, name). Equivalent
+          to tag=latest for tagged kinds.
         explode: false
         in: query
         name: latestOnly
         schema:
-          description: Only return the literal latest tag per (namespace, name).
+          description: Only return the literal latest tag per (namespace, name). Equivalent
+            to tag=latest for tagged kinds.
           type: boolean
       - description: Include rows with a deletionTimestamp.
         explode: false
@@ -1029,12 +1013,23 @@ paths:
         schema:
           description: 'Label selector: key=value,key2=value2.'
           type: string
-      - description: Only return the literal latest tag per (namespace, name).
+      - description: Restrict the result set to one tag value (tagged artifact kinds
+          only).
+        explode: false
+        in: query
+        name: tag
+        schema:
+          description: Restrict the result set to one tag value (tagged artifact kinds
+            only).
+          type: string
+      - description: Only return the literal latest tag per (namespace, name). Equivalent
+          to tag=latest for tagged kinds.
         explode: false
         in: query
         name: latestOnly
         schema:
-          description: Only return the literal latest tag per (namespace, name).
+          description: Only return the literal latest tag per (namespace, name). Equivalent
+            to tag=latest for tagged kinds.
           type: boolean
       - description: Include rows with a deletionTimestamp.
         explode: false
@@ -1210,12 +1205,23 @@ paths:
         schema:
           description: 'Label selector: key=value,key2=value2.'
           type: string
-      - description: Only return the literal latest tag per (namespace, name).
+      - description: Restrict the result set to one tag value (tagged artifact kinds
+          only).
+        explode: false
+        in: query
+        name: tag
+        schema:
+          description: Restrict the result set to one tag value (tagged artifact kinds
+            only).
+          type: string
+      - description: Only return the literal latest tag per (namespace, name). Equivalent
+          to tag=latest for tagged kinds.
         explode: false
         in: query
         name: latestOnly
         schema:
-          description: Only return the literal latest tag per (namespace, name).
+          description: Only return the literal latest tag per (namespace, name). Equivalent
+            to tag=latest for tagged kinds.
           type: boolean
       - description: Include rows with a deletionTimestamp.
         explode: false
@@ -1427,12 +1433,23 @@ paths:
         schema:
           description: 'Label selector: key=value,key2=value2.'
           type: string
-      - description: Only return the literal latest tag per (namespace, name).
+      - description: Restrict the result set to one tag value (tagged artifact kinds
+          only).
+        explode: false
+        in: query
+        name: tag
+        schema:
+          description: Restrict the result set to one tag value (tagged artifact kinds
+            only).
+          type: string
+      - description: Only return the literal latest tag per (namespace, name). Equivalent
+          to tag=latest for tagged kinds.
         explode: false
         in: query
         name: latestOnly
         schema:
-          description: Only return the literal latest tag per (namespace, name).
+          description: Only return the literal latest tag per (namespace, name). Equivalent
+            to tag=latest for tagged kinds.
           type: boolean
       - description: Include rows with a deletionTimestamp.
         explode: false
@@ -1590,203 +1607,6 @@ paths:
                 $ref: '#/components/schemas/ErrorModel'
           description: Error
       summary: List all tags of a Prompt
-  /v0/remotemcpservers:
-    get:
-      operationId: list-remotemcpservers
-      parameters:
-      - description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
-        explode: false
-        in: query
-        name: namespace
-        schema:
-          description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
-          type: string
-      - description: Max items to return (default 50).
-        explode: false
-        in: query
-        name: limit
-        schema:
-          default: 50
-          description: Max items to return (default 50).
-          format: int64
-          type: integer
-      - description: Opaque pagination cursor.
-        explode: false
-        in: query
-        name: cursor
-        schema:
-          description: Opaque pagination cursor.
-          type: string
-      - description: 'Label selector: key=value,key2=value2.'
-        explode: false
-        in: query
-        name: labels
-        schema:
-          description: 'Label selector: key=value,key2=value2.'
-          type: string
-      - description: Only return the literal latest tag per (namespace, name).
-        explode: false
-        in: query
-        name: latestOnly
-        schema:
-          description: Only return the literal latest tag per (namespace, name).
-          type: boolean
-      - description: Include rows with a deletionTimestamp.
-        explode: false
-        in: query
-        name: includeTerminating
-        schema:
-          description: Include rows with a deletionTimestamp.
-          type: boolean
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ListOutputRemoteMCPServerBody'
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ErrorModel'
-          description: Error
-      summary: List RemoteMCPServer (scoped by ?namespace)
-  /v0/remotemcpservers/{name}:
-    get:
-      operationId: get-latest-remotemcpserver
-      parameters:
-      - description: Namespace (internal; defaults to 'default').
-        explode: false
-        in: query
-        name: namespace
-        schema:
-          description: Namespace (internal; defaults to 'default').
-          type: string
-      - in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RemoteMCPServer'
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ErrorModel'
-          description: Error
-      summary: Get the latest RemoteMCPServer
-  /v0/remotemcpservers/{name}/{tag}:
-    delete:
-      operationId: delete-remotemcpserver
-      parameters:
-      - description: Namespace (internal; defaults to 'default').
-        explode: false
-        in: query
-        name: namespace
-        schema:
-          description: Namespace (internal; defaults to 'default').
-          type: string
-      - in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      - in: path
-        name: tag
-        required: true
-        schema:
-          type: string
-      - description: Skip provider-specific teardown and only remove the registry
-          record.
-        explode: false
-        in: query
-        name: force
-        schema:
-          default: false
-          description: Skip provider-specific teardown and only remove the registry
-            record.
-          type: boolean
-      responses:
-        "204":
-          description: No Content
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ErrorModel'
-          description: Error
-      summary: 'Delete a RemoteMCPServer (soft-delete: sets deletionTimestamp)'
-    get:
-      operationId: get-remotemcpserver
-      parameters:
-      - description: Namespace (internal; defaults to 'default').
-        explode: false
-        in: query
-        name: namespace
-        schema:
-          description: Namespace (internal; defaults to 'default').
-          type: string
-      - in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      - in: path
-        name: tag
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RemoteMCPServer'
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ErrorModel'
-          description: Error
-      summary: Get a RemoteMCPServer by name and tag
-  /v0/remotemcpservers/{name}/tags:
-    get:
-      operationId: list-tags-remotemcpserver
-      parameters:
-      - description: Namespace (internal; defaults to 'default').
-        explode: false
-        in: query
-        name: namespace
-        schema:
-          description: Namespace (internal; defaults to 'default').
-          type: string
-      - in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ListOutputRemoteMCPServerBody'
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ErrorModel'
-          description: Error
-      summary: List all tags of a RemoteMCPServer
   /v0/runtimes:
     get:
       operationId: list-runtimes
@@ -1821,12 +1641,23 @@ paths:
         schema:
           description: 'Label selector: key=value,key2=value2.'
           type: string
-      - description: Only return the literal latest tag per (namespace, name).
+      - description: Restrict the result set to one tag value (tagged artifact kinds
+          only).
+        explode: false
+        in: query
+        name: tag
+        schema:
+          description: Restrict the result set to one tag value (tagged artifact kinds
+            only).
+          type: string
+      - description: Only return the literal latest tag per (namespace, name). Equivalent
+          to tag=latest for tagged kinds.
         explode: false
         in: query
         name: latestOnly
         schema:
-          description: Only return the literal latest tag per (namespace, name).
+          description: Only return the literal latest tag per (namespace, name). Equivalent
+            to tag=latest for tagged kinds.
           type: boolean
       - description: Include rows with a deletionTimestamp.
         explode: false
@@ -1982,12 +1813,23 @@ paths:
         schema:
           description: 'Label selector: key=value,key2=value2.'
           type: string
-      - description: Only return the literal latest tag per (namespace, name).
+      - description: Restrict the result set to one tag value (tagged artifact kinds
+          only).
+        explode: false
+        in: query
+        name: tag
+        schema:
+          description: Restrict the result set to one tag value (tagged artifact kinds
+            only).
+          type: string
+      - description: Only return the literal latest tag per (namespace, name). Equivalent
+          to tag=latest for tagged kinds.
         explode: false
         in: query
         name: latestOnly
         schema:
-          description: Only return the literal latest tag per (namespace, name).
+          description: Only return the literal latest tag per (namespace, name). Equivalent
+            to tag=latest for tagged kinds.
           type: boolean
       - description: Include rows with a deletionTimestamp.
         explode: false

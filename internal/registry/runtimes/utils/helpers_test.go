@@ -9,10 +9,10 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
-func TestSpecToPlatformRemoteMCPServer_RemoteTransport(t *testing.T) {
-	spec := v1alpha1.RemoteMCPServerSpec{
+func TestSpecToPlatformMCPServer_RemoteTransport(t *testing.T) {
+	spec := v1alpha1.MCPServerSpec{
 		Description: "weather",
-		Remote: v1alpha1.MCPTransport{
+		Remote: &v1alpha1.MCPTransport{
 			Type: "streamable-http",
 			URL:  "https://api.weather.example/mcp",
 			Headers: []v1alpha1.MCPKeyValueInput{{
@@ -23,11 +23,11 @@ func TestSpecToPlatformRemoteMCPServer_RemoteTransport(t *testing.T) {
 	}
 	meta := v1alpha1.ObjectMeta{Namespace: "default", Name: "weather", Tag: "1.0.0"}
 
-	got, err := SpecToPlatformRemoteMCPServer(context.Background(), meta, spec, RemoteMCPServerTranslateOpts{
+	got, err := SpecToPlatformMCPServer(context.Background(), meta, spec, MCPServerTranslateOpts{
 		DeploymentID: "dep-1",
 	})
 	if err != nil {
-		t.Fatalf("SpecToPlatformRemoteMCPServer: %v", err)
+		t.Fatalf("SpecToPlatformMCPServer: %v", err)
 	}
 	if got.MCPServerType != runtimetypes.MCPServerTypeRemote {
 		t.Fatalf("MCPServerType = %q, want %q", got.MCPServerType, runtimetypes.MCPServerTypeRemote)
@@ -168,11 +168,11 @@ func TestSpecToPlatformAgent_ResolvesMCPServerRefs(t *testing.T) {
 }
 
 func TestSpecToPlatformAgent_ResolvesRemoteMCPServerHeaders(t *testing.T) {
-	remote := &v1alpha1.RemoteMCPServer{
-		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindRemoteMCPServer},
+	remote := &v1alpha1.MCPServer{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindMCPServer},
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "remote-tools", Tag: "1.0.0"},
-		Spec: v1alpha1.RemoteMCPServerSpec{
-			Remote: v1alpha1.MCPTransport{
+		Spec: v1alpha1.MCPServerSpec{
+			Remote: &v1alpha1.MCPTransport{
 				Type: "streamable-http",
 				URL:  "https://remote.example/mcp",
 				Headers: []v1alpha1.MCPKeyValueInput{
@@ -191,7 +191,7 @@ func TestSpecToPlatformAgent_ResolvesRemoteMCPServerHeaders(t *testing.T) {
 		v1alpha1.ObjectMeta{Namespace: "default", Name: "alice", Tag: "1.0.0"},
 		v1alpha1.AgentSpec{
 			MCPServers: []v1alpha1.ResourceRef{
-				{Kind: v1alpha1.KindRemoteMCPServer, Name: "remote-tools", Tag: "1.0.0"},
+				{Kind: v1alpha1.KindMCPServer, Name: "remote-tools", Tag: "1.0.0"},
 			},
 		},
 		AgentTranslateOpts{

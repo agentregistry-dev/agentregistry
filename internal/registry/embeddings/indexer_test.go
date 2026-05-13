@@ -284,15 +284,15 @@ func TestIndexer_KindsFilter(t *testing.T) {
 }
 
 func TestPayloadBuilderFor_RemoteMCPServer(t *testing.T) {
-	spec := mustSpec(t, v1alpha1.RemoteMCPServerSpec{
+	spec := mustSpec(t, v1alpha1.MCPServerSpec{
 		Title:       "Remote Search",
 		Description: "already running",
-		Remote: v1alpha1.MCPTransport{
+		Remote: &v1alpha1.MCPTransport{
 			Type: "streamable-http",
 			URL:  "https://mcp.example.com",
 		},
 	})
-	payload, err := payloadBuilderFor(v1alpha1.KindRemoteMCPServer)(&v1alpha1.RawObject{
+	payload, err := payloadBuilderFor(v1alpha1.KindMCPServer)(&v1alpha1.RawObject{
 		Metadata: v1alpha1.ObjectMeta{Name: "remote-search", Tag: "v2"},
 		Spec:     spec,
 	})
@@ -310,8 +310,8 @@ func TestDefaultBindings_RequiresAllSearchableKinds(t *testing.T) {
 		v1alpha1.KindAgent:     store,
 		v1alpha1.KindMCPServer: store,
 		v1alpha1.KindSkill:     store,
-		v1alpha1.KindPrompt:    store,
+		// KindPrompt intentionally omitted to trigger the missing-store error.
 	})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), v1alpha1.KindRemoteMCPServer)
+	require.Contains(t, err.Error(), v1alpha1.KindPrompt)
 }
