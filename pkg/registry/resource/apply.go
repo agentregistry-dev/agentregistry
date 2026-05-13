@@ -12,6 +12,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
 // ApplyConfig is the per-server configuration for the multi-doc apply
@@ -65,12 +66,12 @@ type ApplyConfig struct {
 	InitialFinalizers map[string]func(obj v1alpha1.Object) []string
 
 	// Source labels the producer of objects entering this apply pipeline.
-	// Empty defaults to ApplySourceApply.
-	Source ApplySource
+	// Empty defaults to types.AdmissionSourceApply.
+	Source string
 
 	// Admission optionally accepts a validated write before production Upsert.
 	// Nil preserves normal direct-write behavior.
-	Admission AdmissionFunc
+	Admission types.Admission
 
 	// Prepare optionally mutates an object after validation/admission and
 	// before Upsert. Import uses this to merge scanner output while still

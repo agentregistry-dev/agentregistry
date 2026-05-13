@@ -7,6 +7,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
 // applyOpts threads the per-kind dependencies into the apply pipeline.
@@ -20,8 +21,8 @@ type applyOpts struct {
 	RegistryValidator v1alpha1.RegistryValidatorFunc
 	PostUpsert        func(ctx context.Context, obj v1alpha1.Object) error
 	InitialFinalizers func(obj v1alpha1.Object) []string
-	Admission         AdmissionFunc
-	Source            ApplySource
+	Admission         types.Admission
+	Source            string
 	Prepare           func(ctx context.Context, obj v1alpha1.Object) error
 }
 
@@ -44,51 +45,6 @@ type upsertResult struct {
 	AdmitStatus string
 	// AdmitTag is the optional tag to report when Admitted is true.
 	AdmitTag string
-}
-
-// ApplySource identifies the route or subsystem that produced an object for
-// the shared apply pipeline.
-type ApplySource string
-
-const (
-	ApplySourceApply  ApplySource = "apply"
-	ApplySourceImport ApplySource = "import"
-)
-
-// AdmissionFunc can accept or reject a validated apply request before the
-// object is written to the production Store. Downstream builds use this as a
-// neutral admission seam for workflows that persist the object somewhere else
-// first.
-//
-// TODO(krt): this is a synchronous-handler bridge for the pre-KRT apply path.
-// Remove or collapse it when reconciler-owned admission/staging becomes the
-// production architecture.
-//
-// The hook runs after authorization, validation, reference resolution, and
-// registry validation, but before Store.Upsert and PostUpsert. Returning
-// Handled=true short-circuits the production upsert and skips PostUpsert.
-type AdmissionFunc func(ctx context.Context, in AdmissionInput) (AdmissionDecision, error)
-
-// AdmissionInput describes the write request seen by AdmissionFunc. Store is
-// the production store the object would otherwise be written to.
-type AdmissionInput struct {
-	Source    ApplySource
-	Verb      string
-	Kind      string
-	Namespace string
-	Name      string
-	Tag       string
-	Object    v1alpha1.Object
-	Store     *v1alpha1store.Store
-}
-
-// AdmissionDecision reports whether the hook handled the apply. Status is
-// copied into ApplyResult.Status when Handled is true; leave it empty to use
-// the generic "staged" status.
-type AdmissionDecision struct {
-	Handled bool
-	Status  string
-	Tag     string
 }
 
 // applyStage tags which step of the pipeline produced an error so
@@ -178,9 +134,9 @@ func applyCore(
 	if !dryRun && opts.Admission != nil {
 		source := opts.Source
 		if source == "" {
-			source = ApplySourceApply
+			source = types.AdmissionSourceApply
 		}
-		decision, err := opts.Admission(ctx, AdmissionInput{
+		decision, err := opts.Admission(ctx, types.AdmissionInput{
 			Source:    source,
 			Verb:      "apply",
 			Kind:      kind,

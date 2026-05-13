@@ -247,7 +247,7 @@ func buildRouteOptions(
 		Importer:            importer,
 		PerKindHooks:        crudPerKindHooks(options),
 		RegistryValidator:   options.RegistryValidator,
-		Admission:           adaptAdmission(options.Admission),
+		Admission:           options.Admission,
 		ResolverWrapper:     options.ResolverWrapper,
 		ExtraResourceRoutes: options.ExtraResourceRoutes,
 	}
@@ -261,37 +261,6 @@ func buildRouteOptions(
 	}
 
 	return routeOpts
-}
-
-func adaptAdmission(fn types.Admission) resource.AdmissionFunc {
-	if fn == nil {
-		return nil
-	}
-	// AppOptions exposes the public pkg/types admission contract so downstream
-	// integrations do not need to import the internal resource package. The
-	// route layer still needs resource.AdmissionFunc, so this adapter keeps the
-	// composition root as the only place that translates between the two
-	// field-compatible shapes.
-	return func(ctx context.Context, in resource.AdmissionInput) (resource.AdmissionDecision, error) {
-		out, err := fn(ctx, types.AdmissionInput{
-			Source:    string(in.Source),
-			Verb:      in.Verb,
-			Kind:      in.Kind,
-			Namespace: in.Namespace,
-			Name:      in.Name,
-			Tag:       in.Tag,
-			Object:    in.Object,
-			Store:     in.Store,
-		})
-		if err != nil {
-			return resource.AdmissionDecision{}, err
-		}
-		return resource.AdmissionDecision{
-			Handled: out.Handled,
-			Status:  out.Status,
-			Tag:     out.Tag,
-		}, nil
-	}
 }
 
 // crudPerKindHooks adapts the AppOptions per-kind authorizer +

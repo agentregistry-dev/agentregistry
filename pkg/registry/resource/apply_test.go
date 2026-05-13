@@ -17,6 +17,7 @@ import (
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
 func TestRegisterApply_MultiDocRoundTrip(t *testing.T) {
@@ -120,7 +121,7 @@ func TestRegisterApply_AdmissionCanHandleBeforeProductionUpsert(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
 	agents := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
-	var admitted resource.AdmissionInput
+	var admitted types.AdmissionInput
 	postUpsertCalled := false
 	_, api := humatest.New(t)
 	resource.RegisterApply(api, resource.ApplyConfig{
@@ -134,9 +135,9 @@ func TestRegisterApply_AdmissionCanHandleBeforeProductionUpsert(t *testing.T) {
 				return nil
 			},
 		},
-		Admission: func(ctx context.Context, in resource.AdmissionInput) (resource.AdmissionDecision, error) {
+		Admission: func(ctx context.Context, in types.AdmissionInput) (types.AdmissionDecision, error) {
 			admitted = in
-			return resource.AdmissionDecision{Handled: true, Tag: in.Tag}, nil
+			return types.AdmissionDecision{Handled: true, Tag: in.Tag}, nil
 		},
 	})
 
@@ -159,7 +160,7 @@ spec:
 	require.Equal(t, arv0.ApplyStatusStaged, out.Results[0].Status)
 	require.Equal(t, v1alpha1store.DefaultTag(), out.Results[0].Tag)
 	require.False(t, postUpsertCalled, "admitted applies must not fire production side effects")
-	require.Equal(t, resource.ApplySourceApply, admitted.Source)
+	require.Equal(t, types.AdmissionSourceApply, admitted.Source)
 	require.Equal(t, "apply", admitted.Verb)
 	require.Equal(t, v1alpha1.KindAgent, admitted.Kind)
 	require.Equal(t, "default", admitted.Namespace)

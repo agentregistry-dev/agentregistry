@@ -73,9 +73,9 @@ const (
 )
 
 // Admission can accept or reject a validated write before the object reaches
-// production storage. Store is intentionally opaque to keep pkg/types free of
-// registry/store implementation imports; integrations that need it can type
-// assert against the concrete store package they already depend on.
+// production storage. Store is intentionally any-typed so downstream
+// integrations can use this public contract without forcing pkg/types to
+// depend on the concrete registry store package.
 //
 // TODO(krt): this belongs to the synchronous handler architecture. Prefer a
 // reconciler-owned admission/staging model when KRT becomes the write path, and

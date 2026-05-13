@@ -17,6 +17,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
 // Options controls one invocation of Importer.Import.
@@ -294,7 +295,7 @@ func (i *Importer) importOne(ctx context.Context, source string, obj v1alpha1.Ob
 
 	var pendingFindings map[string][]Finding
 	applyCfg := i.applyConfig(opts)
-	applyCfg.Source = resource.ApplySourceImport
+	applyCfg.Source = types.AdmissionSourceImport
 	applyCfg.Prepare = func(ctx context.Context, obj v1alpha1.Object) error {
 		if !opts.Enrich {
 			return nil

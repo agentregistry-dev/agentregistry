@@ -86,7 +86,7 @@ type RouteOptions struct {
 	// Upsert. Nil preserves normal direct writes.
 	// TODO(krt): temporary synchronous-handler bridge; remove when KRT owns
 	// admission/staging.
-	Admission resource.AdmissionFunc
+	Admission types.Admission
 
 	// ResolverWrapper decorates the shared ResourceRef resolver before
 	// resource and apply routes are registered.
@@ -144,7 +144,7 @@ func RegisterRoutes(
 	// one write path instead of route-specific overrides.
 	if opts.Importer != nil {
 		importApplyCfg := applyCfg
-		importApplyCfg.Source = resource.ApplySourceImport
+		importApplyCfg.Source = types.AdmissionSourceImport
 		importpipeline.Register(api, importpipeline.Config{
 			BasePrefix:  pathPrefix,
 			Importer:    opts.Importer,
@@ -179,7 +179,7 @@ func registerKindRoutes(
 	coord *deploymentsvc.Coordinator,
 	perKind crud.PerKindHooks,
 	registryValidator v1alpha1.RegistryValidatorFunc,
-	admission resource.AdmissionFunc,
+	admission types.Admission,
 	resolverWrapper func(v1alpha1.ResolverFunc) v1alpha1.ResolverFunc,
 	extraResourceRoutes func(api huma.API, pathPrefix string, ctx types.ResourceRouteContext),
 ) resource.ApplyConfig {
