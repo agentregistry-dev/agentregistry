@@ -277,18 +277,6 @@ func runtimeRow(runtime *v1alpha1.Runtime) []string {
 	return []string{runtime.Metadata.Name, runtime.Spec.Type}
 }
 
-func remoteMCPServerRow(r *v1alpha1.RemoteMCPServer) []string {
-	if r == nil {
-		return []string{"<invalid>"}
-	}
-	return []string{
-		printer.TruncateString(r.Metadata.Name, 40),
-		r.Metadata.Tag,
-		printer.EmptyValueOrDefault(r.Spec.Remote.Type, "<none>"),
-		printer.TruncateString(printer.EmptyValueOrDefault(r.Spec.Remote.URL, "<none>"), 60),
-	}
-}
-
 func deploymentRow(dep *cliCommon.DeploymentRecord) []string {
 	if dep == nil {
 		return []string{"<invalid>"}

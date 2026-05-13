@@ -14,3 +14,14 @@ type ResourceRef struct {
 	Name      string `json:"name" yaml:"name"`
 	Tag       string `json:"tag,omitempty" yaml:"tag,omitempty"`
 }
+
+// DeploymentRef is a typed reference to another Deployment resource. Kind
+// is implicit (always Deployment) and Tag is omitted because Deployment is
+// a mutable-object kind keyed by namespace/name.
+//
+// Namespace is optional: blank means "same namespace as the referencing
+// Deployment".
+type DeploymentRef struct {
+	Namespace string `json:"namespace,omitempty" yaml:"namespace,omitempty"`
+	Name      string `json:"name" yaml:"name"`
+}

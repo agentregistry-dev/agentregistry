@@ -55,16 +55,6 @@ func init() {
 		promptRow,
 	))
 
-	scheme.Register(typedKind(
-		"remote-mcp", "remote-mcps", []string{
-			"RemoteMCPServer", "remotemcpserver", "remote-mcp-server", "remotemcpservers",
-		},
-		[]scheme.Column{{Header: "NAME"}, {Header: "TAG"}, {Header: "TYPE"}, {Header: "URL"}},
-		v1alpha1.KindRemoteMCPServer,
-		func() *v1alpha1.RemoteMCPServer { return &v1alpha1.RemoteMCPServer{} },
-		remoteMCPServerRow,
-	))
-
 	// Runtime is registered manually because it is a mutable namespace/name
 	// object: the server's runtime store does not expose /tags or
 	// DeleteAllTags endpoints. Routing it through

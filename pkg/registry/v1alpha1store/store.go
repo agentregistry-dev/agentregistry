@@ -45,8 +45,7 @@ const (
 //     Storage key is (namespace, name, tag). Users may supply the tag
 //     declaratively; missing tags are filled with the literal "latest".
 //     Re-applying the same tag replaces the prior row atomically when the
-//     content changes. Used for agents, mcp_servers,
-//     remote_mcp_servers, skills, and prompts.
+//     content changes. Used for agents, mcp_servers, skills, and prompts.
 //
 //   - MutableObjectStore (produced by NewMutableObjectStore). Storage key is
 //     (namespace, name). Used for Runtime/Deployment and additional
@@ -739,6 +738,30 @@ func (s *Store) GetLatest(ctx context.Context, namespace, name string) (*v1alpha
 			FROM %s
 			WHERE namespace=$1 AND name=$2 AND deletion_timestamp IS NULL`, s.selectColumns(), s.table)
 	}
+	row := s.pool.QueryRow(ctx, query, namespace, name)
+	return scanRow(row, false)
+}
+
+// GetLatestIncludingTerminating is GetLatest without the
+// `deletion_timestamp IS NULL` filter, so soft-deleted rows are still
+// returned. Used by resource-handler GET / DELETE paths when the kind
+// opts into IncludeTerminatingByDefault; without this view those
+// handlers contradict LIST, which surfaces the terminating row.
+// Returns pkgdb.ErrNotFound only when no row exists at all.
+func (s *Store) GetLatestIncludingTerminating(ctx context.Context, namespace, name string) (*v1alpha1.RawObject, error) {
+	var query string
+	if s.behavior == TaggedArtifactStore {
+		query = fmt.Sprintf(`
+			SELECT %s
+			FROM %s
+			WHERE namespace=$1 AND name=$2 AND tag=$3`, s.selectColumns(), s.table)
+		row := s.pool.QueryRow(ctx, query, namespace, name, DefaultTag())
+		return scanRow(row, true)
+	}
+	query = fmt.Sprintf(`
+		SELECT %s
+		FROM %s
+		WHERE namespace=$1 AND name=$2`, s.selectColumns(), s.table)
 	row := s.pool.QueryRow(ctx, query, namespace, name)
 	return scanRow(row, false)
 }
