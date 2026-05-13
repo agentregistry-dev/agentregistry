@@ -58,8 +58,8 @@ func RegisterExtensionKind(k ExtensionKind) {
 		Get: func(ctx context.Context, name, _ string) (any, error) {
 			return client.GetTyped(ctx, apiClient, k.CanonicalKind, v1alpha1.DefaultNamespace, name, "", k.NewObject)
 		},
-		ListFunc: func(ctx context.Context) ([]any, error) {
-			return listLatestAny(ctx, k.CanonicalKind, k.NewObject)
+		ListFunc: func(ctx context.Context, opts scheme.ListOpts) ([]any, error) {
+			return listAny(ctx, k.CanonicalKind, opts, k.NewObject)
 		},
 		Delete: func(ctx context.Context, name, tag string, force bool) error {
 			return deleteAny(ctx, k.CanonicalKind, name, tag, force, k.NewObject)

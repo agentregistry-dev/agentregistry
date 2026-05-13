@@ -7,6 +7,7 @@ import (
 	"time"
 
 	cliCommon "github.com/agentregistry-dev/agentregistry/internal/cli/common"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/printer"
@@ -27,14 +28,25 @@ type deploymentStatus struct {
 	UpdatedAt       time.Time      `json:"updatedAt,omitempty" yaml:"updatedAt,omitempty"`
 }
 
-func listLatestAny[T v1alpha1.Object](ctx context.Context, kind string, newObj func() T) ([]any, error) {
+// listAny lists rows of the given kind. The zero scheme.ListOpts returns
+// every (namespace, name, tag) row of the kind — same shape as a raw
+// GET /v0/{plural}. Callers pass Tag or LatestOnly to filter; the CLI
+// `get` command surfaces those as `--tag` / `--latest`.
+//
+// Earlier this helper hardcoded `LatestOnly: true`, which translated
+// server-side to a literal `tag = "latest"` predicate. That returned
+// nothing for resources published with explicit version tags, even
+// though they existed in the registry. List now matches the natural
+// "show me what's there" expectation.
+func listAny[T v1alpha1.Object](ctx context.Context, kind string, opts scheme.ListOpts, newObj func() T) ([]any, error) {
 	items, err := client.ListAllTyped(
 		ctx,
 		apiClient,
 		kind,
 		client.ListOpts{
 			Namespace:  v1alpha1.DefaultNamespace,
-			LatestOnly: true,
+			Tag:        opts.Tag,
+			LatestOnly: opts.LatestOnly,
 			Limit:      200,
 		},
 		newObj,
