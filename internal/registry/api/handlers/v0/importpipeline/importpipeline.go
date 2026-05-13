@@ -1,25 +1,20 @@
 // Package importpipeline owns POST /v0/import — the multi-doc YAML
 // import endpoint that runs each decoded document through the
-// pre-constructed importer.Importer (validation + scanner enrichment
-// + Upsert) and returns per-document results.
+// pre-constructed importer.Importer (scanner enrichment + shared
+// apply/admission) and returns per-document results.
 //
 // Distinct from the per-kind CRUD bindings in v1alpha1crud and from
-// the in-package POST /v0/apply (pkg/registry/resource): apply
-// short-circuits to plain Upsert without scanner runs, while
-// importpipeline always passes through the importer's enrichment
-// pipeline so scanner annotations + findings rows land alongside
-// the persisted spec.
+// the in-package POST /v0/apply (pkg/registry/resource): import adds
+// scanner enrichment, then persists through the same apply/admission path.
 package importpipeline
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/importer"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 )
@@ -31,17 +26,10 @@ import (
 type Config struct {
 	BasePrefix string
 	Importer   *importer.Importer
-	// Authorizers is the same per-kind authz map the regular apply
-	// pipeline consults. When set, every decoded document is
-	// authorized before Upsert via importer.Options.PerObjectAuthorize;
-	// a deny on any kind makes that doc fail with Status=failed
-	// without aborting the rest of the batch (matches the
-	// per-doc-failure pattern in pkg/registry/resource/apply.go).
-	//
-	// Without this map, POST /v0/import is a write-bypass for any
-	// kind the Importer accepts — denied users could create / replace
-	// rows by routing writes through this endpoint.
-	Authorizers map[string]func(ctx context.Context, in resource.AuthorizeInput) error
+	// ApplyConfig is the same apply/admission config used by /v0/apply, with
+	// Source set to import by the router. Importer adds scanner enrichment via
+	// Prepare, then delegates persistence to resource.ApplyObject.
+	ApplyConfig resource.ApplyConfig
 }
 
 // importInput is the HTTP input for POST /import. RawBody carries
@@ -79,10 +67,11 @@ func Register(api huma.API, cfg Config) {
 		Summary:     "Import v1alpha1 resources (validate, optionally enrich, upsert)",
 	}, func(ctx context.Context, in *importInput) (*importOutput, error) {
 		opts := importer.Options{
-			Namespace: in.Namespace,
-			Enrich:    in.Enrich,
-			DryRun:    in.DryRun,
-			ScannedBy: firstNonEmpty(in.ScannedBy, "importer-http"),
+			Namespace:   in.Namespace,
+			Enrich:      in.Enrich,
+			DryRun:      in.DryRun,
+			ScannedBy:   firstNonEmpty(in.ScannedBy, "importer-http"),
+			ApplyConfig: cfg.ApplyConfig,
 		}
 		if s := strings.TrimSpace(in.WhichScans); s != "" {
 			for name := range strings.SplitSeq(s, ",") {
@@ -92,30 +81,6 @@ func Register(api huma.API, cfg Config) {
 				}
 			}
 		}
-		if len(cfg.Authorizers) > 0 {
-			authorizers := cfg.Authorizers
-			opts.PerObjectAuthorize = func(ctx context.Context, obj v1alpha1.Object) error {
-				kind := obj.GetKind()
-				authz, ok := authorizers[kind]
-				// Defense-in-depth: when the caller has wired any
-				// Authorizers, a kind without an entry must DENY
-				// rather than silently allow. Downstream boot guards
-				// can ensure every OSS BuiltinKinds entry has an
-				// authorizer, so this only fires for extension kinds
-				// the operator added without
-				// updating the import config — fail closed there.
-				if !ok || authz == nil {
-					return huma.Error403Forbidden(fmt.Sprintf("import: no authorizer wired for kind %q", kind))
-				}
-				meta := obj.GetMetadata()
-				return authz(ctx, resource.AuthorizeInput{
-					Verb: "apply", Kind: kind,
-					Namespace: meta.Namespace, Name: meta.Name, Tag: meta.Tag,
-					Object: obj,
-				})
-			}
-		}
-
 		out := &importOutput{}
 		out.Body.Results = cfg.Importer.ImportBytes(ctx, "", in.RawBody, opts)
 		return out, nil

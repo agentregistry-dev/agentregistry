@@ -20,7 +20,9 @@ type applyOpts struct {
 	RegistryValidator v1alpha1.RegistryValidatorFunc
 	PostUpsert        func(ctx context.Context, obj v1alpha1.Object) error
 	InitialFinalizers func(obj v1alpha1.Object) []string
-	ApplyInterceptor  ApplyInterceptor
+	Admission         AdmissionFunc
+	Source            ApplySource
+	Prepare           func(ctx context.Context, obj v1alpha1.Object) error
 }
 
 // upsertResult is the outcome of a successful applyCore call.
@@ -34,19 +36,29 @@ type upsertResult struct {
 	Generation int64
 	// UID is the server-managed row identity after production upsert.
 	UID string
-	// Intercepted reports that a downstream hook handled the apply before
+	// Admitted reports that a downstream hook handled the apply before
 	// production upsert. No production PostUpsert hook has run.
-	Intercepted bool
-	// InterceptStatus is the ApplyResult status to report when Intercepted
+	Admitted bool
+	// AdmitStatus is the ApplyResult status to report when Admitted
 	// is true. Empty defaults to ApplyStatusStaged at the batch layer.
-	InterceptStatus string
-	// InterceptTag is the optional tag to report when Intercepted is true.
-	InterceptTag string
+	AdmitStatus string
+	// AdmitTag is the optional tag to report when Admitted is true.
+	AdmitTag string
 }
 
-// ApplyInterceptor can accept a validated apply request before the object is
-// written to the production Store. Downstream builds use this as a neutral
-// admission seam for workflows that persist the object somewhere else first.
+// ApplySource identifies the route or subsystem that produced an object for
+// the shared apply pipeline.
+type ApplySource string
+
+const (
+	ApplySourceApply  ApplySource = "apply"
+	ApplySourceImport ApplySource = "import"
+)
+
+// AdmissionFunc can accept or reject a validated apply request before the
+// object is written to the production Store. Downstream builds use this as a
+// neutral admission seam for workflows that persist the object somewhere else
+// first.
 //
 // TODO(krt): this is a synchronous-handler bridge for the pre-KRT apply path.
 // Remove or collapse it when reconciler-owned admission/staging becomes the
@@ -55,11 +67,13 @@ type upsertResult struct {
 // The hook runs after authorization, validation, reference resolution, and
 // registry validation, but before Store.Upsert and PostUpsert. Returning
 // Handled=true short-circuits the production upsert and skips PostUpsert.
-type ApplyInterceptor func(ctx context.Context, in ApplyInterceptorInput) (ApplyInterceptorResult, error)
+type AdmissionFunc func(ctx context.Context, in AdmissionInput) (AdmissionDecision, error)
 
-// ApplyInterceptorInput describes the apply request seen by ApplyInterceptor.
-// Store is the production store the object would otherwise be written to.
-type ApplyInterceptorInput struct {
+// AdmissionInput describes the write request seen by AdmissionFunc. Store is
+// the production store the object would otherwise be written to.
+type AdmissionInput struct {
+	Source    ApplySource
+	Verb      string
 	Kind      string
 	Namespace string
 	Name      string
@@ -68,10 +82,10 @@ type ApplyInterceptorInput struct {
 	Store     *v1alpha1store.Store
 }
 
-// ApplyInterceptorResult reports whether the hook handled the apply.
-// Status is copied into ApplyResult.Status when Handled is true; leave it empty
-// to use the generic "staged" status.
-type ApplyInterceptorResult struct {
+// AdmissionDecision reports whether the hook handled the apply. Status is
+// copied into ApplyResult.Status when Handled is true; leave it empty to use
+// the generic "staged" status.
+type AdmissionDecision struct {
 	Handled bool
 	Status  string
 	Tag     string
@@ -88,6 +102,7 @@ const (
 	stageRefs       applyStage = "refs"
 	stageRegistries applyStage = "registries"
 	stageAdmission  applyStage = "admission"
+	stagePrepare    applyStage = "prepare"
 	stageMarshal    applyStage = "marshal"
 	stageUpsert     applyStage = "upsert"
 	stagePostUpsert applyStage = "post-upsert"
@@ -160,12 +175,14 @@ func applyCore(
 		return upsertResult{}, &applyError{Stage: stageRegistries, Err: err}
 	}
 
-	if dryRun {
-		return upsertResult{}, nil
-	}
-
-	if opts.ApplyInterceptor != nil {
-		intercept, err := opts.ApplyInterceptor(ctx, ApplyInterceptorInput{
+	if !dryRun && opts.Admission != nil {
+		source := opts.Source
+		if source == "" {
+			source = ApplySourceApply
+		}
+		decision, err := opts.Admission(ctx, AdmissionInput{
+			Source:    source,
+			Verb:      "apply",
 			Kind:      kind,
 			Namespace: meta.Namespace,
 			Name:      meta.Name,
@@ -176,13 +193,23 @@ func applyCore(
 		if err != nil {
 			return upsertResult{}, &applyError{Stage: stageAdmission, Err: err}
 		}
-		if intercept.Handled {
+		if decision.Handled {
 			return upsertResult{
-				Intercepted:     true,
-				InterceptStatus: intercept.Status,
-				InterceptTag:    intercept.Tag,
+				Admitted:    true,
+				AdmitStatus: decision.Status,
+				AdmitTag:    decision.Tag,
 			}, nil
 		}
+	}
+
+	if opts.Prepare != nil {
+		if err := opts.Prepare(ctx, obj); err != nil {
+			return upsertResult{}, &applyError{Stage: stagePrepare, Err: err}
+		}
+	}
+
+	if dryRun {
+		return upsertResult{}, nil
 	}
 
 	upsertOpts := v1alpha1store.UpsertOpts{}

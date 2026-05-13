@@ -67,7 +67,12 @@ type PostUpsert func(ctx context.Context, obj v1alpha1.Object) error
 // batch's per-doc delete hook.
 type PostDelete func(ctx context.Context, obj v1alpha1.Object) error
 
-// ApplyInterceptor can accept a validated apply before the object reaches
+const (
+	AdmissionSourceApply  = "apply"
+	AdmissionSourceImport = "import"
+)
+
+// Admission can accept or reject a validated write before the object reaches
 // production storage. Store is intentionally opaque to keep pkg/types free of
 // registry/store implementation imports; integrations that need it can type
 // assert against the concrete store package they already depend on.
@@ -75,9 +80,11 @@ type PostDelete func(ctx context.Context, obj v1alpha1.Object) error
 // TODO(krt): this belongs to the synchronous handler architecture. Prefer a
 // reconciler-owned admission/staging model when KRT becomes the write path, and
 // delete this bridge once no downstream route depends on it.
-type ApplyInterceptor func(ctx context.Context, in ApplyInterceptorInput) (ApplyInterceptorResult, error)
+type Admission func(ctx context.Context, in AdmissionInput) (AdmissionDecision, error)
 
-type ApplyInterceptorInput struct {
+type AdmissionInput struct {
+	Source    string
+	Verb      string
 	Kind      string
 	Namespace string
 	Name      string
@@ -86,7 +93,7 @@ type ApplyInterceptorInput struct {
 	Store     any
 }
 
-type ApplyInterceptorResult struct {
+type AdmissionDecision struct {
 	Handled bool
 	Status  string
 	Tag     string
@@ -191,15 +198,11 @@ type AppOptions struct {
 	// PostDeletes mirror PostUpserts on the delete path.
 	PostDeletes map[string]PostDelete
 
-	// ApplyInterceptor optionally accepts a validated apply before the row
-	// reaches production storage. Nil preserves normal direct writes.
+	// Admission optionally accepts a validated write before the row reaches
+	// production storage. Nil preserves normal direct writes.
 	// TODO(krt): temporary synchronous-handler bridge; remove with reconciler
 	// admission/staging.
-	ApplyInterceptor ApplyInterceptor
-
-	// ImportAuthorizers optionally overrides Authorizers for /v0/import.
-	// Nil makes import use the regular Authorizers map.
-	ImportAuthorizers map[string]Authorizer
+	Admission Admission
 
 	// ResolverWrapper decorates the shared ResourceRef resolver before route
 	// registration. Nil preserves the default store-backed resolver.

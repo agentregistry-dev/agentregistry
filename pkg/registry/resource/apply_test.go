@@ -116,11 +116,11 @@ spec:
 	require.Contains(t, out.Results[1].Error, "unknown or unconfigured kind")
 }
 
-func TestRegisterApply_ApplyInterceptorCanHandleBeforeProductionUpsert(t *testing.T) {
+func TestRegisterApply_AdmissionCanHandleBeforeProductionUpsert(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
 	agents := v1alpha1store.NewStore(pool, "v1alpha1.agents")
 
-	var intercepted resource.ApplyInterceptorInput
+	var admitted resource.AdmissionInput
 	postUpsertCalled := false
 	_, api := humatest.New(t)
 	resource.RegisterApply(api, resource.ApplyConfig{
@@ -134,9 +134,9 @@ func TestRegisterApply_ApplyInterceptorCanHandleBeforeProductionUpsert(t *testin
 				return nil
 			},
 		},
-		ApplyInterceptor: func(ctx context.Context, in resource.ApplyInterceptorInput) (resource.ApplyInterceptorResult, error) {
-			intercepted = in
-			return resource.ApplyInterceptorResult{Handled: true, Tag: in.Tag}, nil
+		Admission: func(ctx context.Context, in resource.AdmissionInput) (resource.AdmissionDecision, error) {
+			admitted = in
+			return resource.AdmissionDecision{Handled: true, Tag: in.Tag}, nil
 		},
 	})
 
@@ -158,12 +158,14 @@ spec:
 	require.Len(t, out.Results, 1)
 	require.Equal(t, arv0.ApplyStatusStaged, out.Results[0].Status)
 	require.Equal(t, v1alpha1store.DefaultTag(), out.Results[0].Tag)
-	require.False(t, postUpsertCalled, "intercepted applies must not fire production side effects")
-	require.Equal(t, v1alpha1.KindAgent, intercepted.Kind)
-	require.Equal(t, "default", intercepted.Namespace)
-	require.Equal(t, "staged-agent", intercepted.Name)
-	require.Equal(t, v1alpha1store.DefaultTag(), intercepted.Tag)
-	require.Same(t, agents, intercepted.Store)
+	require.False(t, postUpsertCalled, "admitted applies must not fire production side effects")
+	require.Equal(t, resource.ApplySourceApply, admitted.Source)
+	require.Equal(t, "apply", admitted.Verb)
+	require.Equal(t, v1alpha1.KindAgent, admitted.Kind)
+	require.Equal(t, "default", admitted.Namespace)
+	require.Equal(t, "staged-agent", admitted.Name)
+	require.Equal(t, v1alpha1store.DefaultTag(), admitted.Tag)
+	require.Same(t, agents, admitted.Store)
 
 	_, err := agents.Get(t.Context(), "default", "staged-agent", v1alpha1store.DefaultTag())
 	require.ErrorIs(t, err, pkgdb.ErrNotFound)

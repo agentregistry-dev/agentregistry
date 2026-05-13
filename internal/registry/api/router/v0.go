@@ -82,11 +82,11 @@ type RouteOptions struct {
 	// Optional callback for integration-owned route registration.
 	ExtraRoutes func(api huma.API, pathPrefix string)
 
-	// ApplyInterceptor optionally accepts a validated apply before
-	// production Upsert. Nil preserves normal direct writes.
+	// Admission optionally accepts a validated write before production
+	// Upsert. Nil preserves normal direct writes.
 	// TODO(krt): temporary synchronous-handler bridge; remove when KRT owns
 	// admission/staging.
-	ApplyInterceptor resource.ApplyInterceptor
+	Admission resource.AdmissionFunc
 
 	// ResolverWrapper decorates the shared ResourceRef resolver before
 	// resource and apply routes are registered.
@@ -97,10 +97,6 @@ type RouteOptions struct {
 	// v1alpha1 stores and hooks used by /v0/apply.
 	// TODO(krt): temporary bridge for downstream synchronous approval routes.
 	ExtraResourceRoutes func(api huma.API, pathPrefix string, ctx types.ResourceRouteContext)
-
-	// ImportAuthorizers overrides PerKindHooks.Authorizers for /v0/import.
-	// Nil preserves the regular authorizer map.
-	ImportAuthorizers map[string]func(ctx context.Context, in resource.AuthorizeInput) error
 }
 
 // RegisterRoutes registers all API routes under /v0. Required
@@ -130,31 +126,29 @@ func RegisterRoutes(
 	// v1alpha1 generic routes. Cross-kind dangling-ref detection uses
 	// a Store-backed resolver. Deployment reconciliation hooks plug in
 	// when the coordinator is supplied.
-	registerKindRoutes(
+	applyCfg := registerKindRoutes(
 		api,
 		pathPrefix,
 		opts.Stores,
 		opts.DeploymentCoordinator,
 		opts.PerKindHooks,
 		opts.RegistryValidator,
-		opts.ApplyInterceptor,
+		opts.Admission,
 		opts.ResolverWrapper,
 		opts.ExtraResourceRoutes,
 	)
 
-	// POST /v0/import — runs decoded manifests through the enrichment
-	// pipeline (validate + scanners + findings-write) before Upsert.
-	// Authorizers wires the same per-kind RBAC the regular apply path
-	// uses; without it the import endpoint would be a write-bypass.
+	// POST /v0/import — runs decoded manifests through scanner enrichment
+	// before persisting via the same source-aware apply/admission pipeline as
+	// /v0/apply. That keeps per-kind authz and downstream admission policy in
+	// one write path instead of route-specific overrides.
 	if opts.Importer != nil {
-		importAuthorizers := opts.PerKindHooks.Authorizers
-		if opts.ImportAuthorizers != nil {
-			importAuthorizers = opts.ImportAuthorizers
-		}
+		importApplyCfg := applyCfg
+		importApplyCfg.Source = resource.ApplySourceImport
 		importpipeline.Register(api, importpipeline.Config{
 			BasePrefix:  pathPrefix,
 			Importer:    opts.Importer,
-			Authorizers: importAuthorizers,
+			ApplyConfig: importApplyCfg,
 		})
 	}
 
@@ -185,10 +179,10 @@ func registerKindRoutes(
 	coord *deploymentsvc.Coordinator,
 	perKind crud.PerKindHooks,
 	registryValidator v1alpha1.RegistryValidatorFunc,
-	applyInterceptor resource.ApplyInterceptor,
+	admission resource.AdmissionFunc,
 	resolverWrapper func(v1alpha1.ResolverFunc) v1alpha1.ResolverFunc,
 	extraResourceRoutes func(api huma.API, pathPrefix string, ctx types.ResourceRouteContext),
-) {
+) resource.ApplyConfig {
 	resolver := internaldb.NewResolver(stores)
 	if resolverWrapper != nil {
 		resolver = resolverWrapper(resolver)
@@ -255,10 +249,10 @@ func registerKindRoutes(
 		PostUpserts:       perKind.PostUpserts,
 		PostDeletes:       perKind.PostDeletes,
 		InitialFinalizers: perKind.InitialFinalizers,
-		ApplyInterceptor:  applyInterceptor,
+		Admission:         admission,
 	}
 	productionApplyCfg := applyCfg
-	productionApplyCfg.ApplyInterceptor = nil
+	productionApplyCfg.Admission = nil
 	resource.RegisterApply(api, applyCfg)
 
 	if extraResourceRoutes != nil {
@@ -275,4 +269,5 @@ func registerKindRoutes(
 			},
 		})
 	}
+	return applyCfg
 }

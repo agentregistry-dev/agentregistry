@@ -13,7 +13,9 @@ import (
 	"strings"
 	"time"
 
+	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
@@ -47,23 +49,12 @@ type Options struct {
 	// "importer-cli" when blank.
 	ScannedBy string
 
-	// PerObjectAuthorize, when non-nil, is invoked once per decoded
-	// object after validation + ref/registry/remote-URL checks but
-	// BEFORE Upsert. A non-nil error fails the per-doc
-	// ImportResult with Status=ImportStatusFailed; the rest of the
-	// stream still runs.
-	//
-	// HTTP callers (POST /v0/import) wire this from the same
-	// PerKindHooks.Authorizers map the regular apply path consults so
-	// the import surface enforces the same per-kind RBAC. Nil is the
-	// non-HTTP default (admin context, no per-call gate).
-	//
-	// Object identity is fully populated by the time this fires —
-	// metadata.namespace has been defaulted, validation has passed,
-	// labels/annotations from scanners are NOT yet applied (those run
-	// only on enrich + after authz, so an authz failure can't leak
-	// scanner-derived state).
-	PerObjectAuthorize func(ctx context.Context, obj v1alpha1.Object) error
+	// ApplyConfig, when set, is the shared apply/admission pipeline used for
+	// persistence. HTTP callers pass the same config as /v0/apply with
+	// Source=import so per-kind authz, downstream admission, finalizers, and
+	// post-upsert hooks are not reimplemented by import. When Stores is nil,
+	// the importer falls back to its own server boot dependencies.
+	ApplyConfig resource.ApplyConfig
 }
 
 // ImportResult is the per-object outcome of Importer.Import. One
@@ -82,8 +73,8 @@ type ImportResult struct {
 	Namespace string `json:"namespace,omitempty"`
 	Name      string `json:"name,omitempty"`
 
-	// Status is one of "created" | "updated" | "unchanged" | "failed"
-	// | "dry-run". Matches the apply-handler vocabulary.
+	// Status is one of "created" | "updated" | "unchanged" | "staged"
+	// | "failed" | "dry-run". Matches the apply-handler vocabulary.
 	Status string `json:"status"`
 
 	// EnrichmentStatus is "skipped" (Enrich=false or no supporting
@@ -107,6 +98,7 @@ const (
 	ImportStatusCreated   = "created"
 	ImportStatusUpdated   = "updated"
 	ImportStatusUnchanged = "unchanged"
+	ImportStatusStaged    = "staged"
 	ImportStatusFailed    = "failed"
 	ImportStatusDryRun    = "dry-run"
 
@@ -274,9 +266,9 @@ func (i *Importer) importStream(ctx context.Context, source string, data []byte,
 	return out
 }
 
-// importOne runs one decoded object through validate → enrich →
-// upsert → findings-write. Never errors; failures come back as the
-// ImportResult.
+// importOne runs one decoded object through the shared apply pipeline. Import
+// contributes scanner enrichment through ApplyConfig.Prepare, then writes
+// findings only after production apply succeeds.
 func (i *Importer) importOne(ctx context.Context, source string, obj v1alpha1.Object, opts Options) ImportResult {
 	meta := obj.GetMetadata()
 	kind := obj.GetKind()
@@ -300,78 +292,56 @@ func (i *Importer) importOne(ctx context.Context, source string, obj v1alpha1.Ob
 		res.Namespace = meta.Namespace
 	}
 
-	store, ok := i.stores[kind]
-	if !ok || store == nil {
-		res.Status = ImportStatusFailed
-		res.Error = fmt.Sprintf("unknown or unconfigured kind %q", kind)
-		return res
-	}
-
-	if v1alpha1.IsTaggedArtifactKind(kind) && meta.Tag == "" {
-		meta.Tag = v1alpha1store.DefaultTag()
-		obj.SetMetadata(*meta)
-		res.Tag = meta.Tag
-	}
-
-	if err := v1alpha1.ValidateObject(obj); err != nil {
-		res.Status = ImportStatusFailed
-		res.Error = "validation: " + err.Error()
-		return res
-	}
-	if err := v1alpha1.ResolveObjectRefs(ctx, obj, i.resolver); err != nil {
-		res.Status = ImportStatusFailed
-		res.Error = "refs: " + err.Error()
-		return res
-	}
-	if err := v1alpha1.ValidateObjectRegistries(ctx, obj, i.registryValidator); err != nil {
-		res.Status = ImportStatusFailed
-		res.Error = "registries: " + err.Error()
-		return res
-	}
-	// Per-object authz gate. Mirrors the apply pipeline's Authorize
-	// call (pkg/registry/resource/apply.go:prepareApplyDoc). Wired by
-	// the HTTP /v0/import handler from PerKindHooks.Authorizers so
-	// callers without role grants for a kind can't bypass per-kind
-	// RBAC by routing writes through the import endpoint.
-	if opts.PerObjectAuthorize != nil {
-		if err := opts.PerObjectAuthorize(ctx, obj); err != nil {
-			res.Status = ImportStatusFailed
-			res.Error = "authorize: " + err.Error()
-			return res
-		}
-	}
-
-	// Enrichment: mutate obj's annotations/labels in place, accumulate
-	// per-source findings to write after Upsert. Scanners run against
-	// the fully-populated object so they see user-authored labels too.
 	var pendingFindings map[string][]Finding
-	if opts.Enrich {
+	applyCfg := i.applyConfig(opts)
+	applyCfg.Source = resource.ApplySourceImport
+	applyCfg.Prepare = func(ctx context.Context, obj v1alpha1.Object) error {
+		if !opts.Enrich {
+			return nil
+		}
 		pendingFindings, res.EnrichmentStatus, res.EnrichmentErrors = i.runScanners(ctx, obj, opts)
+		return nil
 	}
 
-	if opts.DryRun {
-		res.Status = ImportStatusDryRun
-		return res
-	}
+	applyRes := resource.ApplyObject(ctx, applyCfg, obj, opts.DryRun)
+	res.Namespace = applyRes.Namespace
+	res.Name = applyRes.Name
+	res.Tag = applyRes.Tag
+	res.Status = importStatusFromApplyStatus(applyRes.Status)
+	res.Error = applyRes.Error
 
-	up, err := store.Upsert(ctx, obj)
-	if err != nil {
-		res.Status = ImportStatusFailed
-		res.Error = "upsert: " + err.Error()
-		return res
+	if res.Status != ImportStatusFailed && res.Status != ImportStatusDryRun && res.Status != ImportStatusStaged {
+		i.writeFindings(ctx, obj, opts, pendingFindings, &res, applyRes.Tag)
 	}
-	switch up.Outcome {
-	case v1alpha1store.UpsertCreated:
-		res.Status = ImportStatusCreated
-	case v1alpha1store.UpsertReplaced:
-		res.Status = ImportStatusUpdated
-	default:
-		res.Status = ImportStatusUnchanged
-	}
-	res.Tag = up.Tag
-
-	i.writeFindings(ctx, obj, opts, pendingFindings, &res, up.Tag)
 	return res
+}
+
+func (i *Importer) applyConfig(opts Options) resource.ApplyConfig {
+	if opts.ApplyConfig.Stores != nil {
+		return opts.ApplyConfig
+	}
+	return resource.ApplyConfig{
+		Stores:            i.stores,
+		Resolver:          i.resolver,
+		RegistryValidator: i.registryValidator,
+	}
+}
+
+func importStatusFromApplyStatus(status string) string {
+	switch status {
+	case arv0.ApplyStatusCreated:
+		return ImportStatusCreated
+	case arv0.ApplyStatusConfigured:
+		return ImportStatusUpdated
+	case arv0.ApplyStatusUnchanged:
+		return ImportStatusUnchanged
+	case arv0.ApplyStatusDryRun:
+		return ImportStatusDryRun
+	case arv0.ApplyStatusStaged:
+		return ImportStatusStaged
+	default:
+		return ImportStatusFailed
+	}
 }
 
 // writeFindings persists per-scanner findings after a successful Upsert.

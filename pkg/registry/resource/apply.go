@@ -64,9 +64,18 @@ type ApplyConfig struct {
 	// InitialFinalizers mirrors resource.Config.InitialFinalizers per kind.
 	InitialFinalizers map[string]func(obj v1alpha1.Object) []string
 
-	// ApplyInterceptor optionally accepts a validated apply before
-	// production Upsert. Nil preserves normal direct-write behavior.
-	ApplyInterceptor ApplyInterceptor
+	// Source labels the producer of objects entering this apply pipeline.
+	// Empty defaults to ApplySourceApply.
+	Source ApplySource
+
+	// Admission optionally accepts a validated write before production Upsert.
+	// Nil preserves normal direct-write behavior.
+	Admission AdmissionFunc
+
+	// Prepare optionally mutates an object after validation/admission and
+	// before Upsert. Import uses this to merge scanner output while still
+	// persisting through the shared apply path.
+	Prepare func(ctx context.Context, obj v1alpha1.Object) error
 }
 
 // applyInput receives a raw multi-doc YAML stream. RawBody keeps bytes
@@ -182,7 +191,9 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 		RegistryValidator: cfg.RegistryValidator,
 		PostUpsert:        cfg.PostUpserts[obj.GetKind()],
 		InitialFinalizers: cfg.InitialFinalizers[obj.GetKind()],
-		ApplyInterceptor:  cfg.ApplyInterceptor,
+		Admission:         cfg.Admission,
+		Source:            cfg.Source,
+		Prepare:           cfg.Prepare,
 	}, dryRun)
 	if ae != nil {
 		return failResult(res, ae)
@@ -196,13 +207,13 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 	// surface as created, same-tag replacements as configured, and exact
 	// re-applies as unchanged.
 	switch {
-	case up.Intercepted:
-		res.Status = up.InterceptStatus
+	case up.Admitted:
+		res.Status = up.AdmitStatus
 		if res.Status == "" {
 			res.Status = arv0.ApplyStatusStaged
 		}
-		if up.InterceptTag != "" {
-			res.Tag = up.InterceptTag
+		if up.AdmitTag != "" {
+			res.Tag = up.AdmitTag
 		}
 		return res
 	case up.Outcome == v1alpha1store.UpsertCreated:
