@@ -257,7 +257,8 @@ type listInput struct {
 	Limit      int    `query:"limit" doc:"Max items to return (default 50)." default:"50"`
 	Cursor     string `query:"cursor" doc:"Opaque pagination cursor."`
 	Labels     string `query:"labels" doc:"Label selector: key=value,key2=value2."`
-	LatestOnly bool   `query:"latestOnly" doc:"Only return the literal latest tag per (namespace, name)."`
+	Tag        string `query:"tag" doc:"Restrict the result set to one tag value (tagged artifact kinds only)."`
+	LatestOnly bool   `query:"latestOnly" doc:"Only return the literal latest tag per (namespace, name). Equivalent to tag=latest for tagged kinds."`
 	// IncludeTerminating surfaces soft-deleted rows (deletionTimestamp != nil)
 	// which are hidden by default.
 	IncludeTerminating bool `query:"includeTerminating" doc:"Include rows with a deletionTimestamp."`
@@ -318,6 +319,7 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 			Labels:             in.Labels,
 			Limit:              in.Limit,
 			Cursor:             in.Cursor,
+			Tag:                in.Tag,
 			LatestOnly:         in.LatestOnly,
 			IncludeTerminating: in.IncludeTerminating,
 		})
@@ -639,6 +641,7 @@ type listParams struct {
 	Labels             string
 	Limit              int
 	Cursor             string
+	Tag                string
 	LatestOnly         bool
 	IncludeTerminating bool
 }
@@ -652,6 +655,7 @@ func runList[T v1alpha1.Object](
 		Namespace:          p.Namespace,
 		Limit:              p.Limit,
 		Cursor:             p.Cursor,
+		Tag:                p.Tag,
 		LatestOnly:         p.LatestOnly,
 		IncludeTerminating: p.IncludeTerminating || cfg.IncludeTerminatingByDefault,
 	}

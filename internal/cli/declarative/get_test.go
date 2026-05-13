@@ -236,16 +236,123 @@ func TestGet_Tag_NotSupportedForDeployment(t *testing.T) {
 	assert.Contains(t, err.Error(), "deployment")
 }
 
-// TestGet_Tag_RequiresName pins that --tag errors when NAME is omitted.
-func TestGet_Tag_RequiresName(t *testing.T) {
+// TestGet_Tag_ListModeFiltersByTag verifies that `arctl get agents --tag X`
+// (no NAME) forwards `?tag=X` to the list endpoint. Earlier the CLI rejected
+// the no-NAME form with "--tag requires NAME"; that constraint is gone now
+// because the default list returns every tag, so --tag is the canonical way
+// to scope a list to one tag value.
+func TestGet_Tag_ListModeFiltersByTag(t *testing.T) {
+	var (
+		mu       sync.Mutex
+		captured []string
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		captured = append(captured, r.URL.RawQuery)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items":[]}`))
+	}))
+	t.Cleanup(srv.Close)
+	setupClientForServer(t, srv)
+
+	cmd := declarative.NewGetCmd()
+	cmd.SetArgs([]string{"agents", "--tag", "0.1.0"})
+	require.NoError(t, cmd.Execute())
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.NotEmpty(t, captured, "expected at least one server call")
+	assert.Contains(t, captured[0], "tag=0.1.0",
+		"expected ?tag=0.1.0 to flow through to the list query, got %q", captured[0])
+}
+
+// TestGet_Latest_ListModeFiltersByLatestOnly verifies `--latest` (no NAME)
+// flips `?latestOnly=true` on the list query. This is the explicit re-opt
+// into the old "default list filter" behavior that used to be implicit.
+func TestGet_Latest_ListModeFiltersByLatestOnly(t *testing.T) {
+	var (
+		mu       sync.Mutex
+		captured []string
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		captured = append(captured, r.URL.RawQuery)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items":[]}`))
+	}))
+	t.Cleanup(srv.Close)
+	setupClientForServer(t, srv)
+
+	cmd := declarative.NewGetCmd()
+	cmd.SetArgs([]string{"agents", "--latest"})
+	require.NoError(t, cmd.Execute())
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.NotEmpty(t, captured, "expected at least one server call")
+	assert.Contains(t, captured[0], "latestOnly=true",
+		"expected ?latestOnly=true to flow through, got %q", captured[0])
+}
+
+// TestGet_ListModeDefault_NoTagFilter verifies the new default: a plain
+// `arctl get agents` does NOT send tag= or latestOnly=, so the server
+// returns every row. This is the contract that fixes the empty-list bug
+// for resources published with explicit version tags.
+func TestGet_ListModeDefault_NoTagFilter(t *testing.T) {
+	var (
+		mu       sync.Mutex
+		captured []string
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		captured = append(captured, r.URL.RawQuery)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items":[]}`))
+	}))
+	t.Cleanup(srv.Close)
+	setupClientForServer(t, srv)
+
+	cmd := declarative.NewGetCmd()
+	cmd.SetArgs([]string{"agents"})
+	require.NoError(t, cmd.Execute())
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.NotEmpty(t, captured, "expected at least one server call")
+	assert.NotContains(t, captured[0], "tag=",
+		"default list should not pass a tag filter, got %q", captured[0])
+	assert.NotContains(t, captured[0], "latestOnly=true",
+		"default list should not pass latestOnly, got %q", captured[0])
+}
+
+// TestGet_TagAndLatest_MutuallyExclusive pins the flag-validation guard.
+func TestGet_TagAndLatest_MutuallyExclusive(t *testing.T) {
 	declarative.SetAPIClient(client.NewClient("http://127.0.0.1:1", ""))
 	t.Cleanup(func() { declarative.SetAPIClient(nil) })
 
 	cmd := declarative.NewGetCmd()
-	cmd.SetArgs([]string{"agents", "--tag", "1"})
+	cmd.SetArgs([]string{"agents", "--tag", "1", "--latest"})
 	err := cmd.Execute()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "--tag requires NAME")
+	assert.Contains(t, err.Error(), "mutually exclusive")
+}
+
+// TestGet_Latest_NotSupportedForProvider mirrors the --tag guard: --latest
+// is also a tag-shaped filter and should be rejected for mutable kinds
+// before any dispatch.
+func TestGet_Latest_NotSupportedForProvider(t *testing.T) {
+	declarative.SetAPIClient(client.NewClient("http://127.0.0.1:1", ""))
+	t.Cleanup(func() { declarative.SetAPIClient(nil) })
+
+	cmd := declarative.NewGetCmd()
+	cmd.SetArgs([]string{"runtime", "--latest"})
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--latest not supported")
+	assert.Contains(t, err.Error(), "runtime")
 }
 
 // TestGet_Tag_RejectsGetAll pins that --tag is rejected for
@@ -256,4 +363,14 @@ func TestGet_Tag_RejectsGetAll(t *testing.T) {
 	err := cmd.Execute()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "--tag cannot be used with `get all`")
+}
+
+// TestGet_Latest_RejectsGetAll is the symmetric guard for --latest on
+// cross-kind list.
+func TestGet_Latest_RejectsGetAll(t *testing.T) {
+	cmd := declarative.NewGetCmd()
+	cmd.SetArgs([]string{"all", "--latest"})
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--latest cannot be used with `get all`")
 }

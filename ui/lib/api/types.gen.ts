@@ -376,7 +376,11 @@ export type ListAgentsData = {
          */
         labels?: string;
         /**
-         * Only return the literal latest tag per (namespace, name).
+         * Restrict the result set to one tag value (tagged artifact kinds only).
+         */
+        tag?: string;
+        /**
+         * Only return the literal latest tag per (namespace, name). Equivalent to tag=latest for tagged kinds.
          */
         latestOnly?: boolean;
         /**
@@ -620,7 +624,11 @@ export type ListDeploymentsData = {
          */
         labels?: string;
         /**
-         * Only return the literal latest tag per (namespace, name).
+         * Restrict the result set to one tag value (tagged artifact kinds only).
+         */
+        tag?: string;
+        /**
+         * Only return the literal latest tag per (namespace, name). Equivalent to tag=latest for tagged kinds.
          */
         latestOnly?: boolean;
         /**
@@ -795,7 +803,11 @@ export type ListMcpserversData = {
          */
         labels?: string;
         /**
-         * Only return the literal latest tag per (namespace, name).
+         * Restrict the result set to one tag value (tagged artifact kinds only).
+         */
+        tag?: string;
+        /**
+         * Only return the literal latest tag per (namespace, name). Equivalent to tag=latest for tagged kinds.
          */
         latestOnly?: boolean;
         /**
@@ -1004,7 +1016,11 @@ export type ListPromptsData = {
          */
         labels?: string;
         /**
-         * Only return the literal latest tag per (namespace, name).
+         * Restrict the result set to one tag value (tagged artifact kinds only).
+         */
+        tag?: string;
+        /**
+         * Only return the literal latest tag per (namespace, name). Equivalent to tag=latest for tagged kinds.
          */
         latestOnly?: boolean;
         /**
@@ -1188,7 +1204,11 @@ export type ListRemotemcpserversData = {
          */
         labels?: string;
         /**
-         * Only return the literal latest tag per (namespace, name).
+         * Restrict the result set to one tag value (tagged artifact kinds only).
+         */
+        tag?: string;
+        /**
+         * Only return the literal latest tag per (namespace, name). Equivalent to tag=latest for tagged kinds.
          */
         latestOnly?: boolean;
         /**
@@ -1372,7 +1392,11 @@ export type ListRuntimesData = {
          */
         labels?: string;
         /**
-         * Only return the literal latest tag per (namespace, name).
+         * Restrict the result set to one tag value (tagged artifact kinds only).
+         */
+        tag?: string;
+        /**
+         * Only return the literal latest tag per (namespace, name). Equivalent to tag=latest for tagged kinds.
          */
         latestOnly?: boolean;
         /**
@@ -1522,7 +1546,11 @@ export type ListSkillsData = {
          */
         labels?: string;
         /**
-         * Only return the literal latest tag per (namespace, name).
+         * Restrict the result set to one tag value (tagged artifact kinds only).
+         */
+        tag?: string;
+        /**
+         * Only return the literal latest tag per (namespace, name). Equivalent to tag=latest for tagged kinds.
          */
         latestOnly?: boolean;
         /**

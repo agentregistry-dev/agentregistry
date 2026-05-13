@@ -763,12 +763,23 @@ paths:
         schema:
           description: 'Label selector: key=value,key2=value2.'
           type: string
-      - description: Only return the literal latest tag per (namespace, name).
+      - description: Restrict the result set to one tag value (tagged artifact kinds
+          only).
+        explode: false
+        in: query
+        name: tag
+        schema:
+          description: Restrict the result set to one tag value (tagged artifact kinds
+            only).
+          type: string
+      - description: Only return the literal latest tag per (namespace, name). Equivalent
+          to tag=latest for tagged kinds.
         explode: false
         in: query
         name: latestOnly
         schema:
-          description: Only return the literal latest tag per (namespace, name).
+          description: Only return the literal latest tag per (namespace, name). Equivalent
+            to tag=latest for tagged kinds.
           type: boolean
       - description: Include rows with a deletionTimestamp.
         explode: false
@@ -1029,12 +1040,23 @@ paths:
         schema:
           description: 'Label selector: key=value,key2=value2.'
           type: string
-      - description: Only return the literal latest tag per (namespace, name).
+      - description: Restrict the result set to one tag value (tagged artifact kinds
+          only).
+        explode: false
+        in: query
+        name: tag
+        schema:
+          description: Restrict the result set to one tag value (tagged artifact kinds
+            only).
+          type: string
+      - description: Only return the literal latest tag per (namespace, name). Equivalent
+          to tag=latest for tagged kinds.
         explode: false
         in: query
         name: latestOnly
         schema:
-          description: Only return the literal latest tag per (namespace, name).
+          description: Only return the literal latest tag per (namespace, name). Equivalent
+            to tag=latest for tagged kinds.
           type: boolean
       - description: Include rows with a deletionTimestamp.
         explode: false
@@ -1210,12 +1232,23 @@ paths:
         schema:
           description: 'Label selector: key=value,key2=value2.'
           type: string
-      - description: Only return the literal latest tag per (namespace, name).
+      - description: Restrict the result set to one tag value (tagged artifact kinds
+          only).
+        explode: false
+        in: query
+        name: tag
+        schema:
+          description: Restrict the result set to one tag value (tagged artifact kinds
+            only).
+          type: string
+      - description: Only return the literal latest tag per (namespace, name). Equivalent
+          to tag=latest for tagged kinds.
         explode: false
         in: query
         name: latestOnly
         schema:
-          description: Only return the literal latest tag per (namespace, name).
+          description: Only return the literal latest tag per (namespace, name). Equivalent
+            to tag=latest for tagged kinds.
           type: boolean
       - description: Include rows with a deletionTimestamp.
         explode: false
@@ -1427,12 +1460,23 @@ paths:
         schema:
           description: 'Label selector: key=value,key2=value2.'
           type: string
-      - description: Only return the literal latest tag per (namespace, name).
+      - description: Restrict the result set to one tag value (tagged artifact kinds
+          only).
+        explode: false
+        in: query
+        name: tag
+        schema:
+          description: Restrict the result set to one tag value (tagged artifact kinds
+            only).
+          type: string
+      - description: Only return the literal latest tag per (namespace, name). Equivalent
+          to tag=latest for tagged kinds.
         explode: false
         in: query
         name: latestOnly
         schema:
-          description: Only return the literal latest tag per (namespace, name).
+          description: Only return the literal latest tag per (namespace, name). Equivalent
+            to tag=latest for tagged kinds.
           type: boolean
       - description: Include rows with a deletionTimestamp.
         explode: false
@@ -1624,12 +1668,23 @@ paths:
         schema:
           description: 'Label selector: key=value,key2=value2.'
           type: string
-      - description: Only return the literal latest tag per (namespace, name).
+      - description: Restrict the result set to one tag value (tagged artifact kinds
+          only).
+        explode: false
+        in: query
+        name: tag
+        schema:
+          description: Restrict the result set to one tag value (tagged artifact kinds
+            only).
+          type: string
+      - description: Only return the literal latest tag per (namespace, name). Equivalent
+          to tag=latest for tagged kinds.
         explode: false
         in: query
         name: latestOnly
         schema:
-          description: Only return the literal latest tag per (namespace, name).
+          description: Only return the literal latest tag per (namespace, name). Equivalent
+            to tag=latest for tagged kinds.
           type: boolean
       - description: Include rows with a deletionTimestamp.
         explode: false
@@ -1821,12 +1876,23 @@ paths:
         schema:
           description: 'Label selector: key=value,key2=value2.'
           type: string
-      - description: Only return the literal latest tag per (namespace, name).
+      - description: Restrict the result set to one tag value (tagged artifact kinds
+          only).
+        explode: false
+        in: query
+        name: tag
+        schema:
+          description: Restrict the result set to one tag value (tagged artifact kinds
+            only).
+          type: string
+      - description: Only return the literal latest tag per (namespace, name). Equivalent
+          to tag=latest for tagged kinds.
         explode: false
         in: query
         name: latestOnly
         schema:
-          description: Only return the literal latest tag per (namespace, name).
+          description: Only return the literal latest tag per (namespace, name). Equivalent
+            to tag=latest for tagged kinds.
           type: boolean
       - description: Include rows with a deletionTimestamp.
         explode: false
@@ -1982,12 +2048,23 @@ paths:
         schema:
           description: 'Label selector: key=value,key2=value2.'
           type: string
-      - description: Only return the literal latest tag per (namespace, name).
+      - description: Restrict the result set to one tag value (tagged artifact kinds
+          only).
+        explode: false
+        in: query
+        name: tag
+        schema:
+          description: Restrict the result set to one tag value (tagged artifact kinds
+            only).
+          type: string
+      - description: Only return the literal latest tag per (namespace, name). Equivalent
+          to tag=latest for tagged kinds.
         explode: false
         in: query
         name: latestOnly
         schema:
-          description: Only return the literal latest tag per (namespace, name).
+          description: Only return the literal latest tag per (namespace, name). Equivalent
+            to tag=latest for tagged kinds.
           type: boolean
       - description: Include rows with a deletionTimestamp.
         explode: false

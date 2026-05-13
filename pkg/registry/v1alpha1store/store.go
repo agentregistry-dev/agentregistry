@@ -180,8 +180,18 @@ type ListOpts struct {
 	Limit int
 	// Cursor is an opaque pagination token. Empty starts from the beginning.
 	Cursor string
+	// Tag restricts the result set to a single tag value on tagged-artifact
+	// stores. Empty means "no tag filter" — every tag of every name is
+	// returned. Ignored on mutable-object stores (they have no tag column).
+	// Mutually exclusive with LatestOnly (validated at the caller level;
+	// the store treats LatestOnly as the literal `Tag = "latest"` filter
+	// when both are set, but new callers should pick one).
+	Tag string
 	// LatestOnly restricts to the literal "latest" tag per (namespace, name),
-	// or the private latest row for mutable-object stores.
+	// or the private latest row for mutable-object stores. Equivalent to
+	// `Tag = "latest"` on tagged stores; kept as a separate field because
+	// it also covers the mutable-object latest-row case (where there's no
+	// user-facing tag column).
 	LatestOnly bool
 	// IncludeTerminating includes rows with deletion_timestamp set. Default
 	// false — callers asking for "alive" rows shouldn't see terminating ones.
@@ -965,8 +975,14 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 		args = append(args, opts.Namespace)
 		where = append(where, fmt.Sprintf("namespace = $%d", len(args)))
 	}
-	if opts.LatestOnly {
-		if s.behavior == TaggedArtifactStore {
+	if s.behavior == TaggedArtifactStore {
+		// Tag wins when set; otherwise LatestOnly falls back to the literal
+		// "latest" filter for callers that pre-date the Tag field.
+		switch {
+		case opts.Tag != "":
+			args = append(args, opts.Tag)
+			where = append(where, fmt.Sprintf("tag = $%d", len(args)))
+		case opts.LatestOnly:
 			args = append(args, DefaultTag())
 			where = append(where, fmt.Sprintf("tag = $%d", len(args)))
 		}
