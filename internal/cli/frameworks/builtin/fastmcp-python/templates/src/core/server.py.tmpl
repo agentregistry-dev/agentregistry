@@ -158,8 +158,21 @@ class DynamicMCPServer:
         """
 
         if transport_mode == "http":
-            self.mcp.run(transport="http", host=host, port=port, path="/mcp",
-                         stateless_http=stateless_http)
+            # Build the ASGI app via FastMCP, then run uvicorn directly. This
+            # lets us disable Starlette's trailing-slash redirect, which would
+            # otherwise turn POST /mcp/ into a 307 -> /mcp round-trip. The
+            # round-trip breaks streamable HTTP / SSE clients (the redirect
+            # arrives mid-stream and surfaces as anyio.BrokenResourceError on
+            # the client). Serving /mcp and /mcp/ both as 200 OK keeps the
+            # protocol contract: stream handshake completes in one request.
+            import uvicorn
+
+            app = self.mcp.streamable_http_app(
+                path="/mcp",
+                stateless_http=stateless_http,
+            )
+            app.router.redirect_slashes = False
+            uvicorn.run(app, host=host, port=port)
         elif transport_mode == "stdio":
             # Default to stdio mode
             self.mcp.run()
