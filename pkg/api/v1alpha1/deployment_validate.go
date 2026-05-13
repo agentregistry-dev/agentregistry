@@ -80,5 +80,17 @@ func validateDeploymentSpec(s *DeploymentSpec) FieldErrors {
 				DesiredStateDeployed, DesiredStateUndeployed))
 	}
 
+	for i, ref := range s.DeploymentRefs {
+		path := fmt.Sprintf("spec.deploymentRefs[%d]", i)
+		if ref.Name == "" {
+			errs.Append(path+".name", fmt.Errorf("%w", ErrRequiredField))
+		} else if !nameRegex.MatchString(ref.Name) {
+			errs.Append(path+".name", fmt.Errorf("%w: %q", ErrInvalidFormat, ref.Name))
+		}
+		if ref.Namespace != "" && !namespaceRegex.MatchString(ref.Namespace) {
+			errs.Append(path+".namespace", fmt.Errorf("%w: %q", ErrInvalidFormat, ref.Namespace))
+		}
+	}
+
 	return errs
 }

@@ -263,6 +263,48 @@ func TestDeploymentValidate_RejectsBadDesiredState(t *testing.T) {
 	require.Contains(t, paths, "spec.desiredState")
 }
 
+func TestDeploymentValidate_DeploymentRefsOK(t *testing.T) {
+	d := &Deployment{
+		Metadata: ObjectMeta{Namespace: "default", Name: "agent-prod"},
+		Spec: DeploymentSpec{
+			TargetRef:    ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
+			RuntimeRef:   ResourceRef{Kind: KindRuntime, Name: "local"},
+			DesiredState: DesiredStateDeployed,
+			DeploymentRefs: []DeploymentRef{
+				{Name: "weather-mcp-prod"},
+				{Namespace: "tools", Name: "fs-mcp-prod"},
+			},
+		},
+	}
+	require.NoError(t, d.Validate())
+}
+
+func TestDeploymentValidate_DeploymentRefsRejectMissingName(t *testing.T) {
+	d := &Deployment{
+		Metadata: ObjectMeta{Namespace: "default", Name: "agent-prod"},
+		Spec: DeploymentSpec{
+			TargetRef:      ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
+			RuntimeRef:     ResourceRef{Kind: KindRuntime, Name: "local"},
+			DeploymentRefs: []DeploymentRef{{Namespace: "tools"}}, // missing Name
+		},
+	}
+	paths := failedFields(t, d.Validate())
+	require.Contains(t, paths, "spec.deploymentRefs[0].name")
+}
+
+func TestDeploymentValidate_DeploymentRefsRejectBadNamespace(t *testing.T) {
+	d := &Deployment{
+		Metadata: ObjectMeta{Namespace: "default", Name: "agent-prod"},
+		Spec: DeploymentSpec{
+			TargetRef:      ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
+			RuntimeRef:     ResourceRef{Kind: KindRuntime, Name: "local"},
+			DeploymentRefs: []DeploymentRef{{Namespace: "Bad NS", Name: "ok"}},
+		},
+	}
+	paths := failedFields(t, d.Validate())
+	require.Contains(t, paths, "spec.deploymentRefs[0].namespace")
+}
+
 // Deployment.spec.targetRef may omit tag; reference resolution treats blank as
 // the literal "latest" tag.
 func TestDeploymentValidate_AllowsEmptyTargetRefTag(t *testing.T) {
