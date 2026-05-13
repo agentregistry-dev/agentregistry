@@ -252,7 +252,7 @@ func registerKindRoutes(
 		Admission:         admission,
 	}
 	productionApplyCfg := applyCfg
-	productionApplyCfg.Admission = nil
+	productionApplyCfg.Admission = resource.ProductionAdmission
 	resource.RegisterApply(api, applyCfg)
 
 	if extraResourceRoutes != nil {
