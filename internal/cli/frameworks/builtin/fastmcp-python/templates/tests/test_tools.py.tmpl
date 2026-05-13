@@ -72,10 +72,10 @@ class TestEchoTool:
         server.load_tools()
 
         tools = server.get_tools_sync()
-        assert "echo" in tools
+        assert "example_echo" in tools
 
         # Call the tool function
-        echo_tool = tools["echo"]
+        echo_tool = tools["example_echo"]
         result = echo_tool.fn("Hello, World!")
         assert isinstance(result, str)
         assert "Hello, World!" in result
