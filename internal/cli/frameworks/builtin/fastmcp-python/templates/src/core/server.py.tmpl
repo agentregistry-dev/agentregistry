@@ -167,7 +167,7 @@ class DynamicMCPServer:
             # protocol contract: stream handshake completes in one request.
             import uvicorn
 
-            app = self.mcp.streamable_http_app(
+            app = self.mcp.http_app(
                 path="/mcp",
                 stateless_http=stateless_http,
             )
