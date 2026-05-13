@@ -20,6 +20,35 @@ from .utils import load_config
 mcp: FastMCP = FastMCP(name="Dynamic Server")
 
 
+class _StripTrailingSlashASGI:
+    """ASGI shim that maps `<path>/` to `<path>` without a redirect.
+
+    With redirect_slashes disabled on the inner Starlette app, a request to
+    `/mcp/` would otherwise 404. Rewriting the scope path in place lets both
+    `/mcp` and `/mcp/` hit the same handler in a single request — required
+    for streamable HTTP / SSE, where a 307 redirect arrives mid-stream and
+    breaks the client.
+    """
+
+    def __init__(self, app: Any, path: str) -> None:
+        self._app = app
+        self._path = path
+        self._slashed = path + "/"
+        self._raw_slashed = self._slashed.encode("ascii")
+        self._raw_stripped = path.encode("ascii")
+
+    async def __call__(self, scope: dict, receive: Any, send: Any) -> None:
+        if scope["type"] == "http" and scope.get("path") == self._slashed:
+            scope = dict(scope)
+            scope["path"] = self._path
+            raw_path = scope.get("raw_path")
+            if isinstance(raw_path, (bytes, bytearray)) and raw_path.startswith(
+                self._raw_slashed
+            ):
+                scope["raw_path"] = self._raw_stripped + raw_path[len(self._raw_slashed):]
+        await self._app(scope, receive, send)
+
+
 class DynamicMCPServer:
     """MCP server with dynamic tool loading capabilities."""
 
@@ -158,8 +187,22 @@ class DynamicMCPServer:
         """
 
         if transport_mode == "http":
-            self.mcp.run(transport="http", host=host, port=port, path="/mcp",
-                         stateless_http=stateless_http)
+            # Build the ASGI app via FastMCP, then run uvicorn directly. We
+            # disable Starlette's trailing-slash redirect (which would turn
+            # POST /mcp/ into a 307 -> /mcp round-trip and break streamable
+            # HTTP / SSE clients — the redirect arrives mid-stream and
+            # surfaces as anyio.BrokenResourceError) and instead rewrite
+            # incoming /mcp/ requests to /mcp so both forms succeed with
+            # 200 OK in a single request.
+            import uvicorn
+
+            app = self.mcp.http_app(
+                path="/mcp",
+                stateless_http=stateless_http,
+            )
+            app.router.redirect_slashes = False
+            app = _StripTrailingSlashASGI(app, "/mcp")
+            uvicorn.run(app, host=host, port=port)
         elif transport_mode == "stdio":
             # Default to stdio mode
             self.mcp.run()

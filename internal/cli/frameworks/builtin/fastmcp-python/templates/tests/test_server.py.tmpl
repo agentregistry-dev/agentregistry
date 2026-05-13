@@ -35,26 +35,26 @@ class TestDynamicMCPServer:
         server:
           name: "Test Server"
         tools:
-          echo:
+          example_echo:
             prefix: "[TEST] "
         """
 
         with patch("builtins.open", mock_open(read_data=config_data)):
             config = load_config("test.yaml")
             assert config["server"]["name"] == "Test Server"
-            assert config["tools"]["echo"]["prefix"] == "[TEST] "
+            assert config["tools"]["example_echo"]["prefix"] == "[TEST] "
 
     def test_get_tool_config(self) -> None:
         """Test tool-specific configuration retrieval."""
         with patch("core.utils.load_config") as mock_load:
             mock_load.return_value = {
                 "tools": {
-                    "echo": {"prefix": "[TEST] "},
+                    "example_echo": {"prefix": "[TEST] "},
                     "weather": {"api_key_env": "WEATHER_API_KEY"}
                 }
             }
 
-            echo_config = get_tool_config("echo")
+            echo_config = get_tool_config("example_echo")
             assert echo_config["prefix"] == "[TEST] "
 
             weather_config = get_tool_config("weather")
@@ -73,33 +73,33 @@ class TestDynamicMCPServer:
             mock_run.assert_called_once()
 
     def test_run_method_http_mode(self) -> None:
-        """Test that run method can switch to HTTP mode."""
+        """Test that run method serves an ASGI app via uvicorn in HTTP mode."""
         server = DynamicMCPServer(name="Test Server", tools_dir="src/tools")
 
-        with patch.object(server.mcp, 'run') as mock_run:
+        fake_app = MagicMock()
+        fake_app.router.redirect_slashes = True
+        with patch.object(server.mcp, 'http_app', return_value=fake_app) as mock_http_app, \
+                patch('uvicorn.run') as mock_uvicorn_run:
             server.run(transport_mode="http", host="0.0.0.0", port=8080)
-            mock_run.assert_called_once_with(transport="http", host="0.0.0.0", port=8080, path="/mcp")
 
-    def test_http_transport_configuration(self) -> None:
-        """Test HTTP transport configuration is passed to FastMCP."""
-        server = DynamicMCPServer(name="Test Server", tools_dir="src/tools")
-        with patch.object(server.mcp, 'run') as mock_run:
-            server.run(transport_mode="http", host="localhost", port=3000)
-            mock_run.assert_called_once_with(transport="http", host="localhost", port=3000, path="/mcp")
-            kwargs = mock_run.call_args.kwargs
-            assert kwargs["transport"] == "http"
-            assert kwargs["host"] == "localhost"
-            assert kwargs["port"] == 3000
-            assert kwargs["path"] == "/mcp"
+            mock_http_app.assert_called_once_with(path="/mcp", stateless_http=False)
+            # redirect_slashes must be disabled so /mcp/ does not 307 mid-stream
+            assert fake_app.router.redirect_slashes is False
+            mock_uvicorn_run.assert_called_once()
+            args, kwargs = mock_uvicorn_run.call_args
+            assert kwargs.get("host") == "0.0.0.0"
+            assert kwargs.get("port") == 8080
 
-    def test_http_server_missing_dependencies(self) -> None:
-        """Test that HTTP server raises ImportError from FastMCP run."""
+    def test_http_transport_stateless(self) -> None:
+        """Test that stateless_http flag is forwarded to FastMCP."""
         server = DynamicMCPServer(name="Test Server", tools_dir="src/tools")
 
-        with patch.object(server.mcp, 'run') as mock_run:
-            mock_run.side_effect = ImportError("No module named 'uvicorn'")
-            with pytest.raises(ImportError, match="No module named 'uvicorn'"):
-                server.run(transport_mode="http", host="localhost", port=3000)
+        fake_app = MagicMock()
+        with patch.object(server.mcp, 'http_app', return_value=fake_app) as mock_http_app, \
+                patch('uvicorn.run'):
+            server.run(transport_mode="http", host="localhost", port=3000,
+                       stateless_http=True)
+            mock_http_app.assert_called_once_with(path="/mcp", stateless_http=True)
 
 
 class TestToolLoading:
@@ -115,5 +115,6 @@ class TestToolLoading:
         # Verify that tools were loaded
         assert len(server.loaded_tools) > 0
 
-        # Verify that echo tool specifically was loaded
+        # Verify that the echo tool module specifically was loaded
+        # (loaded_tools stores file stems, not MCP-registered tool names)
         assert "echo" in server.loaded_tools
