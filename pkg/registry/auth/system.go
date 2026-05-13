@@ -2,7 +2,7 @@ package auth
 
 import "context"
 
-// SystemSession is used for internal system operations (importers, reconciliation).
+// SystemSession is used for internal system operations such as reconciliation.
 type SystemSession struct{}
 
 func (s *SystemSession) Principal() Principal {

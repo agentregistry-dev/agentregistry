@@ -35,7 +35,7 @@ agentregistry is an open-source platform that gives you one place to find, manag
 
 Right now, the MCP servers and AI tools your team needs are spread across npm, PyPI, Docker Hub, GitHub repos, and random URLs. Nobody knows which ones are trustworthy, which versions work, or how to get them running. Every developer is doing their own manual Docker setup and IDE configuration.
 
-agentregistry puts all of that into a single registry with a CLI and a web UI. You import or publish artifacts once, and then anyone on your team can discover them, deploy them with one command, and have their IDE automatically configured to use them.
+agentregistry puts all of that into a single registry with a CLI and a web UI. You publish artifacts once, and then anyone on your team can discover them, deploy them with one command, and have their IDE automatically configured to use them.
 
 ---
 
@@ -55,11 +55,11 @@ agentregistry puts all of that into a single registry with a CLI and a web UI. Y
 <td width="50%" valign="top">
 <h3>For Organizations</h3>
 <p><strong>Curate &amp; Deploy</strong></p>
-<p>Package, collect, and enrich AI artifacts from any source in a single centralized registry.</p>
+<p>Package, publish, and curate AI artifacts in a single centralized registry.</p>
 <ul>
-  <li><strong>Centralized Control</strong> - Package and collect AI artifacts from any source into a single registry</li>
+  <li><strong>Centralized Control</strong> - Package and publish AI artifacts into a single registry</li>
   <li><strong>Security &amp; Governance</strong> - Curate and approve agents, servers, and skills before company-wide deployment</li>
-  <li><strong>Enriched Metadata</strong> - Add context to help assess trustworthiness and security</li>
+  <li><strong>Resource Metadata</strong> - Add context to help teams assess trustworthiness and security</li>
 </ul>
 
 </td>
@@ -103,14 +103,14 @@ That's it. Your IDE now has access to the deployed server through the agentgatew
 
 Create, scaffold, and publish the building blocks of your agentic infrastructure.
 
-- **MCP servers** — Register servers from npm (`npx`), PyPI (`uvx`), OCI/Docker images, or remote HTTP/SSE endpoints. Each entry supports versioning, environment variables, package references, and automated quality scores.
-- **Skills** — Build structured knowledge packages that extend what an agent knows. A skill is a `SKILL.md` bundled with code examples, docs, PDFs, and reference URLs. Scaffold with `arctl init skill`, package and push the image with `arctl build ./skill --push`, then register the skill record with `arctl apply -f skill.yaml`.
-- **Agents** — Define agents that bundle an identity with dependencies: which MCP servers it needs, which skills it uses, and how it should be configured. Scaffold with `arctl init agent`, build and push the image with `arctl build ./agent --push`, then register the versioned agent record with `arctl apply -f agent.yaml`.
-- **Prompts** — Create reusable instruction templates that define how an agent should behave in specific contexts. Version and store them alongside agents, skills, and servers so they're discoverable and shareable across your team.
+- **MCP servers** -- Register servers from npm (`npx`), PyPI (`uvx`), OCI/Docker images, or remote HTTP/SSE endpoints. Each entry supports versioning, environment variables, and package references.
+- **Skills** -- Build structured knowledge packages that extend what an agent knows. A skill is a `SKILL.md` bundled with code examples, docs, PDFs, and reference URLs. Scaffold with `arctl init skill`, package and push the image with `arctl build ./skill --push`, then register the skill record with `arctl apply -f skill.yaml`.
+- **Agents** -- Define agents that bundle an identity with dependencies: which MCP servers it needs, which skills it uses, and how it should be configured. Scaffold with `arctl init agent`, build and push the image with `arctl build ./agent --push`, then register the versioned agent record with `arctl apply -f agent.yaml`.
+- **Prompts** -- Create reusable instruction templates that define how an agent should behave in specific contexts. Version and store them alongside agents, skills, and servers so they're discoverable and shareable across your team.
 
 ### Web UI
 
-A browser-based admin interface at `localhost:12121`. Browse the artifact catalog, add MCP servers, skills, and agents, review enrichment scores and metadata, manage deployments, and configure the registry — all without touching the CLI.
+A browser-based admin interface at `localhost:12121`. Browse the artifact catalog, add MCP servers, skills, and agents, review metadata, manage deployments, and configure the registry -- all without touching the CLI.
 
 <p align="center">
   <img src="docs/img/arwui.gif" alt="agentregistry Web UI" width="800"/>
@@ -129,7 +129,7 @@ Curate a shared catalog of MCP servers, agents, skills, and prompts your teams c
 Turn a broad set of available AI artifacts into a collection your organization is willing to support.
 
 - Organize what developers can discover and deploy
-- Review enrichment scores, versioning, and environment variable requirements
+- Review versioning, metadata, and environment variable requirements
 - Standardize how artifacts are shared across teams
 - Keep control of what gets published and promoted
 

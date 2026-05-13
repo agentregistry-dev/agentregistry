@@ -8,7 +8,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/crud"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/deploymentlogs"
 	v0health "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/health"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/importpipeline"
 	v0ping "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/ping"
 	v0version "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/version"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
@@ -18,7 +17,6 @@ import (
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1/registries"
-	"github.com/agentregistry-dev/agentregistry/pkg/importer"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 	"github.com/danielgtaylor/huma/v2"
@@ -34,7 +32,7 @@ type Stores = map[string]*v1alpha1store.Store
 // RouteOptions contains the services that drive route registration.
 //
 // Stores is required; everything else is optional and gates a
-// specific feature area (deployments, import).
+// specific feature area (deployments).
 // RegisterRoutes returns an error if a required field is missing rather
 // than silently no-op'ing — a misconfigured boot fails loud.
 type RouteOptions struct {
@@ -46,12 +44,6 @@ type RouteOptions struct {
 	// namespace.
 	// REQUIRED — RegisterRoutes errors when this is nil/empty.
 	Stores Stores
-
-	// Importer, when non-nil, enables POST /v0/import. Typically
-	// constructed alongside Stores at bootstrap with the OSS
-	// scanner set (OSV + Scorecard) + a FindingsStore bound to the
-	// same pool.
-	Importer *importer.Importer
 
 	// DeploymentCoordinator drives post-persist reconciliation
 	// for the Deployment kind: PUT → adapter.Apply; DELETE → adapter.Remove.
@@ -71,7 +63,7 @@ type RouteOptions struct {
 	PerKindHooks crud.PerKindHooks
 
 	// RegistryValidator overrides the per-package registry
-	// validator on the apply / import path. Nil falls back to
+	// validator on the apply path. Nil falls back to
 	// registries.Dispatcher, the upstream public-catalogue default.
 	// See types.AppOptions.RegistryValidator for the full
 	// rationale (private deployments typically swap in a filter that
@@ -118,18 +110,6 @@ func RegisterRoutes(
 		opts.RegistryValidator,
 	)
 
-	// POST /v0/import — runs decoded manifests through the enrichment
-	// pipeline (validate + scanners + findings-write) before Upsert.
-	// Authorizers wires the same per-kind RBAC the regular apply path
-	// uses; without it the import endpoint would be a write-bypass.
-	if opts.Importer != nil {
-		importpipeline.Register(api, importpipeline.Config{
-			BasePrefix:  pathPrefix,
-			Importer:    opts.Importer,
-			Authorizers: opts.PerKindHooks.Authorizers,
-		})
-	}
-
 	if opts.ExtraRoutes != nil {
 		opts.ExtraRoutes(api, pathPrefix)
 	}
@@ -143,9 +123,7 @@ func RegisterRoutes(
 // query param defaulting to "default"; `?namespace=all` on list
 // widens scope across every namespace. The multi-doc apply endpoint
 // lives at `{basePrefix}/apply`. Cross-kind ResourceRef existence
-// dispatches through the shared
-// internaldb.NewResolver so the router and any server-side
-// Importer both see the same ref-existence semantics.
+// dispatches through the shared internaldb.NewResolver.
 //
 // When coord is non-nil, Deployment PUT/DELETE fire
 // coord.Apply/coord.Remove after the row is persisted so the type

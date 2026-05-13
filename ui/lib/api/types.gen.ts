@@ -544,7 +544,7 @@ export type DeleteBatchData = {
     path?: never;
     query?: {
         /**
-         * Run validation and enrichment without mutating the store. Defaults to false.
+         * Run validation without mutating the store. Defaults to false.
          */
         dryRun?: boolean;
     };
@@ -574,7 +574,7 @@ export type ApplyBatchData = {
     path?: never;
     query?: {
         /**
-         * Run validation and enrichment without mutating the store. Defaults to false.
+         * Run validation without mutating the store. Defaults to false.
          */
         dryRun?: boolean;
     };

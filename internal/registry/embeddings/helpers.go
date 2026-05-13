@@ -20,8 +20,8 @@ import (
 // Tag is intentionally omitted — two tags of the same MCPServer have
 // no semantic difference for search relevance.
 //
-// Enrichment annotations are intentionally excluded from the payload
-// — they're scanner output, not user-authored search-relevant content.
+// System annotations are intentionally excluded from the payload because
+// they are not user-authored search-relevant content.
 func BuildMCPServerEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.MCPServerSpec) string {
 	var parts []string
 	appendIf(&parts, meta.Name, spec.Title, spec.Description)
