@@ -233,6 +233,9 @@ metadata:
   name: %s
 spec:
   description: "E2E declarative apply test MCP server"
+  remote:
+    type: streamable-http
+    url: https://example.test/mcp
 `, serverName)
 
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "server.yaml", serverYAML)
@@ -271,6 +274,9 @@ metadata:
   name: %s
 spec:
   description: "Multi-doc test MCP server"
+  remote:
+    type: streamable-http
+    url: https://example.test/mcp
 ---
 apiVersion: ar.dev/v1alpha1
 kind: Agent
@@ -801,6 +807,9 @@ metadata:
   name: %s
 spec:
   description: "Idempotent apply test MCP server"
+  remote:
+    type: streamable-http
+    url: https://example.test/mcp
 `, serverName)
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "server.yaml", serverYAML)
 
@@ -1326,6 +1335,9 @@ metadata:
   name: %s
 spec:
   description: "MCP round-trip test server"
+  remote:
+    type: streamable-http
+    url: https://example.test/mcp
 `, serverName)
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "server.yaml", serverYAML)
 
@@ -1563,6 +1575,9 @@ metadata:
   name: %s
 spec:
   description: "multi-kind delete test mcp"
+  remote:
+    type: streamable-http
+    url: https://example.test/mcp
 ---
 apiVersion: ar.dev/v1alpha1
 kind: Skill

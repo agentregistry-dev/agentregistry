@@ -40,6 +40,9 @@ metadata:
   name: tools
 spec:
   title: Tools
+  remote:
+    type: streamable-http
+    url: https://example.test/mcp
 ---
 apiVersion: ar.dev/v1alpha1
 kind: Agent
@@ -268,13 +271,13 @@ metadata:
 
 func TestRegisterApply_DefaultsRemoteMCPServerTagBeforeAuthorize(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	remoteMCPServers := v1alpha1store.NewStore(pool, "v1alpha1.remote_mcp_servers")
+	mcpServers := v1alpha1store.NewStore(pool, "v1alpha1.mcp_servers")
 
-	_, err := remoteMCPServers.Upsert(t.Context(), &v1alpha1.RemoteMCPServer{
+	_, err := mcpServers.Upsert(t.Context(), &v1alpha1.MCPServer{
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "test-mcp-server"},
-		Spec: v1alpha1.RemoteMCPServerSpec{
+		Spec: v1alpha1.MCPServerSpec{
 			Title:  "Test MCP Server",
-			Remote: v1alpha1.MCPTransport{Type: "streamable-http", URL: "https://example.test/mcp"},
+			Remote: &v1alpha1.MCPTransport{Type: "streamable-http", URL: "https://example.test/mcp"},
 		},
 	})
 	require.NoError(t, err)
@@ -284,19 +287,19 @@ func TestRegisterApply_DefaultsRemoteMCPServerTagBeforeAuthorize(t *testing.T) {
 	resource.RegisterApply(api, resource.ApplyConfig{
 		BasePrefix: "/v0",
 		Stores: map[string]*v1alpha1store.Store{
-			v1alpha1.KindRemoteMCPServer: remoteMCPServers,
+			v1alpha1.KindMCPServer: mcpServers,
 		},
 		Authorizers: map[string]func(context.Context, resource.AuthorizeInput) error{
-			v1alpha1.KindRemoteMCPServer: func(ctx context.Context, in resource.AuthorizeInput) error {
+			v1alpha1.KindMCPServer: func(ctx context.Context, in resource.AuthorizeInput) error {
 				seen = in
-				_, err := remoteMCPServers.Get(ctx, in.Namespace, in.Name, in.Tag)
+				_, err := mcpServers.Get(ctx, in.Namespace, in.Name, in.Tag)
 				return err
 			},
 		},
 	})
 
 	yaml := []byte(`apiVersion: ar.dev/v1alpha1
-kind: RemoteMCPServer
+kind: MCPServer
 metadata:
   namespace: default
   name: test-mcp-server
@@ -317,7 +320,7 @@ spec:
 	require.Equal(t, arv0.ApplyStatusUnchanged, out.Results[0].Status)
 	require.Equal(t, v1alpha1store.DefaultTag(), out.Results[0].Tag)
 	require.Equal(t, "apply", seen.Verb)
-	require.Equal(t, v1alpha1.KindRemoteMCPServer, seen.Kind)
+	require.Equal(t, v1alpha1.KindMCPServer, seen.Kind)
 	require.Equal(t, "default", seen.Namespace)
 	require.Equal(t, "test-mcp-server", seen.Name)
 	require.Equal(t, v1alpha1store.DefaultTag(), seen.Tag)

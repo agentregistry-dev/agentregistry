@@ -21,10 +21,11 @@ func (d *Deployment) Validate() error {
 	return errs
 }
 
-// ResolveRefs checks that TargetRef and RuntimeRef both resolve. The
-// referenced objects must live in the referenced namespace; when
-// ref.Namespace is blank on the wire we inherit the Deployment's own
-// namespace (mirroring how kubectl treats blank metadata.namespace).
+// ResolveRefs checks that TargetRef, RuntimeRef, and every entry in
+// DeploymentRefs resolve. The referenced objects must live in the
+// referenced namespace; when ref.Namespace is blank on the wire we
+// inherit the Deployment's own namespace (mirroring how kubectl treats
+// blank metadata.namespace).
 func (d *Deployment) ResolveRefs(ctx context.Context, resolver ResolverFunc) error {
 	if resolver == nil {
 		return nil
@@ -42,6 +43,14 @@ func (d *Deployment) ResolveRefs(ctx context.Context, resolver ResolverFunc) err
 		runtime.Namespace = d.Metadata.Namespace
 	}
 	errs = append(errs, resolveRefWith(ctx, resolver, runtime, "spec.runtimeRef")...)
+
+	for i, ref := range d.Spec.DeploymentRefs {
+		probe := ResourceRef{Kind: KindDeployment, Namespace: ref.Namespace, Name: ref.Name}
+		if probe.Namespace == "" {
+			probe.Namespace = d.Metadata.Namespace
+		}
+		errs = append(errs, resolveRefWith(ctx, resolver, probe, fmt.Sprintf("spec.deploymentRefs[%d]", i))...)
+	}
 
 	if len(errs) == 0 {
 		return nil

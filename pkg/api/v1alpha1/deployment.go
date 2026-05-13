@@ -35,7 +35,10 @@ type DeploymentSpec struct {
 	RuntimeRef   ResourceRef `json:"runtimeRef" yaml:"runtimeRef"`
 	DesiredState string      `json:"desiredState,omitempty" yaml:"desiredState,omitempty"`
 	// DeploymentRefs declaratively binds this Deployment to other
-	// Deployments, such as an Agent Deployment binding to MCPServer Deployments.
+	// Deployments — e.g. an Agent Deployment binding to the MCPServer
+	// Deployments whose status should feed its runtime config. Stored
+	// and structurally validated; binding semantics are owned by the
+	// kind's reconciler.
 	DeploymentRefs []DeploymentRef   `json:"deploymentRefs,omitempty" yaml:"deploymentRefs,omitempty"`
 	Env            map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
 	RuntimeConfig  map[string]any    `json:"runtimeConfig,omitempty" yaml:"runtimeConfig,omitempty"`
