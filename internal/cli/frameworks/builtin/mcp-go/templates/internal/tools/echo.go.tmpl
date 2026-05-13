@@ -17,9 +17,16 @@ type EchoResult struct {
 	Echo string `json:"echo" description:"The echoed message."`
 }
 
+// The tool is registered as `example_echo` so it doesn't collide with the
+// near-universal `echo` exposed by common reference MCP servers (e.g. the
+// @modelcontextprotocol/server-everything demo). Tool-name uniqueness is
+// enforced by LLM providers (Bedrock, Anthropic, OpenAI, Gemini) across the
+// full tool list an agent sends per turn, so a duplicate makes every chat
+// 400 before the model is ever invoked. Rename to taste once you replace
+// this scaffold with real functionality.
 func Echo() MCPTool[EchoParams, EchoResult] {
 	return MCPTool[EchoParams, EchoResult]{
-		Name:        "echo",
+		Name:        "example_echo",
 		Description: "Echoes a message back to the user.",
 		Handler: func(ctx context.Context, request *mcp.CallToolRequest, params EchoParams) (*mcp.CallToolResult, EchoResult, error) {
 			echoMessage := "Echo: " + params.Message
