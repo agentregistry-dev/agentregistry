@@ -146,6 +146,13 @@ func deleteResource(cmd *cobra.Command, typeName, name, tag string, force bool) 
 		return fmt.Errorf("--force is only supported for deployments")
 	}
 
+	// Deployments and runtimes have no tag of their own; rejecting --tag here
+	// keeps users from confusing a deployment's target tag (or a runtime's
+	// non-existent tag) with the metadata identity used for delete.
+	if tag != "" && (k.Kind == "deployment" || k.Kind == "runtime") {
+		return fmt.Errorf("--tag is not supported for %s", k.Kind)
+	}
+
 	if apiClient == nil {
 		return fmt.Errorf("API client not initialized")
 	}

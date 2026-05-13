@@ -128,11 +128,13 @@ func getDeploymentByTarget(ctx context.Context, name string) (any, error) {
 	return nil, database.ErrNotFound
 }
 
-func deleteDeploymentByTarget(ctx context.Context, name, tag string, force bool) error {
-	if tag == "" {
-		return fmt.Errorf("%w: --tag is required when deleting deployments", database.ErrInvalidInput)
-	}
-
+// deleteDeploymentByTarget deletes every deployment whose target has the given
+// name. Deployments do not carry a tag of their own — the only tag in play is
+// the target's, which is not part of the deployment's identity — so the tag
+// parameter is ignored and rejected upstream at the CLI surface. The dispatch
+// signature is shared across kinds, which is why the parameter is still
+// present here.
+func deleteDeploymentByTarget(ctx context.Context, name, _ string, force bool) error {
 	deployments, err := cliCommon.ListDeployments(ctx, apiClient)
 	if err != nil {
 		return fmt.Errorf("listing deployments: %w", err)
@@ -140,12 +142,10 @@ func deleteDeploymentByTarget(ctx context.Context, name, tag string, force bool)
 
 	var matches []*cliCommon.DeploymentRecord
 	for _, dep := range deployments {
-		if dep == nil {
+		if dep == nil || dep.TargetName != name {
 			continue
 		}
-		if dep.TargetName == name && dep.TargetTag == tag {
-			matches = append(matches, dep)
-		}
+		matches = append(matches, dep)
 	}
 	if len(matches) == 0 {
 		return database.ErrNotFound
