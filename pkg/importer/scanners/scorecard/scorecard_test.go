@@ -7,7 +7,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/ossf/scorecard/v4/checker"
+	"github.com/ossf/scorecard/v5/checker"
 	"github.com/stretchr/testify/require"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"

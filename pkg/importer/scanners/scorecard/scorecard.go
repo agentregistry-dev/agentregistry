@@ -13,12 +13,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ossf/scorecard/v4/checker"
-	scorechecks "github.com/ossf/scorecard/v4/checks"
-	"github.com/ossf/scorecard/v4/clients"
-	docchecks "github.com/ossf/scorecard/v4/docs/checks"
-	sclog "github.com/ossf/scorecard/v4/log"
-	scpkg "github.com/ossf/scorecard/v4/pkg"
+	"github.com/ossf/scorecard/v5/checker"
+	docchecks "github.com/ossf/scorecard/v5/docs/checks"
+	sclog "github.com/ossf/scorecard/v5/log"
+	scorecardpkg "github.com/ossf/scorecard/v5/pkg/scorecard"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/importer"
@@ -230,7 +228,7 @@ func runScorecardLibraryDetailed(ctx context.Context, owner, repo, token string)
 	}
 
 	logger := sclog.NewLogger(sclog.WarnLevel)
-	repoRef, repoClient, ossFuzzClient, ciiClient, vulnClient, err := checker.GetClients(ctx, repoURL, "", logger)
+	repoRef, repoClient, ossFuzzClient, ciiClient, vulnClient, _, err := checker.GetClients(ctx, repoURL, "", logger)
 	if err != nil {
 		return 0, "", nil, err
 	}
@@ -239,8 +237,12 @@ func runScorecardLibraryDetailed(ctx context.Context, owner, repo, token string)
 		defer func() { _ = ossFuzzClient.Close() }()
 	}
 
-	checksToRun := scorechecks.GetAll()
-	result, err := scpkg.RunScorecard(ctx, repoRef, clients.HeadSHA, 0, checksToRun, repoClient, ossFuzzClient, ciiClient, vulnClient)
+	result, err := scorecardpkg.Run(ctx, repoRef,
+		scorecardpkg.WithRepoClient(repoClient),
+		scorecardpkg.WithOSSFuzzClient(ossFuzzClient),
+		scorecardpkg.WithOpenSSFBestPraticesClient(ciiClient),
+		scorecardpkg.WithVulnerabilitiesClient(vulnClient),
+	)
 	if err != nil {
 		return 0, "", nil, err
 	}
