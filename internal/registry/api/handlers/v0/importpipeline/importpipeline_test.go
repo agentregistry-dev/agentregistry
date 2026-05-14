@@ -60,6 +60,9 @@ func newImportTestServer(t *testing.T, scanners ...importer.Scanner) (*v1alpha1s
 	importpipeline.Register(api, importpipeline.Config{
 		BasePrefix: "/v0",
 		Importer:   imp,
+		ApplyConfig: resource.ApplyConfig{
+			Stores: stores,
+		},
 	})
 	return agents, findings, api
 }
@@ -222,9 +225,12 @@ func TestRegisterImport_PerDocAuthorize(t *testing.T) {
 
 	_, api := humatest.New(t)
 	importpipeline.Register(api, importpipeline.Config{
-		BasePrefix:  "/v0",
-		Importer:    imp,
-		Authorizers: authorizers,
+		BasePrefix: "/v0",
+		Importer:   imp,
+		ApplyConfig: resource.ApplyConfig{
+			Stores:      stores,
+			Authorizers: authorizers,
+		},
 	})
 
 	yaml := `apiVersion: ar.dev/v1alpha1
@@ -258,11 +264,11 @@ spec:
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
 	require.Len(t, out.Results, 2)
 
-	// Denied doc → failed; error mentions authorize so operators can
+	// Denied doc → failed; error mentions forbidden so operators can
 	// distinguish from validation failures.
 	require.Equal(t, "secret", out.Results[0].Name)
 	require.Equal(t, "failed", out.Results[0].Status)
-	require.Contains(t, out.Results[0].Error, "authorize")
+	require.Contains(t, out.Results[0].Error, "forbidden")
 
 	// Allowed doc → created.
 	require.Equal(t, "ok", out.Results[1].Name)
@@ -303,9 +309,12 @@ func TestRegisterImport_DeniesKindWithNoAuthorizer(t *testing.T) {
 
 	_, api := humatest.New(t)
 	importpipeline.Register(api, importpipeline.Config{
-		BasePrefix:  "/v0",
-		Importer:    imp,
-		Authorizers: authorizers,
+		BasePrefix: "/v0",
+		Importer:   imp,
+		ApplyConfig: resource.ApplyConfig{
+			Stores:      stores,
+			Authorizers: authorizers,
+		},
 	})
 
 	yaml := `apiVersion: ar.dev/v1alpha1

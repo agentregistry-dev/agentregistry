@@ -242,11 +242,14 @@ func buildRouteOptions(
 	adapters map[string]types.DeploymentAdapter,
 ) *router.RouteOptions {
 	routeOpts := &router.RouteOptions{
-		ExtraRoutes:       options.ExtraRoutes,
-		Stores:            stores,
-		Importer:          importer,
-		PerKindHooks:      crudPerKindHooks(options),
-		RegistryValidator: options.RegistryValidator,
+		ExtraRoutes:         options.ExtraRoutes,
+		Stores:              stores,
+		Importer:            importer,
+		PerKindHooks:        crudPerKindHooks(options),
+		RegistryValidator:   options.RegistryValidator,
+		Admission:           options.Admission,
+		ResolverWrapper:     options.ResolverWrapper,
+		ExtraResourceRoutes: options.ExtraResourceRoutes,
 	}
 
 	if stores != nil {

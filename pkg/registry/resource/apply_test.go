@@ -17,6 +17,7 @@ import (
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
 func TestRegisterApply_MultiDocRoundTrip(t *testing.T) {
@@ -117,6 +118,87 @@ spec:
 	require.Equal(t, arv0.ApplyStatusCreated, out.Results[0].Status)
 	require.Equal(t, arv0.ApplyStatusFailed, out.Results[1].Status)
 	require.Contains(t, out.Results[1].Error, "unknown or unconfigured kind")
+}
+
+func TestRegisterApply_AdmissionCanStageInsteadOfProductionUpsert(t *testing.T) {
+	pool := v1alpha1store.NewTestPool(t)
+	agents := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+
+	var admitted types.AdmissionInput
+	postUpsertCalled := false
+	_, api := humatest.New(t)
+	resource.RegisterApply(api, resource.ApplyConfig{
+		BasePrefix: "/v0",
+		Stores: map[string]*v1alpha1store.Store{
+			v1alpha1.KindAgent: agents,
+		},
+		PostUpserts: map[string]func(context.Context, v1alpha1.Object) error{
+			v1alpha1.KindAgent: func(context.Context, v1alpha1.Object) error {
+				postUpsertCalled = true
+				return nil
+			},
+		},
+		Admission: func(ctx context.Context, in types.AdmissionInput) (types.AdmissionResult, error) {
+			admitted = in
+			return types.AdmissionResult{Status: arv0.ApplyStatusStaged, Tag: in.Tag}, nil
+		},
+	})
+
+	yaml := []byte(`apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  namespace: default
+  name: staged-agent
+spec:
+  title: Staged Agent
+`)
+	resp := api.Post("/v0/apply", "Content-Type: application/yaml", strings.NewReader(string(yaml)))
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+
+	var out struct {
+		Results []arv0.ApplyResult `json:"results"`
+	}
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+	require.Len(t, out.Results, 1)
+	require.Equal(t, arv0.ApplyStatusStaged, out.Results[0].Status)
+	require.Equal(t, v1alpha1store.DefaultTag(), out.Results[0].Tag)
+	require.False(t, postUpsertCalled, "admitted applies must not fire production side effects")
+	require.Equal(t, types.AdmissionSourceApply, admitted.Source)
+	require.Equal(t, "apply", admitted.Verb)
+	require.Equal(t, v1alpha1.KindAgent, admitted.Kind)
+	require.Equal(t, "default", admitted.Namespace)
+	require.Equal(t, "staged-agent", admitted.Name)
+	require.Equal(t, v1alpha1store.DefaultTag(), admitted.Tag)
+	require.Same(t, agents, admitted.Store)
+
+	_, err := agents.Get(t.Context(), "default", "staged-agent", v1alpha1store.DefaultTag())
+	require.ErrorIs(t, err, pkgdb.ErrNotFound)
+}
+
+func TestApplyObject_ReusesProductionApplyPath(t *testing.T) {
+	pool := v1alpha1store.NewTestPool(t)
+	agents := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+
+	obj := &v1alpha1.Agent{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
+		Metadata: v1alpha1.ObjectMeta{
+			Namespace: "default",
+			Name:      "replayed-agent",
+			Tag:       "stable",
+		},
+		Spec: v1alpha1.AgentSpec{Title: "Replayed Agent"},
+	}
+	res := resource.ApplyObject(t.Context(), resource.ApplyConfig{
+		Stores: map[string]*v1alpha1store.Store{
+			v1alpha1.KindAgent: agents,
+		},
+	}, obj, false)
+	require.Equal(t, arv0.ApplyStatusCreated, res.Status)
+	require.Equal(t, "stable", res.Tag)
+
+	row, err := agents.Get(t.Context(), "default", "replayed-agent", "stable")
+	require.NoError(t, err)
+	require.Equal(t, "stable", row.Metadata.Tag)
 }
 
 func TestRegisterApply_MutableObjectResultsDoNotExposeVersion(t *testing.T) {
