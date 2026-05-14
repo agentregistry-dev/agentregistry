@@ -55,16 +55,6 @@ func init() {
 		promptRow,
 	))
 
-	scheme.Register(typedKind(
-		"remote-mcp", "remote-mcps", []string{
-			"RemoteMCPServer", "remotemcpserver", "remote-mcp-server", "remotemcpservers",
-		},
-		[]scheme.Column{{Header: "NAME"}, {Header: "TAG"}, {Header: "TYPE"}, {Header: "URL"}},
-		v1alpha1.KindRemoteMCPServer,
-		func() *v1alpha1.RemoteMCPServer { return &v1alpha1.RemoteMCPServer{} },
-		remoteMCPServerRow,
-	))
-
 	// Runtime is registered manually because it is a mutable namespace/name
 	// object: the server's runtime store does not expose /tags or
 	// DeleteAllTags endpoints. Routing it through
@@ -88,8 +78,8 @@ func init() {
 		Get: func(ctx context.Context, name, _ string) (any, error) {
 			return client.GetTyped(ctx, apiClient, v1alpha1.KindRuntime, v1alpha1.DefaultNamespace, name, "", func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} })
 		},
-		ListFunc: func(ctx context.Context) ([]any, error) {
-			return listLatestAny(ctx, v1alpha1.KindRuntime, func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} })
+		ListFunc: func(ctx context.Context, opts scheme.ListOpts) ([]any, error) {
+			return listAny(ctx, v1alpha1.KindRuntime, opts, func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} })
 		},
 		Delete: func(ctx context.Context, name, tag string, force bool) error {
 			return deleteAny(ctx, v1alpha1.KindRuntime, name, tag, force, func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} })
@@ -113,7 +103,7 @@ func init() {
 		Delete: func(_ context.Context, name, tag string, force bool) error {
 			return deleteDeploymentByTarget(context.Background(), name, tag, force)
 		},
-		ListFunc: func(_ context.Context) ([]any, error) {
+		ListFunc: func(_ context.Context, _ scheme.ListOpts) ([]any, error) {
 			return listDeploymentAny(context.Background())
 		},
 		RowFunc: func(item any) []string {
@@ -168,8 +158,8 @@ func typedKind[T v1alpha1.Object](
 		Get: func(ctx context.Context, name, tag string) (any, error) {
 			return client.GetTyped(ctx, apiClient, canonicalKind, v1alpha1.DefaultNamespace, name, tag, newObj)
 		},
-		ListFunc: func(ctx context.Context) ([]any, error) {
-			return listLatestAny(ctx, canonicalKind, newObj)
+		ListFunc: func(ctx context.Context, opts scheme.ListOpts) ([]any, error) {
+			return listAny(ctx, canonicalKind, opts, newObj)
 		},
 		Delete: func(ctx context.Context, name, tag string, force bool) error {
 			return deleteAny(ctx, canonicalKind, name, tag, force, newObj)

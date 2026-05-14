@@ -35,13 +35,12 @@ func New() *Adapter { return &Adapter{} }
 // Type returns "noop".
 func (a *Adapter) Type() string { return RuntimeType }
 
-// SupportedTargetKinds returns the bundled kinds plus RemoteMCPServer — the
-// noop adapter declares broad support since it does nothing anyway.
+// SupportedTargetKinds returns the kinds the noop adapter accepts. It
+// declares broad support since it does nothing anyway.
 func (a *Adapter) SupportedTargetKinds() []string {
 	return []string{
 		v1alpha1.KindAgent,
 		v1alpha1.KindMCPServer,
-		v1alpha1.KindRemoteMCPServer,
 	}
 }
 

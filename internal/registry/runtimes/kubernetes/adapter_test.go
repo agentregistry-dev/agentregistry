@@ -45,18 +45,18 @@ func TestK8sV1Alpha1Apply_MCPServerTarget_CreatesResource(t *testing.T) {
 			Config: map[string]any{"namespace": "kagent"},
 		},
 	}
-	target := &v1alpha1.RemoteMCPServer{
-		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindRemoteMCPServer},
+	target := &v1alpha1.MCPServer{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindMCPServer},
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather"},
-		Spec: v1alpha1.RemoteMCPServerSpec{
-			Remote: v1alpha1.MCPTransport{Type: "streamable-http", URL: "https://api.weather.example/mcp"},
+		Spec: v1alpha1.MCPServerSpec{
+			Remote: &v1alpha1.MCPTransport{Type: "streamable-http", URL: "https://api.weather.example/mcp"},
 		},
 	}
 	deployment := &v1alpha1.Deployment{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindDeployment},
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-kube", Generation: 4},
 		Spec: v1alpha1.DeploymentSpec{
-			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindRemoteMCPServer, Name: "weather"},
+			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather"},
 			RuntimeRef:   v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "kube-local"},
 			DesiredState: v1alpha1.DesiredStateDeployed,
 		},
@@ -148,9 +148,8 @@ func TestK8sV1Alpha1SupportedTargetKinds(t *testing.T) {
 	adapter := NewKubernetesDeploymentAdapter()
 	kinds := adapter.SupportedTargetKinds()
 	want := map[string]bool{
-		v1alpha1.KindAgent:           false,
-		v1alpha1.KindMCPServer:       false,
-		v1alpha1.KindRemoteMCPServer: false,
+		v1alpha1.KindAgent:     false,
+		v1alpha1.KindMCPServer: false,
 	}
 	for _, k := range kinds {
 		if _, ok := want[k]; ok {
@@ -206,8 +205,8 @@ func TestK8sV1Alpha1Discover_SkipsManagedResources(t *testing.T) {
 	if got := byName["imported"].TargetKind; got != v1alpha1.KindAgent {
 		t.Fatalf("agent TargetKind = %q, want %q", got, v1alpha1.KindAgent)
 	}
-	if got := byName["imported-remote"].TargetKind; got != v1alpha1.KindRemoteMCPServer {
-		t.Fatalf("remote TargetKind = %q, want %q", got, v1alpha1.KindRemoteMCPServer)
+	if got := byName["imported-remote"].TargetKind; got != v1alpha1.KindMCPServer {
+		t.Fatalf("remote TargetKind = %q, want %q", got, v1alpha1.KindMCPServer)
 	}
 }
 

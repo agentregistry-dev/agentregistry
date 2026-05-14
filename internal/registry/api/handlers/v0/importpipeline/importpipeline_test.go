@@ -324,6 +324,9 @@ metadata:
   name: anything
 spec:
   title: Anything
+  remote:
+    type: streamable-http
+    url: https://example.test/mcp
 `
 	resp := api.Post("/v0/import",
 		"Content-Type: application/yaml",
