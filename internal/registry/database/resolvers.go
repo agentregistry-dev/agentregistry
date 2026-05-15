@@ -12,8 +12,7 @@ import (
 
 // NewResolver returns a v1alpha1.ResolverFunc that dispatches
 // cross-kind ResourceRef existence checks against the supplied
-// Stores map. Consumers: the router wires one into its apply
-// handler; the Importer consumes one during per-object ResolveRefs.
+// Stores map. The router wires one into its apply handler.
 //
 // Dangling references return v1alpha1.ErrDanglingRef so callers can
 // distinguish "row missing" from "database unavailable"; unknown

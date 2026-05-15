@@ -27,7 +27,6 @@ import { SkillDetail } from "@/components/skill-detail"
 import { AgentDetail } from "@/components/agent-detail"
 import { PromptDetail } from "@/components/prompt-detail"
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
-import { ImportDialog } from "@/components/import-dialog"
 import { AddServerDialog } from "@/components/add-server-dialog"
 import { AddSkillDialog } from "@/components/add-skill-dialog"
 import { AddAgentDialog } from "@/components/add-agent-dialog"
@@ -37,7 +36,6 @@ import { listServersV0, listSkillsV0, listAgentsV0, listPromptsV0, ServerRespons
 import MCPIcon from "@/components/icons/mcp"
 import {
   Search,
-  Download,
   RefreshCw,
   Plus,
   Zap,
@@ -95,7 +93,6 @@ export default function AdminPage() {
   const [sortBy, setSortBy] = useState<"name" | "stars" | "date">("name")
   const [filterVerifiedOrg, setFilterVerifiedOrg] = useState(false)
   const [filterVerifiedPublisher, setFilterVerifiedPublisher] = useState(false)
-  const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [addServerDialogOpen, setAddServerDialogOpen] = useState(false)
   const [addSkillDialogOpen, setAddSkillDialogOpen] = useState(false)
   const [addAgentDialogOpen, setAddAgentDialogOpen] = useState(false)
@@ -493,21 +490,6 @@ export default function AdminPage() {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-1.5 h-8">
-                  <Download className="h-3.5 w-3.5" />
-                  Import
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setImportDialogOpen(true)}>
-                  <span className="mr-2 h-4 w-4 flex items-center justify-center"><MCPIcon /></span>
-                  Import Servers
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={fetchData} title="Refresh">
               <RefreshCw className="h-3.5 w-3.5" />
             </Button>
@@ -577,10 +559,10 @@ export default function AdminPage() {
               <EmptyState
                 icon={<span className="h-8 w-8 flex items-center justify-center text-muted-foreground"><MCPIcon /></span>}
                 title={groupedServers.length === 0 ? "No servers in registry" : "No servers match your filters"}
-                description={groupedServers.length === 0 ? "Import servers from external registries to get started" : "Try adjusting your search or filter criteria"}
+                description={groupedServers.length === 0 ? "Add servers to get started" : "Try adjusting your search or filter criteria"}
                 action={groupedServers.length === 0 ? (
-                  <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setImportDialogOpen(true)}>
-                    <Download className="h-3.5 w-3.5" /> Import Servers
+                  <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setAddServerDialogOpen(true)}>
+                    <Plus className="h-3.5 w-3.5" /> Add Server
                   </Button>
                 ) : undefined}
               />
@@ -682,7 +664,6 @@ export default function AdminPage() {
         </div>
       </div>
 
-      <ImportDialog open={importDialogOpen} onOpenChange={setImportDialogOpen} onImportComplete={fetchData} />
       <AddServerDialog open={addServerDialogOpen} onOpenChange={setAddServerDialogOpen} onServerAdded={fetchData} />
       <AddSkillDialog open={addSkillDialogOpen} onOpenChange={setAddSkillDialogOpen} onSkillAdded={fetchData} />
       <AddAgentDialog open={addAgentDialogOpen} onOpenChange={setAddAgentDialogOpen} onAgentAdded={() => {}} />

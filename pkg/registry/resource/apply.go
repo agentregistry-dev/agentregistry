@@ -73,7 +73,7 @@ type ApplyConfig struct {
 // DryRun runs validate + resolve + registries + uniqueness but does not
 // mutate the store.
 type applyInput struct {
-	DryRun  bool   `query:"dryRun" doc:"Run validation and enrichment without mutating the store. Defaults to false."`
+	DryRun  bool   `query:"dryRun" doc:"Run validation without mutating the store. Defaults to false."`
 	RawBody []byte `contentType:"application/yaml" doc:"Multi-document YAML stream of v1alpha1 resources."`
 }
 

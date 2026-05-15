@@ -26,9 +26,8 @@ var TableFor = map[string]string{
 
 // NewStores builds one *Store per built-in v1alpha1 Kind, bound
 // to its canonical table. The returned map is keyed by Kind name (e.g.
-// "Agent", "MCPServer") and is the single input the router/apply/
-// importer layers take — they never look up tables by string literal
-// themselves.
+// "Agent", "MCPServer") and is the single input the router/apply
+// layers take. They never look up tables by string literal themselves.
 //
 // KindDeployment and KindRuntime are bound through NewMutableObjectStore —
 // both are infra/lifecycle state, not tagged artifacts. Every other built-in
