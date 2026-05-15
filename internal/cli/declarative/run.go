@@ -15,6 +15,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/buildconfig"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative/chat"
+	inspectorpkg "github.com/agentregistry-dev/agentregistry/internal/cli/declarative/inspector"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/frameworks"
 	"github.com/spf13/cobra"
 )
@@ -30,10 +31,11 @@ func NewRunCmd() *cobra.Command {
 
 func newRunCmd() *cobra.Command {
 	var (
-		extraEnv []string
-		dryRun   bool
-		watch    bool
-		noChat   bool
+		extraEnv  []string
+		dryRun    bool
+		watch     bool
+		noChat    bool
+		inspector bool
 	)
 	cmd := &cobra.Command{
 		Use:   "run [DIRECTORY]",
@@ -47,7 +49,8 @@ A2A chat. When chat exits the runtime is torn down. Use --no-chat to
 keep the old foreground-only behavior.
 
 For MCPServer kinds chat does not apply; the framework's run command runs
-in the foreground until interrupted.
+in the foreground until interrupted. Pass --inspector to launch the MCP
+Inspector subprocess (requires 'npx' on PATH) after the server starts.
 
 Reads arctl.yaml to look up the matching framework by (framework, language)
 and dispatches to its run command. Loads .env (if present) and validates
@@ -55,8 +58,9 @@ that the framework's required env vars are set.`,
 		Example: `  arctl run
   arctl run ./myagent
   arctl run -e FOO=bar -e BAZ=qux
-  arctl run --no-chat
-  arctl run --watch`,
+  arctl run --no-chat              # agent without chat
+  arctl run --watch                # iterative dev loop
+  arctl run mymcp --inspector      # MCP with MCP Inspector launched`,
 		SilenceUsage: true,
 		Args:         cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -64,13 +68,14 @@ that the framework's required env vars are set.`,
 			if err != nil {
 				return err
 			}
-			return runProject(cmd.OutOrStdout(), dir, extraEnv, dryRun, watch, noChat)
+			return runProject(cmd.OutOrStdout(), dir, extraEnv, dryRun, watch, noChat, inspector)
 		},
 	}
 	cmd.Flags().StringArrayVarP(&extraEnv, "env", "e", nil, "KEY=VALUE env override")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Skip actual exec; useful for tests")
 	cmd.Flags().BoolVar(&watch, "watch", false, "Rebuild and restart on file change")
-	cmd.Flags().BoolVar(&noChat, "no-chat", false, "Skip chat for Agents; run the framework command in the foreground")
+	cmd.Flags().BoolVar(&noChat, "no-chat", false, "Skip chat for Agents; run the framework command in the foreground (agent projects only; errors on MCP projects)")
+	cmd.Flags().BoolVar(&inspector, "inspector", false, "Launch MCP Inspector after the server is ready (MCP projects only; errors on agent projects)")
 	return cmd
 }
 
@@ -95,7 +100,7 @@ func resolveProjectDir(args []string) (string, error) {
 	return abs, nil
 }
 
-func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun, watch, noChat bool) error {
+func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun, watch, noChat, inspector bool) error {
 	cfg, err := buildconfig.Read(projectDir)
 	if err != nil {
 		return err
@@ -122,6 +127,17 @@ func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun, wat
 	}
 	if p == nil {
 		return fmt.Errorf("no framework for framework=%s language=%s", cfg.Framework, cfg.Language)
+	}
+
+	// Strict flag-vs-kind validation. Symmetric: --inspector errors on
+	// agent projects, --no-chat errors on MCP projects. Fail fast before
+	// any exec or dry-run narration so a typo'd flag gives clear feedback
+	// instead of being silently ignored.
+	if inspector && frameworkType == "agent" {
+		return fmt.Errorf("--inspector is only valid for MCP projects; this is an agent project (agents are inspected via chat, the default behavior of arctl run)")
+	}
+	if noChat && frameworkType == "mcp" {
+		return fmt.Errorf("--no-chat is only valid for agent projects; this is an MCP project (MCPs do not open a chat)")
 	}
 
 	name := filepath.Base(projectDir)
@@ -197,9 +213,35 @@ func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun, wat
 
 	if dryRun {
 		fmt.Fprintf(out, "→ %s: %s\n", p.Name, strings.Join(rendered, " "))
+		if inspector {
+			fmt.Fprintf(out, "→ would launch MCP Inspector against http://localhost:%d/mcp\n", port)
+		}
 		fmt.Fprintln(out, "(dry-run; skipping exec)")
 		return nil
 	}
+
+	// Launch the MCP Inspector subprocess BEFORE the foreground docker run.
+	// Inspector retries connecting on its own until the MCP is up, so this
+	// race window is invisible. Defer-kill ensures the inspector is torn
+	// down when ExecForeground returns (on container exit or SIGINT). Not
+	// blocking the MCP on a missing npx is intentional — debug tools should
+	// degrade gracefully, not gate the dev loop.
+	if inspector {
+		inspectorURL := fmt.Sprintf("http://localhost:%d/mcp", port)
+		insCmd, err := inspectorpkg.Launch(context.Background(), inspectorURL)
+		if err != nil {
+			fmt.Fprintf(out, "Warning: --inspector skipped: %v\n", err)
+			fmt.Fprintf(out, "         MCP will still start on %s.\n", inspectorURL)
+		} else {
+			fmt.Fprintf(out, "→ MCP Inspector launching (will connect to %s when ready)\n", inspectorURL)
+			defer func() {
+				if insCmd != nil && insCmd.Process != nil {
+					_ = insCmd.Process.Kill()
+				}
+			}()
+		}
+	}
+
 	fmt.Fprintf(out, "→ %s: %s\n", p.Name, strings.Join(rendered, " "))
 	return frameworks.ExecForeground(p.Run, projectDir, vars, envv)
 }
