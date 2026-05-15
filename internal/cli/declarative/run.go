@@ -30,10 +30,11 @@ func NewRunCmd() *cobra.Command {
 
 func newRunCmd() *cobra.Command {
 	var (
-		extraEnv []string
-		dryRun   bool
-		watch    bool
-		noChat   bool
+		extraEnv  []string
+		dryRun    bool
+		watch     bool
+		noChat    bool
+		inspector bool
 	)
 	cmd := &cobra.Command{
 		Use:   "run [DIRECTORY]",
@@ -47,7 +48,8 @@ A2A chat. When chat exits the runtime is torn down. Use --no-chat to
 keep the old foreground-only behavior.
 
 For MCPServer kinds chat does not apply; the framework's run command runs
-in the foreground until interrupted.
+in the foreground until interrupted. Pass --inspector to launch the MCP
+Inspector subprocess (requires 'npx' on PATH) after the server starts.
 
 Reads arctl.yaml to look up the matching framework by (framework, language)
 and dispatches to its run command. Loads .env (if present) and validates
@@ -55,8 +57,9 @@ that the framework's required env vars are set.`,
 		Example: `  arctl run
   arctl run ./myagent
   arctl run -e FOO=bar -e BAZ=qux
-  arctl run --no-chat
-  arctl run --watch`,
+  arctl run --no-chat              # agent without chat
+  arctl run --watch                # iterative dev loop
+  arctl run mymcp --inspector      # MCP with MCP Inspector launched`,
 		SilenceUsage: true,
 		Args:         cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -64,13 +67,14 @@ that the framework's required env vars are set.`,
 			if err != nil {
 				return err
 			}
-			return runProject(cmd.OutOrStdout(), dir, extraEnv, dryRun, watch, noChat)
+			return runProject(cmd.OutOrStdout(), dir, extraEnv, dryRun, watch, noChat, inspector)
 		},
 	}
 	cmd.Flags().StringArrayVarP(&extraEnv, "env", "e", nil, "KEY=VALUE env override")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Skip actual exec; useful for tests")
 	cmd.Flags().BoolVar(&watch, "watch", false, "Rebuild and restart on file change")
-	cmd.Flags().BoolVar(&noChat, "no-chat", false, "Skip chat for Agents; run the framework command in the foreground")
+	cmd.Flags().BoolVar(&noChat, "no-chat", false, "Skip chat for Agents; run the framework command in the foreground (agent projects only; errors on MCP projects)")
+	cmd.Flags().BoolVar(&inspector, "inspector", false, "Launch MCP Inspector after the server is ready (MCP projects only; errors on agent projects)")
 	return cmd
 }
 
@@ -95,7 +99,7 @@ func resolveProjectDir(args []string) (string, error) {
 	return abs, nil
 }
 
-func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun, watch, noChat bool) error {
+func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun, watch, noChat, inspector bool) error {
 	cfg, err := buildconfig.Read(projectDir)
 	if err != nil {
 		return err
