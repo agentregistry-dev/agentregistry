@@ -68,7 +68,11 @@ func TestPreRunBehavior(t *testing.T) {
 	zshCompletionCmd := &cobra.Command{Use: "zsh"}
 	completionCmd.AddCommand(zshCompletionCmd)
 	versionCmd := &cobra.Command{Use: "version"}
-	root.AddCommand(initCmd, buildCmd, agentCmd, mcpCmd, skillCmd, configureCmd, completionCmd, versionCmd)
+	// Cobra auto-generates a "help" subcommand on the root. `arctl help`,
+	// `arctl help <cmd>`, and `arctl help <cmd> <subcmd>` all dispatch to this
+	// single command (cmd.Name()=="help", cmd.Parent()==root).
+	helpCmd := &cobra.Command{Use: "help"}
+	root.AddCommand(initCmd, buildCmd, agentCmd, mcpCmd, skillCmd, configureCmd, completionCmd, versionCmd, helpCmd)
 
 	tests := []struct {
 		name     string
@@ -85,6 +89,8 @@ func TestPreRunBehavior(t *testing.T) {
 		{"configure", configureCmd, true},
 		{"completion", completionCmd, true},
 		{"completion zsh", zshCompletionCmd, true},
+		// help is offline; must not trigger registry setup.
+		{"help", helpCmd, true},
 		// version goes through pre-run using AnnotationOptionalRegistry to have an optional registry connection
 		{"version", versionCmd, false},
 		// Run/pull/etc. need the API client.
