@@ -134,10 +134,10 @@ func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun, wat
 	// any exec or dry-run narration so a typo'd flag gives clear feedback
 	// instead of being silently ignored.
 	if inspector && frameworkType == "agent" {
-		return fmt.Errorf("--inspector is only valid for MCP projects. This is an agent project. Agents are inspected via chat (the default behavior of arctl run).")
+		return fmt.Errorf("--inspector is only valid for MCP projects; this is an agent project (agents are inspected via chat, the default behavior of arctl run)")
 	}
 	if noChat && frameworkType == "mcp" {
-		return fmt.Errorf("--no-chat is only valid for agent projects. This is an MCP project. MCPs do not open a chat.")
+		return fmt.Errorf("--no-chat is only valid for agent projects; this is an MCP project (MCPs do not open a chat)")
 	}
 
 	name := filepath.Base(projectDir)
