@@ -5,8 +5,7 @@ export type ClientOptions = {
 };
 
 export type Agent = {
-    apiVersion: string;
-    kind: string;
+    TypeMeta: TypeMeta;
     metadata: ObjectMeta;
     spec: AgentSpec;
     status?: Status;
@@ -49,8 +48,7 @@ export type Condition = {
 };
 
 export type Deployment = {
-    apiVersion: string;
-    kind: string;
+    TypeMeta: TypeMeta;
     metadata: ObjectMeta;
     spec: DeploymentSpec;
     status?: Status;
@@ -215,8 +213,7 @@ export type McpPackage = {
 };
 
 export type McpServer = {
-    apiVersion: string;
-    kind: string;
+    TypeMeta: TypeMeta;
     metadata: ObjectMeta;
     spec: McpServerSpec;
     status?: Status;
@@ -264,8 +261,7 @@ export type PingBody = {
 };
 
 export type Prompt = {
-    apiVersion: string;
-    kind: string;
+    TypeMeta: TypeMeta;
     metadata: ObjectMeta;
     spec: PromptSpec;
     status?: Status;
@@ -291,8 +287,7 @@ export type ResourceRef = {
 };
 
 export type Runtime = {
-    apiVersion: string;
-    kind: string;
+    TypeMeta: TypeMeta;
     metadata: ObjectMeta;
     spec: RuntimeSpec;
     status?: Status;
@@ -307,8 +302,7 @@ export type RuntimeSpec = {
 };
 
 export type Skill = {
-    apiVersion: string;
-    kind: string;
+    TypeMeta: TypeMeta;
     metadata: ObjectMeta;
     spec: SkillSpec;
     status?: Status;
@@ -326,6 +320,11 @@ export type SkillSpec = {
 
 export type Status = {
     conditions?: Array<Condition> | null;
+};
+
+export type TypeMeta = {
+    apiVersion: string;
+    kind: string;
 };
 
 export type VersionBody = {
