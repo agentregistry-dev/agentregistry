@@ -34,6 +34,8 @@ Supported types: agents, mcps, skills, prompts, runtimes, deployments
 Examples:
   arctl get all
   arctl get agents
+  arctl get agents --tag stable          # list rows with a specific tag
+  arctl get agents --latest              # list rows pinned to the "latest" tag
   arctl get mcps
   arctl get agent acme/summarizer
   arctl get agent acme/summarizer -o yaml
@@ -45,7 +47,8 @@ Examples:
 		RunE:         runGet,
 	}
 	cmd.Flags().StringP("output", "o", "table", "Output format: table, yaml, json")
-	cmd.Flags().String("tag", "", "Specific tag to fetch (defaults to latest; tagged content kinds only; not allowed with --all-tags)")
+	cmd.Flags().String("tag", "", "Tagged kinds only. With NAME: fetch one tag (defaults to latest). Without NAME: filter the list to this tag.")
+	cmd.Flags().Bool("latest", false, "List mode only: restrict to rows pinned to the literal 'latest' tag (equivalent to --tag latest).")
 	cmd.Flags().Bool("all-tags", false, "List every tag of NAME (tagged content kinds only)")
 	return cmd
 }
@@ -53,12 +56,20 @@ Examples:
 func runGet(cmd *cobra.Command, args []string) error {
 	outputFormat, _ := cmd.Flags().GetString("output")
 	allTags, _ := cmd.Flags().GetBool("all-tags")
+	latest, _ := cmd.Flags().GetBool("latest")
 	tag, _ := cmd.Flags().GetString("tag")
 	allTagsFlag := "--all-tags"
 	tagFlag := "--tag"
+	latestFlag := "--latest"
 
 	if allTags && tag != "" {
 		return fmt.Errorf("%s and %s are mutually exclusive", tagFlag, allTagsFlag)
+	}
+	if allTags && latest {
+		return fmt.Errorf("%s and %s are mutually exclusive", latestFlag, allTagsFlag)
+	}
+	if latest && tag != "" {
+		return fmt.Errorf("%s and %s are mutually exclusive", tagFlag, latestFlag)
 	}
 
 	if args[0] == "all" {
@@ -67,6 +78,9 @@ func runGet(cmd *cobra.Command, args []string) error {
 		}
 		if tag != "" {
 			return fmt.Errorf("%s cannot be used with `get all`", tagFlag)
+		}
+		if latest {
+			return fmt.Errorf("%s cannot be used with `get all`", latestFlag)
 		}
 		return runGetAll(cmd, outputFormat)
 	}
@@ -98,16 +112,14 @@ func runGet(cmd *cobra.Command, args []string) error {
 		return printItems(cmd, k, items, outputFormat)
 	}
 
-	// --tag is only meaningful for tagged content-registry kinds.
-	// ListTags is set exclusively on those kinds via typedKind, so
-	// it's a stable proxy without coupling get.go to v1alpha1's kind table.
-	if tag != "" {
-		if len(args) != 2 {
-			return fmt.Errorf("%s requires NAME", tagFlag)
-		}
-		if k.ListTags == nil {
-			return fmt.Errorf("%s not supported for kind %q (resource is not tagged)", tagFlag, k.Kind)
-		}
+	// --tag / --latest are only meaningful for tagged content-registry kinds.
+	// ListTags is set exclusively on those kinds via typedKind, so it's a
+	// stable proxy without coupling get.go to v1alpha1's kind table.
+	if tag != "" && k.ListTags == nil {
+		return fmt.Errorf("%s not supported for kind %q (resource is not tagged)", tagFlag, k.Kind)
+	}
+	if latest && k.ListTags == nil {
+		return fmt.Errorf("%s not supported for kind %q (resource is not tagged)", latestFlag, k.Kind)
 	}
 
 	if len(args) == 2 {
@@ -123,7 +135,8 @@ func runGet(cmd *cobra.Command, args []string) error {
 		return printItem(cmd, k, item, outputFormat)
 	}
 
-	items, err := listItems(k)
+	listOpts := scheme.ListOpts{Tag: tag, LatestOnly: latest}
+	items, err := listItems(k, listOpts)
 	if err != nil {
 		return fmt.Errorf("listing %s: %w", kindPlural(k), err)
 	}
@@ -142,7 +155,7 @@ func runGetAll(cmd *cobra.Command, outputFormat string) error {
 	allKinds := scheme.All()
 	first := true
 	for _, k := range allKinds {
-		items, err := listItems(k)
+		items, err := listItems(k, scheme.ListOpts{})
 		if errors.Is(err, errNotListable) {
 			continue
 		}

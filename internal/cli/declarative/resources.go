@@ -7,6 +7,7 @@ import (
 	"time"
 
 	cliCommon "github.com/agentregistry-dev/agentregistry/internal/cli/common"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/printer"
@@ -27,14 +28,25 @@ type deploymentStatus struct {
 	UpdatedAt       time.Time      `json:"updatedAt,omitempty" yaml:"updatedAt,omitempty"`
 }
 
-func listLatestAny[T v1alpha1.Object](ctx context.Context, kind string, newObj func() T) ([]any, error) {
+// listAny lists rows of the given kind. The zero scheme.ListOpts returns
+// every (namespace, name, tag) row of the kind — same shape as a raw
+// GET /v0/{plural}. Callers pass Tag or LatestOnly to filter; the CLI
+// `get` command surfaces those as `--tag` / `--latest`.
+//
+// Earlier this helper hardcoded `LatestOnly: true`, which translated
+// server-side to a literal `tag = "latest"` predicate. That returned
+// nothing for resources published with explicit version tags, even
+// though they existed in the registry. List now matches the natural
+// "show me what's there" expectation.
+func listAny[T v1alpha1.Object](ctx context.Context, kind string, opts scheme.ListOpts, newObj func() T) ([]any, error) {
 	items, err := client.ListAllTyped(
 		ctx,
 		apiClient,
 		kind,
 		client.ListOpts{
 			Namespace:  v1alpha1.DefaultNamespace,
-			LatestOnly: true,
+			Tag:        opts.Tag,
+			LatestOnly: opts.LatestOnly,
 			Limit:      200,
 		},
 		newObj,
@@ -128,11 +140,13 @@ func getDeploymentByTarget(ctx context.Context, name string) (any, error) {
 	return nil, database.ErrNotFound
 }
 
-func deleteDeploymentByTarget(ctx context.Context, name, tag string, force bool) error {
-	if tag == "" {
-		return fmt.Errorf("%w: --tag is required when deleting deployments", database.ErrInvalidInput)
-	}
-
+// deleteDeploymentByTarget deletes every deployment whose target has the given
+// name. Deployments do not carry a tag of their own — the only tag in play is
+// the target's, which is not part of the deployment's identity — so the tag
+// parameter is ignored and rejected upstream at the CLI surface. The dispatch
+// signature is shared across kinds, which is why the parameter is still
+// present here.
+func deleteDeploymentByTarget(ctx context.Context, name, _ string, force bool) error {
 	deployments, err := cliCommon.ListDeployments(ctx, apiClient)
 	if err != nil {
 		return fmt.Errorf("listing deployments: %w", err)
@@ -140,12 +154,10 @@ func deleteDeploymentByTarget(ctx context.Context, name, tag string, force bool)
 
 	var matches []*cliCommon.DeploymentRecord
 	for _, dep := range deployments {
-		if dep == nil {
+		if dep == nil || dep.TargetName != name {
 			continue
 		}
-		if dep.TargetName == name && dep.TargetTag == tag {
-			matches = append(matches, dep)
-		}
+		matches = append(matches, dep)
 	}
 	if len(matches) == 0 {
 		return database.ErrNotFound
@@ -263,18 +275,6 @@ func runtimeRow(runtime *v1alpha1.Runtime) []string {
 		return []string{"<invalid>"}
 	}
 	return []string{runtime.Metadata.Name, runtime.Spec.Type}
-}
-
-func remoteMCPServerRow(r *v1alpha1.RemoteMCPServer) []string {
-	if r == nil {
-		return []string{"<invalid>"}
-	}
-	return []string{
-		printer.TruncateString(r.Metadata.Name, 40),
-		r.Metadata.Tag,
-		printer.EmptyValueOrDefault(r.Spec.Remote.Type, "<none>"),
-		printer.TruncateString(printer.EmptyValueOrDefault(r.Spec.Remote.URL, "<none>"), 60),
-	}
 }
 
 func deploymentRow(dep *cliCommon.DeploymentRecord) []string {

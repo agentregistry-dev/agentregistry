@@ -233,6 +233,9 @@ metadata:
   name: %s
 spec:
   description: "E2E declarative apply test MCP server"
+  remote:
+    type: streamable-http
+    url: https://example.test/mcp
 `, serverName)
 
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "server.yaml", serverYAML)
@@ -271,6 +274,9 @@ metadata:
   name: %s
 spec:
   description: "Multi-doc test MCP server"
+  remote:
+    type: streamable-http
+    url: https://example.test/mcp
 ---
 apiVersion: ar.dev/v1alpha1
 kind: Agent
@@ -801,6 +807,9 @@ metadata:
   name: %s
 spec:
   description: "Idempotent apply test MCP server"
+  remote:
+    type: streamable-http
+    url: https://example.test/mcp
 `, serverName)
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "server.yaml", serverYAML)
 
@@ -1326,6 +1335,9 @@ metadata:
   name: %s
 spec:
   description: "MCP round-trip test server"
+  remote:
+    type: streamable-http
+    url: https://example.test/mcp
 `, serverName)
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "server.yaml", serverYAML)
 
@@ -1563,6 +1575,9 @@ metadata:
   name: %s
 spec:
   description: "multi-kind delete test mcp"
+  remote:
+    type: streamable-http
+    url: https://example.test/mcp
 ---
 apiVersion: ar.dev/v1alpha1
 kind: Skill
@@ -1915,10 +1930,10 @@ spec:
 	}
 }
 
-// TestRemoteMCPServer_RemoteShape verifies apply → get round-trip for a
-// RemoteMCPServer with spec.remote (unmanaged URL — no image, no build). Used
+// TestMCPServer_RemoteShape verifies apply → get round-trip for an
+// MCPServer with spec.remote (unmanaged URL — no image, no build). Used
 // for third-party servers or dev-loop MCPs the user runs themselves.
-func TestRemoteMCPServer_RemoteShape(t *testing.T) {
+func TestMCPServer_RemoteShape(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 	// The server's MCP validator requires the namespace of metadata.name to
@@ -1928,13 +1943,13 @@ func TestRemoteMCPServer_RemoteShape(t *testing.T) {
 	tag := defaultArtifactTag
 
 	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "remote-mcp", serverName, "--tag", tag, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "mcp", serverName, "--tag", tag, "--registry-url", regURL)
 	})
 
 	// The server-side URL validator rejects localhost/private addresses.
 	// Use a public-looking placeholder — the test doesn't actually reach it.
 	yaml := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
-kind: RemoteMCPServer
+kind: MCPServer
 metadata:
   name: %s
 spec:
@@ -1948,9 +1963,9 @@ spec:
 	path := writeDeclarativeYAML(t, tmpDir, "mcp-remote.yaml", yaml)
 	result := RunArctl(t, tmpDir, "apply", "-f", path, "--registry-url", regURL)
 	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "RemoteMCPServer/"+serverName)
+	RequireOutputContains(t, result, "MCPServer/"+serverName)
 
-	result = RunArctl(t, tmpDir, "get", "remote-mcp", serverName, "-o", "yaml", "--registry-url", regURL)
+	result = RunArctl(t, tmpDir, "get", "mcp", serverName, "-o", "yaml", "--registry-url", regURL)
 	RequireSuccess(t, result)
 	RequireOutputContains(t, result, "remote:")
 	RequireOutputContains(t, result, "streamable-http")

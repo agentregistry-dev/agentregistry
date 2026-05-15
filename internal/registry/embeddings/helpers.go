@@ -33,14 +33,9 @@ func BuildMCPServerEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.MCPS
 	}
 	appendJSON(&parts, sourceRepo)
 	appendJSON(&parts, sourcePkg)
-	return strings.Join(parts, "\n")
-}
-
-// BuildRemoteMCPServerEmbeddingPayload assembles the canonical text for a
-// RemoteMCPServer (already-running endpoint).
-func BuildRemoteMCPServerEmbeddingPayload(meta v1alpha1.ObjectMeta, spec v1alpha1.RemoteMCPServerSpec) string {
-	var parts []string
-	appendIf(&parts, meta.Name, spec.Title, spec.Description, spec.Remote.URL, spec.Remote.Type)
+	if spec.Remote != nil {
+		appendIf(&parts, spec.Remote.URL, spec.Remote.Type)
+	}
 	return strings.Join(parts, "\n")
 }
 
