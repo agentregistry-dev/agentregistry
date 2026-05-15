@@ -72,6 +72,51 @@ func TestRun_ChatDefault_DryRunNarratesFullLifecycle(t *testing.T) {
 	require.Contains(t, out, "(dry-run; skipping exec)")
 }
 
+// TestRun_InspectorOnAgentErrors verifies the strict-symmetric flag
+// validation: --inspector is MCP-only and fails fast on agent projects
+// before any exec or dry-run narration, with a message pointing the user
+// at chat (the agent's equivalent inspection surface).
+func TestRun_InspectorOnAgentErrors(t *testing.T) {
+	t.Setenv("GOOGLE_API_KEY", "fake")
+	tmp := t.TempDir()
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	require.NoError(t, os.Chdir(tmp))
+	initCmd := declarative.NewInitCmd()
+	initCmd.SetArgs([]string{"agent", "agentproj", "--framework", "adk", "--language", "python"})
+	require.NoError(t, initCmd.Execute())
+
+	require.NoError(t, os.Chdir(filepath.Join(tmp, "agentproj")))
+	cmd := declarative.NewRunCmd()
+	cmd.SetArgs([]string{"--inspector", "--dry-run"})
+	err = cmd.Execute()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "--inspector is only valid for MCP projects")
+}
+
+// TestRun_NoChatOnMCPErrors mirrors the above for the other direction:
+// --no-chat is agent-only and fails fast on MCP projects.
+func TestRun_NoChatOnMCPErrors(t *testing.T) {
+	tmp := t.TempDir()
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	require.NoError(t, os.Chdir(tmp))
+	initCmd := declarative.NewInitCmd()
+	initCmd.SetArgs([]string{"mcp", "acme/mcpproj", "--framework", "fastmcp", "--language", "python"})
+	require.NoError(t, initCmd.Execute())
+
+	require.NoError(t, os.Chdir(filepath.Join(tmp, "mcpproj")))
+	cmd := declarative.NewRunCmd()
+	cmd.SetArgs([]string{"--no-chat", "--dry-run"})
+	err = cmd.Execute()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "--no-chat is only valid for agent projects")
+}
+
 // TestRun_DoesNotRequireAgentYAML proves the structural decoupling: run
 // reads arctl.yaml only. Removing agent.yaml from a freshly inited project
 // must not break run.

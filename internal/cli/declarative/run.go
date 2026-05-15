@@ -128,6 +128,17 @@ func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun, wat
 		return fmt.Errorf("no framework for framework=%s language=%s", cfg.Framework, cfg.Language)
 	}
 
+	// Strict flag-vs-kind validation. Symmetric: --inspector errors on
+	// agent projects, --no-chat errors on MCP projects. Fail fast before
+	// any exec or dry-run narration so a typo'd flag gives clear feedback
+	// instead of being silently ignored.
+	if inspector && frameworkType == "agent" {
+		return fmt.Errorf("--inspector is only valid for MCP projects. This is an agent project. Agents are inspected via chat (the default behavior of arctl run).")
+	}
+	if noChat && frameworkType == "mcp" {
+		return fmt.Errorf("--no-chat is only valid for agent projects. This is an MCP project. MCPs do not open a chat.")
+	}
+
 	name := filepath.Base(projectDir)
 
 	dotEnv, err := LoadDotEnv(projectDir)
