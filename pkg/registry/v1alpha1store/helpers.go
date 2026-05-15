@@ -63,30 +63,6 @@ func scanRow(row rowScanner, tagged bool) (*v1alpha1.RawObject, error) {
 		return nil, fmt.Errorf("scan row: %w", err)
 	}
 
-	return decodeRow(
-		tagged,
-		namespace, name, tag, uid, generation,
-		labelsJSON, annotationsJSON, specJSON, statusJSON,
-		deletionTimestamp, finalizersJSON, createdAt, updatedAt,
-	)
-}
-
-// decodeRow builds a RawObject from already-scanned column values. Split
-// from scanRow so callers that scan extra trailing columns (SemanticList's
-// distance score) can reuse the deserialization without repeating its
-// logic.
-//
-// Tagged mode populates Metadata.Tag with the row's tag. Mutable-object
-// rows have no tag.
-func decodeRow(
-	tagged bool,
-	namespace, name, tag, uid string,
-	generation int64,
-	labelsJSON, annotationsJSON, specJSON, statusJSON []byte,
-	deletionTimestamp *time.Time,
-	finalizersJSON []byte,
-	createdAt, updatedAt time.Time,
-) (*v1alpha1.RawObject, error) {
 	var labels map[string]string
 	if len(labelsJSON) > 0 {
 		if err := json.Unmarshal(labelsJSON, &labels); err != nil {
