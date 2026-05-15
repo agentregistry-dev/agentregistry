@@ -1,84 +1,21 @@
--- v1alpha1 semantic-embedding columns.
+-- Historical no-op.
 --
--- Adds pgvector-backed embedding storage to every v1alpha1 kind. Columns
--- are additive on top of the schema already defined in 001_v1alpha1_schema.sql;
--- a fresh install applies 001 → 002 → 003 in order. Embedding generation and
--- semantic-search behavior are opt-in at runtime via
--- AGENT_REGISTRY_EMBEDDINGS_ENABLED. When the flag is off, the migrator's
--- Skip predicate filters this entire migration: pgvector is not installed,
--- the columns are not added, and the HNSW indexes are not built. pgvector
--- is therefore a feature dependency, not an install dependency.
+-- This migration originally created the pgvector extension and added
+-- `semantic_embedding*` columns + HNSW indexes to the v1alpha1 tables
+-- backing the semantic-search feature. The feature was removed in its
+-- entirety; see 008_drop_semantic_embeddings.sql for the corresponding
+-- cleanup of the columns and indexes on databases that had previously
+-- applied the original 003.
 --
--- Idempotency. Every DDL statement uses IF NOT EXISTS so repeated
--- application is safe. The migrator's applied-set tracking already prevents
--- re-runs in the common case.
+-- The file is retained so that:
+--   1. Fresh installs still record a `schema_migrations` row for
+--      version 203 (= 003 + the v1alpha1 VersionOffset of 200), keeping
+--      the migration sequence intact and contiguous with deployments
+--      that historically applied the original 003.
+--   2. The bundled PostgreSQL image no longer needs pgvector binaries
+--      available — the original `CREATE EXTENSION vector` is gone, so
+--      a stock `postgres:18` (the Helm chart default) boots cleanly
+--      without pulling in a vector-capable image.
 --
--- The vector dimension is fixed at 1536 to match OpenAI's
--- text-embedding-3-small default. Switching to a provider with a different
--- dimension requires a schema rewrite — document this in operator notes when
--- we add provider abstraction beyond OpenAI.
---
--- Indexing:
---   - HNSW index with vector_cosine_ops on each table for ANN search.
---   - The per-kind ?semantic=<q> list-endpoint path issues `ORDER BY
---     semantic_embedding <=> $1 LIMIT k` against this index.
---   - Rows with NULL semantic_embedding are skipped in semantic queries
---     (caller responsibility via IS NOT NULL predicate).
-
-CREATE EXTENSION IF NOT EXISTS vector;
-
--- -----------------------------------------------------------------------------
--- Per-kind semantic_embedding columns.
--- Identical shape across every kind — keeps the generic Store methods
--- uniform.
--- -----------------------------------------------------------------------------
-
-ALTER TABLE v1alpha1.agents
-    ADD COLUMN IF NOT EXISTS semantic_embedding              vector(1536),
-    ADD COLUMN IF NOT EXISTS semantic_embedding_provider     TEXT,
-    ADD COLUMN IF NOT EXISTS semantic_embedding_model        TEXT,
-    ADD COLUMN IF NOT EXISTS semantic_embedding_dimensions   INTEGER,
-    ADD COLUMN IF NOT EXISTS semantic_embedding_checksum     TEXT,
-    ADD COLUMN IF NOT EXISTS semantic_embedding_generated_at TIMESTAMPTZ;
-
-CREATE INDEX IF NOT EXISTS v1alpha1_agents_semantic_embedding_hnsw
-    ON v1alpha1.agents USING hnsw (semantic_embedding vector_cosine_ops);
-
-ALTER TABLE v1alpha1.mcp_servers
-    ADD COLUMN IF NOT EXISTS semantic_embedding              vector(1536),
-    ADD COLUMN IF NOT EXISTS semantic_embedding_provider     TEXT,
-    ADD COLUMN IF NOT EXISTS semantic_embedding_model        TEXT,
-    ADD COLUMN IF NOT EXISTS semantic_embedding_dimensions   INTEGER,
-    ADD COLUMN IF NOT EXISTS semantic_embedding_checksum     TEXT,
-    ADD COLUMN IF NOT EXISTS semantic_embedding_generated_at TIMESTAMPTZ;
-
-CREATE INDEX IF NOT EXISTS v1alpha1_mcp_servers_semantic_embedding_hnsw
-    ON v1alpha1.mcp_servers USING hnsw (semantic_embedding vector_cosine_ops);
-
-ALTER TABLE v1alpha1.skills
-    ADD COLUMN IF NOT EXISTS semantic_embedding              vector(1536),
-    ADD COLUMN IF NOT EXISTS semantic_embedding_provider     TEXT,
-    ADD COLUMN IF NOT EXISTS semantic_embedding_model        TEXT,
-    ADD COLUMN IF NOT EXISTS semantic_embedding_dimensions   INTEGER,
-    ADD COLUMN IF NOT EXISTS semantic_embedding_checksum     TEXT,
-    ADD COLUMN IF NOT EXISTS semantic_embedding_generated_at TIMESTAMPTZ;
-
-CREATE INDEX IF NOT EXISTS v1alpha1_skills_semantic_embedding_hnsw
-    ON v1alpha1.skills USING hnsw (semantic_embedding vector_cosine_ops);
-
-ALTER TABLE v1alpha1.prompts
-    ADD COLUMN IF NOT EXISTS semantic_embedding              vector(1536),
-    ADD COLUMN IF NOT EXISTS semantic_embedding_provider     TEXT,
-    ADD COLUMN IF NOT EXISTS semantic_embedding_model        TEXT,
-    ADD COLUMN IF NOT EXISTS semantic_embedding_dimensions   INTEGER,
-    ADD COLUMN IF NOT EXISTS semantic_embedding_checksum     TEXT,
-    ADD COLUMN IF NOT EXISTS semantic_embedding_generated_at TIMESTAMPTZ;
-
-CREATE INDEX IF NOT EXISTS v1alpha1_prompts_semantic_embedding_hnsw
-    ON v1alpha1.prompts USING hnsw (semantic_embedding vector_cosine_ops);
-
--- Providers + Deployments don't participate in semantic search today (users
--- search Agents/MCPServers/Skills/Prompts for capabilities; Providers are
--- infrastructure metadata and Deployments are lifecycle state). Columns
--- stay off these tables to keep the schema honest — add them here if the
--- search model changes.
+-- Comment-only SQL is valid input: PostgreSQL parses zero statements
+-- and the migrator records the version as applied.
