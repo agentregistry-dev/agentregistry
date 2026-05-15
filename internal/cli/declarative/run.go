@@ -15,6 +15,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/buildconfig"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative/chat"
+	inspectorpkg "github.com/agentregistry-dev/agentregistry/internal/cli/declarative/inspector"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/frameworks"
 	"github.com/spf13/cobra"
 )
@@ -212,9 +213,35 @@ func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun, wat
 
 	if dryRun {
 		fmt.Fprintf(out, "→ %s: %s\n", p.Name, strings.Join(rendered, " "))
+		if inspector {
+			fmt.Fprintf(out, "→ would launch MCP Inspector against http://localhost:%d/mcp\n", port)
+		}
 		fmt.Fprintln(out, "(dry-run; skipping exec)")
 		return nil
 	}
+
+	// Launch the MCP Inspector subprocess BEFORE the foreground docker run.
+	// Inspector retries connecting on its own until the MCP is up, so this
+	// race window is invisible. Defer-kill ensures the inspector is torn
+	// down when ExecForeground returns (on container exit or SIGINT). Not
+	// blocking the MCP on a missing npx is intentional — debug tools should
+	// degrade gracefully, not gate the dev loop.
+	if inspector {
+		inspectorURL := fmt.Sprintf("http://localhost:%d/mcp", port)
+		insCmd, err := inspectorpkg.Launch(context.Background(), inspectorURL)
+		if err != nil {
+			fmt.Fprintf(out, "Warning: --inspector skipped: %v\n", err)
+			fmt.Fprintf(out, "         MCP will still start on %s.\n", inspectorURL)
+		} else {
+			fmt.Fprintf(out, "→ MCP Inspector launching (will connect to %s when ready)\n", inspectorURL)
+			defer func() {
+				if insCmd != nil && insCmd.Process != nil {
+					_ = insCmd.Process.Kill()
+				}
+			}()
+		}
+	}
+
 	fmt.Fprintf(out, "→ %s: %s\n", p.Name, strings.Join(rendered, " "))
 	return frameworks.ExecForeground(p.Run, projectDir, vars, envv)
 }

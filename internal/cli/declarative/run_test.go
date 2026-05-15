@@ -96,6 +96,34 @@ func TestRun_InspectorOnAgentErrors(t *testing.T) {
 	require.Contains(t, err.Error(), "--inspector is only valid for MCP projects")
 }
 
+// TestRun_InspectorDryRunNarratesURL verifies that --inspector on an MCP
+// project under --dry-run prints the inspector URL the user would see at
+// runtime, so docs + CI can assert on the narration without spawning npx.
+func TestRun_InspectorDryRunNarratesURL(t *testing.T) {
+	tmp := t.TempDir()
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	require.NoError(t, os.Chdir(tmp))
+	initCmd := declarative.NewInitCmd()
+	initCmd.SetArgs([]string{"mcp", "acme/inspmcp", "--framework", "fastmcp", "--language", "python"})
+	require.NoError(t, initCmd.Execute())
+
+	require.NoError(t, os.Chdir(filepath.Join(tmp, "inspmcp")))
+	cmd := declarative.NewRunCmd()
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"--inspector", "--dry-run"})
+	require.NoError(t, cmd.Execute())
+
+	out := buf.String()
+	require.Contains(t, out, "would launch MCP Inspector")
+	require.Contains(t, out, "http://localhost:3000/mcp")
+	require.Contains(t, out, "(dry-run; skipping exec)")
+}
+
 // TestRun_NoChatOnMCPErrors mirrors the above for the other direction:
 // --no-chat is agent-only and fails fast on MCP projects.
 func TestRun_NoChatOnMCPErrors(t *testing.T) {
