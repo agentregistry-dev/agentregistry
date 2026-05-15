@@ -3,8 +3,10 @@ components:
     Agent:
       additionalProperties: false
       properties:
-        TypeMeta:
-          $ref: '#/components/schemas/TypeMeta'
+        apiVersion:
+          type: string
+        kind:
+          type: string
         metadata:
           $ref: '#/components/schemas/ObjectMeta'
         spec:
@@ -12,9 +14,10 @@ components:
         status:
           $ref: '#/components/schemas/Status'
       required:
-      - TypeMeta
       - metadata
       - spec
+      - apiVersion
+      - kind
       type: object
     AgentSource:
       additionalProperties: false
@@ -98,8 +101,10 @@ components:
     Deployment:
       additionalProperties: false
       properties:
-        TypeMeta:
-          $ref: '#/components/schemas/TypeMeta'
+        apiVersion:
+          type: string
+        kind:
+          type: string
         metadata:
           $ref: '#/components/schemas/ObjectMeta'
         spec:
@@ -107,9 +112,10 @@ components:
         status:
           $ref: '#/components/schemas/Status'
       required:
-      - TypeMeta
       - metadata
       - spec
+      - apiVersion
+      - kind
       type: object
     DeploymentRef:
       additionalProperties: false
@@ -442,8 +448,10 @@ components:
     MCPServer:
       additionalProperties: false
       properties:
-        TypeMeta:
-          $ref: '#/components/schemas/TypeMeta'
+        apiVersion:
+          type: string
+        kind:
+          type: string
         metadata:
           $ref: '#/components/schemas/ObjectMeta'
         spec:
@@ -451,9 +459,10 @@ components:
         status:
           $ref: '#/components/schemas/Status'
       required:
-      - TypeMeta
       - metadata
       - spec
+      - apiVersion
+      - kind
       type: object
     MCPServerSource:
       additionalProperties: false
@@ -536,8 +545,10 @@ components:
     Prompt:
       additionalProperties: false
       properties:
-        TypeMeta:
-          $ref: '#/components/schemas/TypeMeta'
+        apiVersion:
+          type: string
+        kind:
+          type: string
         metadata:
           $ref: '#/components/schemas/ObjectMeta'
         spec:
@@ -545,9 +556,10 @@ components:
         status:
           $ref: '#/components/schemas/Status'
       required:
-      - TypeMeta
       - metadata
       - spec
+      - apiVersion
+      - kind
       type: object
     PromptSpec:
       additionalProperties: false
@@ -587,8 +599,10 @@ components:
     Runtime:
       additionalProperties: false
       properties:
-        TypeMeta:
-          $ref: '#/components/schemas/TypeMeta'
+        apiVersion:
+          type: string
+        kind:
+          type: string
         metadata:
           $ref: '#/components/schemas/ObjectMeta'
         spec:
@@ -596,9 +610,10 @@ components:
         status:
           $ref: '#/components/schemas/Status'
       required:
-      - TypeMeta
       - metadata
       - spec
+      - apiVersion
+      - kind
       type: object
     RuntimeSpec:
       additionalProperties: false
@@ -616,8 +631,10 @@ components:
     Skill:
       additionalProperties: false
       properties:
-        TypeMeta:
-          $ref: '#/components/schemas/TypeMeta'
+        apiVersion:
+          type: string
+        kind:
+          type: string
         metadata:
           $ref: '#/components/schemas/ObjectMeta'
         spec:
@@ -625,9 +642,10 @@ components:
         status:
           $ref: '#/components/schemas/Status'
       required:
-      - TypeMeta
       - metadata
       - spec
+      - apiVersion
+      - kind
       type: object
     SkillSource:
       additionalProperties: false
@@ -654,17 +672,6 @@ components:
           type:
           - array
           - "null"
-      type: object
-    TypeMeta:
-      additionalProperties: false
-      properties:
-        apiVersion:
-          type: string
-        kind:
-          type: string
-      required:
-      - apiVersion
-      - kind
       type: object
     VersionBody:
       additionalProperties: false
