@@ -530,7 +530,7 @@ fmt: ## Run the Go formatter
 	git diff --name-only --cached --diff-filter=ACMR -- '**/*.go' | sed 's|^go/||' | xargs -r $(GCI) write --skip-generated -s standard -s default -s localmodule
 
 .PHONY: verify
-verify: fmt mod-tidy gen-client ## Run all verification checks
+verify: fmt mod-tidy gen-client charts-docs ## Run all verification checks
 	git diff --exit-code
 
 .PHONY: mod-tidy
@@ -567,6 +567,13 @@ charts-deps: charts-generate ## Build Helm chart dependencies
 charts-lint: charts-generate charts-deps ## Lint the Helm chart with --strict
 	@echo "Linting Helm chart $(HELM_CHART_DIR)..."
 	$(HELM) lint $(HELM_CHART_DIR) --strict
+
+.PHONY: charts-docs
+charts-docs: charts-generate ## Render chart README.md from values.yaml via helm-docs
+	@echo "Generating Helm chart docs for $(HELM_CHART_DIR)..."
+	$(HELM_DOCS) -c $(HELM_CHART_DIR) \
+	  --template-files=_templates.gotmpl \
+	  --template-files=README.md.gotmpl
 
 # Render chart templates to stdout (smoke test — catches template errors).
 # Uses minimum required values to pass chart validation.
