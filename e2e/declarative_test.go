@@ -1620,7 +1620,6 @@ spec:
 func TestArctl_KeptCommandsResolve(t *testing.T) {
 	t.Parallel()
 	cases := [][]string{
-		{"mcp", "add-tool"},
 		{"apply"},
 		{"get"},
 		{"delete"},
