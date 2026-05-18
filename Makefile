@@ -401,7 +401,7 @@ endif
 	    get secret agentregistry \
 	    -o jsonpath='{.data.AGENT_REGISTRY_JWT_PRIVATE_KEY}' 2>/dev/null | base64 -d); \
 	  if [ -z "$$JWT_KEY" ]; then JWT_KEY=$$(openssl rand -hex 32); fi; \
-	  helm upgrade --install agentregistry charts/agentregistry \
+	  $(HELM) upgrade --install agentregistry charts/agentregistry \
 	    --kube-context $(KIND_CLUSTER_CONTEXT) \
 	    --namespace $(KIND_NAMESPACE) \
 	    --create-namespace \
