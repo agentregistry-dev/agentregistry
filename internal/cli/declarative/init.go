@@ -285,12 +285,14 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 			}
 
 			// --local-mcp wires sibling MCP projects via the runtime's
-			// MCP_SERVERS_CONFIG env var. Each path's arctl.yaml carries
-			// the port; we write a JSON array of {name, url} entries.
-			if len(initLocalMCPs) > 0 {
-				if err := appendLocalMCPsToDotEnv(projectDir, initLocalMCPs); err != nil {
-					return fmt.Errorf("wire local MCPs: %w", err)
-				}
+			// MCP_SERVERS_CONFIG env var. Task 3 extends this with --mcp remote
+			// catalog refs through the same writer.
+			localEntries, err := localMCPEntries(initLocalMCPs)
+			if err != nil {
+				return fmt.Errorf("wire local MCPs: %w", err)
+			}
+			if err := writeMCPServersConfig(projectDir, localEntries); err != nil {
+				return fmt.Errorf("write MCP_SERVERS_CONFIG: %w", err)
 			}
 
 			// Skills/Prompts/Language/Framework removed from AgentSpec (Phase 11);
@@ -330,51 +332,29 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 	return cmd
 }
 
-// appendLocalMCPsToDotEnv resolves each sibling MCP project path, reads its
-// arctl.yaml for the port, derives the registry-style name from the sibling's
-// mcp.yaml, and appends a single MCP_SERVERS_CONFIG line to projectDir/.env
-// carrying a JSON array of {name, url} entries.
+// mcpEnvEntry is one row of the MCP_SERVERS_CONFIG JSON array written to
+// .env. Type is always "remote" today; the kagent ADK runtime's mcp_tools.py
+// dispatches on this field.
+type mcpEnvEntry struct {
+	Name    string            `json:"name"`
+	Type    string            `json:"type"`
+	URL     string            `json:"url"`
+	Headers map[string]string `json:"headers,omitempty"`
+}
+
+// writeMCPServersConfig appends a single MCP_SERVERS_CONFIG=... line carrying
+// the supplied entries to projectDir/.env. Callers collect entries from both
+// --local-mcp (sibling paths) and --mcp (remote catalog refs) so one writer
+// covers both flag sources and we don't end up with two MCP_SERVERS_CONFIG
+// lines (last wins in dotenv parsing).
 //
 // host.docker.internal works on Docker Desktop (Mac/Windows) by default. Linux
 // users need `--add-host=host.docker.internal:host-gateway` in the agent's
 // docker-compose; we don't auto-inject that here.
-func appendLocalMCPsToDotEnv(projectDir string, paths []string) error {
-	// The kagent ADK runtime's mcp_tools.py reads this JSON and dispatches on
-	// `type`: "command" for in-cluster sidecar services (URL derived from
-	// service name) vs everything else (uses `url` directly). For local-dev
-	// wiring we always emit "remote" so the runtime takes the URL path.
-	type entry struct {
-		Name string `json:"name"`
-		Type string `json:"type"`
-		URL  string `json:"url"`
+func writeMCPServersConfig(projectDir string, entries []mcpEnvEntry) error {
+	if len(entries) == 0 {
+		return nil
 	}
-	var entries []entry
-	for _, p := range paths {
-		abs, err := filepath.Abs(p)
-		if err != nil {
-			return fmt.Errorf("resolve %q: %w", p, err)
-		}
-		cfg, err := buildconfig.Read(abs)
-		if err != nil {
-			return fmt.Errorf("read sibling arctl.yaml at %s: %w", abs, err)
-		}
-		port := cfg.Port
-		if port == 0 {
-			port = 3000
-		}
-
-		// Sibling MCP's registry-style name (e.g. "acme/foo") lives in mcp.yaml.
-		siblingName, err := readMCPName(abs)
-		if err != nil {
-			return err
-		}
-		entries = append(entries, entry{
-			Name: siblingName,
-			Type: "remote",
-			URL:  fmt.Sprintf("http://host.docker.internal:%d/mcp", port),
-		})
-	}
-
 	jsonBlob, err := json.Marshal(entries)
 	if err != nil {
 		return fmt.Errorf("marshal MCP_SERVERS_CONFIG: %w", err)
@@ -388,9 +368,40 @@ func appendLocalMCPsToDotEnv(projectDir string, paths []string) error {
 	if out != "" && !strings.HasSuffix(out, "\n") {
 		out += "\n"
 	}
-	out += "\n# Wired by arctl init --local-mcp.\n"
+	out += "\n# Wired by arctl init --mcp / --local-mcp.\n"
 	out += "MCP_SERVERS_CONFIG=" + string(jsonBlob) + "\n"
 	return os.WriteFile(envPath, []byte(out), 0o644)
+}
+
+// localMCPEntries resolves sibling MCP project paths into mcpEnvEntries.
+// Extracted from the old appendLocalMCPsToDotEnv so the caller can mix
+// local entries with --mcp-derived remote entries before writing once.
+func localMCPEntries(paths []string) ([]mcpEnvEntry, error) {
+	var entries []mcpEnvEntry
+	for _, p := range paths {
+		abs, err := filepath.Abs(p)
+		if err != nil {
+			return nil, fmt.Errorf("resolve %q: %w", p, err)
+		}
+		cfg, err := buildconfig.Read(abs)
+		if err != nil {
+			return nil, fmt.Errorf("read sibling arctl.yaml at %s: %w", abs, err)
+		}
+		port := cfg.Port
+		if port == 0 {
+			port = 3000
+		}
+		siblingName, err := readMCPName(abs)
+		if err != nil {
+			return nil, err
+		}
+		entries = append(entries, mcpEnvEntry{
+			Name: siblingName,
+			Type: "remote",
+			URL:  fmt.Sprintf("http://host.docker.internal:%d/mcp", port),
+		})
+	}
+	return entries, nil
 }
 
 // readMCPName pulls metadata.name out of a sibling mcp.yaml. Used to label
