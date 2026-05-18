@@ -50,7 +50,8 @@ keep the old foreground-only behavior.
 
 For MCPServer kinds chat does not apply; the framework's run command runs
 in the foreground until interrupted. Pass --inspector to launch the MCP
-Inspector subprocess (requires 'npx' on PATH) after the server starts.
+Inspector subprocess (requires 'npx' on PATH) alongside the server; the
+Inspector retries until the server is reachable.
 
 Reads arctl.yaml to look up the matching framework by (framework, language)
 and dispatches to its run command. Loads .env (if present) and validates
@@ -75,7 +76,7 @@ that the framework's required env vars are set.`,
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Skip actual exec; useful for tests")
 	cmd.Flags().BoolVar(&watch, "watch", false, "Rebuild and restart on file change")
 	cmd.Flags().BoolVar(&noChat, "no-chat", false, "Skip chat for Agents; run the framework command in the foreground (agent projects only; errors on MCP projects)")
-	cmd.Flags().BoolVar(&inspector, "inspector", false, "Launch MCP Inspector after the server is ready (MCP projects only; errors on agent projects)")
+	cmd.Flags().BoolVar(&inspector, "inspector", false, "Launch MCP Inspector alongside the server; it connects when ready (MCP projects only; errors on agent projects)")
 	return cmd
 }
 
@@ -222,10 +223,12 @@ func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun, wat
 
 	// Launch the MCP Inspector subprocess BEFORE the foreground docker run.
 	// Inspector retries connecting on its own until the MCP is up, so this
-	// race window is invisible. Defer-kill ensures the inspector is torn
-	// down when ExecForeground returns (on container exit or SIGINT). Not
-	// blocking the MCP on a missing npx is intentional — debug tools should
-	// degrade gracefully, not gate the dev loop.
+	// race window is invisible. Defer-kill tears down the inspector when
+	// ExecForeground returns (typically on container exit). On Ctrl+C the
+	// terminal delivers SIGINT to the whole foreground process group, so
+	// npx exits with us regardless of whether defers run. Not blocking the
+	// MCP on a missing npx is intentional — debug tools should degrade
+	// gracefully, not gate the dev loop.
 	if inspector {
 		inspectorURL := fmt.Sprintf("http://localhost:%d/mcp", port)
 		insCmd, err := inspectorpkg.Launch(context.Background(), inspectorURL)
@@ -237,6 +240,7 @@ func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun, wat
 			defer func() {
 				if insCmd != nil && insCmd.Process != nil {
 					_ = insCmd.Process.Kill()
+					_ = insCmd.Wait() // reap to avoid leaving a zombie
 				}
 			}()
 		}
