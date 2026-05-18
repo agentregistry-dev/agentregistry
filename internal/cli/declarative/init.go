@@ -10,6 +10,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/buildconfig"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative/mcpresolve"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/frameworks"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	skilltemplates "github.com/agentregistry-dev/agentregistry/internal/cli/skill/templates"
@@ -23,6 +24,10 @@ import (
 // InitCmd is the cobra command for "init".
 // Tests should use NewInitCmd() for a fresh instance.
 var InitCmd = newInitCmd()
+
+// mcpFetcherForTest is the indirection point unit tests use to inject a
+// fake registry. Nil in production; the RunE substitutes apiClientMCPFetcher{}.
+var mcpFetcherForTest mcpresolve.Fetcher
 
 // lookupOutputDir walks the cmd → parent chain to find the --output-dir
 // flag value. The flag is defined as persistent on the parent `init`
@@ -200,6 +205,45 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 				return err
 			}
 
+			// Resolve --mcp refs against the registry BEFORE touching project
+			// files, so a registry failure leaves no partial state.
+			fetcher := mcpFetcherForTest
+			if fetcher == nil {
+				fetcher = apiClientMCPFetcher{}
+			}
+			var remoteEntries []mcpEnvEntry
+			type resolvedRef struct {
+				rawRef string
+				r      *mcpresolve.ResolvedMCP
+			}
+			var resolvedRefs []resolvedRef
+			for _, raw := range initMCPs {
+				refName, tag := parseNameVersion(raw)
+				r, rerr := mcpresolve.Resolve(cmd.Context(), fetcher, refName, tag)
+				if rerr != nil {
+					return rerr
+				}
+				resolvedRefs = append(resolvedRefs, resolvedRef{rawRef: raw, r: r})
+				if r.RemoteURL != "" {
+					var headers map[string]string
+					for _, h := range r.RemoteHeaders {
+						if h.Value == "" {
+							continue
+						}
+						if headers == nil {
+							headers = map[string]string{}
+						}
+						headers[h.Name] = h.Value
+					}
+					remoteEntries = append(remoteEntries, mcpEnvEntry{
+						Name:    r.Name,
+						Type:    "remote",
+						URL:     r.RemoteURL,
+						Headers: headers,
+					})
+				}
+			}
+
 			r, err := loadFrameworkRegistry(projectDir)
 			if err != nil {
 				return err
@@ -291,8 +335,17 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 			if err != nil {
 				return fmt.Errorf("wire local MCPs: %w", err)
 			}
-			if err := writeMCPServersConfig(projectDir, localEntries); err != nil {
+			allEntries := append([]mcpEnvEntry{}, localEntries...)
+			allEntries = append(allEntries, remoteEntries...)
+			if err := writeMCPServersConfig(projectDir, allEntries); err != nil {
 				return fmt.Errorf("write MCP_SERVERS_CONFIG: %w", err)
+			}
+
+			// Transparent status output: tell the user what was wired.
+			for _, rr := range resolvedRefs {
+				if rr.r.RemoteURL != "" {
+					fmt.Fprintf(cmd.ErrOrStderr(), "  wired .env: %s → %s\n", rr.r.Name, rr.r.RemoteURL)
+				}
 			}
 
 			// Skills/Prompts/Language/Framework removed from AgentSpec (Phase 11);

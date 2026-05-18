@@ -2,6 +2,7 @@ package declarative
 
 import (
 	"context"
+	"fmt"
 
 	cliCommon "github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
@@ -15,6 +16,18 @@ var apiClient *client.Client
 // Called by pkg/cli/root.go's PersistentPreRunE.
 func SetAPIClient(c *client.Client) {
 	apiClient = c
+}
+
+// apiClientMCPFetcher adapts the package apiClient to the
+// mcpresolve.Fetcher interface so init code can inject the live registry
+// client without exporting apiClient through a wider seam.
+type apiClientMCPFetcher struct{}
+
+func (apiClientMCPFetcher) Fetch(ctx context.Context, name, tag string) (*v1alpha1.MCPServer, error) {
+	if apiClient == nil {
+		return nil, fmt.Errorf("API client not initialized")
+	}
+	return client.GetTyped(ctx, apiClient, v1alpha1.KindMCPServer, v1alpha1.DefaultNamespace, name, tag, func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} })
 }
 
 func init() {
