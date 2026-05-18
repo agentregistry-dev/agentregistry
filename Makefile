@@ -45,6 +45,16 @@ LDFLAGS := \
 # Local architecture detection to build for the current platform
 LOCALARCH ?= $(shell uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/')
 
+# Developer tools (golangci-lint, gotestsum, gci, kind) are pinned in tools/go.mod
+# and invoked via `go tool -modfile=tools/go.mod <name>`. This keeps their
+# transitive dependencies out of the main module.
+TOOLS_DIR     ?= $(CURDIR)/tools
+GO_TOOL       ?= go tool -modfile=$(TOOLS_DIR)/go.mod
+GCI           ?= $(GO_TOOL) gci
+GOLANGCI_LINT ?= $(GO_TOOL) golangci-lint
+GOTESTSUM     ?= $(GO_TOOL) gotestsum
+KIND          ?= $(GO_TOOL) kind
+
 ## Helm / Chart settings
 # Override HELM if your helm binary lives elsewhere (e.g. HELM=/usr/local/bin/helm).
 HELM ?= helm
@@ -167,7 +177,6 @@ run: run-k8s # Start local development environment (default: k8s)
 down: daemon-stop delete-kind-cluster ## Stop the local development environment
 	@echo "agentregistry stopped"
 
-GOTESTSUM ?= go tool gotestsum
 ARCTL ?= ./bin/arctl
 
 # Manage local daemon lifecycle via CLI helpers.
@@ -348,7 +357,7 @@ endif
 
 .PHONY: create-kind-cluster
 create-kind-cluster: local-registry ## Create a local Kind cluster with MetalLB (skips cluster creation if already exists, always runs post-create steps)
-	@if go tool kind get clusters 2>/dev/null | grep -qx "$(KIND_CLUSTER_NAME)"; then \
+	@if $(KIND) get clusters 2>/dev/null | grep -qx "$(KIND_CLUSTER_NAME)"; then \
 	  echo "Kind cluster '$(KIND_CLUSTER_NAME)' already exists, skipping cluster creation"; \
 	else \
 	  KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) \
@@ -361,7 +370,7 @@ create-kind-cluster: local-registry ## Create a local Kind cluster with MetalLB 
 
 .PHONY: delete-kind-cluster
 delete-kind-cluster: ## Delete the local Kind cluster (no-op if it does not exist)
-	@go tool kind delete cluster --name $(KIND_CLUSTER_NAME) 2>/dev/null || true
+	@$(KIND) delete cluster --name $(KIND_CLUSTER_NAME) 2>/dev/null || true
 
 .PHONY: prune-kind-cluster
 prune-kind-cluster: ## Prune dangling container images from the Kind control-plane node
@@ -447,7 +456,7 @@ setup-kind-cluster: create-kind-cluster install-kagent install-agentregistry ## 
 .PHONY: dump-kind-state
 dump-kind-state: ## Dump Kind cluster state for debugging (pods, events, kagent logs)
 	@echo "=== Kind clusters ==="
-	@go tool kind get clusters 2>/dev/null || true
+	@$(KIND) get clusters 2>/dev/null || true
 	@echo ""
 	@echo "=== Pods ==="
 	@kubectl get pods -A --context $(KIND_CLUSTER_CONTEXT) 2>/dev/null || true
@@ -506,11 +515,8 @@ release-cli: bin/arctl-darwin-amd64.sha256
 release-cli: bin/arctl-darwin-arm64.sha256
 release-cli: bin/arctl-windows-amd64.exe.sha256
 
-GOLANGCI_LINT ?= go tool golangci-lint
-GOLANGCI_LINT_ARGS ?= --fix
-
 .PHONY: lint
-lint: ## Run golangci-lint linter
+lint: ## Run the linter (set GOLANGCI_LINT_ARGS=--fix for local auto-fix)
 	$(GOLANGCI_LINT) run $(GOLANGCI_LINT_ARGS)
 
 .PHONY: lint-ui
@@ -520,15 +526,16 @@ lint-ui: install-ui ## Run eslint on UI code
 .PHONY: fmt
 fmt: ## Run the Go formatter
 	$(GOLANGCI_LINT) fmt
-	git diff --name-only --cached --diff-filter=ACMR -- '**/*.go' | sed 's|^go/||' | xargs -r go tool gci write --skip-generated -s standard -s default -s localmodule
+	git diff --name-only --cached --diff-filter=ACMR -- '**/*.go' | sed 's|^go/||' | xargs -r $(GCI) write --skip-generated -s standard -s default -s localmodule
 
 .PHONY: verify
 verify: fmt mod-tidy gen-client ## Run all verification checks
 	git diff --exit-code
 
 .PHONY: mod-tidy
-mod-tidy: ## Run go mod tidy
+mod-tidy: ## Run go mod tidy on the main module and tools module
 	go mod tidy
+	cd $(TOOLS_DIR) && go mod tidy
 
 .PHONY: mod-download
 mod-download: ## Run go mod download
