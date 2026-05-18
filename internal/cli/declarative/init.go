@@ -26,7 +26,7 @@ import (
 var InitCmd = newInitCmd()
 
 // mcpFetcherForTest is the indirection point unit tests use to inject a
-// fake registry. Nil in production; the RunE substitutes apiClientMCPFetcher{}.
+// fake registry. Nil in production; the RunE substitutes apiClientMCPFetcher.
 var mcpFetcherForTest mcpresolve.Fetcher
 
 // lookupOutputDir walks the cmd → parent chain to find the --output-dir
@@ -209,7 +209,7 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 			// files, so a registry failure leaves no partial state.
 			fetcher := mcpFetcherForTest
 			if fetcher == nil {
-				fetcher = apiClientMCPFetcher{}
+				fetcher = apiClientMCPFetcher{cmd: cmd}
 			}
 			var remoteEntries []mcpEnvEntry
 			type resolvedRef struct {
