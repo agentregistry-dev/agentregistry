@@ -32,6 +32,9 @@ jobs:
     - uses: actions/setup-go@v6
       with:
         go-version-file: "go.mod"
+        cache-dependency-path: |
+          go.sum
+          tools/go.sum
 
     - name: Set up Node.js
       uses: actions/setup-node@v4
@@ -80,6 +83,9 @@ jobs:
       uses: actions/setup-go@v6
       with:
         go-version-file: "go.mod"
+        cache-dependency-path: |
+          go.sum
+          tools/go.sum
 
     - name: Cache Helm plugins
       uses: actions/cache@v4
