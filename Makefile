@@ -50,14 +50,15 @@ LOCALARCH ?= $(shell uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/')
 # transitive dependencies out of the main module.
 TOOLS_DIR     ?= $(CURDIR)/tools
 GO_TOOL       ?= go tool -modfile=$(TOOLS_DIR)/go.mod
+CRANE         ?= $(GO_TOOL) crane
 GCI           ?= $(GO_TOOL) gci
 GOLANGCI_LINT ?= $(GO_TOOL) golangci-lint
 GOTESTSUM     ?= $(GO_TOOL) gotestsum
+HELM          ?= $(GO_TOOL) helm
+HELM_DOCS     ?= $(GO_TOOL) helm-docs --log-level=fatal
 KIND          ?= $(GO_TOOL) kind
 
 ## Helm / Chart settings
-# Override HELM if your helm binary lives elsewhere (e.g. HELM=/usr/local/bin/helm).
-HELM ?= helm
 # CHART_VERSION strips the leading 'v' from VERSION for use in Chart.yaml (Helm requires semver without the prefix).
 CHART_VERSION ?= $(shell echo $(VERSION) | sed 's/^v//')
 HELM_CHART_DIR ?= ./charts/agentregistry
@@ -547,15 +548,6 @@ mod-download: ## Run go mod download
 # Override with: make charts-test HELM_CHART_DIR=/path/to/chart
 # ──────────────────────────────────────────────────────────────────────────────
 
-# Sanity-check that helm is present. Called as a dependency by all chart targets.
-.PHONY: _helm-check
-_helm-check:
-	@if ! command -v $(HELM) >/dev/null 2>&1; then \
-	  echo "ERROR: 'helm' not found in PATH."; \
-	  echo "  Install Helm from https://helm.sh or set HELM=/path/to/helm"; \
-	  exit 1; \
-	fi
-
 # Generate Chart.yaml from Chart-template.yaml using envsubst.
 .PHONY: charts-generate
 charts-generate: ## Generate Chart.yaml from Chart-template.yaml (uses CHART_VERSION, default derived from git tags)
@@ -566,7 +558,7 @@ charts-generate: ## Generate Chart.yaml from Chart-template.yaml (uses CHART_VER
 
 # Build chart dependencies (resolves Chart.yaml dependencies → charts/ subdir).
 .PHONY: charts-deps
-charts-deps: charts-generate _helm-check ## Build Helm chart dependencies
+charts-deps: charts-generate ## Build Helm chart dependencies
 	@echo "Building Helm chart dependencies for $(HELM_CHART_DIR)..."
 	$(HELM) dependency build $(HELM_CHART_DIR)
 
@@ -597,7 +589,7 @@ charts-package: charts-generate charts-lint ## Package the Helm chart into $(HEL
 # Package the chart and push to an OCI registry. Caller must be logged in.
 # Override registry/repo: make charts-push HELM_REGISTRY=ghcr.io HELM_REPO=org/repo
 .PHONY: charts-push
-charts-push: charts-package _helm-check ## Package and push chart to the configured OCI registry
+charts-push: charts-package ## Package and push chart to the configured OCI registry
 	@echo "Pushing $(HELM_PACKAGE_DIR)/agentregistry-$(CHART_VERSION).tgz → oci://$(HELM_REGISTRY)/$(HELM_REPO)/charts"
 	$(HELM) push "$(HELM_PACKAGE_DIR)/agentregistry-$(CHART_VERSION).tgz" "oci://$(HELM_REGISTRY)/$(HELM_REPO)/charts"
 
@@ -620,13 +612,13 @@ charts-release: charts-test charts-push charts-checksum ## Full Helm release: li
 #   2. checks for the helm-unittest plugin and installs it if missing
 #   3. runs the full test suite
 .PHONY: charts-test
-charts-test: charts-generate _helm-check charts-deps helm-unittest-install ## Run helm-unittest chart tests
+charts-test: charts-generate charts-deps helm-unittest-install ## Run helm-unittest chart tests
 	@echo "Running helm-unittest on $(HELM_CHART_DIR)..."
 	$(HELM) unittest $(HELM_CHART_DIR) --file "tests/*_test.yaml"
 
 .PHONY: helm-unittest-install
-helm-unittest-install: _helm-check  ## Install the helm-unittest plugin if needed
-	HELM=$(HELM) \
+helm-unittest-install: ## Install the helm-unittest plugin if needed
+	HELM="$(HELM)" \
 	HELM_PLUGIN_UNITTEST_URL=$(HELM_PLUGIN_UNITTEST_URL) \
 	HELM_PLUGIN_UNITTEST_VERSION=$(HELM_PLUGIN_UNITTEST_VERSION) \
 	HELM_PLUGIN_INSTALL_FLAGS="$(HELM_PLUGIN_INSTALL_FLAGS)" \
