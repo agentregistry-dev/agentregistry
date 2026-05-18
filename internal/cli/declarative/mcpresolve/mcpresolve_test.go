@@ -32,7 +32,10 @@ func TestResolve_RemoteMCP_ReturnsURLAndHeaders(t *testing.T) {
 			Remote: &v1alpha1.MCPTransport{
 				Type:    "streamable-http",
 				URL:     "https://mcp.acme.com/mcp",
-				Headers: []v1alpha1.MCPKeyValueInput{{Name: "X-Hello", Value: "world"}},
+				Headers: []v1alpha1.MCPKeyValueInput{
+					{Name: "X-Hello", Value: "world"},
+					{Name: "X-Empty", Value: ""}, // dropped — unfilled placeholder
+				},
 			},
 		},
 	}
@@ -41,7 +44,7 @@ func TestResolve_RemoteMCP_ReturnsURLAndHeaders(t *testing.T) {
 	assert.Equal(t, "acme/fetch", r.Name)
 	assert.Equal(t, "v1.0.0", r.Tag)
 	assert.Equal(t, "https://mcp.acme.com/mcp", r.RemoteURL)
-	assert.Equal(t, []v1alpha1.MCPKeyValueInput{{Name: "X-Hello", Value: "world"}}, r.RemoteHeaders)
+	assert.Equal(t, map[string]string{"X-Hello": "world"}, r.RemoteHeaders)
 }
 
 func TestResolve_SourceMCP_ReturnsEmptyURL(t *testing.T) {

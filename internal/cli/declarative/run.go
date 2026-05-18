@@ -2,7 +2,6 @@ package declarative
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -19,7 +18,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/frameworks"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/spf13/cobra"
-	"sigs.k8s.io/yaml"
 )
 
 // RunCmd is the cobra command for "run".
@@ -124,22 +122,17 @@ func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun, wat
 		}
 	}
 
-	// Run-B guard: if this is an mcp project whose mcp.yaml declares only
-	// Spec.Remote (no Spec.Source), there is nothing to docker-run locally.
-	// Fail fast with a message pointing at the npx-based MCP Inspector.
-	//
-	// We check this BEFORE the framework-not-found error so that a remote-only
-	// project produces the helpful "remote MCPServer" message even when the
+	// A remote-only mcp.yaml (Spec.Remote set, Spec.Source unset) has
+	// nothing to docker-run locally. Fail fast before the framework-not-
+	// found error so users get the npx-inspector hint even when their
 	// arctl.yaml lists a framework the local registry doesn't know about.
-	if frameworkType == "mcp" || hasMCPYAML(projectDir) {
-		remote, mcpName, perr := loadRemoteOnlyMCP(projectDir)
-		if perr != nil {
-			return perr
-		}
-		if remote != nil {
-			return fmt.Errorf("%s is a remote MCPServer (URL: %s). Nothing to run locally. To inspect tools: npx -y @modelcontextprotocol/inspector --server-url %s",
-				mcpName, remote.URL, remote.URL)
-		}
+	remote, mcpName, perr := loadRemoteOnlyMCP(projectDir)
+	if perr != nil {
+		return perr
+	}
+	if remote != nil {
+		return fmt.Errorf("%s is a remote MCPServer (URL: %s). Nothing to run locally. To inspect tools: npx -y @modelcontextprotocol/inspector --server-url %s",
+			mcpName, remote.URL, remote.URL)
 	}
 
 	if p == nil {
@@ -381,44 +374,17 @@ func mergeEnv(dotEnv map[string]string, overrides []string) []string {
 	return out
 }
 
-// hasMCPYAML reports whether projectDir contains an mcp.yaml. Used by the
-// Run-B guard to detect an mcp-project shape even when the arctl.yaml's
-// framework field doesn't match a registered framework.
-func hasMCPYAML(projectDir string) bool {
-	_, err := os.Stat(filepath.Join(projectDir, "mcp.yaml"))
-	return err == nil
-}
-
-// loadRemoteOnlyMCP reads mcp.yaml from projectDir and returns its remote
-// transport iff the spec has Remote set AND Source unset. Returns
-// (nil, name, nil) when the mcp.yaml is source-mode or both — i.e., when
-// arctl run should proceed normally.
-//
-// Reading mcp.yaml here is a deliberate departure from the offline-by-
-// default reading of arctl.yaml — but it's still local I/O, no registry.
-// This is the only place arctl run touches mcp.yaml.
+// loadRemoteOnlyMCP returns (Remote, name) when projectDir's mcp.yaml has
+// Spec.Remote set and Spec.Source unset — the case where arctl run has no
+// local image to spawn. Returns (nil, ...) for source-mode or no-mcp.yaml
+// so callers fall through to the normal run flow.
 func loadRemoteOnlyMCP(projectDir string) (*v1alpha1.MCPTransport, string, error) {
-	data, err := os.ReadFile(filepath.Join(projectDir, "mcp.yaml"))
+	doc, err := readMCPYAML(projectDir)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			// mcp-typed framework but no mcp.yaml is a different kind
-			// of broken project; let the existing run flow surface that
-			// error. The guard's job is specifically the remote-only case.
-			return nil, "", nil
-		}
-		return nil, "", fmt.Errorf("read mcp.yaml: %w", err)
+		return nil, "", err
 	}
-	var doc struct {
-		Metadata struct {
-			Name string `yaml:"name"`
-		} `yaml:"metadata"`
-		Spec struct {
-			Source *struct{}              `yaml:"source"`
-			Remote *v1alpha1.MCPTransport `yaml:"remote"`
-		} `yaml:"spec"`
-	}
-	if err := yaml.Unmarshal(data, &doc); err != nil {
-		return nil, "", fmt.Errorf("parse mcp.yaml: %w", err)
+	if doc == nil {
+		return nil, "", nil
 	}
 	if doc.Spec.Remote != nil && doc.Spec.Source == nil {
 		return doc.Spec.Remote, doc.Metadata.Name, nil

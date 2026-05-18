@@ -39,25 +39,28 @@ func (f apiClientMCPFetcher) Fetch(ctx context.Context, name, tag string) (*v1al
 	return client.GetTyped(ctx, c, v1alpha1.KindMCPServer, v1alpha1.DefaultNamespace, name, tag, func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} })
 }
 
-// lookupRegistryURL resolves --registry-url for commands that skip the
-// root pre-run hook. Walks the cmd→parent chain because cobra defines
-// the flag as persistent on rootCmd; child commands that haven't been
-// Execute()'d through the root won't have it merged into their own
-// flag set. Falls back to env then client.DefaultBaseURL to mirror
-// pkg/cli/root.go's resolveRegistryTarget/normalizeBaseURL.
-func lookupRegistryURL(cmd *cobra.Command) string {
-	var raw string
+// lookupPersistentFlag walks the cmd→parent chain to find a persistent
+// flag value. Needed for commands that skip PersistentPreRunE: cobra
+// normally merges parent persistent flags into child flag sets at Execute
+// time, but commands routed through that path won't see them. Returns
+// "" if the flag isn't declared anywhere in the chain.
+func lookupPersistentFlag(cmd *cobra.Command, name string) string {
 	for c := cmd; c != nil; c = c.Parent() {
-		if f := c.PersistentFlags().Lookup("registry-url"); f != nil {
-			raw = f.Value.String()
-			break
+		if f := c.PersistentFlags().Lookup(name); f != nil {
+			return f.Value.String()
 		}
-		if f := c.Flags().Lookup("registry-url"); f != nil {
-			raw = f.Value.String()
-			break
+		if f := c.Flags().Lookup(name); f != nil {
+			return f.Value.String()
 		}
 	}
-	raw = strings.TrimSpace(raw)
+	return ""
+}
+
+// lookupRegistryURL resolves --registry-url for commands that skip the
+// root pre-run hook, falling back to env then client.DefaultBaseURL.
+// Mirrors pkg/cli/root.go's resolveRegistryTarget+normalizeBaseURL.
+func lookupRegistryURL(cmd *cobra.Command) string {
+	raw := strings.TrimSpace(lookupPersistentFlag(cmd, "registry-url"))
 	if raw == "" {
 		raw = strings.TrimSpace(os.Getenv("ARCTL_API_BASE_URL"))
 	}
@@ -71,13 +74,8 @@ func lookupRegistryURL(cmd *cobra.Command) string {
 }
 
 func lookupRegistryToken(cmd *cobra.Command) string {
-	for c := cmd; c != nil; c = c.Parent() {
-		if f := c.PersistentFlags().Lookup("registry-token"); f != nil {
-			if v := f.Value.String(); v != "" {
-				return v
-			}
-			break
-		}
+	if v := lookupPersistentFlag(cmd, "registry-token"); v != "" {
+		return v
 	}
 	return os.Getenv("ARCTL_API_TOKEN")
 }

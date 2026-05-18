@@ -29,21 +29,11 @@ var InitCmd = newInitCmd()
 // fake registry. Nil in production; the RunE substitutes apiClientMCPFetcher.
 var mcpFetcherForTest mcpresolve.Fetcher
 
-// lookupOutputDir walks the cmd → parent chain to find the --output-dir
-// flag value. The flag is defined as persistent on the parent `init`
-// command; cobra normally merges it into child flag sets at Execute time,
-// but the kindless dispatch (top-level RunE → child.RunE directly) skips
-// that merge, so we walk explicitly.
+// lookupOutputDir resolves --output-dir from the parent init command for
+// child RunEs invoked directly by the kindless dispatcher (top-level
+// RunE → child.RunE) — that path skips cobra's persistent-flag merge.
 func lookupOutputDir(cmd *cobra.Command) string {
-	for c := cmd; c != nil; c = c.Parent() {
-		if f := c.Flags().Lookup("output-dir"); f != nil {
-			return f.Value.String()
-		}
-		if f := c.PersistentFlags().Lookup("output-dir"); f != nil {
-			return f.Value.String()
-		}
-	}
-	return ""
+	return lookupPersistentFlag(cmd, "output-dir")
 }
 
 // resolveInitProjectPath returns the absolute path the new project should
@@ -212,34 +202,20 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 				fetcher = apiClientMCPFetcher{cmd: cmd}
 			}
 			var remoteEntries []mcpEnvEntry
-			type resolvedRef struct {
-				rawRef string
-				r      *mcpresolve.ResolvedMCP
-			}
-			var resolvedRefs []resolvedRef
+			var resolvedRefs []*mcpresolve.ResolvedMCP
 			for _, raw := range initMCPs {
 				refName, tag := parseNameVersion(raw)
 				r, rerr := mcpresolve.Resolve(cmd.Context(), fetcher, refName, tag)
 				if rerr != nil {
 					return rerr
 				}
-				resolvedRefs = append(resolvedRefs, resolvedRef{rawRef: raw, r: r})
+				resolvedRefs = append(resolvedRefs, r)
 				if r.RemoteURL != "" {
-					var headers map[string]string
-					for _, h := range r.RemoteHeaders {
-						if h.Value == "" {
-							continue
-						}
-						if headers == nil {
-							headers = map[string]string{}
-						}
-						headers[h.Name] = h.Value
-					}
 					remoteEntries = append(remoteEntries, mcpEnvEntry{
 						Name:    r.Name,
 						Type:    "remote",
 						URL:     r.RemoteURL,
-						Headers: headers,
+						Headers: r.RemoteHeaders,
 					})
 				}
 			}
@@ -329,22 +305,18 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 			}
 
 			// --local-mcp wires sibling MCP projects via the runtime's
-			// MCP_SERVERS_CONFIG env var. Task 3 extends this with --mcp remote
-			// catalog refs through the same writer.
+			// MCP_SERVERS_CONFIG env var; --mcp remote refs join the same line.
 			localEntries, err := localMCPEntries(initLocalMCPs)
 			if err != nil {
 				return fmt.Errorf("wire local MCPs: %w", err)
 			}
-			allEntries := append([]mcpEnvEntry{}, localEntries...)
-			allEntries = append(allEntries, remoteEntries...)
-			if err := writeMCPServersConfig(projectDir, allEntries); err != nil {
+			if err := writeMCPServersConfig(projectDir, append(localEntries, remoteEntries...)); err != nil {
 				return fmt.Errorf("write MCP_SERVERS_CONFIG: %w", err)
 			}
 
-			// Transparent status output: tell the user what was wired.
-			for _, rr := range resolvedRefs {
-				if rr.r.RemoteURL != "" {
-					fmt.Fprintf(cmd.ErrOrStderr(), "  wired .env: %s → %s\n", rr.r.Name, rr.r.RemoteURL)
+			for _, r := range resolvedRefs {
+				if r.RemoteURL != "" {
+					fmt.Fprintf(cmd.ErrOrStderr(), "  wired .env: %s → %s\n", r.Name, r.RemoteURL)
 				}
 			}
 
@@ -457,25 +429,35 @@ func localMCPEntries(paths []string) ([]mcpEnvEntry, error) {
 	return entries, nil
 }
 
+// readMCPYAML reads <projectDir>/mcp.yaml and decodes it into a typed
+// v1alpha1.MCPServer. Returns (nil, nil) when the file doesn't exist so
+// callers can distinguish "no mcp.yaml here" from a real parse error.
+func readMCPYAML(projectDir string) (*v1alpha1.MCPServer, error) {
+	data, err := os.ReadFile(filepath.Join(projectDir, "mcp.yaml"))
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read mcp.yaml: %w", err)
+	}
+	var doc v1alpha1.MCPServer
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return nil, fmt.Errorf("parse mcp.yaml: %w", err)
+	}
+	return &doc, nil
+}
+
 // readMCPName pulls metadata.name out of a sibling mcp.yaml. Used to label
 // entries in MCP_SERVERS_CONFIG.
 func readMCPName(projectDir string) (string, error) {
-	data, err := os.ReadFile(filepath.Join(projectDir, "mcp.yaml"))
+	doc, err := readMCPYAML(projectDir)
 	if err != nil {
-		return "", fmt.Errorf("read sibling mcp.yaml: %w", err)
+		return "", err
 	}
-	var env struct {
-		Metadata struct {
-			Name string `yaml:"name"`
-		} `yaml:"metadata"`
-	}
-	if err := yaml.Unmarshal(data, &env); err != nil {
-		return "", fmt.Errorf("parse sibling mcp.yaml: %w", err)
-	}
-	if env.Metadata.Name == "" {
+	if doc == nil || doc.Metadata.Name == "" {
 		return "", fmt.Errorf("sibling mcp.yaml missing metadata.name")
 	}
-	return env.Metadata.Name, nil
+	return doc.Metadata.Name, nil
 }
 
 // defaultInitModelName returns the default model name for a provider when

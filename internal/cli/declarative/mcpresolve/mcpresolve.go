@@ -21,12 +21,14 @@ type Fetcher interface {
 
 // ResolvedMCP carries the fields a caller needs to decide whether (and what)
 // to write into .env. For Source-mode records, RemoteURL is empty —
-// callers MUST treat that as "skip the .env write."
+// callers MUST treat that as "skip the .env write." RemoteHeaders is
+// pre-flattened to a plain map with empty-Value entries dropped, ready
+// to embed in MCP_SERVERS_CONFIG as JSON.
 type ResolvedMCP struct {
 	Name          string
 	Tag           string
 	RemoteURL     string
-	RemoteHeaders []v1alpha1.MCPKeyValueInput
+	RemoteHeaders map[string]string
 }
 
 // Resolve fetches the MCPServer at (name, tag) and returns a ResolvedMCP.
@@ -42,7 +44,24 @@ func Resolve(ctx context.Context, f Fetcher, name, tag string) (*ResolvedMCP, er
 	}
 	if server.Spec.Remote != nil {
 		r.RemoteURL = server.Spec.Remote.URL
-		r.RemoteHeaders = server.Spec.Remote.Headers
+		r.RemoteHeaders = flattenHeaders(server.Spec.Remote.Headers)
 	}
 	return r, nil
+}
+
+// flattenHeaders turns MCPKeyValueInput rows into a plain map, dropping
+// entries with no Value (unfilled placeholders / required-without-default).
+// Returns nil when no usable rows survive so JSON omitempty drops the key.
+func flattenHeaders(in []v1alpha1.MCPKeyValueInput) map[string]string {
+	var out map[string]string
+	for _, h := range in {
+		if h.Value == "" {
+			continue
+		}
+		if out == nil {
+			out = map[string]string{}
+		}
+		out[h.Name] = h.Value
+	}
+	return out
 }
