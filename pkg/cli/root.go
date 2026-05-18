@@ -203,6 +203,7 @@ var preRunSkipCommands = map[string]map[string]bool{
 		"configure":  true,
 		"init":       true,
 		"build":      true,
+		"help":       true,
 	},
 	"mcp": {
 		"add-tool": true,
