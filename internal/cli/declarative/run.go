@@ -17,7 +17,6 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/buildconfig"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative/chat"
-	inspectorpkg "github.com/agentregistry-dev/agentregistry/internal/cli/declarative/inspector"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/frameworks"
 )
 
@@ -70,12 +69,12 @@ that the framework's required env vars are set.`,
 			if err != nil {
 				return err
 			}
-			return runProject(cmd.OutOrStdout(), dir, extraEnv, dryRun, watch, noChat, inspector)
+			return runProject(cmd.Context(), cmd.OutOrStdout(), dir, extraEnv, dryRun, watch, noChat, inspector)
 		},
 	}
 	cmd.Flags().StringArrayVarP(&extraEnv, "env", "e", nil, "KEY=VALUE env override")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Skip actual exec; useful for tests")
-	cmd.Flags().BoolVar(&watch, "watch", false, "Rebuild and restart on file change")
+	cmd.Flags().BoolVar(&watch, "watch", false, "Rebuild and restart on file change (skips chat for agents; for chat open a second terminal)")
 	cmd.Flags().BoolVar(&noChat, "no-chat", false, "Skip chat for Agents; run the framework command in the foreground (agent projects only; errors on MCP projects)")
 	cmd.Flags().BoolVar(&inspector, "inspector", false, "Launch MCP Inspector alongside the server; it connects when ready (MCP projects only; errors on agent projects)")
 	return cmd
@@ -102,7 +101,7 @@ func resolveProjectDir(args []string) (string, error) {
 	return abs, nil
 }
 
-func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun, watch, noChat, inspector bool) error {
+func runProject(ctx context.Context, out io.Writer, projectDir string, extraEnv []string, dryRun, watch, noChat, inspector bool) error {
 	cfg, err := buildconfig.Read(projectDir)
 	if err != nil {
 		return err
@@ -202,7 +201,17 @@ func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun, wat
 	// surface ("Watching for changes…", "Change detected") without
 	// shelling out to a long-running runtime.
 	if watch {
-		return runWithWatch(out, projectDir, p, envv, dryRun)
+		// Agent + --watch is the no-chat foreground rebuild loop. Print a
+		// signpost so users know (a) where the agent is reachable and
+		// (b) that chat lives in another terminal. Suppress the chat hint
+		// when the user has explicitly opted out via --no-chat.
+		if frameworkType == "agent" {
+			fmt.Fprintf(out, "→ Agent at %s\n", agentReadinessURL)
+			if !noChat {
+				fmt.Fprintf(out, "→ For chat, open another terminal: arctl run %s\n", name)
+			}
+		}
+		return runWithWatch(ctx, out, projectDir, p, image, port, envv, dryRun, inspector)
 	}
 
 	// Chat default applies only to Agents (not MCPServers) and when the
@@ -222,29 +231,13 @@ func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun, wat
 		return nil
 	}
 
-	// Launch the MCP Inspector subprocess BEFORE the foreground docker run.
-	// Inspector retries connecting on its own until the MCP is up, so this
-	// race window is invisible. Defer-kill tears down the inspector when
-	// ExecForeground returns (typically on container exit). On Ctrl+C the
-	// terminal delivers SIGINT to the whole foreground process group, so
-	// npx exits with us regardless of whether defers run. Not blocking the
-	// MCP on a missing npx is intentional — debug tools should degrade
-	// gracefully, not gate the dev loop.
+	// Inspector retries connecting on its own until the MCP is up, so launch
+	// it BEFORE the foreground docker run — the race window is invisible.
+	// Not blocking the MCP on a missing npx is intentional: debug tools
+	// should degrade gracefully, not gate the dev loop.
 	if inspector {
-		inspectorURL := fmt.Sprintf("http://localhost:%d/mcp", port)
-		insCmd, err := inspectorpkg.Launch(context.Background(), inspectorURL)
-		if err != nil {
-			fmt.Fprintf(out, "Warning: --inspector skipped: %v\n", err)
-			fmt.Fprintf(out, "         MCP will still start on %s.\n", inspectorURL)
-		} else {
-			fmt.Fprintf(out, "→ MCP Inspector launching (will connect to %s when ready)\n", inspectorURL)
-			defer func() {
-				if insCmd != nil && insCmd.Process != nil {
-					_ = insCmd.Process.Kill()
-					_ = insCmd.Wait() // reap to avoid leaving a zombie
-				}
-			}()
-		}
+		stop := launchInspector(out, port)
+		defer stop()
 	}
 
 	fmt.Fprintf(out, "→ %s: %s\n", p.Name, strings.Join(rendered, " "))

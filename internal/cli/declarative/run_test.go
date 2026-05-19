@@ -2,6 +2,7 @@ package declarative_test
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -168,4 +169,71 @@ func TestRun_DoesNotRequireAgentYAML(t *testing.T) {
 	cmd := declarative.NewRunCmd()
 	cmd.SetArgs([]string{"--dry-run"})
 	require.NoError(t, cmd.Execute())
+}
+
+// TestRun_AgentWatch_DryRunNarratesSignpost verifies that the agent + --watch
+// path emits the "where is my agent" + "open chat in another terminal"
+// signpost so users know watch is the no-chat foreground iterate mode.
+func TestRun_AgentWatch_DryRunNarratesSignpost(t *testing.T) {
+	t.Setenv("GOOGLE_API_KEY", "fake")
+	tmp := t.TempDir()
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	require.NoError(t, os.Chdir(tmp))
+	initCmd := declarative.NewInitCmd()
+	initCmd.SetArgs([]string{"agent", "watchagent", "--framework", "adk", "--language", "python"})
+	require.NoError(t, initCmd.Execute())
+
+	require.NoError(t, os.Chdir(filepath.Join(tmp, "watchagent")))
+	cmd := declarative.NewRunCmd()
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"--watch", "--dry-run"})
+	// Pre-cancel so runWithWatch's fsnotify loop exits immediately after
+	// printing the signpost + watcher banner. Without this, --watch under
+	// dry-run blocks forever waiting on file events.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	cmd.SetContext(ctx)
+	require.NoError(t, cmd.Execute())
+
+	out := buf.String()
+	require.Contains(t, out, "→ Agent at http://localhost:8080")
+	require.Contains(t, out, "→ For chat, open another terminal: arctl run watchagent")
+	require.Contains(t, out, "Watching for changes")
+}
+
+// TestRun_AgentWatchNoChat_DryRunSuppressesChatHint verifies that when the
+// user explicitly opts out of chat with --no-chat alongside --watch, the
+// signpost drops the "open another terminal for chat" line — the user
+// already said they don't want chat, no need to nag.
+func TestRun_AgentWatchNoChat_DryRunSuppressesChatHint(t *testing.T) {
+	t.Setenv("GOOGLE_API_KEY", "fake")
+	tmp := t.TempDir()
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	require.NoError(t, os.Chdir(tmp))
+	initCmd := declarative.NewInitCmd()
+	initCmd.SetArgs([]string{"agent", "watchquiet", "--framework", "adk", "--language", "python"})
+	require.NoError(t, initCmd.Execute())
+
+	require.NoError(t, os.Chdir(filepath.Join(tmp, "watchquiet")))
+	cmd := declarative.NewRunCmd()
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"--watch", "--no-chat", "--dry-run"})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	cmd.SetContext(ctx)
+	require.NoError(t, cmd.Execute())
+
+	out := buf.String()
+	require.Contains(t, out, "→ Agent at http://localhost:8080")
+	require.NotContains(t, out, "For chat, open another terminal")
 }
