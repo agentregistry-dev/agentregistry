@@ -34,6 +34,30 @@ func TestWriteMCPServersConfig_MergesEntries(t *testing.T) {
 	assert.Contains(t, s, `"url":"https://mcp.acme.com/mcp"`)
 }
 
+// Re-running writeMCPServersConfig over a .env that already carries a
+// MCP_SERVERS_CONFIG line must replace it, not duplicate it (dotenv parsing
+// keeps the last value, so a duplicate silently shadows the older line).
+func TestWriteMCPServersConfig_ReplacesExisting(t *testing.T) {
+	dir := t.TempDir()
+	seed := "FOO=bar\n\n# Wired by arctl init --mcp / --local-mcp.\n" +
+		`MCP_SERVERS_CONFIG=[{"name":"old","type":"remote","url":"http://old"}]` + "\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".env"), []byte(seed), 0o644))
+
+	require.NoError(t, writeMCPServersConfig(dir, []mcpEnvEntry{
+		{Name: "acme/new", Type: "remote", URL: "https://mcp.acme.com/mcp"},
+	}))
+
+	got, err := os.ReadFile(filepath.Join(dir, ".env"))
+	require.NoError(t, err)
+	s := string(got)
+	assert.Equal(t, 1, strings.Count(s, "MCP_SERVERS_CONFIG="), "must not duplicate the key")
+	assert.NotContains(t, s, `"name":"old"`, "old entry must be gone")
+	assert.Contains(t, s, `"name":"acme/new"`)
+	assert.Contains(t, s, "FOO=bar")
+	// And only one marker comment too — not stacked.
+	assert.Equal(t, 1, strings.Count(s, "# Wired by arctl init"))
+}
+
 // fakeMCPFetcher implements mcpresolve.Fetcher for init-level tests.
 type fakeMCPFetcher struct {
 	servers map[string]*v1alpha1.MCPServer // key = "name@tag"

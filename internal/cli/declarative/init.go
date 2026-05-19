@@ -205,6 +205,9 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 			var remoteEntries []mcpEnvEntry
 			var resolvedRefs []*mcpresolve.ResolvedMCP
 			for _, raw := range initMCPs {
+				if strings.TrimSpace(raw) == "" {
+					return fmt.Errorf("--mcp: empty ref (expected name or name@version)")
+				}
 				refName, tag := parseNameVersion(raw)
 				r, rerr := mcpresolve.Resolve(cmd.Context(), fetcher, refName, tag)
 				if rerr != nil {
@@ -315,10 +318,20 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 				return fmt.Errorf("write MCP_SERVERS_CONFIG: %w", err)
 			}
 
+			headersWired := false
 			for _, r := range resolvedRefs {
 				if r.RemoteURL != "" {
 					fmt.Fprintf(cmd.ErrOrStderr(), "  wired .env: %s → %s\n", r.Name, r.RemoteURL)
+					if len(r.RemoteHeaders) > 0 {
+						headersWired = true
+					}
 				}
+			}
+			if headersWired {
+				// Catalog Header values land in .env verbatim. .env is
+				// gitignored above, but warn so the user knows a shared
+				// catalog can leak tokens into local checkouts.
+				fmt.Fprintln(cmd.ErrOrStderr(), "  note: remote MCP headers written to .env in plaintext; rotate any tokens stored in the catalog if shared.")
 			}
 
 			// Skills/Prompts/Language/Framework removed from AgentSpec (Phase 11);
@@ -368,11 +381,12 @@ type mcpEnvEntry struct {
 	Headers map[string]string `json:"headers,omitempty"`
 }
 
-// writeMCPServersConfig appends a single MCP_SERVERS_CONFIG=... line carrying
+// writeMCPServersConfig writes a single MCP_SERVERS_CONFIG=... line carrying
 // the supplied entries to projectDir/.env. Callers collect entries from both
 // --local-mcp (sibling paths) and --mcp (remote catalog refs) so one writer
-// covers both flag sources and we don't end up with two MCP_SERVERS_CONFIG
-// lines (last wins in dotenv parsing).
+// covers both flag sources. Any pre-existing MCP_SERVERS_CONFIG= line is
+// stripped first so re-running init can't leave two lines (dotenv parsing
+// would silently take the last, masking the older one).
 //
 // host.docker.internal works on Docker Desktop (Mac/Windows) by default. Linux
 // users need `--add-host=host.docker.internal:host-gateway` in the agent's
@@ -390,13 +404,35 @@ func writeMCPServersConfig(projectDir string, entries []mcpEnvEntry) error {
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	out := string(existing)
+	out := stripMCPServersConfigLines(string(existing))
 	if out != "" && !strings.HasSuffix(out, "\n") {
 		out += "\n"
 	}
 	out += "\n# Wired by arctl init --mcp / --local-mcp.\n"
 	out += "MCP_SERVERS_CONFIG=" + string(jsonBlob) + "\n"
 	return os.WriteFile(envPath, []byte(out), 0o644)
+}
+
+// stripMCPServersConfigLines removes existing MCP_SERVERS_CONFIG= lines and
+// the "# Wired by arctl init ..." marker comment that immediately precedes
+// them, so a re-write replaces rather than appends.
+func stripMCPServersConfigLines(env string) string {
+	lines := strings.Split(env, "\n")
+	out := make([]string, 0, len(lines))
+	for i := 0; i < len(lines); i++ {
+		if strings.HasPrefix(lines[i], "MCP_SERVERS_CONFIG=") {
+			// Drop the preceding marker comment too (the one we emit).
+			if n := len(out); n > 0 && strings.HasPrefix(out[n-1], "# Wired by arctl init") {
+				out = out[:n-1]
+				if n2 := len(out); n2 > 0 && out[n2-1] == "" {
+					out = out[:n2-1]
+				}
+			}
+			continue
+		}
+		out = append(out, lines[i])
+	}
+	return strings.Join(out, "\n")
 }
 
 // localMCPEntries resolves sibling MCP project paths into mcpEnvEntries.
