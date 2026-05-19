@@ -5,8 +5,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"sigs.k8s.io/yaml"
+
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
 // APIVersion is the canonical apiVersion string for arctl declarative YAML files.

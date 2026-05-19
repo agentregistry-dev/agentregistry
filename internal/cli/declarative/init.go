@@ -8,6 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/spf13/cobra"
+	"sigs.k8s.io/yaml"
+
 	"github.com/agentregistry-dev/agentregistry/internal/cli/buildconfig"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative/mcpresolve"
@@ -17,8 +20,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/validators"
-	"github.com/spf13/cobra"
-	"sigs.k8s.io/yaml"
 )
 
 // InitCmd is the cobra command for "init".

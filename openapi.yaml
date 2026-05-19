@@ -914,14 +914,12 @@ paths:
     delete:
       operationId: delete-batch
       parameters:
-      - description: Run validation and enrichment without mutating the store. Defaults
-          to false.
+      - description: Run validation without mutating the store. Defaults to false.
         explode: false
         in: query
         name: dryRun
         schema:
-          description: Run validation and enrichment without mutating the store. Defaults
-            to false.
+          description: Run validation without mutating the store. Defaults to false.
           type: boolean
       requestBody:
         content:
@@ -948,14 +946,12 @@ paths:
     post:
       operationId: apply-batch
       parameters:
-      - description: Run validation and enrichment without mutating the store. Defaults
-          to false.
+      - description: Run validation without mutating the store. Defaults to false.
         explode: false
         in: query
         name: dryRun
         schema:
-          description: Run validation and enrichment without mutating the store. Defaults
-            to false.
+          description: Run validation without mutating the store. Defaults to false.
           type: boolean
       requestBody:
         content:

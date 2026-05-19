@@ -49,6 +49,20 @@ def _get_terminate_on_close() -> bool:
     return os.environ.get("MCP_TERMINATE_ON_CLOSE", "true").lower() != "false"
 
 
+def _get_connect_timeout() -> float:
+    """Connect/request timeout (seconds) for MCP streamable-http toolsets.
+
+    Defaults to 60s. The google-adk default is 5s, which is too short for
+    remote MCP servers reached through authenticated gateways or cold-start
+    compute — first-connection latency on those paths regularly exceeds 5s.
+    Override via MCP_CONNECT_TIMEOUT env var (float seconds).
+    """
+    try:
+        return float(os.environ.get("MCP_CONNECT_TIMEOUT", "60"))
+    except ValueError:
+        return 60.0
+
+
 def _load_runtime_mcp_servers() -> List[dict]:
     """Load MCP servers from MCP_SERVERS_CONFIG env var (JSON).
 
@@ -95,6 +109,10 @@ def get_mcp_tools(
     Environment variables:
         MCP_TERMINATE_ON_CLOSE: Set to "false" for stateless MCP servers.
             Defaults to "true" for backward compatibility.
+        MCP_CONNECT_TIMEOUT: Float seconds for MCP connect/request timeout.
+            Defaults to 60s (raised from google-adk's 5s) so remote MCPs
+            reached through gateways or cold-start compute have time to
+            respond on first connection.
     """
 
     servers = _get_all_mcp_servers()
@@ -103,6 +121,7 @@ def get_mcp_tools(
         servers = [s for s in servers if s.get("name") in server_names]
 
     terminate_on_close = _get_terminate_on_close()
+    connect_timeout = _get_connect_timeout()
 
     toolsets = []
     for server in servers:
@@ -123,11 +142,11 @@ def get_mcp_tools(
 
         if headers:
             connection_params = StreamableHTTPConnectionParams(
-                url=url, headers=headers, terminate_on_close=terminate_on_close
+                url=url, headers=headers, timeout=connect_timeout, terminate_on_close=terminate_on_close
             )
         else:
             connection_params = StreamableHTTPConnectionParams(
-                url=url, terminate_on_close=terminate_on_close
+                url=url, timeout=connect_timeout, terminate_on_close=terminate_on_close
             )
 
         if predicate is not None:

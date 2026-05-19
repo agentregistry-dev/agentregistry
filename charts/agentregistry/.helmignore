@@ -29,3 +29,6 @@ tests/
 # Documentation (not needed in package)
 CHANGELOG.md
 LICENSE
+# helm-docs source templates (rendered README.md is packaged)
+README.md.gotmpl
+_templates.gotmpl

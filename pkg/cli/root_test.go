@@ -6,10 +6,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/pkg/cli/annotations"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
-	"github.com/spf13/cobra"
 )
 
 func TestNormalizeBaseURL(t *testing.T) {
@@ -37,8 +38,8 @@ func TestNormalizeBaseURL(t *testing.T) {
 
 func TestPreRunBehavior(t *testing.T) {
 	// Build a synthetic command tree mirroring the current (declarative) CLI
-	// surface: top-level init/build, agent/run, mcp/{run,add-tool}, skill/pull,
-	// plus helper commands (configure, completion, version).
+	// surface: top-level init/build, agent/run, skill/pull, plus helper
+	// commands (configure, completion, version).
 	root := &cobra.Command{Use: "arctl"}
 
 	// Top-level declarative commands (no API client needed).
@@ -48,16 +49,10 @@ func TestPreRunBehavior(t *testing.T) {
 	initMCPCmd := &cobra.Command{Use: "mcp"}
 	initCmd.AddCommand(initMCPCmd)
 
-	// agent/mcp/skill parents keep only run-time / add-tool / pull children.
+	// agent/skill parents keep only run-time / pull children.
 	agentCmd := &cobra.Command{Use: "agent"}
 	agentRunCmd := &cobra.Command{Use: "run"}
 	agentCmd.AddCommand(agentRunCmd)
-
-	mcpCmd := &cobra.Command{Use: "mcp"}
-	mcpRunCmd := &cobra.Command{Use: "run"}
-	mcpAddToolCmd := &cobra.Command{Use: "add-tool"}
-	mcpCmd.AddCommand(mcpRunCmd)
-	mcpCmd.AddCommand(mcpAddToolCmd)
 
 	skillCmd := &cobra.Command{Use: "skill"}
 	skillPullCmd := &cobra.Command{Use: "pull"}
@@ -68,7 +63,11 @@ func TestPreRunBehavior(t *testing.T) {
 	zshCompletionCmd := &cobra.Command{Use: "zsh"}
 	completionCmd.AddCommand(zshCompletionCmd)
 	versionCmd := &cobra.Command{Use: "version"}
-	root.AddCommand(initCmd, buildCmd, agentCmd, mcpCmd, skillCmd, configureCmd, completionCmd, versionCmd)
+	// Cobra auto-generates a "help" subcommand on the root. `arctl help`,
+	// `arctl help <cmd>`, and `arctl help <cmd> <subcmd>` all dispatch to this
+	// single command (cmd.Name()=="help", cmd.Parent()==root).
+	helpCmd := &cobra.Command{Use: "help"}
+	root.AddCommand(initCmd, buildCmd, agentCmd, skillCmd, configureCmd, completionCmd, versionCmd, helpCmd)
 
 	tests := []struct {
 		name     string
@@ -79,17 +78,16 @@ func TestPreRunBehavior(t *testing.T) {
 		{"init", initCmd, true},
 		{"build", buildCmd, true},
 		{"init mcp (subcommand of init)", initMCPCmd, true},
-		// mcp add-tool runs locally, no API client.
-		{"mcp add-tool", mcpAddToolCmd, true},
 		// Helper commands skip setup.
 		{"configure", configureCmd, true},
 		{"completion", completionCmd, true},
 		{"completion zsh", zshCompletionCmd, true},
+		// help is offline; must not trigger registry setup.
+		{"help", helpCmd, true},
 		// version goes through pre-run using AnnotationOptionalRegistry to have an optional registry connection
 		{"version", versionCmd, false},
 		// Run/pull/etc. need the API client.
 		{"agent run", agentRunCmd, false},
-		{"mcp run", mcpRunCmd, false},
 		{"skill pull", skillPullCmd, false},
 		// Edge cases.
 		{"nil cmd", nil, false},
