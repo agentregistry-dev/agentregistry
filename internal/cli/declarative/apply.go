@@ -7,12 +7,13 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
+
 	"github.com/agentregistry-dev/agentregistry/internal/cli/buildconfig"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
-	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
 )
 
 // labelInjectableKinds is the set of envelope kinds that participate in

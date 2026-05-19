@@ -6,10 +6,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/pkg/cli/annotations"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
-	"github.com/spf13/cobra"
 )
 
 func TestNormalizeBaseURL(t *testing.T) {

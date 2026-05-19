@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	"github.com/agentregistry-dev/agentregistry/internal/cli"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/configure"
 	clidaemon "github.com/agentregistry-dev/agentregistry/internal/cli/daemon"
@@ -17,7 +19,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/cli/annotations"
 	"github.com/agentregistry-dev/agentregistry/pkg/daemon/dockercompose"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
-	"github.com/spf13/cobra"
 )
 
 // ClientFactory creates an API client for the given base URL and token.

@@ -1,9 +1,10 @@
 package daemon
 
 import (
+	"github.com/spf13/cobra"
+
 	"github.com/agentregistry-dev/agentregistry/pkg/printer"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
-	"github.com/spf13/cobra"
 )
 
 // New creates the daemon command tree with the given manager.

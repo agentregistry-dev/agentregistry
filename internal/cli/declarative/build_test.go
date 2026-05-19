@@ -5,10 +5,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/agentregistry-dev/agentregistry/internal/cli/buildconfig"
-	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/agentregistry-dev/agentregistry/internal/cli/buildconfig"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative"
 )
 
 // writeBuildYAML writes a declarative YAML fixture to a project directory.

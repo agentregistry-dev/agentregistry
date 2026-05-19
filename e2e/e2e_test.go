@@ -170,10 +170,21 @@ func checkPrerequisites() {
 		if _, err := exec.LookPath("kubectl"); err != nil {
 			log.Fatalf("kubectl not found in PATH -- required for k8s e2e tests")
 		}
-		if out, err := exec.Command("go", "tool", "kind", "version").CombinedOutput(); err != nil {
-			log.Fatalf("go tool kind not available -- required for k8s e2e tests: %v\n%s", err, out)
+		toolsModfile := filepath.Join(testDir(), "..", "tools", "go.mod")
+		if out, err := exec.Command("go", "tool", "-modfile="+toolsModfile, "kind", "version").CombinedOutput(); err != nil {
+			log.Fatalf("kind not available via tools/go.mod -- required for k8s e2e tests: %v\n%s", err, out)
 		}
 	}
+}
+
+// testDir returns the directory containing these test source files.
+// Uses runtime.Caller so it works regardless of working directory.
+func testDir() string {
+	_, f, _, ok := runtime.Caller(0)
+	if !ok {
+		panic("runtime.Caller failed")
+	}
+	return filepath.Dir(f)
 }
 
 // resolveArctlBinaryPath returns the absolute path to the pre-built arctl binary.

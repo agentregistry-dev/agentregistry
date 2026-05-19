@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	"github.com/agentregistry-dev/agentregistry/internal/cli/buildconfig"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common/docker"
@@ -15,7 +17,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
-	"github.com/spf13/cobra"
 )
 
 // BuildCmd is the cobra command for "build".
