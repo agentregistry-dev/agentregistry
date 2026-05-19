@@ -26,7 +26,6 @@ type Fetcher interface {
 // to embed in MCP_SERVERS_CONFIG as JSON.
 type ResolvedMCP struct {
 	Name          string
-	Tag           string
 	RemoteURL     string
 	RemoteHeaders map[string]string
 }
@@ -40,7 +39,6 @@ func Resolve(ctx context.Context, f Fetcher, name, tag string) (*ResolvedMCP, er
 	}
 	r := &ResolvedMCP{
 		Name: server.Metadata.Name,
-		Tag:  server.Metadata.Tag,
 	}
 	if server.Spec.Remote != nil {
 		r.RemoteURL = server.Spec.Remote.URL

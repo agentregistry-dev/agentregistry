@@ -42,7 +42,6 @@ func TestResolve_RemoteMCP_ReturnsURLAndHeaders(t *testing.T) {
 	r, err := Resolve(context.Background(), &fakeFetcher{server: server}, "acme/fetch", "v1.0.0")
 	require.NoError(t, err)
 	assert.Equal(t, "acme/fetch", r.Name)
-	assert.Equal(t, "v1.0.0", r.Tag)
 	assert.Equal(t, "https://mcp.acme.com/mcp", r.RemoteURL)
 	assert.Equal(t, map[string]string{"X-Hello": "world"}, r.RemoteHeaders)
 }

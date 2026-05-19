@@ -132,7 +132,7 @@ func runProject(out io.Writer, projectDir string, extraEnv []string, dryRun, wat
 		return perr
 	}
 	if remote != nil {
-		return fmt.Errorf("%s is a remote MCPServer (URL: %s). Nothing to run locally. To inspect tools: npx -y @modelcontextprotocol/inspector --server-url %s",
+		return fmt.Errorf("%s is a remote MCPServer at %s. Nothing to run locally. To inspect tools: npx -y @modelcontextprotocol/inspector --server-url %s",
 			mcpName, remote.URL, remote.URL)
 	}
 
