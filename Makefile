@@ -45,13 +45,11 @@ LDFLAGS := \
 # Local architecture detection to build for the current platform
 LOCALARCH ?= $(shell uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/')
 
-# Developer tools (golangci-lint, gotestsum, gci, kind) are pinned in tools/go.mod
+# Developer tools (golangci-lint, gotestsum, kind) are pinned in tools/go.mod
 # and invoked via `go tool -modfile=tools/go.mod <name>`. This keeps their
 # transitive dependencies out of the main module.
 TOOLS_DIR     ?= $(CURDIR)/tools
 GO_TOOL       ?= go tool -modfile=$(TOOLS_DIR)/go.mod
-CRANE         ?= $(GO_TOOL) crane
-GCI           ?= $(GO_TOOL) gci
 GOLANGCI_LINT ?= $(GO_TOOL) golangci-lint
 GOTESTSUM     ?= $(GO_TOOL) gotestsum
 HELM          ?= $(GO_TOOL) helm
@@ -527,7 +525,6 @@ lint-ui: install-ui ## Run eslint on UI code
 .PHONY: fmt
 fmt: ## Run the Go formatter
 	$(GOLANGCI_LINT) fmt
-	git diff --name-only --cached --diff-filter=ACMR -- '**/*.go' | sed 's|^go/||' | xargs -r $(GCI) write --skip-generated -s standard -s default -s localmodule
 
 .PHONY: verify
 verify: fmt mod-tidy gen-client charts-docs ## Run all verification checks
