@@ -59,7 +59,7 @@ agentregistry is a centralized registry for securely curating, discovering, depl
 
 ### Background
 
-The rapid growth of AI agents, MCP servers, and skills has created a fragmented ecosystem with no standardized way to discover, curate, validate, or govern agentic infrastructure. Organizations face challenges such as no centralized source of truth for AI artifacts, lack of governance controls over which AI tools are approved for company-wide use, difficulty deploying and managing AI artifacts consistently across multiple environments, and absence of metadata enrichment, scoring, or validation pipelines for agentic components. agentregistry addresses these gaps by providing a centralized, secure registry where teams can publish, discover, curate, and deploy AI artifacts with confidence.
+The rapid growth of AI agents, MCP servers, and skills has created a fragmented ecosystem with no standardized way to discover, curate, validate, or govern agentic infrastructure. Organizations face challenges such as no centralized source of truth for AI artifacts, lack of governance controls over which AI tools are approved for company-wide use, and difficulty deploying and managing AI artifacts consistently across multiple environments. agentregistry addresses these gaps by providing a centralized, secure registry where teams can publish, discover, curate, and deploy AI artifacts with confidence.
 
 ### Actors
 
@@ -75,7 +75,7 @@ The rapid growth of AI agents, MCP servers, and skills has created a fragmented 
 
 ### Actions
 
-**Artifact Ingestion and Curation**: Operators import MCP servers, agents, and skills from external registries or sources. Ingested artifacts are automatically validated and scored to provide trustworthiness signals. Operators control which artifacts are approved before developers can consume them.
+**Artifact Publishing and Curation**: Operators publish MCP servers, agents, and skills into a central catalog. Operators control which artifacts are approved before developers can consume them.
 
 **Artifact Discovery and Consumption**: Developers discover pre-approved artifacts through the CLI or web UI. Artifacts can be pulled, configured, and integrated directly into AI-powered IDEs (Claude Code, Cursor, VS Code).
 
@@ -86,9 +86,9 @@ The rapid growth of AI agents, MCP servers, and skills has created a fragmented 
 ### Goals
 
 - **Centralized Trusted Registry**: Provide a single source of truth for AI artifacts (MCP servers, agents, skills) that organizations can trust and govern.
-- **Governance and Curation**: Enable operators to control which artifacts are approved, scored, validated, and available to developers before consumption.
+- **Governance and Curation**: Enable operators to control which artifacts are approved, validated, and available to developers before consumption.
 - **Cloud-Native Deployment**: Deliver a Kubernetes-native deployment model via Helm charts with secure defaults, enabling registry operation on-premises, in the cloud, or at the edge.
-- **Secure Artifact Lifecycle**: Maintain end-to-end audit and control over artifact ingestion, curation, publishing, and deployment.
+- **Secure Artifact Lifecycle**: Maintain end-to-end audit and control over artifact publishing, curation, and deployment.
 
 ### Non-goals
 
@@ -124,7 +124,7 @@ This document provides the CNCF TAG-Security with an initial understanding of ag
 
 - **Authorization with Resource Pattern Matching**: The AuthzProvider interface enforces per-request authorization checks against the caller's permission set, supporting exact match, prefix match (with wildcard), and global resource patterns.
 
-- **Artifact Scoring and Validation**: Ingested artifacts are automatically scored and validated using the OSSF Scorecard library, enriching metadata with trustworthiness and dependency health signals.
+- **Artifact Validation**: Published artifacts can be validated before they are made available to developers.
 
 - **Container Image Security**: Production images are built using multi-stage Docker builds, with Alpine Linux used for builder stages and `ubuntu:22.04` as the final runtime base image to reduce the attack surface. Go binaries are stripped of debug symbols (`-s -w` flags). Images are published to `ghcr.io` with multi-platform support (linux/amd64, linux/arm64).
 
@@ -185,7 +185,6 @@ agentregistry operates within the cloud-native ecosystem as a Kubernetes-native 
 - **MCP Ecosystem**: Core alignment with the Model Context Protocol (MCP) specification for AI tool interoperability, supporting MCP servers, agents, and skills as first-class artifacts.
 - **PostgreSQL**: Metadata persistence.
 - **Docker / OCI**: Container image format for artifact packaging and distribution.
-- **OSSF Scorecard**: Integrated for dependency health evaluation of ingested artifacts.
 - **CI/CD Tooling**: The `arctl` CLI can be embedded in CI/CD pipelines for artifact publishing workflows.
 
 ## Security Issue Resolution
@@ -208,7 +207,7 @@ As of the time of this assessment, no critical security vulnerabilities have bee
 
 ### Open SSF Best Practices
 
-agentregistry is working toward OpenSSF Best Practices certification. The project incorporates the OSSF Scorecard library for evaluating the dependency health of ingested artifacts.
+agentregistry is working toward OpenSSF Best Practices certification.
 
 ### Case Studies
 
@@ -218,4 +217,4 @@ No case studies are available at this time. The project is at an early stage (v0
 
 - **kagent**: A Kubernetes-native AI agent platform. agentregistry uses kagent's CRDs (`kagent.dev` API group) for deploying agents and MCP servers to Kubernetes clusters.
 - **agentgateway (agentgateway)**: A Linux Foundation project that acts as a reverse proxy providing a unified MCP endpoint. agentregistry integrates with agentgateway as an optional data plane component.
-- **MCP Registries**: While other MCP server registries exist, agentregistry differentiates through its governance-first approach with operator-controlled curation, scoring, and deployment lifecycle management.
+- **MCP Registries**: While other MCP server registries exist, agentregistry differentiates through its governance-first approach with operator-controlled curation and deployment lifecycle management.

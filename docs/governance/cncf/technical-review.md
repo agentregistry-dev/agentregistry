@@ -32,12 +32,12 @@ https://github.com/agentregistry-dev/community/blob/main/CONTRIBUTING.md outline
 
 Agentregistry is designed for two primary personas, both of whom interact with the same registry but with distinct concerns:
 
-- **Operators / Platform Engineering Teams:** Operators are responsible for the governance and lifecycle of AI infrastructure within an organization. They import AI artifacts from external sources, apply validation and scoring pipelines to assess trustworthiness, and publish curated, approved collections for developer consumption. Their primary concerns are control, auditability, and preventing unapproved or unvetted AI tools from reaching production systems.
+- **Operators / Platform Engineering Teams:** Operators are responsible for the governance and lifecycle of AI infrastructure within an organization. They publish, validate, and curate approved collections for developer consumption. Their primary concerns are control, auditability, and preventing unapproved or unvetted AI tools from reaching production systems.
 - **Developers / Application Builders:** Developers are building AI-powered applications or workflows and need a trusted, discoverable source of MCP servers, agents, and skills. They consume artifacts that have been pre-approved by operators, integrate them into AI-powered IDEs (Claude Code, Cursor, VS Code), and may also publish their own custom artifacts back to the registry for team-wide sharing.
 
 **Explain the primary use case for the project. What additional use cases are supported by the project?**
 
-The primary use case is providing organizations with a centralized, trusted registry where MCP servers, AI agents, and skills can be published, discovered, and consumed with governance controls in place. Without agentregistry, teams have no standardized way to vet, curate, or distribute the AI tools their developers use, leading to fragmentation and risk. agentregistry solves this by functioning as the control plane for agentic infrastructure: operators import and curate artifacts, and developers pull only from the approved catalog.
+The primary use case is providing organizations with a centralized, trusted registry where MCP servers, AI agents, and skills can be published, discovered, and consumed with governance controls in place. Without agentregistry, teams have no standardized way to vet, curate, or distribute the AI tools their developers use, leading to fragmentation and risk. agentregistry solves this by functioning as the control plane for agentic infrastructure: operators publish and curate artifacts, and developers pull only from the approved catalog.
 
 A concrete example shown in the project documentation is publishing an Anthropic Skill to the registry and consuming it directly from Claude Code via `arctl configure claude-desktop`.
 
@@ -45,7 +45,6 @@ _Additional Supported Use Cases:_
 - **MCP server aggregation via Agentgateway:** The registry integrates with [agentgateway](https://github.com/agentgateway/agentgateway) to expose all deployed MCP servers through a single unified endpoint. This allows AI IDE clients to connect once and access all available tools without per-server configuration.
 - **IDE configuration generation:** `arctl configure` generates ready-to-use configuration files for Claude Desktop, Cursor, and VS Code, reducing the friction of connecting AI tools to a local or team registry.
 - **Multi-environment artifact deployment:** Artifacts can be deployed to any target environment (local, cloud, Kubernetes) from a single registry, unifying AI infrastructure management across deployment targets.
-- **Artifact enrichment and scoring:** The registry automatically validates and scores ingested artifacts, producing metadata that operators can use to assess safety, quality, and trustworthiness before approving artifacts for developer use.
 - **Local development registry:** Developers can run a full registry locally via Docker Compose for testing and development workflows.
 
 **Explain which use cases have been identified as unsupported by the project.**
@@ -73,13 +72,13 @@ Agentregistry is broadly relevant to any organization building on AI-powered too
 
 **How should the target personas interact with your project?**
 
-Agentregistry provides two primary interaction surfaces — a CLI (`arctl`) and a Web UI — which map to different stages of the artifact lifecycle and to the two personas (Operators, Developers) described earlier.
+Agentregistry provides two primary interaction surfaces -- a CLI (`arctl`) and a Web UI -- which map to different stages of the artifact lifecycle and to the two personas (Operators, Developers) described earlier.
 
 _Operators interact primarily through the Web UI and the CLI for governance workflows._
-1. **Import** — Pull AI artifacts (MCP servers, agents, skills) from external sources into the registry. This can be done via the Web UI using the purple `+ Add` button, selecting the artifact type (Agent, MCP Server, or Skill) and providing its metadata, name, description, version, and container image path or repository reference. The CLI `arctl apply -f skill.yaml` and `arctl apply -f mcp.yaml` commands are available for scripted or CI/CD-driven ingestion.
-2. **Review and enrich** — Inspect automatically generated scores and validation metadata in the Web UI's artifact detail views (the Servers, Agents, and Skills views). Operators use this enriched metadata to make approval decisions.
-3. **Curate and publish** — Selectively publish approved artifacts into a curated catalog that developers can access, maintaining end-to-end audit and control from the registry.
-4. **Deploy to environments** — Use `arctl deploy` or the Web UI to promote approved artifacts to target environments (local Docker, Kubernetes clusters).
+1. **Publish** -- Add AI artifacts (MCP servers, agents, skills) to the registry. This can be done via the Web UI using the `+ Add` button, selecting the artifact type (Agent, MCP Server, or Skill) and providing its metadata, name, description, version, and container image path or repository reference. The CLI `arctl apply -f skill.yaml` and `arctl apply -f mcp.yaml` commands are available for scripted or CI/CD-driven publishing.
+2. **Review** -- Inspect artifact metadata in the Web UI's artifact detail views (the Servers, Agents, and Skills views). Operators use this metadata to make approval decisions.
+3. **Curate and publish** -- Selectively publish approved artifacts into a curated catalog that developers can access, maintaining end-to-end audit and control from the registry.
+4. **Deploy to environments** -- Use `arctl deploy` or the Web UI to promote approved artifacts to target environments (local Docker, Kubernetes clusters).
 
 _Developers interact primarily through the CLI for day-to-day workflows._
 1. **Install** — Install the `arctl` CLI via the provided shell script or by downloading a binary directly from the GitHub releases page:
@@ -116,7 +115,7 @@ In production, agentregistry acts as the **control plane** for agentic AI infras
 **Explain the design principles and best practices the project is following.**
 1. **Centralization with portability:** A single registry server acts as the source of truth for artifacts, yet is deployable anywhere via container images and Helm.
 2. **Governance first:** All artifacts are subject to operator-controlled curation, approval, and access control before reaching developers.
-3. **Data enrichment by default:** Ingested artifacts are automatically validated and scored to provide operators with trustworthiness insights.
+3. **Declarative resource management:** Artifacts use a consistent resource model for publishing, versioning, validation, and deployment workflows.
 4. **Protocol alignment:** The project aligns with the Model Context Protocol (MCP) specification, which is rapidly becoming the de facto standard for AI tool interoperability.
 5. **Separation of concerns:** The registry server, CLI, and web UI are distinct components with well-defined interfaces.
 6. **Open source and vendor-neutral:** Licensed under Apache 2.0; no vendor lock-in for registry operations or artifact formats.

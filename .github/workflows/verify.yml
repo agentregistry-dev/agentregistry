@@ -18,6 +18,9 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
+          cache-dependency-path: |
+            go.sum
+            tools/go.sum
 
       - uses: actions/setup-node@v4
         with:

@@ -71,5 +71,4 @@ Direct-DB CLI commands that construct `auth.Authorizer{Authz: nil}` and therefor
 
 | Command | What gets bypassed | Permissions that would apply post-refactor |
 | --- | --- | --- |
-| `arctl import` | Every write through the importer: `Publish` checks on each imported server, and `Edit` checks on the `--update` overwrite path. | `Publish` + `Edit` on `server:{name}` per item. |
 | `arctl export` | Every individual readme fetch (`GetServerReadme`). List is not a regression because List intentionally skips checks. | `Read` on `server:{name}` per server whose readme is exported. |

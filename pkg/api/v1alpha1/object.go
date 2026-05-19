@@ -98,11 +98,10 @@ type objectMetaWire ObjectMeta
 // from the user-facing API. Internal storage always carries the full
 // identity; this only affects wire rendering.
 //
-// Inbound defaulting (empty → "default") happens at the apply /
-// import pipeline boundary (see resource.prepareApplyDoc and
-// importer.Options.Namespace), not on UnmarshalJSON — callers like
-// the importer need to keep the empty-namespace signal around so they
-// can layer their own default on top.
+// Inbound defaulting from empty to "default" happens at the apply
+// boundary (see resource.prepareApplyDoc), not on UnmarshalJSON. Callers
+// need to keep the empty-namespace signal around so they can layer their
+// own default on top.
 func (m ObjectMeta) MarshalJSON() ([]byte, error) {
 	w := objectMetaWire(m)
 	if w.Namespace == DefaultNamespace {

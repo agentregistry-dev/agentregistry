@@ -5,9 +5,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/manifest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/manifest"
 )
 
 func TestMCPManagerLoad_EnvelopeFormat(t *testing.T) {

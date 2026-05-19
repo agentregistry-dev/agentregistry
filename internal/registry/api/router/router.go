@@ -8,9 +8,6 @@ import (
 	"strings"
 	"time"
 
-	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
-	"github.com/agentregistry-dev/agentregistry/pkg/logging"
-	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 	"go.opentelemetry.io/otel/attribute"
@@ -18,6 +15,9 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
+	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
+	"github.com/agentregistry-dev/agentregistry/pkg/logging"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 )
 
 // Middleware configuration options

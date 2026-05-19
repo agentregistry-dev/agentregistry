@@ -10,8 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agentregistry-dev/agentregistry/internal/cli/frameworks"
 	"github.com/fsnotify/fsnotify"
+
+	"github.com/agentregistry-dev/agentregistry/internal/cli/frameworks"
 )
 
 // runWithWatch runs the project under fsnotify; on file changes it restarts
