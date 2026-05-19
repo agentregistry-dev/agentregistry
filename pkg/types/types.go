@@ -15,11 +15,12 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/danielgtaylor/huma/v2"
+
 	v0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
-	"github.com/danielgtaylor/huma/v2"
 )
 
 // DatabaseFactory is a function type that creates a store implementation.
