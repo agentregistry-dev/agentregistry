@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli"
@@ -15,7 +16,11 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/cli/annotations"
+	"github.com/agentregistry-dev/agentregistry/pkg/cli/db"
+	"github.com/agentregistry-dev/agentregistry/pkg/cli/db/migrate"
 	"github.com/agentregistry-dev/agentregistry/pkg/daemon/dockercompose"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/spf13/cobra"
 )
@@ -139,6 +144,34 @@ func init() {
 	rootCmd.AddCommand(declarative.BuildCmd)
 	rootCmd.AddCommand(declarative.RunCmd)
 	rootCmd.AddCommand(declarative.PullCmd)
+	rootCmd.AddCommand(db.NewCommand())
+
+	// Register the OSS migration source. BuildConfig resolves the
+	// embeddings gate at command-execution time so the CLI's view
+	// matches the server's by default: --embeddings-enabled wins
+	// when passed, otherwise AGENT_REGISTRY_EMBEDDINGS_ENABLED.
+	//
+	// Invalid env values exit loudly (mirrors NewConfig's strict
+	// parse of AGENT_REGISTRY_SKIP_MIGRATIONS / SKIP_MIGRATIONS) so
+	// operators catch typos at the same loudness no matter which
+	// gate they set.
+	migrate.Register(migrate.Source{
+		Name: "oss",
+		BuildConfig: func() database.MigratorConfig {
+			enabled, set := migrate.EmbeddingsEnabledOverride()
+			if !set {
+				if raw := os.Getenv("AGENT_REGISTRY_EMBEDDINGS_ENABLED"); raw != "" {
+					parsed, err := strconv.ParseBool(raw)
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "failed to parse AGENT_REGISTRY_EMBEDDINGS_ENABLED=%q: %v\n", raw, err)
+						os.Exit(1)
+					}
+					enabled = parsed
+				}
+			}
+			return v1alpha1store.MigratorConfig(enabled)
+		},
+	})
 }
 
 // resolveRegistryTarget returns base URL and token from flags and env.
