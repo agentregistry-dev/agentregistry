@@ -248,6 +248,7 @@ func buildRouteOptions(
 		PerKindHooks:        crudPerKindHooks(options),
 		RegistryValidator:   options.RegistryValidator,
 		Admission:           options.Admission,
+		DeleteAdmission:     options.DeleteAdmission,
 		ResolverWrapper:     options.ResolverWrapper,
 		ExtraResourceRoutes: options.ExtraResourceRoutes,
 	}

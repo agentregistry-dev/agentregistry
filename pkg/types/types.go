@@ -69,6 +69,7 @@ type PostDelete func(ctx context.Context, obj v1alpha1.Object) error
 
 const (
 	AdmissionSourceApply  = "apply"
+	AdmissionSourceDelete = "delete"
 	AdmissionSourceImport = "import"
 )
 
@@ -102,6 +103,33 @@ type AdmissionResult struct {
 	Generation int64
 }
 
+// DeleteAdmission owns the final delete decision after authz has passed. The
+// OSS default deletes from production; downstream integrations can stage,
+// reject, or otherwise route the delete before production storage is touched.
+//
+// TODO(krt): temporary synchronous-handler bridge; remove with reconciler
+// admission/staging.
+type DeleteAdmission func(ctx context.Context, in DeleteAdmissionInput) (DeleteAdmissionResult, error)
+
+type DeleteAdmissionInput struct {
+	Source     string
+	Verb       string
+	DryRun     bool
+	Kind       string
+	Namespace  string
+	Name       string
+	Tag        string
+	Object     v1alpha1.Object
+	Store      any
+	PostDelete PostDelete
+	Force      bool
+}
+
+type DeleteAdmissionResult struct {
+	Status string
+	Tag    string
+}
+
 // ResourceRouteContext exposes the finalized v1alpha1 route wiring to
 // downstream integrations that need adjacent routes against the same stores
 // and hooks as /v0/apply.
@@ -114,6 +142,7 @@ type ResourceRouteContext struct {
 	Resolver          v1alpha1.ResolverFunc
 	RegistryValidator v1alpha1.RegistryValidatorFunc
 	Apply             func(ctx context.Context, obj v1alpha1.Object, dryRun bool) v0.ApplyResult
+	Delete            func(ctx context.Context, obj v1alpha1.Object, dryRun bool) v0.ApplyResult
 }
 
 // Auditor receives audit events for state changes that the OSS layer
@@ -206,6 +235,12 @@ type AppOptions struct {
 	// TODO(krt): temporary synchronous-handler bridge; remove with reconciler
 	// admission/staging.
 	Admission Admission
+
+	// DeleteAdmission optionally accepts an authorized delete before the row is
+	// removed from production storage. Nil preserves normal direct deletes.
+	// TODO(krt): temporary synchronous-handler bridge; remove with reconciler
+	// admission/staging.
+	DeleteAdmission DeleteAdmission
 
 	// ResolverWrapper decorates the shared ResourceRef resolver before route
 	// registration. Nil preserves the default store-backed resolver.

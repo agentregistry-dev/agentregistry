@@ -2,7 +2,6 @@ package resource
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 
@@ -10,7 +9,6 @@ import (
 
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
-	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
@@ -72,6 +70,11 @@ type ApplyConfig struct {
 	// Admission optionally owns the final apply write. Nil uses
 	// ProductionAdmission, which writes to the configured production Store.
 	Admission types.Admission
+
+	// DeleteAdmission optionally owns the final delete. Nil uses
+	// ProductionDeleteAdmission, which deletes from the configured production
+	// Store and runs the per-kind PostDelete hook.
+	DeleteAdmission types.DeleteAdmission
 
 	// Prepare optionally mutates an object after validation and before
 	// admission. Import uses this to merge scanner output while still
@@ -172,6 +175,12 @@ func ApplyObject(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryR
 	return applyOne(ctx, cfg, obj, dryRun)
 }
 
+// DeleteObject runs one already-decoded object through the same production
+// delete path used by DELETE /v0/apply.
+func DeleteObject(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun bool) arv0.ApplyResult {
+	return deleteOne(ctx, cfg, obj, dryRun)
+}
+
 // applyOne runs a single document through the shared apply pipeline.
 // Never errors; encodes any failure into the returned ApplyResult.
 func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun bool) arv0.ApplyResult {
@@ -231,38 +240,21 @@ func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun
 		return failResult(res, ae)
 	}
 
-	if dryRun {
-		res.Status = arv0.ApplyStatusDryRun
-		return res
+	admitted, ae := deleteCore(ctx, store, obj.GetKind(), meta.Namespace, meta.Name, meta.Tag, deleteOpts{
+		Authorize:       batchAuthorize(cfg, obj.GetKind()),
+		PostDelete:      cfg.PostDeletes[obj.GetKind()],
+		PreDeleteObject: obj,
+		DeleteAdmission: cfg.DeleteAdmission,
+		Source:          cfg.Source,
+	}, dryRun)
+	if ae != nil {
+		return failResult(res, ae)
 	}
-
-	authz := batchAuthorize(cfg, obj.GetKind())
-	if authz != nil {
-		if err := authz(ctx, AuthorizeInput{
-			Verb: "delete", Kind: obj.GetKind(),
-			Namespace: meta.Namespace, Name: meta.Name, Tag: meta.Tag,
-			Object: obj,
-		}); err != nil {
-			return failResult(res, &applyError{Stage: stageAuth, Err: err})
-		}
+	res.Status = admitted.Status
+	if res.Status == "" {
+		res.Status = arv0.ApplyStatusDeleted
 	}
-
-	err := store.DeleteByRef(ctx, meta.Namespace, meta.Name, meta.Tag)
-	if err != nil {
-		return failResult(res, &applyError{
-			Stage:    stageDelete,
-			Err:      err,
-			NotFound: errors.Is(err, pkgdb.ErrNotFound),
-		})
-	}
-
-	res.Tag = meta.Tag
-	if hook := cfg.PostDeletes[obj.GetKind()]; hook != nil {
-		if err := hook(ctx, obj); err != nil {
-			return failResult(res, &applyError{Stage: stagePostDelete, Err: err})
-		}
-	}
-	res.Status = arv0.ApplyStatusDeleted
+	res.Tag = admitted.Tag
 	return res
 }
 

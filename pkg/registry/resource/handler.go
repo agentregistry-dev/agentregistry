@@ -31,6 +31,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
 // unescapePath URL-decodes a path segment captured by Huma. Resource
@@ -111,6 +112,11 @@ type Config struct {
 	// Coordinator.Remove, which tears down runtime resources
 	// and writes the terminal Removed condition.
 	PostDelete func(ctx context.Context, obj v1alpha1.Object) error
+
+	// DeleteAdmission optionally owns the final delete after authz. Nil uses
+	// ProductionDeleteAdmission, which deletes from the configured Store and
+	// runs PostDelete.
+	DeleteAdmission types.DeleteAdmission
 
 	// InitialFinalizers, when non-nil, seeds finalizers atomically on create.
 	// Updates preserve existing finalizers.
@@ -573,9 +579,13 @@ func runDeleteLatest[T v1alpha1.Object](ctx context.Context, cfg Config, newObj 
 	dopts := deleteOpts{Authorize: cfg.Authorize}
 	if cfg.PostDelete != nil && !force {
 		dopts.PostDelete = cfg.PostDelete
+	}
+	if cfg.DeleteAdmission != nil || dopts.PostDelete != nil {
 		dopts.PreDeleteObject = obj
 	}
-	if ae := deleteCore(ctx, cfg.Store, kind, ns, name, "", dopts); ae != nil {
+	dopts.DeleteAdmission = cfg.DeleteAdmission
+	dopts.Force = force
+	if _, ae := deleteCore(ctx, cfg.Store, kind, ns, name, "", dopts, false); ae != nil {
 		return nil, mapApplyErrorToHuma(ae, kind, ns, name, "")
 	}
 	return &deleteOutput{}, nil
@@ -614,7 +624,9 @@ func runDelete[T v1alpha1.Object](ctx context.Context, cfg Config, newObj func()
 	if runHook {
 		dopts.PostDelete = cfg.PostDelete
 	}
-	if ae := deleteCore(ctx, cfg.Store, kind, ns, name, tag, dopts); ae != nil {
+	dopts.DeleteAdmission = cfg.DeleteAdmission
+	dopts.Force = force
+	if _, ae := deleteCore(ctx, cfg.Store, kind, ns, name, tag, dopts, false); ae != nil {
 		return nil, mapApplyErrorToHuma(ae, kind, ns, name, tag)
 	}
 	return &deleteOutput{}, nil

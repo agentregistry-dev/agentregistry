@@ -88,6 +88,12 @@ type RouteOptions struct {
 	// admission/staging.
 	Admission types.Admission
 
+	// DeleteAdmission optionally owns the final delete. Nil preserves OSS
+	// production deletes through resource.ProductionDeleteAdmission.
+	// TODO(krt): temporary synchronous-handler bridge; remove when KRT owns
+	// admission/staging.
+	DeleteAdmission types.DeleteAdmission
+
 	// ResolverWrapper decorates the shared ResourceRef resolver before
 	// resource and apply routes are registered.
 	// TODO(krt): temporary bridge for pending staged refs during HTTP apply.
@@ -134,6 +140,7 @@ func RegisterRoutes(
 		opts.PerKindHooks,
 		opts.RegistryValidator,
 		opts.Admission,
+		opts.DeleteAdmission,
 		opts.ResolverWrapper,
 		opts.ExtraResourceRoutes,
 	)
@@ -180,6 +187,7 @@ func registerKindRoutes(
 	perKind crud.PerKindHooks,
 	registryValidator v1alpha1.RegistryValidatorFunc,
 	admission types.Admission,
+	deleteAdmission types.DeleteAdmission,
 	resolverWrapper func(v1alpha1.ResolverFunc) v1alpha1.ResolverFunc,
 	extraResourceRoutes func(api huma.API, pathPrefix string, ctx types.ResourceRouteContext),
 ) resource.ApplyConfig {
@@ -223,7 +231,7 @@ func registerKindRoutes(
 
 	// Per-kind CRUD endpoints — one call per built-in kind, hidden
 	// inside crud.Register.
-	crud.Register(api, basePrefix, stores, resolver, registryValidator, perKind)
+	crud.Register(api, basePrefix, stores, resolver, registryValidator, perKind, deleteAdmission)
 
 	// Deployment-specific endpoints: logs stream (cancel is subsumed
 	// by DesiredState=undeployed + DELETE in the v1alpha1 lifecycle).
@@ -250,9 +258,12 @@ func registerKindRoutes(
 		PostDeletes:       perKind.PostDeletes,
 		InitialFinalizers: perKind.InitialFinalizers,
 		Admission:         admission,
+		DeleteAdmission:   deleteAdmission,
 	}
 	productionApplyCfg := applyCfg
 	productionApplyCfg.Admission = resource.ProductionAdmission
+	productionDeleteCfg := applyCfg
+	productionDeleteCfg.DeleteAdmission = resource.ProductionDeleteAdmission
 	resource.RegisterApply(api, applyCfg)
 
 	if extraResourceRoutes != nil {
@@ -266,6 +277,9 @@ func registerKindRoutes(
 			RegistryValidator: registryValidator,
 			Apply: func(ctx context.Context, obj v1alpha1.Object, dryRun bool) arv0.ApplyResult {
 				return resource.ApplyObject(ctx, productionApplyCfg, obj, dryRun)
+			},
+			Delete: func(ctx context.Context, obj v1alpha1.Object, dryRun bool) arv0.ApplyResult {
+				return resource.DeleteObject(ctx, productionDeleteCfg, obj, dryRun)
 			},
 		})
 	}

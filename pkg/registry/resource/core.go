@@ -211,11 +211,15 @@ type deleteOpts struct {
 	Authorize       func(ctx context.Context, in AuthorizeInput) error
 	PostDelete      func(ctx context.Context, obj v1alpha1.Object) error
 	PreDeleteObject v1alpha1.Object
+	DeleteAdmission types.DeleteAdmission
+	Source          string
+	Force           bool
 }
 
-// deleteCore runs Authorize → Store.Delete → PostDelete for a single resource.
-// Validation is intentionally skipped — deleting a row should not require its
-// spec to validate.
+// deleteCore runs Authorize → delete admission for a single resource.
+// Validation is intentionally skipped — deleting a row should not require
+// its spec to validate. The OSS default admission performs Store.DeleteByRef
+// + PostDelete; downstream implementations may stage or reject the delete.
 //
 // Returns NotFound=true on the missing-row case so callers can map it
 // to 404 (single PUT) or "not found" Result (batch).
@@ -224,29 +228,70 @@ func deleteCore(
 	store *v1alpha1store.Store,
 	kind, namespace, name, tag string,
 	opts deleteOpts,
-) *applyError {
+	dryRun bool,
+) (types.DeleteAdmissionResult, *applyError) {
 	if opts.Authorize != nil {
 		if err := opts.Authorize(ctx, AuthorizeInput{
 			Verb: "delete", Kind: kind,
 			Namespace: namespace, Name: name, Tag: tag,
 			Object: opts.PreDeleteObject,
 		}); err != nil {
-			return &applyError{Stage: stageAuth, Err: err}
+			return types.DeleteAdmissionResult{}, &applyError{Stage: stageAuth, Err: err}
 		}
 	}
 
-	if err := store.Delete(ctx, namespace, name, tag); err != nil {
-		return &applyError{
+	source := opts.Source
+	if source == "" {
+		source = types.AdmissionSourceDelete
+	}
+	admission := opts.DeleteAdmission
+	if admission == nil {
+		admission = ProductionDeleteAdmission
+	}
+	result, err := admission(ctx, types.DeleteAdmissionInput{
+		Source:     source,
+		Verb:       "delete",
+		DryRun:     dryRun,
+		Kind:       kind,
+		Namespace:  namespace,
+		Name:       name,
+		Tag:        tag,
+		Object:     opts.PreDeleteObject,
+		Store:      store,
+		PostDelete: opts.PostDelete,
+		Force:      opts.Force,
+	})
+	if err != nil {
+		if ae, ok := err.(*applyError); ok {
+			return types.DeleteAdmissionResult{}, ae
+		}
+		return types.DeleteAdmissionResult{}, &applyError{Stage: stageAdmission, Err: err}
+	}
+	return result, nil
+}
+
+// ProductionDeleteAdmission is the OSS delete admission implementation. It
+// removes the selected production row(s) and then runs the per-kind post-delete
+// hook when present.
+func ProductionDeleteAdmission(ctx context.Context, in types.DeleteAdmissionInput) (types.DeleteAdmissionResult, error) {
+	if in.DryRun {
+		return types.DeleteAdmissionResult{Status: arv0.ApplyStatusDryRun, Tag: in.Tag}, nil
+	}
+	store, ok := in.Store.(*v1alpha1store.Store)
+	if !ok || store == nil {
+		return types.DeleteAdmissionResult{}, errors.New("production store is required")
+	}
+	if err := store.DeleteByRef(ctx, in.Namespace, in.Name, in.Tag); err != nil {
+		return types.DeleteAdmissionResult{}, &applyError{
 			Stage:    stageDelete,
 			Err:      err,
 			NotFound: errors.Is(err, pkgdb.ErrNotFound),
 		}
 	}
-
-	if opts.PostDelete != nil && opts.PreDeleteObject != nil {
-		if err := opts.PostDelete(ctx, opts.PreDeleteObject); err != nil {
-			return &applyError{Stage: stagePostDelete, Err: err}
+	if in.PostDelete != nil && in.Object != nil {
+		if err := in.PostDelete(ctx, in.Object); err != nil {
+			return types.DeleteAdmissionResult{}, &applyError{Stage: stagePostDelete, Err: err}
 		}
 	}
-	return nil
+	return types.DeleteAdmissionResult{Status: arv0.ApplyStatusDeleted, Tag: in.Tag}, nil
 }

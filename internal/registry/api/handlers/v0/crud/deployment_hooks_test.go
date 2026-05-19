@@ -75,6 +75,7 @@ func seedDeploymentFixtures(t *testing.T) (humatest.TestAPI, map[string]*v1alpha
 				},
 			},
 		},
+		nil,
 	)
 	deploymentlogs.Register(api, deploymentlogs.Config{
 		BasePrefix:  "/v0",

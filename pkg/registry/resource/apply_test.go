@@ -175,6 +175,68 @@ spec:
 	require.ErrorIs(t, err, pkgdb.ErrNotFound)
 }
 
+func TestRegisterApply_DeleteAdmissionCanStageInsteadOfProductionDelete(t *testing.T) {
+	pool := v1alpha1store.NewTestPool(t)
+	agents := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+	_, err := agents.Upsert(t.Context(), &v1alpha1.Agent{
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "staged-delete", Tag: "stable"},
+		Spec:     v1alpha1.AgentSpec{Title: "Staged Delete"},
+	})
+	require.NoError(t, err)
+
+	var admitted types.DeleteAdmissionInput
+	postDeleteCalled := false
+	_, api := humatest.New(t)
+	resource.RegisterApply(api, resource.ApplyConfig{
+		BasePrefix: "/v0",
+		Stores: map[string]*v1alpha1store.Store{
+			v1alpha1.KindAgent: agents,
+		},
+		PostDeletes: map[string]func(context.Context, v1alpha1.Object) error{
+			v1alpha1.KindAgent: func(context.Context, v1alpha1.Object) error {
+				postDeleteCalled = true
+				return nil
+			},
+		},
+		DeleteAdmission: func(ctx context.Context, in types.DeleteAdmissionInput) (types.DeleteAdmissionResult, error) {
+			admitted = in
+			return types.DeleteAdmissionResult{Status: arv0.ApplyStatusStaged, Tag: in.Tag}, nil
+		},
+	})
+
+	yaml := []byte(`apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  namespace: default
+  name: staged-delete
+  tag: stable
+`)
+	resp := api.Do(http.MethodDelete, "/v0/apply", "Content-Type: application/yaml", strings.NewReader(string(yaml)))
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+
+	var out struct {
+		Results []arv0.ApplyResult `json:"results"`
+	}
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+	require.Len(t, out.Results, 1)
+	require.Equal(t, arv0.ApplyStatusStaged, out.Results[0].Status)
+	require.Equal(t, "stable", out.Results[0].Tag)
+	require.False(t, postDeleteCalled, "staged deletes must not fire production side effects")
+	require.Equal(t, types.AdmissionSourceDelete, admitted.Source)
+	require.Equal(t, "delete", admitted.Verb)
+	require.Equal(t, v1alpha1.KindAgent, admitted.Kind)
+	require.Equal(t, "default", admitted.Namespace)
+	require.Equal(t, "staged-delete", admitted.Name)
+	require.Equal(t, "stable", admitted.Tag)
+	require.NotNil(t, admitted.Object)
+	require.NotNil(t, admitted.PostDelete)
+	require.Same(t, agents, admitted.Store)
+
+	row, err := agents.Get(t.Context(), "default", "staged-delete", "stable")
+	require.NoError(t, err)
+	require.Equal(t, "stable", row.Metadata.Tag)
+}
+
 func TestApplyObject_ReusesProductionApplyPath(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
 	agents := v1alpha1store.NewStore(pool, "v1alpha1.agents")
