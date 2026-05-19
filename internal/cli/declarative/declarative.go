@@ -5,11 +5,12 @@ import (
 	"os"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	cliCommon "github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
-	"github.com/spf13/cobra"
 )
 
 var apiClient *client.Client

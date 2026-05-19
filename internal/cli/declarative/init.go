@@ -419,8 +419,8 @@ func writeMCPServersConfig(projectDir string, entries []mcpEnvEntry) error {
 func stripMCPServersConfigLines(env string) string {
 	lines := strings.Split(env, "\n")
 	out := make([]string, 0, len(lines))
-	for i := 0; i < len(lines); i++ {
-		if strings.HasPrefix(lines[i], "MCP_SERVERS_CONFIG=") {
+	for _, line := range lines {
+		if strings.HasPrefix(line, "MCP_SERVERS_CONFIG=") {
 			// Drop the preceding marker comment too (the one we emit).
 			if n := len(out); n > 0 && strings.HasPrefix(out[n-1], "# Wired by arctl init") {
 				out = out[:n-1]
@@ -430,7 +430,7 @@ func stripMCPServersConfigLines(env string) string {
 			}
 			continue
 		}
-		out = append(out, lines[i])
+		out = append(out, line)
 	}
 	return strings.Join(out, "\n")
 }

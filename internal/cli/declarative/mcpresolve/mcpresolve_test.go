@@ -5,9 +5,10 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
 // fakeFetcher lets tests inject the MCPServer the package would otherwise
