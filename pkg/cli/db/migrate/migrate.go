@@ -1,11 +1,12 @@
 package migrate
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -102,8 +103,8 @@ func orderedSources() ([]orderedSource, error) {
 	for i, s := range srcs {
 		out[i] = orderedSource{src: s, cfg: s.BuildConfig()}
 	}
-	sort.SliceStable(out, func(i, j int) bool {
-		return out[i].cfg.VersionOffset < out[j].cfg.VersionOffset
+	slices.SortStableFunc(out, func(a, b orderedSource) int {
+		return cmp.Compare(a.cfg.VersionOffset, b.cfg.VersionOffset)
 	})
 	for i := 1; i < len(out); i++ {
 		if out[i].cfg.VersionOffset == out[i-1].cfg.VersionOffset {
@@ -159,7 +160,7 @@ func newDownCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			n, err := strconv.Atoi(args[0])
 			if err != nil || n < 1 {
-				return fmt.Errorf("N must be a positive integer, got %q", args[0])
+				return fmt.Errorf("expected a positive integer for N, got %q", args[0])
 			}
 			return withConn(cmd.Context(), func(ctx context.Context, conn *pgx.Conn) error {
 				remaining := n
@@ -265,7 +266,7 @@ lacks a .down.sql sibling).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			v, err := strconv.Atoi(args[0])
 			if err != nil || v < 0 {
-				return fmt.Errorf("V must be a non-negative integer, got %q", args[0])
+				return fmt.Errorf("expected a non-negative integer for V, got %q", args[0])
 			}
 			return withConn(cmd.Context(), func(ctx context.Context, conn *pgx.Conn) error {
 				srcs, oerr := orderedSources()
@@ -369,7 +370,7 @@ row already exists.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			v, err := strconv.Atoi(args[0])
 			if err != nil || v < 1 {
-				return fmt.Errorf("V must be a positive integer, got %q", args[0])
+				return fmt.Errorf("expected a positive integer for V, got %q", args[0])
 			}
 			return withConn(cmd.Context(), func(ctx context.Context, conn *pgx.Conn) error {
 				srcsList, oerr := orderedSources()
