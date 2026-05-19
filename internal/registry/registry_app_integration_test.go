@@ -47,12 +47,11 @@ func (e *extensionApplyObject) UnmarshalStatus(data json.RawMessage) error {
 	return v1alpha1.UnmarshalStatusFromStorage(data, &e.Status)
 }
 
-func TestBuildStoresAndImporter_ExtensionKindAppliesThroughBatchEndpoint(t *testing.T) {
+func TestBuildStores_ExtensionKindAppliesThroughBatchEndpoint(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	stores, importer := buildStoresAndImporter(pool, nil, map[string]string{
+	stores := buildStores(pool, map[string]string{
 		extensionApplyKind: "v1alpha1.agents",
 	}, nil, nil)
-	require.NotNil(t, importer)
 	extensionStore := stores[extensionApplyKind]
 	require.NotNil(t, extensionStore)
 
@@ -91,16 +90,16 @@ spec:
 	require.JSONEq(t, `{"value":"ok"}`, string(row.Spec))
 }
 
-// TestBuildStoresAndImporter_PropagatesAuditor verifies the auditor
-// passed through buildStoresAndImporter (the AppOptions.Auditor field)
+// TestBuildStores_PropagatesAuditor verifies the auditor passed
+// through buildStores (the AppOptions.Auditor field)
 // reaches every constructed Store. We drive a tagged-artifact Upsert
 // and assert the auditor saw the expected ResourceTagCreated event,
 // proving the option survived the
 // NewStores -> NewStore option chain.
-func TestBuildStoresAndImporter_PropagatesAuditor(t *testing.T) {
+func TestBuildStores_PropagatesAuditor(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
 	auditor := &typestest.RecordingAuditor{}
-	stores, _ := buildStoresAndImporter(pool, nil, nil, nil, auditor)
+	stores := buildStores(pool, nil, nil, auditor)
 
 	agentStore := stores[v1alpha1.KindAgent]
 	require.NotNil(t, agentStore)
@@ -120,8 +119,8 @@ func TestBuildStoresAndImporter_PropagatesAuditor(t *testing.T) {
 	require.NotEmpty(t, events[0].Tag)
 
 	// Sanity: nil auditor still works (NoopAuditor fallback) — guards the
-	// nil-check branch in buildStoresAndImporter.
-	stores2, _ := buildStoresAndImporter(pool, nil, nil, nil, nil)
+	// nil-check branch in buildStores.
+	stores2 := buildStores(pool, nil, nil, nil)
 	require.NotNil(t, stores2[v1alpha1.KindAgent])
 	_ = types.NoopAuditor
 }

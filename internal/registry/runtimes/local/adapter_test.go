@@ -70,14 +70,16 @@ func TestV1Alpha1Apply_MCPServerTarget_WritesComposeAndMarksProgressing(t *testi
 		t.Fatalf("composeUp called %d times, want 1", composeUpCalls)
 	}
 
-	var gotProgressing *v1alpha1.Condition
+	var gotProgressing v1alpha1.Condition
+	var foundProgressing bool
 	for i := range res.Conditions {
 		if res.Conditions[i].Type == "Progressing" {
-			gotProgressing = &res.Conditions[i]
+			gotProgressing = res.Conditions[i]
+			foundProgressing = true
 			break
 		}
 	}
-	if gotProgressing == nil {
+	if !foundProgressing {
 		t.Fatalf("Progressing condition missing; got conditions = %+v", res.Conditions)
 	}
 	if gotProgressing.Status != v1alpha1.ConditionTrue {

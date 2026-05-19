@@ -25,20 +25,12 @@ import {
   Calendar,
   ExternalLink,
   Code,
-  Server,
-  Link,
   Star,
-  TrendingUp,
   Copy,
-  ArrowLeft,
   History,
   Check,
-  Shield,
   GitFork,
   Eye,
-  Zap,
-  CheckCircle,
-  Clock,
   ShieldCheck,
   BadgeCheck,
 } from "lucide-react"
@@ -61,13 +53,8 @@ export function ServerDetail({ server, onServerCopied }: ServerDetailProps) {
   const publisherProvided = serverData._meta?.['io.modelcontextprotocol.registry/publisher-provided'] as Record<string, unknown> | undefined
   const publisherMetadata = publisherProvided?.['aregistry.ai/metadata'] as Record<string, any> | undefined
   const githubStars = publisherMetadata?.stars as number | undefined
-  const overallScore = publisherMetadata?.score as number | undefined
-  const openSSFScore = (publisherMetadata?.scorecard as Record<string, any>)?.openssf as number | undefined
   const repoData = publisherMetadata?.repo as Record<string, any> | undefined
-  const endpointHealth = publisherMetadata?.endpoint_health as Record<string, any> | undefined
-  const scanData = publisherMetadata?.scans as Record<string, any> | undefined
   const identityData = publisherMetadata?.identity as Record<string, any> | undefined
-  const securityScanning = publisherMetadata?.security_scanning as Record<string, any> | undefined
 
   const handleTagChange = (tag: string) => {
     const newTag = allTags.find(v => v.server.tag === tag)
@@ -168,7 +155,6 @@ export function ServerDetail({ server, onServerCopied }: ServerDetailProps) {
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="mb-4">
               <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="score">Score</TabsTrigger>
               {serverData.source?.package && (
                 <TabsTrigger value="packages">Package</TabsTrigger>
               )}
@@ -203,36 +189,6 @@ export function ServerDetail({ server, onServerCopied }: ServerDetailProps) {
                   </section>
                 )
               })()}
-            </TabsContent>
-
-            <TabsContent value="score" className="space-y-6">
-              {/* Score cards */}
-              {(overallScore !== undefined || openSSFScore !== undefined) && (
-                <div className="grid grid-cols-2 gap-4">
-                  {overallScore !== undefined && (
-                    <div className="p-4 rounded-lg border bg-muted/30">
-                      <div className="flex items-center gap-3">
-                        <TrendingUp className="h-5 w-5 text-primary" />
-                        <div>
-                          <p className="text-xs text-muted-foreground">Overall Score</p>
-                          <p className="text-2xl font-bold">{overallScore.toFixed(2)}</p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {openSSFScore !== undefined && (
-                    <div className="p-4 rounded-lg border bg-muted/30">
-                      <div className="flex items-center gap-3">
-                        <Shield className="h-5 w-5 text-green-500" />
-                        <div>
-                          <p className="text-xs text-muted-foreground">OpenSSF Scorecard</p>
-                          <p className="text-2xl font-bold">{openSSFScore.toFixed(1)}/10</p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
 
               {/* Repo stats */}
               {(githubStars !== undefined || repoData) && (
@@ -292,110 +248,6 @@ export function ServerDetail({ server, onServerCopied }: ServerDetailProps) {
                     )
                   })()}
                 </section>
-              )}
-
-              {/* Endpoint Health */}
-              {endpointHealth && (
-                <section>
-                  <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">Endpoint Health</h3>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="flex items-center gap-2 p-3 rounded-md bg-muted/50">
-                      <CheckCircle className={`h-4 w-4 ${endpointHealth.reachable ? 'text-green-500' : 'text-red-500'}`} />
-                      <div>
-                        <p className="text-[10px] text-muted-foreground">Status</p>
-                        <p className="text-sm font-semibold">{endpointHealth.reachable ? 'Reachable' : 'Unreachable'}</p>
-                      </div>
-                    </div>
-                    {endpointHealth.response_ms !== undefined && (
-                      <div className="flex items-center gap-2 p-3 rounded-md bg-muted/50">
-                        <Clock className="h-4 w-4 text-muted-foreground" />
-                        <div>
-                          <p className="text-[10px] text-muted-foreground">Response</p>
-                          <p className="text-sm font-semibold">{endpointHealth.response_ms}ms</p>
-                        </div>
-                      </div>
-                    )}
-                    {endpointHealth.last_checked_at && (
-                      <div className="flex items-center gap-2 p-3 rounded-md bg-muted/50">
-                        <Calendar className="h-4 w-4 text-muted-foreground" />
-                        <div>
-                          <p className="text-[10px] text-muted-foreground">Last Checked</p>
-                          <p className="text-sm font-semibold">{new Date(endpointHealth.last_checked_at).toLocaleDateString()}</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </section>
-              )}
-
-              {/* Security */}
-              {(scanData || securityScanning) && (
-                <section>
-                  <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">Security</h3>
-
-                  {scanData?.dependency_health && (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                      <div className="p-3 rounded-md bg-muted/50 text-center">
-                        <p className="text-[10px] text-muted-foreground">Total Packages</p>
-                        <p className="text-lg font-bold">{scanData.dependency_health.packages_total}</p>
-                      </div>
-                      <div className="p-3 rounded-md bg-muted/50 text-center">
-                        <p className="text-[10px] text-muted-foreground">Copyleft</p>
-                        <p className="text-lg font-bold">{scanData.dependency_health.copyleft_licenses}</p>
-                      </div>
-                      <div className="p-3 rounded-md bg-muted/50 text-center">
-                        <p className="text-[10px] text-muted-foreground">Unknown Licenses</p>
-                        <p className="text-lg font-bold">{scanData.dependency_health.unknown_licenses}</p>
-                      </div>
-                      {scanData.dependency_health.ecosystems && (
-                        <div className="p-3 rounded-md bg-muted/50 text-center">
-                          <p className="text-[10px] text-muted-foreground">Ecosystems</p>
-                          <div className="text-xs font-semibold space-y-0.5 mt-1">
-                            {Object.entries(scanData.dependency_health.ecosystems).map(([key, value]) => (
-                              <div key={key}>{key}: {String(value)}</div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {securityScanning && (
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="flex items-center gap-1.5 text-sm">
-                        <CheckCircle className={`h-3.5 w-3.5 ${securityScanning.codeql_enabled ? 'text-green-500' : 'text-muted-foreground/40'}`} />
-                        CodeQL
-                      </div>
-                      <div className="flex items-center gap-1.5 text-sm">
-                        <CheckCircle className={`h-3.5 w-3.5 ${securityScanning.dependabot_enabled ? 'text-green-500' : 'text-muted-foreground/40'}`} />
-                        Dependabot
-                      </div>
-                    </div>
-                  )}
-
-                  {scanData?.details && scanData.details.length > 0 && (
-                    <div className="space-y-1">
-                      {scanData.details.map((detail: string, idx: number) => (
-                        <div key={idx} className="text-xs p-2 bg-muted rounded font-mono">{detail}</div>
-                      ))}
-                    </div>
-                  )}
-
-                  {scanData?.summary && (
-                    <div className="mt-3 p-3 bg-accent/50 rounded-md border border-primary/10">
-                      <p className="text-[10px] font-semibold text-muted-foreground mb-0.5">Summary</p>
-                      <p className="text-xs font-mono">{scanData.summary}</p>
-                    </div>
-                  )}
-                </section>
-              )}
-
-              {!publisherMetadata && (
-                <div className="text-center py-12">
-                  <TrendingUp className="h-8 w-8 mx-auto mb-3 text-muted-foreground opacity-40" />
-                  <p className="text-sm text-muted-foreground">No scoring data available</p>
-                  <p className="text-xs text-muted-foreground mt-1">Data will be fetched on next import/refresh</p>
-                </div>
               )}
             </TabsContent>
 

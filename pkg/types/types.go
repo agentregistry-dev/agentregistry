@@ -155,8 +155,8 @@ type AppOptions struct {
 	// V1Alpha1StoreTables registers additional v1alpha1 kinds with their
 	// backing PostgreSQL tables. Downstream builds that add their own
 	// Scheme kinds should populate this so the shared /v0/apply,
-	// /v0/import, resolver, and generic route plumbing can see the same
-	// store map as any ExtraRoutes they register.
+	// resolver, and generic route plumbing can see the same store map
+	// as any ExtraRoutes they register.
 	V1Alpha1StoreTables map[string]string
 
 	// V1Alpha1MutableStoreKinds marks extra v1alpha1 kinds that use mutable
@@ -166,7 +166,7 @@ type AppOptions struct {
 	V1Alpha1MutableStoreKinds map[string]bool
 
 	// RegistryValidator overrides the per-package registry
-	// validator (the dispatcher consulted on apply / import to confirm
+	// validator (the dispatcher consulted on apply to confirm
 	// each declared package — npm / pypi / oci / nuget / mcpb — exists
 	// and (for OCI) carries the
 	// `LABEL io.modelcontextprotocol.server.name` ownership annotation
