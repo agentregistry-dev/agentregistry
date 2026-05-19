@@ -5,8 +5,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/danielgtaylor/huma/v2"
+
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
 // PingBody represents the ping response body.

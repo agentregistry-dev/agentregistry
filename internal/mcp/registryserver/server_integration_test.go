@@ -7,12 +7,12 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func TestMCPListServers_HappyPath(t *testing.T) {

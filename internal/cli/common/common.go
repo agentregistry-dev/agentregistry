@@ -5,11 +5,12 @@ import (
 	"os"
 	"strings"
 
+	"github.com/stoewer/go-strcase"
+	"golang.org/x/mod/semver"
+
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/manifest"
 	versionpkg "github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/printer"
-	"github.com/stoewer/go-strcase"
-	"golang.org/x/mod/semver"
 )
 
 const DefaultUserName = "user"

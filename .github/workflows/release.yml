@@ -32,6 +32,9 @@ jobs:
     - uses: actions/setup-go@v6
       with:
         go-version-file: "go.mod"
+        cache-dependency-path: |
+          go.sum
+          tools/go.sum
 
     - name: Set up Node.js
       uses: actions/setup-node@v4
@@ -67,6 +70,7 @@ jobs:
       HELM_PLUGIN_UNITTEST_VERSION: v1.0.3
       HELM_REGISTRY: ${{ secrets.HELM_REGISTRY || 'ghcr.io' }}
       HELM_REPO: ${{ secrets.HELM_REPO || 'agentregistry-dev/agentregistry' }}
+      HELM: go tool -modfile=tools/go.mod helm
     permissions:
       contents: write
       packages: write
@@ -79,6 +83,9 @@ jobs:
       uses: actions/setup-go@v6
       with:
         go-version-file: "go.mod"
+        cache-dependency-path: |
+          go.sum
+          tools/go.sum
 
     - name: Cache Helm plugins
       uses: actions/cache@v4
@@ -95,7 +102,7 @@ jobs:
         HELM_REGISTRY_PASSWORD: ${{ secrets.HELM_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
       run: |
         set -euo pipefail
-        printf "%s" "${HELM_REGISTRY_PASSWORD}" | helm registry login "${HELM_REGISTRY}" \
+        printf "%s" "${HELM_REGISTRY_PASSWORD}" | $HELM registry login "${HELM_REGISTRY}" \
           --username "${HELM_REGISTRY_USERNAME}" \
           --password-stdin
 
@@ -117,4 +124,4 @@ jobs:
 
     - name: Log out of Helm registry
       if: always()
-      run: helm registry logout "${HELM_REGISTRY}" || true
+      run: $HELM registry logout "${HELM_REGISTRY}" || true
