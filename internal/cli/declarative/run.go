@@ -13,10 +13,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/agentregistry-dev/agentregistry/internal/cli/buildconfig"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative/chat"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/frameworks"
-	"github.com/spf13/cobra"
 )
 
 // RunCmd is the cobra command for "run".

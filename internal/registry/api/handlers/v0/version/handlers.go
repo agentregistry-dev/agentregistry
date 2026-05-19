@@ -5,9 +5,10 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/danielgtaylor/huma/v2"
+
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
-	"github.com/danielgtaylor/huma/v2"
 )
 
 type VersionBody = arv0.VersionBody

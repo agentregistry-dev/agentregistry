@@ -7,8 +7,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/spf13/cobra"
+
+	"github.com/agentregistry-dev/agentregistry/internal/cli/common"
 )
 
 var (
