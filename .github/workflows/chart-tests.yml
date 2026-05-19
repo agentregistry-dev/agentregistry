@@ -24,12 +24,21 @@ jobs:
     runs-on: ubuntu-latest
     env:
       HELM_PLUGIN_UNITTEST_VERSION: v1.0.3
+      HELM: go tool -modfile=tools/go.mod helm
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: "go.mod"
+          cache-dependency-path: |
+            go.sum
+            tools/go.sum
 
       # Cache the helm-unittest plugin dir so repeated runs skip re-downloading.
       - name: Cache Helm plugins
@@ -49,8 +58,8 @@ jobs:
 
       - name: Show Helm and plugin versions
         run: |
-          helm version --short
-          helm plugin list
+          $HELM version --short
+          $HELM plugin list
 
       - name: Lint chart (Makefile)
         run: |

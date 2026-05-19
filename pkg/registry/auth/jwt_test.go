@@ -8,11 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
-	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 )
 
 func TestJWTManager_GenerateAndVerifyToken(t *testing.T) {

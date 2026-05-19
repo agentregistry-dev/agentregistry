@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 
+	"github.com/danielgtaylor/huma/v2"
+
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/crud"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/deploymentlogs"
 	v0health "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/health"
@@ -19,7 +21,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1/registries"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
-	"github.com/danielgtaylor/huma/v2"
 )
 
 // Stores is the per-kind Store map used by the v1alpha1

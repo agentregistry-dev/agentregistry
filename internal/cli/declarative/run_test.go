@@ -6,8 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative"
 	"github.com/stretchr/testify/require"
+
+	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative"
 )
 
 func TestRun_DispatchesToFrameworkRunCommand(t *testing.T) {
