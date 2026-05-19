@@ -195,6 +195,16 @@ test: ## Run Go integration tests
 	@echo "Running Go tests with integration..."
 	$(GOTESTSUM) --format testdox -- -tags=integration -timeout 10m ./...
 
+# Run CLI e2e tests: build the arctl binary and exercise it as a subprocess.
+# The no-DB cases (missing-DSN, --db-url precedence, --help, arg validation)
+# run on every invocation; the DB-required cases (happy path, ErrNotReversible,
+# force-writes-row-only) skip automatically when Postgres on localhost:5432
+# is unreachable.
+.PHONY: test-cli-e2e
+test-cli-e2e: ## Run CLI subprocess e2e tests (no docker/k8s required; DB cases self-skip)
+	@echo "Running CLI e2e tests..."
+	$(GOTESTSUM) --format testdox -- -tags=e2e -timeout 5m ./pkg/cli/...
+
 # Run e2e tests against docker backend (skips Kind cluster setup and k8s tests)
 .PHONY: test-e2e-docker
 test-e2e-docker: local-registry docker docker-tag-as-dev daemon-start

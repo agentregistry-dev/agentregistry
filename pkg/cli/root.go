@@ -235,6 +235,11 @@ var preRunSkipCommands = map[string]map[string]bool{
 		"init":       true,
 		"build":      true,
 		"help":       true,
+		// db subcommands talk to Postgres directly via --db-url / env
+		// and never call the registry API. Skipping pre-run lets
+		// operators run `arctl db migrate up` before the server is
+		// reachable (the canonical pre-rollout workflow).
+		"db": true,
 	},
 }
 
