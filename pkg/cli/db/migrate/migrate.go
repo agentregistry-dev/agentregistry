@@ -2,10 +2,13 @@ package migrate
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -134,14 +137,19 @@ func readVersion(mg *migrate.Migrate) (uint, error) {
 	return v, nil
 }
 
-// countSourceFiles returns the number of NNN_name.up.sql files in
-// src.Files/src.Dir.
-func countSourceFiles(src Source) (int, error) {
+// sourceFileVersions returns the (ascending-sorted) NNN versions
+// parsed from every NNN_name.up.sql file in src.Files/src.Dir.
+//
+// The set isn't required to be contiguous — gaps (e.g. a deleted
+// 005) are real and we treat the missing numbers as
+// not-applicable-to-this-binary. status/desync math goes via this
+// list so the count of files and the highest version stay distinct.
+func sourceFileVersions(src Source) ([]int, error) {
 	entries, err := fs.ReadDir(src.Files, src.Dir)
 	if err != nil {
-		return 0, fmt.Errorf("read migration dir %s: %w", src.Dir, err)
+		return nil, fmt.Errorf("read migration dir %s: %w", src.Dir, err)
 	}
-	n := 0
+	var versions []int
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
@@ -154,12 +162,24 @@ func countSourceFiles(src Source) (int, error) {
 		if len(parts) != 2 {
 			continue
 		}
-		if _, err := strconv.Atoi(parts[0]); err != nil {
+		v, err := strconv.Atoi(parts[0])
+		if err != nil {
 			continue
 		}
-		n++
+		versions = append(versions, v)
 	}
-	return n, nil
+	slices.Sort(versions)
+	return versions, nil
+}
+
+// lineRow carries per-source status data through the status command's
+// text and JSON output paths.
+type lineRow struct {
+	src        Source
+	applied    int
+	pending    int
+	dbVersion  int  // raw DB version for desync reporting
+	downgraded bool // dbVersion > total
 }
 
 // upSnapshot tracks (src, mg, preVersion) for cross-track rollback.
@@ -312,13 +332,17 @@ func newDownCmd() *cobra.Command {
 }
 
 func newStatusCmd() *cobra.Command {
-	return &cobra.Command{
+	var output string
+	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Show how many migrations are applied vs pending across all sources",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if flags.source != "" {
 				return errors.New("status aggregates across all registered sources; --source is not applicable")
+			}
+			if output != "text" && output != "json" {
+				return fmt.Errorf("invalid --output %q; supported: text, json", output)
 			}
 			dsn, err := resolveDSN()
 			if err != nil {
@@ -329,13 +353,6 @@ func newStatusCmd() *cobra.Command {
 				return errors.New("no migration sources registered")
 			}
 
-			type lineRow struct {
-				src        Source
-				applied    int
-				pending    int
-				dbVersion  int  // raw DB version for desync reporting
-				downgraded bool // dbVersion > total
-			}
 			lines := make([]lineRow, 0, len(srcs))
 			appliedTotal, pendingTotal := 0, 0
 			// Multi-source binaries surface a per-source desync line
@@ -345,9 +362,13 @@ func newStatusCmd() *cobra.Command {
 			// no stdout breakdown that would carry it.
 			multiSource := len(srcs) > 1
 			for _, src := range srcs {
-				total, err := countSourceFiles(src)
+				versions, err := sourceFileVersions(src)
 				if err != nil {
 					return err
+				}
+				maxFileVersion := 0
+				if len(versions) > 0 {
+					maxFileVersion = versions[len(versions)-1]
 				}
 				var applied, dbVersion int
 				var downgraded bool
@@ -357,31 +378,42 @@ func newStatusCmd() *cobra.Command {
 						return err
 					}
 					dbVersion = int(v)
-					if dbVersion > total {
-						// Binary embedded fewer migrations than the
-						// DB reports applied — operator is running an
+					// applied counts files whose version is ≤ dbVersion;
+					// pending counts the rest. This survives gaps in
+					// the version sequence (e.g. a deleted v5) where
+					// `count(files)` and `max(version)` diverge.
+					for _, fv := range versions {
+						if fv <= dbVersion {
+							applied++
+						}
+					}
+					if dbVersion > maxFileVersion {
+						// Binary's highest shipped version is below the
+						// DB's recorded version — operator is running an
 						// older arctl against a DB migrated by a newer
 						// build. Warn but don't fail; the operator
 						// should reconcile by upgrading the binary.
 						downgraded = true
 						if !multiSource {
 							fmt.Fprintf(os.Stderr,
-								"warning: %s reports version %d but this binary only ships migrations up to %d (older binary against newer DB?)\n",
-								src.Name, v, total)
+								"warning: %s reports version %d but this binary's highest shipped migration is v%d (older binary against newer DB?)\n",
+								src.Name, v, maxFileVersion)
 						}
 					}
-					applied = min(dbVersion, total)
 					return nil
 				}); rerr != nil {
 					return rerr
 				}
-				pending := total - applied
+				pending := len(versions) - applied
 				lines = append(lines, lineRow{src: src, applied: applied, pending: pending, dbVersion: dbVersion, downgraded: downgraded})
 				appliedTotal += applied
 				pendingTotal += pending
 			}
 
 			out := cmd.OutOrStdout()
+			if output == "json" {
+				return writeStatusJSON(out, lines, appliedTotal, pendingTotal)
+			}
 			if multiSource {
 				fmt.Fprintf(out, "%d migration(s) applied, %d pending\n", appliedTotal, pendingTotal)
 				// Same `multiSource` used to gate the stderr desync
@@ -412,6 +444,46 @@ func newStatusCmd() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().StringVarP(&output, "output", "o", "text",
+		`Output format: "text" (default) or "json"`)
+	return cmd
+}
+
+// statusJSON is the wire format for `arctl db migrate status -o json`.
+// Stable contract — operators may consume it from CI/CD shell scripts
+// via `jq`.
+type statusJSON struct {
+	Applied int                `json:"applied"`
+	Pending int                `json:"pending"`
+	Sources []statusSourceJSON `json:"sources"`
+}
+
+type statusSourceJSON struct {
+	Name       string `json:"name"`
+	Applied    int    `json:"applied"`
+	Pending    int    `json:"pending"`
+	Version    int    `json:"version"`
+	Downgraded bool   `json:"downgraded"`
+}
+
+func writeStatusJSON(out io.Writer, lines []lineRow, appliedTotal, pendingTotal int) error {
+	payload := statusJSON{
+		Applied: appliedTotal,
+		Pending: pendingTotal,
+		Sources: make([]statusSourceJSON, 0, len(lines)),
+	}
+	for _, l := range lines {
+		payload.Sources = append(payload.Sources, statusSourceJSON{
+			Name:       l.src.Name,
+			Applied:    l.applied,
+			Pending:    l.pending,
+			Version:    l.dbVersion,
+			Downgraded: l.downgraded,
+		})
+	}
+	enc := json.NewEncoder(out)
+	enc.SetIndent("", "  ")
+	return enc.Encode(payload)
 }
 
 func newVersionCmd() *cobra.Command {

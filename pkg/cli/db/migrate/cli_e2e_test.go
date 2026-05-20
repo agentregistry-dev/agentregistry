@@ -16,6 +16,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -377,6 +378,56 @@ func TestE2E_ForceWritesRowOnly(t *testing.T) {
 	}
 	if v1alpha1Exists {
 		t.Errorf("v1alpha1 schema must NOT exist after `force 1` (migration SQL did not run)")
+	}
+}
+
+// TestE2E_StatusJSON — `status --output json` emits a stable JSON
+// shape that CI/CD shell scripts can pipe through `jq`.
+func TestE2E_StatusJSON(t *testing.T) {
+	dsn := freshDB(t)
+	env := append(stripARRegistryEnv(), "AGENT_REGISTRY_DATABASE_URL="+dsn)
+
+	if r := runArctl(t, env, "db", "migrate", "up"); r.exitCode != 0 {
+		t.Fatalf("up setup: exit %d\nstderr: %s", r.exitCode, r.stderr)
+	}
+
+	r := runArctl(t, env, "db", "migrate", "status", "--output", "json")
+	if r.exitCode != 0 {
+		t.Fatalf("status -o json: exit %d\nstderr: %s", r.exitCode, r.stderr)
+	}
+
+	var payload struct {
+		Applied int `json:"applied"`
+		Pending int `json:"pending"`
+		Sources []struct {
+			Name       string `json:"name"`
+			Applied    int    `json:"applied"`
+			Pending    int    `json:"pending"`
+			Version    int    `json:"version"`
+			Downgraded bool   `json:"downgraded"`
+		} `json:"sources"`
+	}
+	if err := json.Unmarshal([]byte(r.stdout), &payload); err != nil {
+		t.Fatalf("status -o json output not parseable: %v\nstdout: %s", err, r.stdout)
+	}
+	if payload.Applied != 7 || payload.Pending != 0 {
+		t.Errorf("aggregate counts: got applied=%d pending=%d; want 7/0", payload.Applied, payload.Pending)
+	}
+	if len(payload.Sources) != 1 {
+		t.Fatalf("expected 1 source in JSON; got %d", len(payload.Sources))
+	}
+	s := payload.Sources[0]
+	if s.Name != "oss" || s.Applied != 7 || s.Pending != 0 || s.Version != 8 || s.Downgraded {
+		t.Errorf("source[0]: got %+v; want {oss 7 0 8 false}", s)
+	}
+
+	// Invalid --output rejected with a useful message.
+	r = runArctl(t, env, "db", "migrate", "status", "--output", "yaml")
+	if r.exitCode == 0 {
+		t.Fatalf("status --output yaml should fail; got exit 0\nstdout: %s", r.stdout)
+	}
+	if !strings.Contains(r.combined, "supported: text, json") {
+		t.Errorf("invalid --output error should name supported formats; got:\n%s", r.combined)
 	}
 }
 
