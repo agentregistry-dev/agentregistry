@@ -4,8 +4,9 @@
 package db
 
 import (
-	"github.com/agentregistry-dev/agentregistry/pkg/cli/db/migrate"
 	"github.com/spf13/cobra"
+
+	"github.com/agentregistry-dev/agentregistry/pkg/cli/db/migrate"
 )
 
 // NewCommand returns the `db` parent command with `migrate` attached.

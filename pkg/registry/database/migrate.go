@@ -87,26 +87,33 @@ func RunUpWithRecovery(mg *migrate.Migrate, name string) (preVersion uint, err e
 		return 0, fmt.Errorf("get pre-migration version for %s: %w", name, verr)
 	}
 
-	if upErr := mg.Up(); upErr != nil {
-		if errors.Is(upErr, migrate.ErrNoChange) {
-			return preVersion, nil
-		}
-		if preVersion == 0 {
-			// No prior version means there's nothing to recover to;
-			// the dirty row points at the migration that failed and an
-			// operator-facing message is the most actionable surface.
-			logger.Info("migration failed; no prior version to recover to — inspect schema for partial DDL before retry")
-		} else {
-			logger.Info(fmt.Sprintf("migration failed, clearing dirty bookkeeping back to v%d", preVersion), "target_version", preVersion)
-			if rbErr := RollbackToVersion(mg, name, preVersion); rbErr != nil {
-				logger.Error("dirty-bookkeeping recovery failed", "error", rbErr)
-			} else {
-				logger.Info(fmt.Sprintf("dirty bookkeeping cleared back to v%d; partial DDL from the failed migration may remain — inspect schema before retry", preVersion), "version", preVersion)
-			}
-		}
-		return preVersion, fmt.Errorf("run migrations for %s: %w", name, upErr)
+	upErr := mg.Up()
+	if upErr == nil || errors.Is(upErr, migrate.ErrNoChange) {
+		return preVersion, nil
 	}
-	return preVersion, nil
+	recoverFromFailedUp(logger, mg, name, preVersion)
+	return preVersion, fmt.Errorf("run migrations for %s: %w", name, upErr)
+}
+
+// recoverFromFailedUp clears go-migrate's dirty bookkeeping back to
+// preVersion when there's a prior version to recover to; otherwise it
+// logs an actionable note that the first migration left no row to
+// recover from. Schema-level cleanup is not attempted — see
+// RollbackToVersion's docstring.
+func recoverFromFailedUp(logger *slog.Logger, mg *migrate.Migrate, name string, preVersion uint) {
+	if preVersion == 0 {
+		// No prior version means there's nothing to recover to; the
+		// dirty row points at the migration that failed and an
+		// operator-facing message is the most actionable surface.
+		logger.Info("migration failed; no prior version to recover to — inspect schema for partial DDL before retry")
+		return
+	}
+	logger.Info(fmt.Sprintf("migration failed, clearing dirty bookkeeping back to v%d", preVersion), "target_version", preVersion)
+	if rbErr := RollbackToVersion(mg, name, preVersion); rbErr != nil {
+		logger.Error("dirty-bookkeeping recovery failed", "error", rbErr)
+		return
+	}
+	logger.Info(fmt.Sprintf("dirty bookkeeping cleared back to v%d; partial DDL from the failed migration may remain — inspect schema before retry", preVersion), "version", preVersion)
 }
 
 // RollbackToVersion clears go-migrate's dirty-state marker on mg and,
@@ -166,4 +173,3 @@ func RollbackToVersion(mg *migrate.Migrate, name string, targetVersion uint) err
 	}
 	return nil
 }
-

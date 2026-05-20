@@ -27,14 +27,14 @@ const bootstrapAdvisoryLockKey = int64(0x6172626f6f742d6f) // "arboot-o" — fir
 // On fresh installs and on deployments already bridged the function
 // no-ops. On a legacy DB it runs once in a single transaction:
 //
-//   1. Renames the legacy table to schema_migrations_v0_legacy
-//      (audit trail preserved).
-//   2. Creates the new go-migrate-shaped schema_migrations table.
-//   3. Inserts a single row whose version is the highest legacy OSS
-//      version that (a) sits in [201, 499] AND (b) has a matching
-//      NNN_*.up.sql in migrationsFS/dir, with the +200 offset
-//      stripped. Orphan legacy rows (no matching .up.sql) are
-//      skipped — the legacy table preserves them for forensics.
+//  1. Renames the legacy table to schema_migrations_v0_legacy
+//     (audit trail preserved).
+//  2. Creates the new go-migrate-shaped schema_migrations table.
+//  3. Inserts a single row whose version is the highest legacy OSS
+//     version that (a) sits in [201, 499] AND (b) has a matching
+//     NNN_*.up.sql in migrationsFS/dir, with the +200 offset
+//     stripped. Orphan legacy rows (no matching .up.sql) are
+//     skipped — the legacy table preserves them for forensics.
 //
 // Rows with `version >= 500` are intentionally left untouched in
 // schema_migrations_v0_legacy for downstream extension bootstraps to
