@@ -17,5 +17,8 @@
 --      a stock `postgres:18` (the Helm chart default) boots cleanly
 --      without pulling in a vector-capable image.
 --
--- Comment-only SQL is valid input: PostgreSQL parses zero statements
--- and the migrator records the version as applied.
+-- A trailing `SELECT 1;` is included so the file parses to a real
+-- statement rather than relying on PostgreSQL/pgx accepting an empty
+-- query.
+
+SELECT 1;
