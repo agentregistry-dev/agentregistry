@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -109,14 +110,17 @@ func ensureTemplate(ctx context.Context, adminConn *pgx.Conn) error {
 	templateURI := fmt.Sprintf(
 		"postgres://agentregistry:agentregistry@localhost:5432/%s?sslmode=disable",
 		v1alpha1TemplateDBName)
-	templateConn, err := pgx.Connect(ctx, templateURI)
+	mg, err := NewOSSMigrator(templateURI)
 	if err != nil {
-		return fmt.Errorf("connect to template: %w", err)
+		return fmt.Errorf("construct template migrator: %w", err)
 	}
-	defer func() { _ = templateConn.Close(ctx) }()
-
-	mig := pkgdb.NewMigrator(templateConn, MigratorConfig())
-	if err := mig.Migrate(ctx); err != nil {
+	defer func() {
+		srcErr, dbErr := mg.Close()
+		if srcErr != nil || dbErr != nil {
+			slog.Warn("error closing template migrator", "source_error", srcErr, "database_error", dbErr)
+		}
+	}()
+	if _, err := pkgdb.RunUpWithRecovery(mg, "v1alpha1-template"); err != nil {
 		return fmt.Errorf("apply v1alpha1 migrations: %w", err)
 	}
 	return nil

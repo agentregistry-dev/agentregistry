@@ -1,63 +1,43 @@
 package migrate
 
 import (
-	"cmp"
-	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
-	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/spf13/cobra"
+
 	"github.com/agentregistry-dev/agentregistry/pkg/cli/annotations"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
-	"github.com/jackc/pgx/v5"
-	"github.com/spf13/cobra"
 )
 
-const (
-	dbURLEnv       = "AGENT_REGISTRY_DATABASE_URL"
-	embeddingsFlag = "embeddings-enabled"
-	embeddingsEnv  = "AGENT_REGISTRY_EMBEDDINGS_ENABLED"
-)
+const dbURLEnv = "AGENT_REGISTRY_DATABASE_URL"
 
 // flags holds the migrate command's parsed flags.
 var flags struct {
-	dbURL             string
-	embeddingsEnabled bool
+	dbURL string
 }
 
-// migrateCmd holds the *cobra.Command instance built by NewCommand so
-// accessors (EmbeddingsEnabledOverride) can introspect parsed flag
-// state. nil before NewCommand is called (e.g. in subcommand-level unit
-// tests that construct only newUpCmd/newDownCmd), in which case the
-// accessors fall through to env.
-var migrateCmd *cobra.Command
-
-// NewCommand returns the `migrate` parent command with all subcommands
-// attached. Persistent flags (--db-url, --embeddings-enabled) and env
-// fallbacks are wired here so each subcommand inherits the same
-// connection setup.
+// NewCommand returns the `migrate` parent command with all
+// subcommands attached.
 func NewCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "migrate",
 		Short: "Apply, roll back, and inspect database migrations",
-		Long: `Apply, roll back, and inspect database migrations independently of
-server startup. Reads ` + dbURLEnv + ` from the environment when --db-url
-is omitted; reads ` + embeddingsEnv + ` when --` + embeddingsFlag + ` is omitted.`,
+		Long: `Apply, roll back, and inspect database migrations independently
+of server startup. Reads ` + dbURLEnv + ` from the environment when
+--db-url is omitted.`,
 		Annotations: map[string]string{
 			annotations.AnnotationSkipTokenResolution: "true",
 		},
 	}
-	cmd.PersistentFlags().StringVar(&flags.dbURL, "db-url",
-		"",
+	cmd.PersistentFlags().StringVar(&flags.dbURL, "db-url", "",
 		"PostgreSQL connection URL (defaults to value of "+dbURLEnv+" env var)")
-	cmd.PersistentFlags().BoolVar(&flags.embeddingsEnabled, embeddingsFlag,
-		false,
-		"Enable the pgvector-dependent embeddings migration (overrides "+embeddingsEnv+")")
 
-	migrateCmd = cmd
 	cmd.AddCommand(newUpCmd())
 	cmd.AddCommand(newDownCmd())
 	cmd.AddCommand(newStatusCmd())
@@ -67,51 +47,85 @@ is omitted; reads ` + embeddingsEnv + ` when --` + embeddingsFlag + ` is omitted
 	return cmd
 }
 
-// EmbeddingsEnabledOverride returns (value, true) when the user passed
-// --embeddings-enabled on the command line and (false, false) otherwise.
-// Source-registration BuildConfig closures use the (set==false) signal
-// to fall through to the env var so the CLI's view of the embeddings
-// flag matches the server's by default.
-func EmbeddingsEnabledOverride() (value bool, set bool) {
-	if migrateCmd == nil {
-		return false, false
+// resolveDSN returns the DSN from --db-url or the env fallback.
+func resolveDSN() (string, error) {
+	dsn := strings.TrimSpace(flags.dbURL)
+	if dsn == "" {
+		dsn = os.Getenv(dbURLEnv)
 	}
-	if !migrateCmd.PersistentFlags().Changed(embeddingsFlag) {
-		return false, false
+	if dsn == "" {
+		return "", fmt.Errorf("database URL not set; pass --db-url or set %s", dbURLEnv)
 	}
-	return flags.embeddingsEnabled, true
+	return dsn, nil
 }
 
-// orderedSource pairs a registered Source with its lazily-evaluated
-// MigratorConfig so the CLI can sort by VersionOffset without invoking
-// BuildConfig multiple times during sort comparisons.
-type orderedSource struct {
-	src Source
-	cfg database.MigratorConfig
-}
-
-// orderedSources returns the registered sources with their BuildConfig
-// results, sorted ascending by VersionOffset. CLI subcommands route
-// against this order instead of raw registration order so cross-package
-// init() ordering (which is not deterministic) can't silently mis-route
-// down/goto operations. Errors when two registered sources share a
-// VersionOffset — that's a misconfiguration that would otherwise route
-// silently to the first match.
-func orderedSources() ([]orderedSource, error) {
-	srcs := Sources()
-	out := make([]orderedSource, len(srcs))
-	for i, s := range srcs {
-		out[i] = orderedSource{src: s, cfg: s.BuildConfig()}
+// withSourceMigrator opens a *migrate.Migrate for src, runs fn, and
+// closes the migrator. Centralizes the open/close discipline so each
+// subcommand stays focused on its operation.
+func withSourceMigrator(src Source, dsn string, fn func(mg *migrate.Migrate) error) error {
+	mg, err := src.NewMigrator(dsn)
+	if err != nil {
+		return fmt.Errorf("construct %s migrator: %w", src.Name, err)
 	}
-	slices.SortStableFunc(out, func(a, b orderedSource) int {
-		return cmp.Compare(a.cfg.VersionOffset, b.cfg.VersionOffset)
-	})
-	for i := 1; i < len(out); i++ {
-		if out[i].cfg.VersionOffset == out[i-1].cfg.VersionOffset {
-			return nil, fmt.Errorf("misconfigured migration sources: %q and %q share VersionOffset %d", out[i-1].src.Name, out[i].src.Name, out[i].cfg.VersionOffset)
+	defer func() {
+		srcErr, dbErr := mg.Close()
+		if srcErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: closing %s migrator source: %v\n", src.Name, srcErr)
 		}
+		if dbErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: closing %s migrator db: %v\n", src.Name, dbErr)
+		}
+	}()
+	return fn(mg)
+}
+
+// soleSource returns the single registered source or an error
+// instructing the operator to pass --source (which arrives in a
+// later commit). Until --source lands, multi-source binaries are an
+// explicit unsupported configuration.
+func soleSource() (Source, error) {
+	srcs := Sources()
+	if len(srcs) == 0 {
+		return Source{}, errors.New("no migration sources registered")
 	}
-	return out, nil
+	if len(srcs) > 1 {
+		names := make([]string, 0, len(srcs))
+		for _, s := range srcs {
+			names = append(names, s.Name)
+		}
+		return Source{}, fmt.Errorf("multiple migration sources registered (%s); --source selection is a forthcoming feature", strings.Join(names, ", "))
+	}
+	return srcs[0], nil
+}
+
+// countSourceFiles returns the number of NNN_name.up.sql files in
+// src.Files/src.Dir. Used by status to compute "pending = total - applied"
+// without piercing migrate.Migrate's source-handle internals.
+func countSourceFiles(src Source) (int, error) {
+	entries, err := fs.ReadDir(src.Files, src.Dir)
+	if err != nil {
+		return 0, fmt.Errorf("read migration dir %s: %w", src.Dir, err)
+	}
+	n := 0
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if !strings.HasSuffix(name, ".up.sql") {
+			continue
+		}
+		// Sanity: must parse as NNN_*.
+		parts := strings.SplitN(name, "_", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		if _, err := strconv.Atoi(parts[0]); err != nil {
+			continue
+		}
+		n++
+	}
+	return n, nil
 }
 
 func newUpCmd() *cobra.Command {
@@ -120,32 +134,32 @@ func newUpCmd() *cobra.Command {
 		Short: "Apply all pending migrations",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return withConn(cmd.Context(), func(ctx context.Context, conn *pgx.Conn) error {
-				// Pre-count via Status so stdout carries the applied count
-				// for CI/CD consumers that filter slog output. Sources
-				// run in VersionOffset-ascending order so the OSS source
-				// (which owns table creation) runs before extensions.
-				total := 0
-				srcsList, oerr := orderedSources()
-				if oerr != nil {
-					return oerr
+			dsn, err := resolveDSN()
+			if err != nil {
+				return err
+			}
+			src, err := soleSource()
+			if err != nil {
+				return err
+			}
+			return withSourceMigrator(src, dsn, func(mg *migrate.Migrate) error {
+				preVersion, runErr := database.RunUpWithRecovery(mg, src.Name)
+				if runErr != nil {
+					return runErr
 				}
-				for _, src := range srcsList {
-					m := database.NewMigrator(conn, src.cfg)
-					_, pending, err := m.Status(ctx)
-					if err != nil {
-						return err
-					}
-					total += len(pending)
-					if err := m.Migrate(ctx); err != nil {
-						return err
-					}
+				postVersion, _, vErr := mg.Version()
+				if vErr != nil && !errors.Is(vErr, migrate.ErrNilVersion) {
+					return fmt.Errorf("read post-up version: %w", vErr)
 				}
-				if total == 0 {
+				if errors.Is(vErr, migrate.ErrNilVersion) {
+					postVersion = 0
+				}
+				applied := int(postVersion) - int(preVersion)
+				if applied == 0 {
 					fmt.Fprintln(cmd.OutOrStdout(), "no pending migrations; schema is up to date")
 					return nil
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "applied %d migration(s); schema is up to date\n", total)
+				fmt.Fprintf(cmd.OutOrStdout(), "applied %d migration(s); schema is up to date\n", applied)
 				return nil
 			})
 		},
@@ -162,33 +176,21 @@ func newDownCmd() *cobra.Command {
 			if err != nil || n < 1 {
 				return fmt.Errorf("expected a positive integer for N, got %q", args[0])
 			}
-			return withConn(cmd.Context(), func(ctx context.Context, conn *pgx.Conn) error {
-				remaining := n
-				// Roll back from the highest-offset source first; its
-				// applied migrations are the system's most-recent.
-				// orderedSources() sorts by VersionOffset so this is
-				// correct regardless of registration order.
-				srcs, oerr := orderedSources()
-				if oerr != nil {
-					return oerr
-				}
-				for i := len(srcs) - 1; i >= 0 && remaining > 0; i-- {
-					m := database.NewMigrator(conn, srcs[i].cfg)
-					applied, _, err := m.Status(ctx)
-					if err != nil {
-						return err
+			dsn, err := resolveDSN()
+			if err != nil {
+				return err
+			}
+			src, err := soleSource()
+			if err != nil {
+				return err
+			}
+			return withSourceMigrator(src, dsn, func(mg *migrate.Migrate) error {
+				if err := mg.Steps(-n); err != nil {
+					if errors.Is(err, migrate.ErrNoChange) {
+						fmt.Fprintln(cmd.OutOrStdout(), "no migrations to roll back")
+						return nil
 					}
-					toRollback := min(remaining, len(applied))
-					if toRollback == 0 {
-						continue
-					}
-					if err := m.Down(ctx, toRollback); err != nil {
-						return err
-					}
-					remaining -= toRollback
-				}
-				if remaining > 0 {
-					return fmt.Errorf("cannot roll back %d more migration(s); ran out of applied migrations", remaining)
+					return err
 				}
 				fmt.Fprintf(cmd.OutOrStdout(), "rolled back %d migration(s)\n", n)
 				return nil
@@ -203,22 +205,32 @@ func newStatusCmd() *cobra.Command {
 		Short: "Show how many migrations are applied vs pending",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return withConn(cmd.Context(), func(ctx context.Context, conn *pgx.Conn) error {
-				appliedTotal, pendingTotal := 0, 0
-				srcsList, oerr := orderedSources()
-				if oerr != nil {
-					return oerr
+			dsn, err := resolveDSN()
+			if err != nil {
+				return err
+			}
+			src, err := soleSource()
+			if err != nil {
+				return err
+			}
+			total, err := countSourceFiles(src)
+			if err != nil {
+				return err
+			}
+			return withSourceMigrator(src, dsn, func(mg *migrate.Migrate) error {
+				current, _, vErr := mg.Version()
+				if vErr != nil && !errors.Is(vErr, migrate.ErrNilVersion) {
+					return fmt.Errorf("read version: %w", vErr)
 				}
-				for _, src := range srcsList {
-					m := database.NewMigrator(conn, src.cfg)
-					applied, pending, err := m.Status(ctx)
-					if err != nil {
-						return err
-					}
-					appliedTotal += len(applied)
-					pendingTotal += len(pending)
+				if errors.Is(vErr, migrate.ErrNilVersion) {
+					current = 0
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "%d migration(s) applied, %d pending\n", appliedTotal, pendingTotal)
+				applied := int(current)
+				if applied > total {
+					applied = total
+				}
+				pending := total - applied
+				fmt.Fprintf(cmd.OutOrStdout(), "%d migration(s) applied, %d pending\n", applied, pending)
 				return nil
 			})
 		},
@@ -231,23 +243,23 @@ func newVersionCmd() *cobra.Command {
 		Short: "Print the highest applied migration version",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return withConn(cmd.Context(), func(ctx context.Context, conn *pgx.Conn) error {
-				maxV := 0
-				srcsList, oerr := orderedSources()
-				if oerr != nil {
-					return oerr
+			dsn, err := resolveDSN()
+			if err != nil {
+				return err
+			}
+			src, err := soleSource()
+			if err != nil {
+				return err
+			}
+			return withSourceMigrator(src, dsn, func(mg *migrate.Migrate) error {
+				current, _, vErr := mg.Version()
+				if vErr != nil && !errors.Is(vErr, migrate.ErrNilVersion) {
+					return fmt.Errorf("read version: %w", vErr)
 				}
-				for _, src := range srcsList {
-					m := database.NewMigrator(conn, src.cfg)
-					v, err := m.CurrentVersion(ctx)
-					if err != nil {
-						return err
-					}
-					if v > maxV {
-						maxV = v
-					}
+				if errors.Is(vErr, migrate.ErrNilVersion) {
+					current = 0
 				}
-				fmt.Fprintln(cmd.OutOrStdout(), maxV)
+				fmt.Fprintln(cmd.OutOrStdout(), current)
 				return nil
 			})
 		},
@@ -259,98 +271,39 @@ func newGotoCmd() *cobra.Command {
 		Use:   "goto V",
 		Short: "Move the schema to version V (forward or backward)",
 		Long: `Move the schema to version V (forward or backward).
-V=0 is the special "empty schema" target: every registered source is
-rolled back fully (errors with ErrNotReversible if any crossed migration
-lacks a .down.sql sibling).`,
+V=0 is the special "empty schema" target: every applied migration is
+rolled back.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			v, err := strconv.Atoi(args[0])
 			if err != nil || v < 0 {
 				return fmt.Errorf("expected a non-negative integer for V, got %q", args[0])
 			}
-			return withConn(cmd.Context(), func(ctx context.Context, conn *pgx.Conn) error {
-				srcs, oerr := orderedSources()
-				if oerr != nil {
-					return oerr
-				}
+			dsn, err := resolveDSN()
+			if err != nil {
+				return err
+			}
+			src, err := soleSource()
+			if err != nil {
+				return err
+			}
+			return withSourceMigrator(src, dsn, func(mg *migrate.Migrate) error {
 				if v == 0 {
-					// Roll back every source fully, highest-offset first
-					// so newer migrations come off before older ones.
-					for i := len(srcs) - 1; i >= 0; i-- {
-						m := database.NewMigrator(conn, srcs[i].cfg)
-						applied, _, err := m.Status(ctx)
-						if err != nil {
-							return err
-						}
-						if len(applied) == 0 {
-							continue
-						}
-						if err := m.Down(ctx, len(applied)); err != nil {
-							return err
-						}
+					if err := mg.Down(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+						return err
 					}
 					fmt.Fprintln(cmd.OutOrStdout(), "schema is at version 0 (empty)")
 					return nil
 				}
-				// Build (migrator, low, high) per source so we can route V.
-				type srcInfo struct {
-					m         *database.Migrator
-					low, high int
-				}
-				infos := make([]srcInfo, len(srcs))
-				targetIdx := -1
-				for i, src := range srcs {
-					mig := database.NewMigrator(conn, src.cfg)
-					low, high := sourceBoundsFromConfig(src.cfg)
-					infos[i] = srcInfo{m: mig, low: low, high: high}
-					// First-match wins (sources are pre-sorted by offset,
-					// so this is the lowest-offset match). Empty sources
-					// report a sentinel `(low, low-1)` range which matches
-					// no version, so they're naturally skipped here.
-					if targetIdx < 0 && v >= low && v <= high {
-						targetIdx = i
-					}
-				}
-				if targetIdx < 0 {
-					return fmt.Errorf("version %d is not in any registered source's range (may be filtered out by the Skip predicate)", v)
-				}
-				// Sources after targetIdx: roll back to floor.
-				for i := len(infos) - 1; i > targetIdx; i-- {
-					applied, _, err := infos[i].m.Status(ctx)
-					if err != nil {
-						return err
-					}
-					if len(applied) == 0 {
-						continue
-					}
-					if err := infos[i].m.Down(ctx, len(applied)); err != nil {
-						return err
-					}
-				}
-				// Sources before targetIdx: bring fully forward.
-				for i := 0; i < targetIdx; i++ {
-					if err := infos[i].m.Migrate(ctx); err != nil {
-						return err
-					}
-				}
-				// Target source: MigrateTo(v).
-				if err := infos[targetIdx].m.MigrateTo(ctx, v); err != nil {
+				if err := mg.Migrate(uint(v)); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 					return err
 				}
-				// Re-query so the output reflects actual schema state,
-				// not the requested target. Cheap insurance against the
-				// MigrateTo contract drifting; an authoritative read also
-				// helps operators trust the output as ground truth.
-				actual := 0
-				for _, src := range srcs {
-					m := database.NewMigrator(conn, src.cfg)
-					cv, err := m.CurrentVersion(ctx)
-					if err != nil {
-						return err
-					}
-					if cv > actual {
-						actual = cv
-					}
+				actual, _, vErr := mg.Version()
+				if vErr != nil && !errors.Is(vErr, migrate.ErrNilVersion) {
+					return fmt.Errorf("read version: %w", vErr)
+				}
+				if errors.Is(vErr, migrate.ErrNilVersion) {
+					actual = 0
 				}
 				fmt.Fprintf(cmd.OutOrStdout(), "schema is at version %d\n", actual)
 				return nil
@@ -364,74 +317,29 @@ func newForceCmd() *cobra.Command {
 		Use:   "force V",
 		Short: "Mark version V as applied without running its SQL",
 		Long: `Used to reconcile schema_migrations after manual remediation.
-The version V should come from a prior failure message; idempotent if the
-row already exists.`,
+The version V should come from a prior failure message.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			v, err := strconv.Atoi(args[0])
 			if err != nil || v < 1 {
 				return fmt.Errorf("expected a positive integer for V, got %q", args[0])
 			}
-			return withConn(cmd.Context(), func(ctx context.Context, conn *pgx.Conn) error {
-				srcsList, oerr := orderedSources()
-				if oerr != nil {
-					return oerr
+			dsn, err := resolveDSN()
+			if err != nil {
+				return err
+			}
+			src, err := soleSource()
+			if err != nil {
+				return err
+			}
+			return withSourceMigrator(src, dsn, func(mg *migrate.Migrate) error {
+				if err := mg.Force(v); err != nil {
+					return err
 				}
-				for _, src := range srcsList {
-					low, high := sourceBoundsFromConfig(src.cfg)
-					if v < low || v > high {
-						continue
-					}
-					m := database.NewMigrator(conn, src.cfg)
-					if err := m.Force(ctx, v); err != nil {
-						return err
-					}
-					fmt.Fprintf(cmd.OutOrStdout(), "version %d marked as applied\n", v)
-					return nil
-				}
-				return fmt.Errorf("version %d is not in any registered source's range (may be filtered out by the Skip predicate)", v)
+				fmt.Fprintf(cmd.OutOrStdout(), "version %d marked as applied\n", v)
+				return nil
 			})
 		},
 	}
 }
 
-// withConn opens a pgx connection from --db-url (or env), runs fn, and
-// closes the connection. Centralizes the DSN resolution + error wrapping
-// so each subcommand stays focused on its operation.
-func withConn(ctx context.Context, fn func(ctx context.Context, conn *pgx.Conn) error) error {
-	dsn := strings.TrimSpace(flags.dbURL)
-	if dsn == "" {
-		dsn = os.Getenv(dbURLEnv)
-	}
-	if dsn == "" {
-		return fmt.Errorf("database URL not set; pass --db-url or set %s", dbURLEnv)
-	}
-	conn, err := pgx.Connect(ctx, dsn)
-	if err != nil {
-		return fmt.Errorf("failed to connect to database: %w", err)
-	}
-	defer func() {
-		cerr := conn.Close(ctx)
-		if cerr == nil {
-			return
-		}
-		// Context cancellation / deadline produce close errors that
-		// reflect the cancel signal rather than a real fault — don't
-		// noisy-log either of them.
-		if errors.Is(cerr, context.Canceled) || errors.Is(cerr, context.DeadlineExceeded) {
-			return
-		}
-		// Connection close errors after the operation succeeded
-		// shouldn't mask the operation's result; log via stderr.
-		fmt.Fprintf(os.Stderr, "warning: failed to close db connection: %v\n", cerr)
-	}()
-	return fn(ctx, conn)
-}
-
-// sourceBoundsFromConfig is a thin wrapper over database.SourceRange so
-// the CLI's routing math goes through the same path as the Migrator's
-// internal range checks. Kept as a local name so future refactors that
-// add CLI-specific concerns (Skip overrides, etc.) land here.
-func sourceBoundsFromConfig(cfg database.MigratorConfig) (int, int) {
-	return database.SourceRange(cfg)
-}

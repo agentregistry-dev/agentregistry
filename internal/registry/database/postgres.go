@@ -13,6 +13,8 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
+const ossMigratorName = "oss"
+
 // PostgreSQL is the root PostgreSQL-backed store. It owns the connection
 // pool; per-kind v1alpha1 access happens via NewStores against
 // db.Pool().
@@ -59,14 +61,17 @@ func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authori
 		return &PostgreSQL{pool: pool, authz: authz}, nil
 	}
 
-	conn, err := pool.Acquire(ctx)
+	mg, err := v1alpha1store.NewOSSMigrator(connectionURI)
 	if err != nil {
-		return nil, fmt.Errorf("failed to acquire connection for migrations: %w", err)
+		return nil, fmt.Errorf("failed to construct v1alpha1 migrator: %w", err)
 	}
-	defer conn.Release()
-
-	v1alpha1Migrator := database.NewMigrator(conn.Conn(), v1alpha1store.MigratorConfig())
-	if err := v1alpha1Migrator.Migrate(ctx); err != nil {
+	defer func() {
+		srcErr, dbErr := mg.Close()
+		if srcErr != nil || dbErr != nil {
+			slog.Warn("error closing v1alpha1 migrator", "source_error", srcErr, "database_error", dbErr)
+		}
+	}()
+	if _, err := database.RunUpWithRecovery(mg, ossMigratorName); err != nil {
 		return nil, fmt.Errorf("failed to run v1alpha1 migrations: %w", err)
 	}
 

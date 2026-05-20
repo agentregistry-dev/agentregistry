@@ -20,7 +20,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/cli/db"
 	"github.com/agentregistry-dev/agentregistry/pkg/cli/db/migrate"
 	"github.com/agentregistry-dev/agentregistry/pkg/daemon/dockercompose"
-	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
@@ -146,13 +145,14 @@ func init() {
 	rootCmd.AddCommand(declarative.PullCmd)
 	rootCmd.AddCommand(db.NewCommand())
 
-	// Register the OSS migration source. BuildConfig is evaluated at
-	// command-execution time so the CLI's view matches the server's.
+	// Register the OSS migration source. Each source carries its own
+	// embedded FS so the CLI can compute pending-migration counts
+	// without piercing migrate.Migrate's internals.
 	migrate.Register(migrate.Source{
-		Name: "oss",
-		BuildConfig: func() database.MigratorConfig {
-			return v1alpha1store.MigratorConfig()
-		},
+		Name:        "oss",
+		NewMigrator: v1alpha1store.NewOSSMigrator,
+		Files:       v1alpha1store.MigrationFiles,
+		Dir:         "migrations",
 	})
 }
 
