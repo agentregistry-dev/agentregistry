@@ -95,10 +95,16 @@ func (c *Coordinator) Apply(ctx context.Context, deployment *v1alpha1.Deployment
 
 	target, err := c.resolveTarget(ctx, deployment)
 	if err != nil {
+		if errors.Is(err, v1alpha1.ErrDanglingRef) {
+			return c.persistReferencePending(ctx, deployment, err)
+		}
 		return err
 	}
 	runtime, err := c.resolveRuntime(ctx, deployment)
 	if err != nil {
+		if errors.Is(err, v1alpha1.ErrDanglingRef) {
+			return c.persistReferencePending(ctx, deployment, err)
+		}
 		return err
 	}
 
@@ -122,6 +128,22 @@ func (c *Coordinator) Apply(ctx context.Context, deployment *v1alpha1.Deployment
 	}
 
 	return c.persistApplyResult(ctx, deployment, result)
+}
+
+func (c *Coordinator) persistReferencePending(ctx context.Context, deployment *v1alpha1.Deployment, cause error) error {
+	message := "referenced resource is not available yet"
+	if cause != nil {
+		message = cause.Error()
+	}
+	return c.persistApplyResult(ctx, deployment, &types.ApplyResult{
+		Conditions: []v1alpha1.Condition{{
+			Type:               "Ready",
+			Status:             v1alpha1.ConditionFalse,
+			Reason:             "ReferencePending",
+			Message:            message,
+			ObservedGeneration: deployment.Metadata.Generation,
+		}},
+	})
 }
 
 // Remove tears down a Deployment's runtime resources via the adapter and

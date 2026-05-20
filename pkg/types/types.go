@@ -17,6 +17,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	v0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
@@ -66,6 +67,84 @@ type PostUpsert func(ctx context.Context, obj v1alpha1.Object) error
 // resource. Wired into resource.Config.PostDelete + the apply
 // batch's per-doc delete hook.
 type PostDelete func(ctx context.Context, obj v1alpha1.Object) error
+
+const (
+	AdmissionSourceApply  = "apply"
+	AdmissionSourceDelete = "delete"
+	AdmissionSourceImport = "import"
+)
+
+// Admission owns the final write decision for an apply request after authz,
+// validation, reference resolution, and registry checks have passed. The OSS
+// default writes to production; downstream integrations can wrap that behavior
+// to stage, reject, or otherwise route the write.
+//
+// TODO(krt): this belongs to the synchronous handler architecture. Prefer a
+// reconciler-owned admission/staging model when KRT becomes the write path, and
+// delete this bridge once no downstream route depends on it.
+type Admission func(ctx context.Context, in AdmissionInput) (AdmissionResult, error)
+
+type AdmissionInput struct {
+	Source            string
+	Verb              string
+	DryRun            bool
+	Kind              string
+	Namespace         string
+	Name              string
+	Tag               string
+	Object            v1alpha1.Object
+	Store             any
+	PostUpsert        PostUpsert
+	InitialFinalizers func(v1alpha1.Object) []string
+}
+
+type AdmissionResult struct {
+	Status     string
+	Tag        string
+	Generation int64
+}
+
+// DeleteAdmission owns the final delete decision after authz has passed. The
+// OSS default deletes from production; downstream integrations can stage,
+// reject, or otherwise route the delete before production storage is touched.
+//
+// TODO(krt): temporary synchronous-handler bridge; remove with reconciler
+// admission/staging.
+type DeleteAdmission func(ctx context.Context, in DeleteAdmissionInput) (DeleteAdmissionResult, error)
+
+type DeleteAdmissionInput struct {
+	Source     string
+	Verb       string
+	DryRun     bool
+	Kind       string
+	Namespace  string
+	Name       string
+	Tag        string
+	Object     v1alpha1.Object
+	Store      any
+	PostDelete PostDelete
+	Force      bool
+}
+
+type DeleteAdmissionResult struct {
+	Status string
+	Tag    string
+}
+
+// ResourceRouteContext exposes the finalized v1alpha1 route wiring to
+// downstream integrations that need adjacent routes against the same stores
+// and hooks as /v0/apply.
+//
+// TODO(krt): this is a temporary way for downstream synchronous routes to reuse
+// production apply wiring. KRT should make this unnecessary by owning the
+// staging-to-production transition outside HTTP route callbacks.
+type ResourceRouteContext struct {
+	Stores            map[string]any
+	Resolver          v1alpha1.ResolverFunc
+	RegistryValidator v1alpha1.RegistryValidatorFunc
+	Apply             func(ctx context.Context, obj v1alpha1.Object, dryRun bool) v0.ApplyResult
+	Delete            func(ctx context.Context, obj v1alpha1.Object, dryRun bool) v0.ApplyResult
+}
 
 // Auditor receives audit events for state changes that the OSS layer
 // considers significant. The default OSS implementation is a no-op;
@@ -152,6 +231,23 @@ type AppOptions struct {
 	// PostDeletes mirror PostUpserts on the delete path.
 	PostDeletes map[string]PostDelete
 
+	// Admission optionally accepts a validated write before the row reaches
+	// production storage. Nil preserves normal direct writes.
+	// TODO(krt): temporary synchronous-handler bridge; remove with reconciler
+	// admission/staging.
+	Admission Admission
+
+	// DeleteAdmission optionally accepts an authorized delete before the row is
+	// removed from production storage. Nil preserves normal direct deletes.
+	// TODO(krt): temporary synchronous-handler bridge; remove with reconciler
+	// admission/staging.
+	DeleteAdmission DeleteAdmission
+
+	// ResolverWrapper decorates the shared ResourceRef resolver before route
+	// registration. Nil preserves the default store-backed resolver.
+	// TODO(krt): temporary bridge for pending staged refs in HTTP apply.
+	ResolverWrapper func(v1alpha1.ResolverFunc) v1alpha1.ResolverFunc
+
 	// V1Alpha1StoreTables registers additional v1alpha1 kinds with their
 	// backing PostgreSQL tables. Downstream builds that add their own
 	// Scheme kinds should populate this so the shared /v0/apply,
@@ -197,6 +293,11 @@ type AppOptions struct {
 	// routes using the same API instance and path prefix as OSS core
 	// routes.
 	ExtraRoutes func(api huma.API, pathPrefix string)
+
+	// ExtraResourceRoutes is like ExtraRoutes, but runs after the v1alpha1
+	// resource route context has been finalized.
+	// TODO(krt): temporary bridge for downstream synchronous approval routes.
+	ExtraResourceRoutes func(api huma.API, pathPrefix string, ctx ResourceRouteContext)
 
 	// HTTPServerFactory is an optional function to create a server that
 	// adds new API routes.
