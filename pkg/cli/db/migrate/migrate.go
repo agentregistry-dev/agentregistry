@@ -15,11 +15,14 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
 
-const dbURLEnv = "AGENT_REGISTRY_DATABASE_URL"
+const (
+	dbURLEnv   = "AGENT_REGISTRY_DATABASE_URL"
+	sourceFlag = "source"
+)
 
-// flags holds the migrate command's parsed flags.
 var flags struct {
-	dbURL string
+	dbURL  string
+	source string
 }
 
 // NewCommand returns the `migrate` parent command with all
@@ -30,13 +33,19 @@ func NewCommand() *cobra.Command {
 		Short: "Apply, roll back, and inspect database migrations",
 		Long: `Apply, roll back, and inspect database migrations independently
 of server startup. Reads ` + dbURLEnv + ` from the environment when
---db-url is omitted.`,
+--db-url is omitted.
+
+When more than one migration source is registered, per-source
+operations (down, goto, force, version) require --source. up and
+status aggregate across all registered sources without a flag.`,
 		Annotations: map[string]string{
 			annotations.AnnotationSkipTokenResolution: "true",
 		},
 	}
 	cmd.PersistentFlags().StringVar(&flags.dbURL, "db-url", "",
 		"PostgreSQL connection URL (defaults to value of "+dbURLEnv+" env var)")
+	cmd.PersistentFlags().StringVar(&flags.source, sourceFlag, "",
+		"Migration source name (required for per-source ops when more than one source is registered)")
 
 	cmd.AddCommand(newUpCmd())
 	cmd.AddCommand(newDownCmd())
@@ -47,7 +56,6 @@ of server startup. Reads ` + dbURLEnv + ` from the environment when
 	return cmd
 }
 
-// resolveDSN returns the DSN from --db-url or the env fallback.
 func resolveDSN() (string, error) {
 	dsn := strings.TrimSpace(flags.dbURL)
 	if dsn == "" {
@@ -59,9 +67,40 @@ func resolveDSN() (string, error) {
 	return dsn, nil
 }
 
-// withSourceMigrator opens a *migrate.Migrate for src, runs fn, and
-// closes the migrator. Centralizes the open/close discipline so each
-// subcommand stays focused on its operation.
+// resolveSource picks the source for a per-source operation. With one
+// source registered it's returned directly; with more than one the
+// operator must pass --source and we report the registered set when
+// they don't.
+func resolveSource() (Source, error) {
+	srcs := Sources()
+	if len(srcs) == 0 {
+		return Source{}, errors.New("no migration sources registered")
+	}
+	if len(srcs) == 1 {
+		if flags.source != "" && flags.source != srcs[0].Name {
+			return Source{}, fmt.Errorf("--source %q not registered; registered source: %s", flags.source, srcs[0].Name)
+		}
+		return srcs[0], nil
+	}
+	if flags.source == "" {
+		return Source{}, fmt.Errorf("registered sources: %s; pass --source", sourceNames(srcs))
+	}
+	for _, s := range srcs {
+		if s.Name == flags.source {
+			return s, nil
+		}
+	}
+	return Source{}, fmt.Errorf("--source %q not registered; registered sources: %s", flags.source, sourceNames(srcs))
+}
+
+func sourceNames(srcs []Source) string {
+	names := make([]string, len(srcs))
+	for i, s := range srcs {
+		names[i] = s.Name
+	}
+	return strings.Join(names, ", ")
+}
+
 func withSourceMigrator(src Source, dsn string, fn func(mg *migrate.Migrate) error) error {
 	mg, err := src.NewMigrator(dsn)
 	if err != nil {
@@ -79,28 +118,21 @@ func withSourceMigrator(src Source, dsn string, fn func(mg *migrate.Migrate) err
 	return fn(mg)
 }
 
-// soleSource returns the single registered source or an error
-// instructing the operator to pass --source (which arrives in a
-// later commit). Until --source lands, multi-source binaries are an
-// explicit unsupported configuration.
-func soleSource() (Source, error) {
-	srcs := Sources()
-	if len(srcs) == 0 {
-		return Source{}, errors.New("no migration sources registered")
-	}
-	if len(srcs) > 1 {
-		names := make([]string, 0, len(srcs))
-		for _, s := range srcs {
-			names = append(names, s.Name)
+// readVersion returns the highest applied version for mg, treating
+// ErrNilVersion (nothing applied) as 0.
+func readVersion(mg *migrate.Migrate) (uint, error) {
+	v, _, err := mg.Version()
+	if err != nil {
+		if errors.Is(err, migrate.ErrNilVersion) {
+			return 0, nil
 		}
-		return Source{}, fmt.Errorf("multiple migration sources registered (%s); --source selection is a forthcoming feature", strings.Join(names, ", "))
+		return 0, fmt.Errorf("read version: %w", err)
 	}
-	return srcs[0], nil
+	return v, nil
 }
 
 // countSourceFiles returns the number of NNN_name.up.sql files in
-// src.Files/src.Dir. Used by status to compute "pending = total - applied"
-// without piercing migrate.Migrate's source-handle internals.
+// src.Files/src.Dir.
 func countSourceFiles(src Source) (int, error) {
 	entries, err := fs.ReadDir(src.Files, src.Dir)
 	if err != nil {
@@ -115,7 +147,6 @@ func countSourceFiles(src Source) (int, error) {
 		if !strings.HasSuffix(name, ".up.sql") {
 			continue
 		}
-		// Sanity: must parse as NNN_*.
 		parts := strings.SplitN(name, "_", 2)
 		if len(parts) != 2 {
 			continue
@@ -128,40 +159,93 @@ func countSourceFiles(src Source) (int, error) {
 	return n, nil
 }
 
+// upSnapshot tracks (src, mg, preVersion) for cross-track rollback.
+// The migrator is held open until the loop finishes so a rollback
+// after a later-track failure can call RollbackToVersion on a still-
+// initialized handle.
+type upSnapshot struct {
+	src        Source
+	mg         *migrate.Migrate
+	preVersion uint
+}
+
+// closeUpSnapshots closes every snapshot's migrator. Best-effort; any
+// close errors are logged via stderr but don't bubble up because the
+// op succeeded or failed already.
+func closeUpSnapshots(snaps []upSnapshot) {
+	for _, s := range snaps {
+		srcErr, dbErr := s.mg.Close()
+		if srcErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: closing %s migrator source: %v\n", s.src.Name, srcErr)
+		}
+		if dbErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: closing %s migrator db: %v\n", s.src.Name, dbErr)
+		}
+	}
+}
+
 func newUpCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "up",
-		Short: "Apply all pending migrations",
+		Short: "Apply all pending migrations across every registered source",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			dsn, err := resolveDSN()
 			if err != nil {
 				return err
 			}
-			src, err := soleSource()
-			if err != nil {
-				return err
+			srcs := Sources()
+			if len(srcs) == 0 {
+				return errors.New("no migration sources registered")
 			}
-			return withSourceMigrator(src, dsn, func(mg *migrate.Migrate) error {
-				preVersion, runErr := database.RunUpWithRecovery(mg, src.Name)
-				if runErr != nil {
+
+			// Snapshot pre-versions across all sources; iterate in
+			// registration order. On failure of source N, roll
+			// sources 0..N-1 back to their pre-versions so the whole
+			// `up` is atomic across tracks.
+			snaps := make([]upSnapshot, 0, len(srcs))
+			defer func() { closeUpSnapshots(snaps) }()
+
+			for _, src := range srcs {
+				mg, err := src.NewMigrator(dsn)
+				if err != nil {
+					return fmt.Errorf("construct %s migrator: %w", src.Name, err)
+				}
+				preVersion, err := readVersion(mg)
+				if err != nil {
+					_, _ = mg.Close()
+					return fmt.Errorf("read pre-version for %s: %w", src.Name, err)
+				}
+				snaps = append(snaps, upSnapshot{src: src, mg: mg, preVersion: preVersion})
+
+				if _, runErr := database.RunUpWithRecovery(mg, src.Name); runErr != nil {
+					// Roll prior sources back to their pre-up versions.
+					for i := len(snaps) - 2; i >= 0; i-- {
+						prior := snaps[i]
+						if rbErr := database.RollbackToVersion(prior.mg, prior.src.Name, prior.preVersion); rbErr != nil {
+							fmt.Fprintf(os.Stderr, "warning: cross-track rollback of %s failed: %v\n", prior.src.Name, rbErr)
+						}
+					}
 					return runErr
 				}
-				postVersion, _, vErr := mg.Version()
-				if vErr != nil && !errors.Is(vErr, migrate.ErrNilVersion) {
-					return fmt.Errorf("read post-up version: %w", vErr)
+			}
+
+			// Aggregate applied count across all sources from
+			// post-Up versions.
+			totalApplied := 0
+			for _, s := range snaps {
+				postVersion, err := readVersion(s.mg)
+				if err != nil {
+					return err
 				}
-				if errors.Is(vErr, migrate.ErrNilVersion) {
-					postVersion = 0
-				}
-				applied := int(postVersion) - int(preVersion)
-				if applied == 0 {
-					fmt.Fprintln(cmd.OutOrStdout(), "no pending migrations; schema is up to date")
-					return nil
-				}
-				fmt.Fprintf(cmd.OutOrStdout(), "applied %d migration(s); schema is up to date\n", applied)
+				totalApplied += int(postVersion) - int(s.preVersion)
+			}
+			if totalApplied == 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), "no pending migrations; schema is up to date")
 				return nil
-			})
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "applied %d migration(s); schema is up to date\n", totalApplied)
+			return nil
 		},
 	}
 }
@@ -169,7 +253,7 @@ func newUpCmd() *cobra.Command {
 func newDownCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "down N",
-		Short: "Roll back the N most-recent applied migrations",
+		Short: "Roll back the N most-recent applied migrations for the selected source",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			n, err := strconv.Atoi(args[0])
@@ -180,7 +264,7 @@ func newDownCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			src, err := soleSource()
+			src, err := resolveSource()
 			if err != nil {
 				return err
 			}
@@ -202,37 +286,55 @@ func newDownCmd() *cobra.Command {
 func newStatusCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
-		Short: "Show how many migrations are applied vs pending",
+		Short: "Show how many migrations are applied vs pending across all sources",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			dsn, err := resolveDSN()
 			if err != nil {
 				return err
 			}
-			src, err := soleSource()
-			if err != nil {
-				return err
+			srcs := Sources()
+			if len(srcs) == 0 {
+				return errors.New("no migration sources registered")
 			}
-			total, err := countSourceFiles(src)
-			if err != nil {
-				return err
+
+			type lineRow struct {
+				src     Source
+				applied int
+				pending int
 			}
-			return withSourceMigrator(src, dsn, func(mg *migrate.Migrate) error {
-				current, _, vErr := mg.Version()
-				if vErr != nil && !errors.Is(vErr, migrate.ErrNilVersion) {
-					return fmt.Errorf("read version: %w", vErr)
+			lines := make([]lineRow, 0, len(srcs))
+			appliedTotal, pendingTotal := 0, 0
+			for _, src := range srcs {
+				total, err := countSourceFiles(src)
+				if err != nil {
+					return err
 				}
-				if errors.Is(vErr, migrate.ErrNilVersion) {
-					current = 0
-				}
-				applied := int(current)
-				if applied > total {
-					applied = total
+				var applied int
+				if rerr := withSourceMigrator(src, dsn, func(mg *migrate.Migrate) error {
+					v, err := readVersion(mg)
+					if err != nil {
+						return err
+					}
+					applied = min(int(v), total)
+					return nil
+				}); rerr != nil {
+					return rerr
 				}
 				pending := total - applied
-				fmt.Fprintf(cmd.OutOrStdout(), "%d migration(s) applied, %d pending\n", applied, pending)
-				return nil
-			})
+				lines = append(lines, lineRow{src: src, applied: applied, pending: pending})
+				appliedTotal += applied
+				pendingTotal += pending
+			}
+
+			out := cmd.OutOrStdout()
+			fmt.Fprintf(out, "%d migration(s) applied, %d pending\n", appliedTotal, pendingTotal)
+			if len(lines) > 1 {
+				for _, l := range lines {
+					fmt.Fprintf(out, "  %s: %d applied, %d pending\n", l.src.Name, l.applied, l.pending)
+				}
+			}
+			return nil
 		},
 	}
 }
@@ -241,27 +343,43 @@ func newVersionCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
 		Short: "Print the highest applied migration version",
-		Args:  cobra.NoArgs,
+		Long: `Print the highest applied migration version.
+For a single registered source the value is on one line; multi-source
+binaries print one line per source.`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			dsn, err := resolveDSN()
 			if err != nil {
 				return err
 			}
-			src, err := soleSource()
-			if err != nil {
-				return err
+			srcs := Sources()
+			if len(srcs) == 0 {
+				return errors.New("no migration sources registered")
 			}
-			return withSourceMigrator(src, dsn, func(mg *migrate.Migrate) error {
-				current, _, vErr := mg.Version()
-				if vErr != nil && !errors.Is(vErr, migrate.ErrNilVersion) {
-					return fmt.Errorf("read version: %w", vErr)
+			out := cmd.OutOrStdout()
+			if len(srcs) == 1 {
+				return withSourceMigrator(srcs[0], dsn, func(mg *migrate.Migrate) error {
+					v, err := readVersion(mg)
+					if err != nil {
+						return err
+					}
+					fmt.Fprintln(out, v)
+					return nil
+				})
+			}
+			for _, src := range srcs {
+				if err := withSourceMigrator(src, dsn, func(mg *migrate.Migrate) error {
+					v, err := readVersion(mg)
+					if err != nil {
+						return err
+					}
+					fmt.Fprintf(out, "%s: %d\n", src.Name, v)
+					return nil
+				}); err != nil {
+					return err
 				}
-				if errors.Is(vErr, migrate.ErrNilVersion) {
-					current = 0
-				}
-				fmt.Fprintln(cmd.OutOrStdout(), current)
-				return nil
-			})
+			}
+			return nil
 		},
 	}
 }
@@ -269,10 +387,10 @@ func newVersionCmd() *cobra.Command {
 func newGotoCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "goto V",
-		Short: "Move the schema to version V (forward or backward)",
-		Long: `Move the schema to version V (forward or backward).
-V=0 is the special "empty schema" target: every applied migration is
-rolled back.`,
+		Short: "Move the selected source's schema to version V",
+		Long: `Move the selected source's schema to version V (forward or backward).
+V=0 is the special "empty schema" target: every applied migration in
+the source is rolled back.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			v, err := strconv.Atoi(args[0])
@@ -283,7 +401,7 @@ rolled back.`,
 			if err != nil {
 				return err
 			}
-			src, err := soleSource()
+			src, err := resolveSource()
 			if err != nil {
 				return err
 			}
@@ -298,12 +416,9 @@ rolled back.`,
 				if err := mg.Migrate(uint(v)); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 					return err
 				}
-				actual, _, vErr := mg.Version()
-				if vErr != nil && !errors.Is(vErr, migrate.ErrNilVersion) {
-					return fmt.Errorf("read version: %w", vErr)
-				}
-				if errors.Is(vErr, migrate.ErrNilVersion) {
-					actual = 0
+				actual, aerr := readVersion(mg)
+				if aerr != nil {
+					return aerr
 				}
 				fmt.Fprintf(cmd.OutOrStdout(), "schema is at version %d\n", actual)
 				return nil
@@ -316,8 +431,9 @@ func newForceCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "force V",
 		Short: "Mark version V as applied without running its SQL",
-		Long: `Used to reconcile schema_migrations after manual remediation.
-The version V should come from a prior failure message.`,
+		Long: `Used to reconcile the selected source's schema_migrations table
+after manual remediation. The version V should come from a prior
+failure message.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			v, err := strconv.Atoi(args[0])
@@ -328,7 +444,7 @@ The version V should come from a prior failure message.`,
 			if err != nil {
 				return err
 			}
-			src, err := soleSource()
+			src, err := resolveSource()
 			if err != nil {
 				return err
 			}
@@ -342,4 +458,3 @@ The version V should come from a prior failure message.`,
 		},
 	}
 }
-
