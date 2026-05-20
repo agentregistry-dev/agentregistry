@@ -269,8 +269,8 @@ func TestE2E_ArgValidation(t *testing.T) {
 // ============================================================================
 
 // TestE2E_HappyPath — `up` → `status` → `version` against a fresh
-// Postgres. Asserts exit 0 on each step, the stdout shape CI/CD shell
-// scripts grep for, and a non-zero version after migrations apply.
+// Postgres. Asserts exit 0 on each step, the operator-facing stdout
+// shape, and the post-Up version (8 — the highest OSS migration).
 func TestE2E_HappyPath(t *testing.T) {
 	dsn := freshDB(t)
 	env := append(stripARRegistryEnv(), "AGENT_REGISTRY_DATABASE_URL="+dsn)
@@ -287,8 +287,8 @@ func TestE2E_HappyPath(t *testing.T) {
 	if r.exitCode != 0 {
 		t.Fatalf("status: exit %d\nstderr: %s", r.exitCode, r.stderr)
 	}
-	if !strings.Contains(r.stdout, "migration(s) applied") || !strings.Contains(r.stdout, "0 pending") {
-		t.Errorf("status stdout shape unexpected: %q", r.stdout)
+	if !strings.Contains(r.stdout, "7 migration(s) applied, 0 pending") {
+		t.Errorf("status should show 7 applied, 0 pending; got: %q", r.stdout)
 	}
 
 	r = runArctl(t, env, "db", "migrate", "version")
@@ -296,14 +296,15 @@ func TestE2E_HappyPath(t *testing.T) {
 		t.Fatalf("version: exit %d\nstderr: %s", r.exitCode, r.stderr)
 	}
 	v := strings.TrimSpace(r.stdout)
-	if v == "" || v == "0" {
-		t.Errorf("version stdout should be a non-zero integer; got %q", v)
+	if v != "8" {
+		t.Errorf("version should be 8 (highest OSS migration); got %q", v)
 	}
 }
 
-// TestE2E_DownErrNotReversible — OSS migrations 001-006 ship up-only.
-// `down 1` after a successful `up` must fail with non-zero exit and an
-// error mentioning irreversibility / the missing .down.sql sibling.
+// TestE2E_DownErrNotReversible — every OSS migration ships an
+// up-only .down.sql that RAISES EXCEPTION. `down 1` after a
+// successful `up` must fail and the error must mention
+// "not reversible" so operators see why.
 func TestE2E_DownErrNotReversible(t *testing.T) {
 	dsn := freshDB(t)
 	env := append(stripARRegistryEnv(), "AGENT_REGISTRY_DATABASE_URL="+dsn)
@@ -316,25 +317,25 @@ func TestE2E_DownErrNotReversible(t *testing.T) {
 	if r.exitCode == 0 {
 		t.Fatalf("down 1 against up-only OSS should fail; got exit 0\nstdout: %s", r.stdout)
 	}
-	if !strings.Contains(r.combined, "reversible") && !strings.Contains(r.combined, ".down.sql") {
-		t.Errorf("error should reference reversibility / .down.sql; got:\n%s", r.combined)
+	if !strings.Contains(r.combined, "not reversible") {
+		t.Errorf("error should reference 'not reversible'; got:\n%s", r.combined)
 	}
 }
 
 // TestE2E_ForceWritesRowOnly — `force V` writes the schema_migrations
-// row without running the migration SQL. After `force 201` against a
+// row without running the migration SQL. After `force 1` against a
 // fresh DB, status reports 1 applied and no public tables besides
-// schema_migrations itself exist (force did NOT run 001's CREATE TABLE
-// statements).
+// schema_migrations itself exist (force did NOT run 001's CREATE
+// TABLE statements).
 func TestE2E_ForceWritesRowOnly(t *testing.T) {
 	dsn := freshDB(t)
 	env := append(stripARRegistryEnv(), "AGENT_REGISTRY_DATABASE_URL="+dsn)
 
-	r := runArctl(t, env, "db", "migrate", "force", "201")
+	r := runArctl(t, env, "db", "migrate", "force", "1")
 	if r.exitCode != 0 {
-		t.Fatalf("force 201: exit %d\nstderr: %s", r.exitCode, r.stderr)
+		t.Fatalf("force 1: exit %d\nstderr: %s", r.exitCode, r.stderr)
 	}
-	if !strings.Contains(r.stdout, "201") || !strings.Contains(r.stdout, "applied") {
+	if !strings.Contains(r.stdout, "1") || !strings.Contains(r.stdout, "applied") {
 		t.Errorf("force stdout shape unexpected: %q", r.stdout)
 	}
 
@@ -346,8 +347,10 @@ func TestE2E_ForceWritesRowOnly(t *testing.T) {
 		t.Errorf("status should show 1 applied; got %q", r.stdout)
 	}
 
-	// Verify force did NOT run 001's CREATE TABLE statements. The only
-	// public table should be schema_migrations (created by EnsureTable).
+	// Verify force did NOT run 001's CREATE SCHEMA / CREATE TABLE
+	// statements. The only public table should be schema_migrations
+	// (created by go-migrate's pgx/v5 driver on first use); no v1alpha1
+	// schema should exist.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	conn, err := pgx.Connect(ctx, dsn)
@@ -363,6 +366,41 @@ func TestE2E_ForceWritesRowOnly(t *testing.T) {
 		t.Fatalf("count public tables: %v", err)
 	}
 	if extraTables != 0 {
-		t.Errorf("expected only schema_migrations in public schema after `force 201`; got %d extra tables", extraTables)
+		t.Errorf("expected only schema_migrations in public schema after `force 1`; got %d extra tables", extraTables)
+	}
+
+	var v1alpha1Exists bool
+	if err := conn.QueryRow(ctx,
+		"SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'v1alpha1')",
+	).Scan(&v1alpha1Exists); err != nil {
+		t.Fatalf("probe v1alpha1 schema: %v", err)
+	}
+	if v1alpha1Exists {
+		t.Errorf("v1alpha1 schema must NOT exist after `force 1` (migration SQL did not run)")
+	}
+}
+
+// TestE2E_GotoInferredSource — single-source binaries accept
+// per-source ops without --source. Asserts `goto 2` against a fresh
+// DB advances the schema to version 2 and the version subcommand
+// confirms it.
+func TestE2E_GotoInferredSource(t *testing.T) {
+	dsn := freshDB(t)
+	env := append(stripARRegistryEnv(), "AGENT_REGISTRY_DATABASE_URL="+dsn)
+
+	r := runArctl(t, env, "db", "migrate", "goto", "2")
+	if r.exitCode != 0 {
+		t.Fatalf("goto 2: exit %d\nstderr: %s", r.exitCode, r.stderr)
+	}
+	if !strings.Contains(r.stdout, "schema is at version 2") {
+		t.Errorf("goto 2 stdout unexpected: %q", r.stdout)
+	}
+
+	r = runArctl(t, env, "db", "migrate", "version")
+	if r.exitCode != 0 {
+		t.Fatalf("version: exit %d\nstderr: %s", r.exitCode, r.stderr)
+	}
+	if strings.TrimSpace(r.stdout) != "2" {
+		t.Errorf("version should be 2; got %q", r.stdout)
 	}
 }
