@@ -29,29 +29,30 @@ var flags struct {
 	source string
 }
 
+// migrateCmd holds the parent cobra.Command after NewCommand
+// constructs it. EnableSourceSelection writes additional flags onto
+// this reference for downstream multi-source binaries; nil before
+// NewCommand has been called.
+var migrateCmd *cobra.Command
+
 // NewCommand returns the `migrate` parent command with all
-// subcommands attached.
+// subcommands attached. The `--source` flag is intentionally NOT
+// wired by default — single-source binaries never need it. Downstream
+// binaries that register a second migration source call
+// EnableSourceSelection after Register to expose the flag.
 func NewCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "migrate",
 		Short: "Apply, roll back, and inspect database migrations",
 		Long: `Apply, roll back, and inspect database migrations independently
 of server startup. Reads ` + dbURLEnv + ` from the environment when
---db-url is omitted.
-
-When more than one migration source is registered, the per-source
-operations down/goto/force require --source. up and status aggregate
-across all registered sources without a flag. version prints one
-line per source by default and accepts --source to filter to a single
-track.`,
+--db-url is omitted.`,
 		Annotations: map[string]string{
 			annotations.AnnotationSkipTokenResolution: "true",
 		},
 	}
 	cmd.PersistentFlags().StringVar(&flags.dbURL, "db-url", "",
 		"PostgreSQL connection URL (defaults to value of "+dbURLEnv+" env var)")
-	cmd.PersistentFlags().StringVar(&flags.source, sourceFlag, "",
-		"Migration source name (required for per-source ops when more than one source is registered)")
 
 	cmd.AddCommand(newUpCmd())
 	cmd.AddCommand(newDownCmd())
@@ -59,7 +60,36 @@ track.`,
 	cmd.AddCommand(newVersionCmd())
 	cmd.AddCommand(newGotoCmd())
 	cmd.AddCommand(newForceCmd())
+	migrateCmd = cmd
 	return cmd
+}
+
+// EnableSourceSelection wires the `--source` persistent flag onto
+// the `migrate` parent command. Intended for downstream binaries
+// that register more than one migration source via Register —
+// single-source binaries leave the flag off and let resolveSource
+// infer the sole source.
+//
+// Behavior with the flag wired:
+//   - `up` and `status` reject --source as "not applicable" (they
+//     aggregate across every registered source).
+//   - `down`, `goto`, `force` require --source when more than one
+//     source is registered; --source is otherwise inferred to the
+//     sole registered source.
+//   - `version` accepts --source as a filter; without it, prints
+//     one line per registered source.
+//
+// Must be called AFTER NewCommand has constructed the parent (the
+// function panics otherwise) and AFTER all Register calls have run
+// — practically, near the end of the downstream binary's `init()`
+// or early in its main(), once both the OSS and downstream sources
+// have registered themselves.
+func EnableSourceSelection() {
+	if migrateCmd == nil {
+		panic("migrate.EnableSourceSelection: called before NewCommand")
+	}
+	migrateCmd.PersistentFlags().StringVar(&flags.source, sourceFlag, "",
+		"Migration source name (required for per-source ops when more than one source is registered)")
 }
 
 func resolveDSN() (string, error) {
