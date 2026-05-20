@@ -190,6 +190,9 @@ func newUpCmd() *cobra.Command {
 		Short: "Apply all pending migrations across every registered source",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if flags.source != "" {
+				return errors.New("up aggregates across all registered sources; --source is not applicable")
+			}
 			dsn, err := resolveDSN()
 			if err != nil {
 				return err
@@ -219,11 +222,22 @@ func newUpCmd() *cobra.Command {
 				snaps = append(snaps, upSnapshot{src: src, mg: mg, preVersion: preVersion})
 
 				if _, runErr := database.RunUpWithRecovery(mg, src.Name); runErr != nil {
-					// Roll prior sources back to their pre-up versions.
+					// Best-effort cross-track rollback. Sources whose
+					// migrations have reversible .down.sql files
+					// (e.g. downstream extensions with real downs)
+					// will roll back; sources whose .down.sql files
+					// raise-exception (the OSS source's up-only
+					// pattern) will fail to roll back and the warning
+					// directs the operator to inspect that track. The
+					// caller is left with a non-atomic state across
+					// tracks in that case — surface explicitly rather
+					// than silently swallow.
 					for i := len(snaps) - 2; i >= 0; i-- {
 						prior := snaps[i]
 						if rbErr := database.RollbackToVersion(prior.mg, prior.src.Name, prior.preVersion); rbErr != nil {
-							fmt.Fprintf(os.Stderr, "warning: cross-track rollback of %s failed: %v\n", prior.src.Name, rbErr)
+							fmt.Fprintf(os.Stderr,
+								"warning: rolling %s back to its pre-up version failed (likely up-only migrations); %s is left at its post-up state and may need manual reconciliation: %v\n",
+								prior.src.Name, prior.src.Name, rbErr)
 						}
 					}
 					return runErr
@@ -289,6 +303,9 @@ func newStatusCmd() *cobra.Command {
 		Short: "Show how many migrations are applied vs pending across all sources",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if flags.source != "" {
+				return errors.New("status aggregates across all registered sources; --source is not applicable")
+			}
 			dsn, err := resolveDSN()
 			if err != nil {
 				return err
@@ -315,6 +332,16 @@ func newStatusCmd() *cobra.Command {
 					v, err := readVersion(mg)
 					if err != nil {
 						return err
+					}
+					if int(v) > total {
+						// Binary embedded fewer migrations than the
+						// DB reports applied — operator is running an
+						// older arctl against a DB migrated by a newer
+						// build. Warn but don't fail; the operator
+						// should reconcile by upgrading the binary.
+						fmt.Fprintf(os.Stderr,
+							"warning: %s reports version %d but this binary only ships migrations up to %d (older binary against newer DB?)\n",
+							src.Name, v, total)
 					}
 					applied = min(int(v), total)
 					return nil

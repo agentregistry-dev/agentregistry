@@ -12,6 +12,12 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib" // pgx stdlib driver — required by sql.Open("pgx", ...)
 )
 
+// bootstrapAdvisoryLockKey is the pg_advisory_xact_lock key under
+// which the OSS legacy-bootstrap serializes. Computed once via a
+// stable fnv32 over the descriptive name so the value is reproducible
+// across processes without baking a magic int.
+const bootstrapAdvisoryLockKey = int64(0x6172626f6f742d6f) // "arboot-o" — first 8 bytes ASCII, fits int64
+
 // BootstrapLegacyOSSMigrations bridges OSS deployments that ran the
 // pre-engine-swap custom migrator (`schema_migrations` with columns
 // version/name/applied_at and a +200 version offset) to the
@@ -34,9 +40,12 @@ import (
 // schema_migrations_v0_legacy for downstream extension bootstraps to
 // claim — the independent-tracks split is layered, not bundled.
 //
-// The function is safe to call from multiple sources concurrently:
-// the RENAME serializes via Postgres's ACCESS EXCLUSIVE lock, and a
-// no-op outcome is the steady state once any caller has bridged.
+// The function is safe to call from multiple processes concurrently
+// (rolling deploys, parallel `arctl db migrate up` + server startup):
+// the bootstrap tx takes `pg_advisory_xact_lock` so racers serialize,
+// and re-probes the legacy shape inside the lock so the loser sees
+// the bridged state and no-ops cleanly rather than colliding on the
+// `_v0_legacy` rename.
 func BootstrapLegacyOSSMigrations(ctx context.Context, dsn string, migrationsFS fs.FS, dir string) error {
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
@@ -44,22 +53,14 @@ func BootstrapLegacyOSSMigrations(ctx context.Context, dsn string, migrationsFS 
 	}
 	defer func() { _ = db.Close() }()
 
-	// Probe: does a legacy-shape schema_migrations table exist? The
-	// `name` column was on the custom migrator but is absent from
-	// go-migrate's schema, so its presence is the unambiguous
-	// legacy-shape marker.
-	var hasNameColumn bool
-	probe := `
-		SELECT EXISTS (
-		    SELECT 1 FROM information_schema.columns
-		    WHERE table_schema = 'public'
-		      AND table_name = 'schema_migrations'
-		      AND column_name = 'name'
-		)`
-	if err := db.QueryRowContext(ctx, probe).Scan(&hasNameColumn); err != nil {
-		return fmt.Errorf("probe legacy schema_migrations: %w", err)
+	// Cheap pre-flight outside the lock: on fresh installs and
+	// already-bridged DBs (the common steady state) we skip the
+	// lock acquisition entirely.
+	hasName, err := probeLegacyShape(ctx, db)
+	if err != nil {
+		return err
 	}
-	if !hasNameColumn {
+	if !hasName {
 		return nil
 	}
 
@@ -83,6 +84,25 @@ func BootstrapLegacyOSSMigrations(ctx context.Context, dsn string, migrationsFS 
 		return fmt.Errorf("begin bootstrap tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+
+	// Serialize concurrent bootstraps. pg_advisory_xact_lock releases
+	// automatically on COMMIT / ROLLBACK so a panic or context-
+	// cancellation can't leak the lock.
+	if _, err := tx.ExecContext(ctx,
+		`SELECT pg_advisory_xact_lock($1)`, bootstrapAdvisoryLockKey); err != nil {
+		return fmt.Errorf("acquire bootstrap advisory lock: %w", err)
+	}
+
+	// Re-probe inside the lock. If a concurrent caller bridged while
+	// we were waiting on the lock, the `name` column is gone — bail
+	// out cleanly instead of colliding on the RENAME.
+	hasName, err = probeLegacyShapeTx(ctx, tx)
+	if err != nil {
+		return err
+	}
+	if !hasName {
+		return nil
+	}
 
 	if _, err := tx.ExecContext(ctx,
 		`ALTER TABLE schema_migrations RENAME TO schema_migrations_v0_legacy`); err != nil {
@@ -114,9 +134,62 @@ func BootstrapLegacyOSSMigrations(ctx context.Context, dsn string, migrationsFS 
 		"dropped", len(dropped))
 	if len(dropped) > 0 {
 		logger.Info("orphan legacy rows skipped during bridge (no matching .up.sql in current embed)",
-			"versions", dropped)
+			"versions", formatDroppedVersions(dropped))
 	}
 	return nil
+}
+
+// probeLegacyShape returns true when `public.schema_migrations` has
+// the custom migrator's `name` column. Used outside the bootstrap tx
+// as a cheap fast-path; the authoritative re-probe happens inside the
+// tx under the advisory lock.
+func probeLegacyShape(ctx context.Context, db *sql.DB) (bool, error) {
+	var has bool
+	if err := db.QueryRowContext(ctx, legacyShapeProbeSQL).Scan(&has); err != nil {
+		return false, fmt.Errorf("probe legacy schema_migrations: %w", err)
+	}
+	return has, nil
+}
+
+// probeLegacyShapeTx is the same probe scoped to the bootstrap tx so
+// it sees the catalog state as of that tx's snapshot — necessary to
+// detect a concurrent bootstrap that committed while we waited on the
+// advisory lock.
+func probeLegacyShapeTx(ctx context.Context, tx *sql.Tx) (bool, error) {
+	var has bool
+	if err := tx.QueryRowContext(ctx, legacyShapeProbeSQL).Scan(&has); err != nil {
+		return false, fmt.Errorf("re-probe legacy schema_migrations under lock: %w", err)
+	}
+	return has, nil
+}
+
+const legacyShapeProbeSQL = `
+	SELECT EXISTS (
+	    SELECT 1 FROM information_schema.columns
+	    WHERE table_schema = 'public'
+	      AND table_name = 'schema_migrations'
+	      AND column_name = 'name'
+	)`
+
+// formatDroppedVersions caps the slice it returns at 20 entries so a
+// pathological migration history doesn't produce a wall-of-text log
+// line. Truncation is visible to the operator via the trailing
+// "...and N more" element.
+func formatDroppedVersions(dropped []int) []any {
+	const cap = 20
+	if len(dropped) <= cap {
+		out := make([]any, len(dropped))
+		for i, v := range dropped {
+			out[i] = v
+		}
+		return out
+	}
+	out := make([]any, cap+1)
+	for i := range cap {
+		out[i] = dropped[i]
+	}
+	out[cap] = fmt.Sprintf("...and %d more", len(dropped)-cap)
+	return out
 }
 
 // readLegacyOSSVersions reads every legacy schema_migrations.version

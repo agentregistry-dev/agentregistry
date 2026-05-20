@@ -28,10 +28,16 @@ NNN_short_name.down.sql      # reverse (required by the iofs source)
 `NNN_short_name.up.sql` is the schema change. **Do not wrap the file
 in `BEGIN;` / `COMMIT;`** — go-migrate runs the SQL through `Exec`,
 and Postgres autocommits single-statement DDL. Multi-statement
-migrations are not atomic by default; the auto-recovery wrapper in
-`pkg/registry/database/migrate.go` handles partial-failure cleanup
-(`Force(current-1)` on dirty state) so a failed migration leaves a
-clear actionable error.
+migrations are not atomic by default.
+
+The auto-recovery wrapper in `pkg/registry/database/migrate.go`
+clears go-migrate's dirty-state bookkeeping (`Force(current-1)`) so a
+partial-failure Up surfaces as an actionable error instead of
+`Dirty database version N. Fix and force version.`. **This is
+bookkeeping recovery only — it does not undo any DDL that committed
+before the migration failed.** Author every migration with
+idempotent DDL so a retry of the partially-applied migration is
+safe:
 
 Write idempotent DDL whenever the operation has a natural idempotent
 form, so a retry after partial failure is safe:

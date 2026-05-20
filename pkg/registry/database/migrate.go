@@ -53,14 +53,22 @@ func NewMigrator(dsn string, migrationsFS fs.FS, dir, table string) (*migrate.Mi
 }
 
 // RunUpWithRecovery applies all pending migrations for mg and, on
-// failure, rolls back to the pre-Up version so the database returns
-// to a clean state rather than the go-migrate-default "dirty"
-// schema_migrations row.
+// failure, clears go-migrate's "dirty" schema_migrations bookkeeping
+// by Force-ing back to the pre-Up version. This is BOOKKEEPING
+// recovery only — it does NOT undo any DDL that may have committed
+// before the migration failed mid-statement. The operator-actionable
+// guarantee is that subsequent `Up` calls won't reject with
+// "Dirty database version N. Fix and force version." — they'll
+// re-attempt the failed migration, which our idempotent-DDL
+// convention (CREATE ... IF NOT EXISTS, CREATE OR REPLACE, DROP ...
+// IF EXISTS) makes safe.
 //
 // Returns the pre-Up version so callers running multiple sources can
-// snapshot it and roll prior sources back via RollbackToVersion if a
-// later source fails (the cross-track atomicity model from kagent's
-// runner).
+// snapshot it and pass it to RollbackToVersion if a later source's
+// Up fails. Cross-source rollback is best-effort: it succeeds when
+// each prior source's `.down.sql` files are reversible; sources with
+// up-only migrations (raise-exception downs) will fail to roll back
+// and the caller is expected to surface the partial state.
 //
 // name appears in log lines and is used purely for operator-facing
 // diagnostics — it has no semantic effect on the migrator.
@@ -80,13 +88,13 @@ func RunUpWithRecovery(mg *migrate.Migrate, name string) (preVersion uint, err e
 			// No prior version means there's nothing to recover to;
 			// the dirty row points at the migration that failed and an
 			// operator-facing message is the most actionable surface.
-			logger.Info("migration failed; no prior version to recover to")
+			logger.Info("migration failed; no prior version to recover to — inspect schema for partial DDL before retry")
 		} else {
-			logger.Info("migration failed, attempting rollback", "target_version", preVersion)
+			logger.Info("migration failed, clearing dirty bookkeeping back to pre-Up version", "target_version", preVersion)
 			if rbErr := RollbackToVersion(mg, name, preVersion); rbErr != nil {
-				logger.Error("rollback failed", "error", rbErr)
+				logger.Error("dirty-bookkeeping recovery failed", "error", rbErr)
 			} else {
-				logger.Info("rollback complete", "version", preVersion)
+				logger.Info("dirty bookkeeping cleared; partial DDL from the failed migration may remain — inspect schema before retry", "version", preVersion)
 			}
 		}
 		return preVersion, fmt.Errorf("run migrations for %s: %w", name, upErr)
@@ -94,9 +102,20 @@ func RunUpWithRecovery(mg *migrate.Migrate, name string) (preVersion uint, err e
 	return preVersion, nil
 }
 
-// RollbackToVersion rolls mg back to targetVersion, clearing any
-// dirty-state marker left over from a partial-failure Up. Used both
-// for auto-recovery inside RunUpWithRecovery and by callers
+// RollbackToVersion clears go-migrate's dirty-state marker on mg and,
+// when the source has reversible `.down.sql` files, steps the schema
+// back to targetVersion via the standard `mg.Steps(-N)` path.
+//
+// Important behavioral note: when called from auto-recovery after a
+// failed Up at version current=preVersion+1, `Force(current-1)` clears
+// the dirty flag but `steps = (current-1) - preVersion = 0` so no
+// `.down.sql` is invoked. The function returns nil ("nothing to roll
+// back from the bookkeeping perspective") — it does NOT undo DDL that
+// the failed migration committed before erroring out. Callers that
+// expected full atomicity must rely on the migration's own
+// idempotency for safe retry.
+//
+// Used both for auto-recovery inside RunUpWithRecovery and by callers
 // coordinating cross-source rollback after a later source fails.
 func RollbackToVersion(mg *migrate.Migrate, name string, targetVersion uint) error {
 	currentVersion, dirty, err := mg.Version()
