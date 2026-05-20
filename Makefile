@@ -45,9 +45,18 @@ LDFLAGS := \
 # Local architecture detection to build for the current platform
 LOCALARCH ?= $(shell uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/')
 
+# Developer tools (golangci-lint, gotestsum, kind) are pinned in tools/go.mod
+# and invoked via `go tool -modfile=tools/go.mod <name>`. This keeps their
+# transitive dependencies out of the main module.
+TOOLS_DIR     ?= $(CURDIR)/tools
+GO_TOOL       ?= go tool -modfile=$(TOOLS_DIR)/go.mod
+GOLANGCI_LINT ?= $(GO_TOOL) golangci-lint
+GOTESTSUM     ?= $(GO_TOOL) gotestsum
+HELM          ?= $(GO_TOOL) helm
+HELM_DOCS     ?= $(GO_TOOL) helm-docs --log-level=fatal
+KIND          ?= $(GO_TOOL) kind
+
 ## Helm / Chart settings
-# Override HELM if your helm binary lives elsewhere (e.g. HELM=/usr/local/bin/helm).
-HELM ?= helm
 # CHART_VERSION strips the leading 'v' from VERSION for use in Chart.yaml (Helm requires semver without the prefix).
 CHART_VERSION ?= $(shell echo $(VERSION) | sed 's/^v//')
 HELM_CHART_DIR ?= ./charts/agentregistry
@@ -167,7 +176,6 @@ run: run-k8s # Start local development environment (default: k8s)
 down: daemon-stop delete-kind-cluster ## Stop the local development environment
 	@echo "agentregistry stopped"
 
-GOTESTSUM ?= go tool gotestsum
 ARCTL ?= ./bin/arctl
 
 # Manage local daemon lifecycle via CLI helpers.
@@ -358,7 +366,7 @@ endif
 
 .PHONY: create-kind-cluster
 create-kind-cluster: local-registry ## Create a local Kind cluster with MetalLB (skips cluster creation if already exists, always runs post-create steps)
-	@if go tool kind get clusters 2>/dev/null | grep -qx "$(KIND_CLUSTER_NAME)"; then \
+	@if $(KIND) get clusters 2>/dev/null | grep -qx "$(KIND_CLUSTER_NAME)"; then \
 	  echo "Kind cluster '$(KIND_CLUSTER_NAME)' already exists, skipping cluster creation"; \
 	else \
 	  KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) \
@@ -371,7 +379,7 @@ create-kind-cluster: local-registry ## Create a local Kind cluster with MetalLB 
 
 .PHONY: delete-kind-cluster
 delete-kind-cluster: ## Delete the local Kind cluster (no-op if it does not exist)
-	@go tool kind delete cluster --name $(KIND_CLUSTER_NAME) 2>/dev/null || true
+	@$(KIND) delete cluster --name $(KIND_CLUSTER_NAME) 2>/dev/null || true
 
 .PHONY: prune-kind-cluster
 prune-kind-cluster: ## Prune dangling container images from the Kind control-plane node
@@ -401,7 +409,7 @@ endif
 	    get secret agentregistry \
 	    -o jsonpath='{.data.AGENT_REGISTRY_JWT_PRIVATE_KEY}' 2>/dev/null | base64 -d); \
 	  if [ -z "$$JWT_KEY" ]; then JWT_KEY=$$(openssl rand -hex 32); fi; \
-	  helm upgrade --install agentregistry charts/agentregistry \
+	  $(HELM) upgrade --install agentregistry charts/agentregistry \
 	    --kube-context $(KIND_CLUSTER_CONTEXT) \
 	    --namespace $(KIND_NAMESPACE) \
 	    --create-namespace \
@@ -457,7 +465,7 @@ setup-kind-cluster: create-kind-cluster install-kagent install-agentregistry ## 
 .PHONY: dump-kind-state
 dump-kind-state: ## Dump Kind cluster state for debugging (pods, events, kagent logs)
 	@echo "=== Kind clusters ==="
-	@go tool kind get clusters 2>/dev/null || true
+	@$(KIND) get clusters 2>/dev/null || true
 	@echo ""
 	@echo "=== Pods ==="
 	@kubectl get pods -A --context $(KIND_CLUSTER_CONTEXT) 2>/dev/null || true
@@ -516,11 +524,8 @@ release-cli: bin/arctl-darwin-amd64.sha256
 release-cli: bin/arctl-darwin-arm64.sha256
 release-cli: bin/arctl-windows-amd64.exe.sha256
 
-GOLANGCI_LINT ?= go tool golangci-lint
-GOLANGCI_LINT_ARGS ?= --fix
-
 .PHONY: lint
-lint: ## Run golangci-lint linter
+lint: ## Run the linter (set GOLANGCI_LINT_ARGS=--fix for local auto-fix)
 	$(GOLANGCI_LINT) run $(GOLANGCI_LINT_ARGS)
 
 .PHONY: lint-ui
@@ -530,15 +535,15 @@ lint-ui: install-ui ## Run eslint on UI code
 .PHONY: fmt
 fmt: ## Run the Go formatter
 	$(GOLANGCI_LINT) fmt
-	git diff --name-only --cached --diff-filter=ACMR -- '**/*.go' | sed 's|^go/||' | xargs -r go tool gci write --skip-generated -s standard -s default -s localmodule
 
 .PHONY: verify
-verify: fmt mod-tidy gen-client ## Run all verification checks
+verify: fmt mod-tidy gen-client charts-docs ## Run all verification checks
 	git diff --exit-code
 
 .PHONY: mod-tidy
-mod-tidy: ## Run go mod tidy
+mod-tidy: ## Run go mod tidy on the main module and tools module
 	go mod tidy
+	cd $(TOOLS_DIR) && go mod tidy
 
 .PHONY: mod-download
 mod-download: ## Run go mod download
@@ -550,15 +555,6 @@ mod-download: ## Run go mod download
 # Override with: make charts-test HELM_CHART_DIR=/path/to/chart
 # ──────────────────────────────────────────────────────────────────────────────
 
-# Sanity-check that helm is present. Called as a dependency by all chart targets.
-.PHONY: _helm-check
-_helm-check:
-	@if ! command -v $(HELM) >/dev/null 2>&1; then \
-	  echo "ERROR: 'helm' not found in PATH."; \
-	  echo "  Install Helm from https://helm.sh or set HELM=/path/to/helm"; \
-	  exit 1; \
-	fi
-
 # Generate Chart.yaml from Chart-template.yaml using envsubst.
 .PHONY: charts-generate
 charts-generate: ## Generate Chart.yaml from Chart-template.yaml (uses CHART_VERSION, default derived from git tags)
@@ -569,7 +565,7 @@ charts-generate: ## Generate Chart.yaml from Chart-template.yaml (uses CHART_VER
 
 # Build chart dependencies (resolves Chart.yaml dependencies → charts/ subdir).
 .PHONY: charts-deps
-charts-deps: charts-generate _helm-check ## Build Helm chart dependencies
+charts-deps: charts-generate ## Build Helm chart dependencies
 	@echo "Building Helm chart dependencies for $(HELM_CHART_DIR)..."
 	$(HELM) dependency build $(HELM_CHART_DIR)
 
@@ -578,6 +574,13 @@ charts-deps: charts-generate _helm-check ## Build Helm chart dependencies
 charts-lint: charts-generate charts-deps ## Lint the Helm chart with --strict
 	@echo "Linting Helm chart $(HELM_CHART_DIR)..."
 	$(HELM) lint $(HELM_CHART_DIR) --strict
+
+.PHONY: charts-docs
+charts-docs: charts-generate ## Render chart README.md from values.yaml via helm-docs
+	@echo "Generating Helm chart docs for $(HELM_CHART_DIR)..."
+	$(HELM_DOCS) -c $(HELM_CHART_DIR) \
+	  --template-files=_templates.gotmpl \
+	  --template-files=README.md.gotmpl
 
 # Render chart templates to stdout (smoke test — catches template errors).
 # Uses minimum required values to pass chart validation.
@@ -600,7 +603,7 @@ charts-package: charts-generate charts-lint ## Package the Helm chart into $(HEL
 # Package the chart and push to an OCI registry. Caller must be logged in.
 # Override registry/repo: make charts-push HELM_REGISTRY=ghcr.io HELM_REPO=org/repo
 .PHONY: charts-push
-charts-push: charts-package _helm-check ## Package and push chart to the configured OCI registry
+charts-push: charts-package ## Package and push chart to the configured OCI registry
 	@echo "Pushing $(HELM_PACKAGE_DIR)/agentregistry-$(CHART_VERSION).tgz → oci://$(HELM_REGISTRY)/$(HELM_REPO)/charts"
 	$(HELM) push "$(HELM_PACKAGE_DIR)/agentregistry-$(CHART_VERSION).tgz" "oci://$(HELM_REGISTRY)/$(HELM_REPO)/charts"
 
@@ -623,13 +626,13 @@ charts-release: charts-test charts-push charts-checksum ## Full Helm release: li
 #   2. checks for the helm-unittest plugin and installs it if missing
 #   3. runs the full test suite
 .PHONY: charts-test
-charts-test: charts-generate _helm-check charts-deps helm-unittest-install ## Run helm-unittest chart tests
+charts-test: charts-generate charts-deps helm-unittest-install ## Run helm-unittest chart tests
 	@echo "Running helm-unittest on $(HELM_CHART_DIR)..."
 	$(HELM) unittest $(HELM_CHART_DIR) --file "tests/*_test.yaml"
 
 .PHONY: helm-unittest-install
-helm-unittest-install: _helm-check  ## Install the helm-unittest plugin if needed
-	HELM=$(HELM) \
+helm-unittest-install: ## Install the helm-unittest plugin if needed
+	HELM="$(HELM)" \
 	HELM_PLUGIN_UNITTEST_URL=$(HELM_PLUGIN_UNITTEST_URL) \
 	HELM_PLUGIN_UNITTEST_VERSION=$(HELM_PLUGIN_UNITTEST_VERSION) \
 	HELM_PLUGIN_INSTALL_FLAGS="$(HELM_PLUGIN_INSTALL_FLAGS)" \

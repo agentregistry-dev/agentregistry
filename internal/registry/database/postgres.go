@@ -25,17 +25,11 @@ type PostgreSQL struct {
 // migrations against it (unless skipMigrations is true), and returns a
 // *PostgreSQL ready for use by the generic v1alpha1 Store.
 //
-// embeddingsEnabled gates the pgvector migration. When false, the
-// 003_embeddings.sql migration is skipped so a vanilla PostgreSQL
-// install (no pgvector extension) succeeds — semantic search /
-// indexing remains unavailable until the flag flips on, at which
-// point the migration applies on next boot.
-//
 // skipMigrations short-circuits the startup migrator entirely. Used
 // when migrations have been applied out-of-band by `arctl db migrate
 // up`. The pool is still parsed, opened, and pinged so a
 // misconfigured DB fails fast.
-func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authorizer, embeddingsEnabled, skipMigrations bool) (*PostgreSQL, error) {
+func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authorizer, skipMigrations bool) (*PostgreSQL, error) {
 	config, err := pgxpool.ParseConfig(connectionURI)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse PostgreSQL config: %w", err)
@@ -71,7 +65,7 @@ func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authori
 	}
 	defer conn.Release()
 
-	v1alpha1Migrator := database.NewMigrator(conn.Conn(), v1alpha1store.MigratorConfig(embeddingsEnabled))
+	v1alpha1Migrator := database.NewMigrator(conn.Conn(), v1alpha1store.MigratorConfig())
 	if err := v1alpha1Migrator.Migrate(ctx); err != nil {
 		return nil, fmt.Errorf("failed to run v1alpha1 migrations: %w", err)
 	}
@@ -80,8 +74,7 @@ func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authori
 }
 
 // Pool exposes the underlying pgxpool for callers (v1alpha1 Stores,
-// importer findings store, enterprise extensions) that need direct
-// pgx access.
+// enterprise extensions) that need direct pgx access.
 func (db *PostgreSQL) Pool() *pgxpool.Pool {
 	return db.pool
 }

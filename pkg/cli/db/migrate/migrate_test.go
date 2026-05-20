@@ -42,20 +42,6 @@ func TestSourceBoundsFromConfig_EmptyDir(t *testing.T) {
 	}
 }
 
-func TestSourceBoundsFromConfig_HonorsSkip(t *testing.T) {
-	cfg := database.MigratorConfig{
-		MigrationFiles: rangeFixtureFiles,
-		MigrationDir:   "testdata/range_fixture",
-		VersionOffset:  200,
-		Skip:           func(v int) bool { return v == 3 },
-	}
-	low, high := sourceBoundsFromConfig(cfg)
-	// 003 skipped → highest visible version is 2.
-	if low != 201 || high != 202 {
-		t.Fatalf("expected bounds [201, 202] with 003 skipped; got [%d, %d]", low, high)
-	}
-}
-
 func TestDownCmd_RejectsNonPositiveN(t *testing.T) {
 	// Negative ints are filtered by cobra at the flag-parsing layer
 	// (interpreted as shorthand flags); the RunE-level check guards

@@ -20,6 +20,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
 // registerAgent wires the generic resource handler for *v1alpha1.Agent and
@@ -222,6 +223,50 @@ func TestResourceRegister_DeleteTaggedPassesTagToAuthorizer(t *testing.T) {
 	require.Equal(t, "default", seen.Namespace)
 	require.Equal(t, "alice", seen.Name)
 	require.Equal(t, "stable", seen.Tag)
+}
+
+func TestResourceRegister_DeleteAdmissionCanStageTaggedDelete(t *testing.T) {
+	pool := v1alpha1store.NewTestPool(t)
+	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+	_, err := store.Upsert(t.Context(), &v1alpha1.Agent{
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "alice", Tag: "stable"},
+		Spec:     v1alpha1.AgentSpec{Title: "Stable Alice"},
+	})
+	require.NoError(t, err)
+
+	var admitted types.DeleteAdmissionInput
+	postDeleteCalled := false
+	_, api := humatest.New(t)
+	resource.Register[*v1alpha1.Agent](api, resource.Config{
+		Kind:       v1alpha1.KindAgent,
+		BasePrefix: "/v0",
+		Store:      store,
+		PostDelete: func(context.Context, v1alpha1.Object) error {
+			postDeleteCalled = true
+			return nil
+		},
+		DeleteAdmission: func(ctx context.Context, in types.DeleteAdmissionInput) (types.DeleteAdmissionResult, error) {
+			admitted = in
+			return types.DeleteAdmissionResult{Status: arv0.ApplyStatusStaged, Tag: in.Tag}, nil
+		},
+	}, func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
+
+	resp := api.Delete("/v0/agents/alice/stable")
+	require.Equal(t, http.StatusNoContent, resp.Code, resp.Body.String())
+	require.False(t, postDeleteCalled, "staged deletes must not fire production side effects")
+	require.Equal(t, types.AdmissionSourceDelete, admitted.Source)
+	require.Equal(t, "delete", admitted.Verb)
+	require.Equal(t, v1alpha1.KindAgent, admitted.Kind)
+	require.Equal(t, "default", admitted.Namespace)
+	require.Equal(t, "alice", admitted.Name)
+	require.Equal(t, "stable", admitted.Tag)
+	require.NotNil(t, admitted.Object)
+	require.NotNil(t, admitted.PostDelete)
+	require.Same(t, store, admitted.Store)
+
+	row, err := store.Get(t.Context(), "default", "alice", "stable")
+	require.NoError(t, err)
+	require.Equal(t, "stable", row.Metadata.Tag)
 }
 
 func TestResourceRegister_AgentNamespaceIsolation(t *testing.T) {

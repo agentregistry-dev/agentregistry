@@ -168,8 +168,17 @@ func TestCoordinator_DanglingTargetRef(t *testing.T) {
 	})
 
 	err := coord.Apply(ctx, deployment)
-	require.Error(t, err)
-	require.ErrorIs(t, err, v1alpha1.ErrDanglingRef)
+	require.NoError(t, err)
+
+	raw, err := stores[v1alpha1.KindDeployment].Get(ctx, deployment.Metadata.Namespace, deployment.Metadata.Name, "")
+	require.NoError(t, err)
+	var status v1alpha1.Status
+	require.NoError(t, v1alpha1.UnmarshalStatusFromStorage(raw.Status, &status))
+	ready := status.GetCondition("Ready")
+	require.NotNil(t, ready)
+	require.Equal(t, v1alpha1.ConditionFalse, ready.Status)
+	require.Equal(t, "ReferencePending", ready.Reason)
+	require.Contains(t, ready.Message, "does-not-exist")
 }
 
 func TestCoordinator_Discover_ReturnsAdapterResults(t *testing.T) {

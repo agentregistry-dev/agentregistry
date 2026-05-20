@@ -29,10 +29,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
-	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1/registries"
-	pkgimporter "github.com/agentregistry-dev/agentregistry/pkg/importer"
-	osvscanner "github.com/agentregistry-dev/agentregistry/pkg/importer/scanners/osv"
-	scorecardscanner "github.com/agentregistry-dev/agentregistry/pkg/importer/scanners/scorecard"
 	"github.com/agentregistry-dev/agentregistry/pkg/logging"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
@@ -108,11 +104,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	}
 	maps.Copy(deploymentAdapters, options.DeploymentAdapters)
 	pool := db.Pool()
-	registryValidator := options.RegistryValidator
-	if registryValidator == nil {
-		registryValidator = registries.Dispatcher
-	}
-	stores, importer := buildStoresAndImporter(pool, registryValidator, options.V1Alpha1StoreTables, options.V1Alpha1MutableStoreKinds, options.Auditor)
+	stores := buildStores(pool, options.V1Alpha1StoreTables, options.V1Alpha1MutableStoreKinds, options.Auditor)
 
 	slog.Info("starting agentregistry", "version", version.Version, "commit", version.GitCommit)
 
@@ -134,7 +126,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		}
 	}()
 
-	routeOpts := buildRouteOptions(options, stores, importer, deploymentAdapters)
+	routeOpts := buildRouteOptions(options, stores, deploymentAdapters)
 
 	// Initialize HTTP server
 	baseServer, err := api.NewServer(cfg, metrics, versionInfo, options.UIHandler, authnProvider, routeOpts)
@@ -188,7 +180,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	return nil
 }
 
-func buildStoresAndImporter(pool *pgxpool.Pool, registryValidator v1alpha1.RegistryValidatorFunc, extraStoreTables map[string]string, mutableExtraKinds map[string]bool, auditor types.Auditor) (map[string]*v1alpha1store.Store, *pkgimporter.Importer) {
+func buildStores(pool *pgxpool.Pool, extraStoreTables map[string]string, mutableExtraKinds map[string]bool, auditor types.Auditor) map[string]*v1alpha1store.Store {
 	if auditor == nil {
 		auditor = types.NoopAuditor
 	}
@@ -213,45 +205,27 @@ func buildStoresAndImporter(pool *pgxpool.Pool, registryValidator v1alpha1.Regis
 	// never serves real traffic.
 	if pool == nil {
 		slog.Info("v1alpha1 routes registered against nil pool: query path will panic if exercised (likely noop/DatabaseFactory)")
-		return stores, nil
-	}
-
-	// GITHUB_TOKEN (when set in env) authenticates scanner fetches
-	// against GitHub's contents + repo API to raise the 60 req/hr
-	// unauthenticated limit.
-	githubToken := os.Getenv("GITHUB_TOKEN")
-	imp, err := pkgimporter.New(pkgimporter.Config{
-		Stores:   stores,
-		Findings: pkgimporter.NewFindingsStore(pool),
-		Scanners: []pkgimporter.Scanner{
-			osvscanner.New(osvscanner.Config{GitHubToken: githubToken}),
-			scorecardscanner.New(scorecardscanner.Config{GitHubToken: githubToken}),
-		},
-		Resolver:          internaldb.NewResolver(stores),
-		RegistryValidator: registryValidator,
-	})
-	if err != nil {
-		slog.Warn("failed to construct v1alpha1 importer; HTTP import disabled for this path", "error", err)
-		slog.Info("v1alpha1 routes enabled")
-		return stores, nil
+		return stores
 	}
 
 	slog.Info("v1alpha1 routes enabled")
-	return stores, imp
+	return stores
 }
 
 func buildRouteOptions(
 	options types.AppOptions,
 	stores map[string]*v1alpha1store.Store,
-	importer *pkgimporter.Importer,
 	adapters map[string]types.DeploymentAdapter,
 ) *router.RouteOptions {
 	routeOpts := &router.RouteOptions{
-		ExtraRoutes:       options.ExtraRoutes,
-		Stores:            stores,
-		Importer:          importer,
-		PerKindHooks:      crudPerKindHooks(options),
-		RegistryValidator: options.RegistryValidator,
+		ExtraRoutes:         options.ExtraRoutes,
+		Stores:              stores,
+		PerKindHooks:        crudPerKindHooks(options),
+		RegistryValidator:   options.RegistryValidator,
+		Admission:           options.Admission,
+		DeleteAdmission:     options.DeleteAdmission,
+		ResolverWrapper:     options.ResolverWrapper,
+		ExtraResourceRoutes: options.ExtraResourceRoutes,
 	}
 
 	if stores != nil {
@@ -406,7 +380,7 @@ func openDatabase(
 		return db, nil
 	}
 
-	baseDB, err := internaldb.NewPostgreSQL(dbCtx, cfg.DatabaseURL, authz, cfg.Embeddings.Enabled, skipMigrations)
+	baseDB, err := internaldb.NewPostgreSQL(dbCtx, cfg.DatabaseURL, authz, skipMigrations)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to PostgreSQL: %w", err)
 	}

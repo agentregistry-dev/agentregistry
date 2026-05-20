@@ -275,9 +275,9 @@ spec:
 }
 
 func TestEncode_RoundTrip_YAML(t *testing.T) {
-	// Empty Namespace survives a round trip — MarshalJSON strips "default"
-	// but UnmarshalJSON intentionally does NOT re-stamp it, so callers
-	// like the importer can layer their own default on top.
+	// Empty Namespace survives a round trip. MarshalJSON strips "default"
+	// but UnmarshalJSON intentionally does not re-stamp it, so API
+	// entry points can layer their own default on top.
 	//
 	original := &Agent{
 		TypeMeta: TypeMeta{APIVersion: GroupVersion, Kind: KindAgent},

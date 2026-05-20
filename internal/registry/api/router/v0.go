@@ -5,10 +5,11 @@ import (
 	"context"
 	"errors"
 
+	"github.com/danielgtaylor/huma/v2"
+
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/crud"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/deploymentlogs"
 	v0health "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/health"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/importpipeline"
 	v0ping "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/ping"
 	v0version "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/version"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
@@ -18,10 +19,9 @@ import (
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1/registries"
-	"github.com/agentregistry-dev/agentregistry/pkg/importer"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
-	"github.com/danielgtaylor/huma/v2"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
 // Stores is the per-kind Store map used by the v1alpha1
@@ -34,7 +34,7 @@ type Stores = map[string]*v1alpha1store.Store
 // RouteOptions contains the services that drive route registration.
 //
 // Stores is required; everything else is optional and gates a
-// specific feature area (deployments, import).
+// specific feature area (deployments).
 // RegisterRoutes returns an error if a required field is missing rather
 // than silently no-op'ing — a misconfigured boot fails loud.
 type RouteOptions struct {
@@ -46,12 +46,6 @@ type RouteOptions struct {
 	// namespace.
 	// REQUIRED — RegisterRoutes errors when this is nil/empty.
 	Stores Stores
-
-	// Importer, when non-nil, enables POST /v0/import. Typically
-	// constructed alongside Stores at bootstrap with the OSS
-	// scanner set (OSV + Scorecard) + a FindingsStore bound to the
-	// same pool.
-	Importer *importer.Importer
 
 	// DeploymentCoordinator drives post-persist reconciliation
 	// for the Deployment kind: PUT → adapter.Apply; DELETE → adapter.Remove.
@@ -71,7 +65,7 @@ type RouteOptions struct {
 	PerKindHooks crud.PerKindHooks
 
 	// RegistryValidator overrides the per-package registry
-	// validator on the apply / import path. Nil falls back to
+	// validator on the apply path. Nil falls back to
 	// registries.Dispatcher, the upstream public-catalogue default.
 	// See types.AppOptions.RegistryValidator for the full
 	// rationale (private deployments typically swap in a filter that
@@ -80,6 +74,28 @@ type RouteOptions struct {
 
 	// Optional callback for integration-owned route registration.
 	ExtraRoutes func(api huma.API, pathPrefix string)
+
+	// Admission optionally owns the final apply write. Nil preserves OSS
+	// production writes through resource.ProductionAdmission.
+	// TODO(krt): temporary synchronous-handler bridge; remove when KRT owns
+	// admission/staging.
+	Admission types.Admission
+
+	// DeleteAdmission optionally owns the final delete. Nil preserves OSS
+	// production deletes through resource.ProductionDeleteAdmission.
+	// TODO(krt): temporary synchronous-handler bridge; remove when KRT owns
+	// admission/staging.
+	DeleteAdmission types.DeleteAdmission
+
+	// ResolverWrapper decorates the shared ResourceRef resolver before
+	// resource and apply routes are registered.
+	// TODO(krt): temporary bridge for pending staged refs during HTTP apply.
+	ResolverWrapper func(v1alpha1.ResolverFunc) v1alpha1.ResolverFunc
+
+	// ExtraResourceRoutes registers adjacent routes with access to the same
+	// v1alpha1 stores and hooks used by /v0/apply.
+	// TODO(krt): temporary bridge for downstream synchronous approval routes.
+	ExtraResourceRoutes func(api huma.API, pathPrefix string, ctx types.ResourceRouteContext)
 }
 
 // RegisterRoutes registers all API routes under /v0. Required
@@ -116,19 +132,11 @@ func RegisterRoutes(
 		opts.DeploymentCoordinator,
 		opts.PerKindHooks,
 		opts.RegistryValidator,
+		opts.Admission,
+		opts.DeleteAdmission,
+		opts.ResolverWrapper,
+		opts.ExtraResourceRoutes,
 	)
-
-	// POST /v0/import — runs decoded manifests through the enrichment
-	// pipeline (validate + scanners + findings-write) before Upsert.
-	// Authorizers wires the same per-kind RBAC the regular apply path
-	// uses; without it the import endpoint would be a write-bypass.
-	if opts.Importer != nil {
-		importpipeline.Register(api, importpipeline.Config{
-			BasePrefix:  pathPrefix,
-			Importer:    opts.Importer,
-			Authorizers: opts.PerKindHooks.Authorizers,
-		})
-	}
 
 	if opts.ExtraRoutes != nil {
 		opts.ExtraRoutes(api, pathPrefix)
@@ -143,9 +151,7 @@ func RegisterRoutes(
 // query param defaulting to "default"; `?namespace=all` on list
 // widens scope across every namespace. The multi-doc apply endpoint
 // lives at `{basePrefix}/apply`. Cross-kind ResourceRef existence
-// dispatches through the shared
-// internaldb.NewResolver so the router and any server-side
-// Importer both see the same ref-existence semantics.
+// dispatches through the shared internaldb.NewResolver.
 //
 // When coord is non-nil, Deployment PUT/DELETE fire
 // coord.Apply/coord.Remove after the row is persisted so the type
@@ -157,8 +163,15 @@ func registerKindRoutes(
 	coord *deploymentsvc.Coordinator,
 	perKind crud.PerKindHooks,
 	registryValidator v1alpha1.RegistryValidatorFunc,
-) {
+	admission types.Admission,
+	deleteAdmission types.DeleteAdmission,
+	resolverWrapper func(v1alpha1.ResolverFunc) v1alpha1.ResolverFunc,
+	extraResourceRoutes func(api huma.API, pathPrefix string, ctx types.ResourceRouteContext),
+) resource.ApplyConfig {
 	resolver := internaldb.NewResolver(stores)
+	if resolverWrapper != nil {
+		resolver = resolverWrapper(resolver)
+	}
 	if registryValidator == nil {
 		registryValidator = registries.Dispatcher
 	}
@@ -195,7 +208,7 @@ func registerKindRoutes(
 
 	// Per-kind CRUD endpoints — one call per built-in kind, hidden
 	// inside crud.Register.
-	crud.Register(api, basePrefix, stores, resolver, registryValidator, perKind)
+	crud.Register(api, basePrefix, stores, resolver, registryValidator, perKind, deleteAdmission)
 
 	// Deployment-specific endpoints: logs stream (cancel is subsumed
 	// by DesiredState=undeployed + DELETE in the v1alpha1 lifecycle).
@@ -212,7 +225,7 @@ func registerKindRoutes(
 	// same per-kind hook table populated above, so Deployment reconciliation
 	// and any caller-supplied PostUpsert/PostDelete fire identically on
 	// the batch path.
-	resource.RegisterApply(api, resource.ApplyConfig{
+	applyCfg := resource.ApplyConfig{
 		BasePrefix:        basePrefix,
 		Stores:            stores,
 		Resolver:          resolver,
@@ -221,5 +234,31 @@ func registerKindRoutes(
 		PostUpserts:       perKind.PostUpserts,
 		PostDeletes:       perKind.PostDeletes,
 		InitialFinalizers: perKind.InitialFinalizers,
-	})
+		Admission:         admission,
+		DeleteAdmission:   deleteAdmission,
+	}
+	productionApplyCfg := applyCfg
+	productionApplyCfg.Admission = resource.ProductionAdmission
+	productionDeleteCfg := applyCfg
+	productionDeleteCfg.DeleteAdmission = resource.ProductionDeleteAdmission
+	resource.RegisterApply(api, applyCfg)
+
+	if extraResourceRoutes != nil {
+		opaqueStores := make(map[string]any, len(stores))
+		for kind, store := range stores {
+			opaqueStores[kind] = store
+		}
+		extraResourceRoutes(api, basePrefix, types.ResourceRouteContext{
+			Stores:            opaqueStores,
+			Resolver:          resolver,
+			RegistryValidator: registryValidator,
+			Apply: func(ctx context.Context, obj v1alpha1.Object, dryRun bool) arv0.ApplyResult {
+				return resource.ApplyObject(ctx, productionApplyCfg, obj, dryRun)
+			},
+			Delete: func(ctx context.Context, obj v1alpha1.Object, dryRun bool) arv0.ApplyResult {
+				return resource.DeleteObject(ctx, productionDeleteCfg, obj, dryRun)
+			},
+		})
+	}
+	return applyCfg
 }

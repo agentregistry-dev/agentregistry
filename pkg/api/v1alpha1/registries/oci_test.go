@@ -4,10 +4,11 @@ import (
 	"context"
 	"testing"
 
-	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
-	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1/registries"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1/registries"
 )
 
 func TestValidateOCI_RegistryAllowlist(t *testing.T) {
