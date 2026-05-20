@@ -90,11 +90,11 @@ func RunUpWithRecovery(mg *migrate.Migrate, name string) (preVersion uint, err e
 			// operator-facing message is the most actionable surface.
 			logger.Info("migration failed; no prior version to recover to — inspect schema for partial DDL before retry")
 		} else {
-			logger.Info("migration failed, clearing dirty bookkeeping back to pre-Up version", "target_version", preVersion)
+			logger.Info(fmt.Sprintf("migration failed, clearing dirty bookkeeping back to v%d", preVersion), "target_version", preVersion)
 			if rbErr := RollbackToVersion(mg, name, preVersion); rbErr != nil {
 				logger.Error("dirty-bookkeeping recovery failed", "error", rbErr)
 			} else {
-				logger.Info("dirty bookkeeping cleared; partial DDL from the failed migration may remain — inspect schema before retry", "version", preVersion)
+				logger.Info(fmt.Sprintf("dirty bookkeeping cleared back to v%d; partial DDL from the failed migration may remain — inspect schema before retry", preVersion), "version", preVersion)
 			}
 		}
 		return preVersion, fmt.Errorf("run migrations for %s: %w", name, upErr)

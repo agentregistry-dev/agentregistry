@@ -171,24 +171,24 @@ const legacyShapeProbeSQL = `
 	      AND column_name = 'name'
 	)`
 
-// formatDroppedVersions caps the slice it returns at 20 entries so a
-// pathological migration history doesn't produce a wall-of-text log
-// line. Truncation is visible to the operator via the trailing
-// "...and N more" element.
+// formatDroppedVersions caps the slice it returns at maxLoggedDroppedVersions
+// entries so a pathological migration history doesn't produce a
+// wall-of-text log line. Truncation is visible to the operator via the
+// trailing "...and N more" element.
 func formatDroppedVersions(dropped []int) []any {
-	const cap = 20
-	if len(dropped) <= cap {
+	const maxLogged = 20
+	if len(dropped) <= maxLogged {
 		out := make([]any, len(dropped))
 		for i, v := range dropped {
 			out[i] = v
 		}
 		return out
 	}
-	out := make([]any, cap+1)
-	for i := range cap {
+	out := make([]any, maxLogged+1)
+	for i := range maxLogged {
 		out[i] = dropped[i]
 	}
-	out[cap] = fmt.Sprintf("...and %d more", len(dropped)-cap)
+	out[maxLogged] = fmt.Sprintf("...and %d more", len(dropped)-maxLogged)
 	return out
 }
 

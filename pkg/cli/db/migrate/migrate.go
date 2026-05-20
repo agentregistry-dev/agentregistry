@@ -35,9 +35,11 @@ func NewCommand() *cobra.Command {
 of server startup. Reads ` + dbURLEnv + ` from the environment when
 --db-url is omitted.
 
-When more than one migration source is registered, per-source
-operations (down, goto, force, version) require --source. up and
-status aggregate across all registered sources without a flag.`,
+When more than one migration source is registered, the per-source
+operations down/goto/force require --source. up and status aggregate
+across all registered sources without a flag. version prints one
+line per source by default and accepts --source to filter to a single
+track.`,
 		Annotations: map[string]string{
 			annotations.AnnotationSkipTokenResolution: "true",
 		},
@@ -203,43 +205,53 @@ func newUpCmd() *cobra.Command {
 			}
 
 			// Snapshot pre-versions across all sources; iterate in
-			// registration order. On failure of source N, roll
+			// registration order. On failure of source N — whether
+			// at NewMigrator, readVersion, or RunUpWithRecovery — roll
 			// sources 0..N-1 back to their pre-versions so the whole
-			// `up` is atomic across tracks.
+			// `up` is best-effort atomic across tracks.
 			snaps := make([]upSnapshot, 0, len(srcs))
 			defer func() { closeUpSnapshots(snaps) }()
+
+			rollbackPriors := func(priors []upSnapshot) {
+				// Best-effort cross-track rollback. Sources whose
+				// migrations have reversible .down.sql files (e.g.
+				// downstream extensions with real downs) will roll
+				// back; sources whose .down.sql files raise-exception
+				// (the OSS source's up-only pattern) will fail to
+				// roll back and the warning directs the operator to
+				// inspect that track. The caller is left with a
+				// non-atomic state across tracks in that case —
+				// surface explicitly rather than silently swallow.
+				for i := len(priors) - 1; i >= 0; i-- {
+					prior := priors[i]
+					if rbErr := database.RollbackToVersion(prior.mg, prior.src.Name, prior.preVersion); rbErr != nil {
+						fmt.Fprintf(os.Stderr,
+							"warning: rolling %s back to its pre-up version failed (likely up-only migrations); %s is left at its post-up state and may need manual reconciliation: %v\n",
+							prior.src.Name, prior.src.Name, rbErr)
+					}
+				}
+			}
 
 			for _, src := range srcs {
 				mg, err := src.NewMigrator(dsn)
 				if err != nil {
+					rollbackPriors(snaps)
 					return fmt.Errorf("construct %s migrator: %w", src.Name, err)
 				}
 				preVersion, err := readVersion(mg)
 				if err != nil {
 					_, _ = mg.Close()
+					rollbackPriors(snaps)
 					return fmt.Errorf("read pre-version for %s: %w", src.Name, err)
 				}
 				snaps = append(snaps, upSnapshot{src: src, mg: mg, preVersion: preVersion})
 
 				if _, runErr := database.RunUpWithRecovery(mg, src.Name); runErr != nil {
-					// Best-effort cross-track rollback. Sources whose
-					// migrations have reversible .down.sql files
-					// (e.g. downstream extensions with real downs)
-					// will roll back; sources whose .down.sql files
-					// raise-exception (the OSS source's up-only
-					// pattern) will fail to roll back and the warning
-					// directs the operator to inspect that track. The
-					// caller is left with a non-atomic state across
-					// tracks in that case — surface explicitly rather
-					// than silently swallow.
-					for i := len(snaps) - 2; i >= 0; i-- {
-						prior := snaps[i]
-						if rbErr := database.RollbackToVersion(prior.mg, prior.src.Name, prior.preVersion); rbErr != nil {
-							fmt.Fprintf(os.Stderr,
-								"warning: rolling %s back to its pre-up version failed (likely up-only migrations); %s is left at its post-up state and may need manual reconciliation: %v\n",
-								prior.src.Name, prior.src.Name, rbErr)
-						}
-					}
+					// The failing source's auto-recovery wrapper has
+					// already attempted to restore it to its
+					// pre-Up state; roll back the prior (succeeded)
+					// sources here.
+					rollbackPriors(snaps[:len(snaps)-1])
 					return runErr
 				}
 			}
@@ -316,9 +328,11 @@ func newStatusCmd() *cobra.Command {
 			}
 
 			type lineRow struct {
-				src     Source
-				applied int
-				pending int
+				src        Source
+				applied    int
+				pending    int
+				dbVersion  int  // raw DB version for desync reporting
+				downgraded bool // dbVersion > total
 			}
 			lines := make([]lineRow, 0, len(srcs))
 			appliedTotal, pendingTotal := 0, 0
@@ -327,29 +341,32 @@ func newStatusCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				var applied int
+				var applied, dbVersion int
+				var downgraded bool
 				if rerr := withSourceMigrator(src, dsn, func(mg *migrate.Migrate) error {
 					v, err := readVersion(mg)
 					if err != nil {
 						return err
 					}
-					if int(v) > total {
+					dbVersion = int(v)
+					if dbVersion > total {
 						// Binary embedded fewer migrations than the
 						// DB reports applied — operator is running an
 						// older arctl against a DB migrated by a newer
 						// build. Warn but don't fail; the operator
 						// should reconcile by upgrading the binary.
+						downgraded = true
 						fmt.Fprintf(os.Stderr,
 							"warning: %s reports version %d but this binary only ships migrations up to %d (older binary against newer DB?)\n",
 							src.Name, v, total)
 					}
-					applied = min(int(v), total)
+					applied = min(dbVersion, total)
 					return nil
 				}); rerr != nil {
 					return rerr
 				}
 				pending := total - applied
-				lines = append(lines, lineRow{src: src, applied: applied, pending: pending})
+				lines = append(lines, lineRow{src: src, applied: applied, pending: pending, dbVersion: dbVersion, downgraded: downgraded})
 				appliedTotal += applied
 				pendingTotal += pending
 			}
@@ -358,7 +375,12 @@ func newStatusCmd() *cobra.Command {
 			fmt.Fprintf(out, "%d migration(s) applied, %d pending\n", appliedTotal, pendingTotal)
 			if len(lines) > 1 {
 				for _, l := range lines {
-					fmt.Fprintf(out, "  %s: %d applied, %d pending\n", l.src.Name, l.applied, l.pending)
+					if l.downgraded {
+						fmt.Fprintf(out, "  %s: %d applied, %d pending (db reports v%d — binary out of date)\n",
+							l.src.Name, l.applied, l.pending, l.dbVersion)
+					} else {
+						fmt.Fprintf(out, "  %s: %d applied, %d pending\n", l.src.Name, l.applied, l.pending)
+					}
 				}
 			}
 			return nil
@@ -372,7 +394,8 @@ func newVersionCmd() *cobra.Command {
 		Short: "Print the highest applied migration version",
 		Long: `Print the highest applied migration version.
 For a single registered source the value is on one line; multi-source
-binaries print one line per source.`,
+binaries print one line per source. Pass --source to filter to a
+single track.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			dsn, err := resolveDSN()
@@ -382,6 +405,21 @@ binaries print one line per source.`,
 			srcs := Sources()
 			if len(srcs) == 0 {
 				return errors.New("no migration sources registered")
+			}
+			// --source filters the output even though version is
+			// otherwise an aggregate op. Empty flag = print all.
+			if flags.source != "" {
+				picked := -1
+				for i, s := range srcs {
+					if s.Name == flags.source {
+						picked = i
+						break
+					}
+				}
+				if picked < 0 {
+					return fmt.Errorf("--source %q not registered; registered sources: %s", flags.source, sourceNames(srcs))
+				}
+				srcs = []Source{srcs[picked]}
 			}
 			out := cmd.OutOrStdout()
 			if len(srcs) == 1 {
