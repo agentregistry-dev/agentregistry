@@ -11,6 +11,7 @@ package migrate
 
 import (
 	"context"
+	"fmt"
 	"io/fs"
 	"sync"
 
@@ -49,12 +50,25 @@ var (
 )
 
 // Register adds a migration source to the package registry. Intended
-// to be called from init() in the binary's root command package; the
-// mutex is defense-in-depth so a contract-violating caller doesn't
-// trigger a silent data race against Sources().
+// to be called from init() in the binary's root command package.
+//
+// Panics on duplicate Name: each source's Name maps 1:1 to its
+// per-source schema_migrations_<name> table (via go-migrate's
+// per-instance MigrationsTable), so a duplicate Name would collide
+// at the bookkeeping layer. init-time panic fails fast at process
+// start where the misconfiguration is easy to spot.
+//
+// The mutex is defense-in-depth so a contract-violating caller
+// running Register outside init() doesn't trigger a silent data race
+// against Sources().
 func Register(s Source) {
 	sourcesMu.Lock()
 	defer sourcesMu.Unlock()
+	for _, existing := range sources {
+		if existing.Name == s.Name {
+			panic(fmt.Sprintf("migrate.Register: source %q already registered; each source must have a unique Name (maps to a distinct schema_migrations_<name> table)", s.Name))
+		}
+	}
 	sources = append(sources, s)
 }
 

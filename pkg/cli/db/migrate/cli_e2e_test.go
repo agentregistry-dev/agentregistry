@@ -287,8 +287,8 @@ func TestE2E_HappyPath(t *testing.T) {
 	if r.exitCode != 0 {
 		t.Fatalf("status: exit %d\nstderr: %s", r.exitCode, r.stderr)
 	}
-	if !strings.Contains(r.stdout, "7 migration(s) applied, 0 pending") {
-		t.Errorf("status should show 7 applied, 0 pending; got: %q", r.stdout)
+	if !strings.Contains(r.stdout, "7 migration(s) applied (at v8), 0 pending") {
+		t.Errorf("status should show 7 applied (at v8), 0 pending; got: %q", r.stdout)
 	}
 
 	r = runArctl(t, env, "db", "migrate", "version")

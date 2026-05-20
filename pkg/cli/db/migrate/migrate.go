@@ -382,19 +382,32 @@ func newStatusCmd() *cobra.Command {
 			}
 
 			out := cmd.OutOrStdout()
-			fmt.Fprintf(out, "%d migration(s) applied, %d pending\n", appliedTotal, pendingTotal)
-			// Same `multiSource` used to gate the stderr desync
-			// warning above — both signals live and die together so
-			// future "skip-this-source" branches can't desync them.
 			if multiSource {
+				fmt.Fprintf(out, "%d migration(s) applied, %d pending\n", appliedTotal, pendingTotal)
+				// Same `multiSource` used to gate the stderr desync
+				// warning above — both signals live and die together so
+				// future "skip-this-source" branches can't desync them.
 				for _, l := range lines {
 					if l.downgraded {
+						// "db reports v" carries the version; no
+						// redundant "at v" needed.
 						fmt.Fprintf(out, "  %s: %d applied, %d pending (db reports v%d — binary out of date)\n",
 							l.src.Name, l.applied, l.pending, l.dbVersion)
 					} else {
-						fmt.Fprintf(out, "  %s: %d applied, %d pending\n", l.src.Name, l.applied, l.pending)
+						fmt.Fprintf(out, "  %s: %d applied (at v%d), %d pending\n",
+							l.src.Name, l.applied, l.dbVersion, l.pending)
 					}
 				}
+			} else {
+				// Single-source: fold the version into the headline
+				// line so operators don't have to run `version`
+				// separately. dbVersion is the raw schema_migrations
+				// value (matches `force V` semantics); applied is the
+				// count capped at the file count, surfacing a desync
+				// when those numbers differ.
+				l := lines[0]
+				fmt.Fprintf(out, "%d migration(s) applied (at v%d), %d pending\n",
+					l.applied, l.dbVersion, l.pending)
 			}
 			return nil
 		},
