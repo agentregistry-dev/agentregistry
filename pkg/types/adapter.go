@@ -2,6 +2,7 @@ package types
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
@@ -125,6 +126,15 @@ type ApplyResult struct {
 	// runtimes.agentregistry.solo.io/<type>/*). Callers marshal
 	// to string values since Annotations is map[string]string.
 	RuntimeMetadata map[string]string
+
+	// Raw is a map of top-level keys to JSON-encoded values to merge into
+	// Deployment.Status.Raw via Status.SetRawKeyJSON. Each adapter owns its
+	// own top-level key; other keys in Status.Raw are preserved across
+	// the patch. A nil value at a key removes that key.
+	//
+	// Use Raw for structured state that Conditions cannot express cleanly;
+	// stable, typed status should still be modeled as Conditions.
+	Raw map[string]json.RawMessage
 }
 
 // RemoveInput carries the Deployment being torn down plus its resolved

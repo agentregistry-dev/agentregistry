@@ -2,6 +2,7 @@ package common
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"maps"
 	"strings"
@@ -32,6 +33,14 @@ type DeploymentRecord struct {
 	CreatedAt         time.Time         `json:"deployedAt,omitempty"`
 	UpdatedAt         time.Time         `json:"updatedAt,omitempty"`
 	DeletionTimestamp *time.Time        `json:"deletionTimestamp,omitempty"`
+
+	// Conditions is the raw v1alpha1.Status.Conditions list as reported by
+	// reconcilers. Surfaced alongside the derived Status phase so YAML/JSON
+	// consumers can see fine-grained state without losing the compact view.
+	Conditions []v1alpha1.Condition `json:"conditions,omitempty"`
+
+	// Raw is the opaque adapter-owned status map (see v1alpha1.Status.Raw).
+	Raw json.RawMessage `json:"raw,omitempty"`
 }
 
 // ListDeployments returns every Deployment row visible from the default namespace.
@@ -103,7 +112,27 @@ func DeploymentRecordFromObject(dep *v1alpha1.Deployment) *DeploymentRecord {
 		CreatedAt:         dep.Metadata.CreatedAt,
 		UpdatedAt:         dep.Metadata.UpdatedAt,
 		DeletionTimestamp: dep.Metadata.DeletionTimestamp,
+		Conditions:        cloneConditions(dep.Status.Conditions),
+		Raw:               cloneRaw(dep.Status.Raw),
 	}
+}
+
+func cloneConditions(in []v1alpha1.Condition) []v1alpha1.Condition {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]v1alpha1.Condition, len(in))
+	copy(out, in)
+	return out
+}
+
+func cloneRaw(in json.RawMessage) json.RawMessage {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(json.RawMessage, len(in))
+	copy(out, in)
+	return out
 }
 
 // DeploymentID is the display identity used by imperative deployment commands.
