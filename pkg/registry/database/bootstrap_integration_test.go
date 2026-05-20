@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/database/migratetest"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
@@ -100,35 +101,10 @@ func TestIntegration_BootstrapPreservesLegacyOSSRows(t *testing.T) {
 		VALUES ('default', 'preserved-agent', 'v1', '{"flag": true}')`)
 	require.NoError(t, err)
 
-	// Step 2 — create legacy schema_migrations and populate it with
-	// the seven OSS migration rows under the +200 offset. Include an
-	// orphan row (205) that has no matching .up.sql to assert it is
-	// silently dropped by the bridge.
-	_, err = db.ExecContext(ctx, `
-		CREATE TABLE schema_migrations (
-		    version    INTEGER                  PRIMARY KEY,
-		    name       VARCHAR(255)             NOT NULL,
-		    applied_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-		)`)
-	require.NoError(t, err)
-	for _, row := range []struct {
-		v    int
-		name string
-	}{
-		{201, "001_v1alpha1_schema"},
-		{202, "002_enrichment_findings"},
-		{203, "003_embeddings"},
-		{204, "004_notify_payload_discrete"},
-		{205, "005_phantom_orphan"}, // no matching .up.sql in current embed
-		{206, "006_enrichment_findings_tag"},
-		{207, "007_drop_enrichment_findings"},
-		{208, "008_drop_semantic_embeddings"},
-	} {
-		_, err = db.ExecContext(ctx,
-			`INSERT INTO schema_migrations (version, name) VALUES ($1, $2)`,
-			row.v, row.name)
-		require.NoError(t, err)
-	}
+	// Step 2 — seed legacy schema_migrations with the canonical OSS
+	// fixture (7 migrations under +200 offset + 1 orphan row to
+	// assert orphan handling).
+	migratetest.SeedLegacySchemaMigrations(t, db, migratetest.OSSLegacyRows())
 
 	// Run the bootstrap + go-migrate Up via the OSS factory.
 	mg, err := v1alpha1store.NewOSSMigrator(ctx, dsn)
@@ -141,16 +117,8 @@ func TestIntegration_BootstrapPreservesLegacyOSSRows(t *testing.T) {
 
 	// Assert 1: schema_migrations_v0_legacy retains the original 8
 	// rows with name/applied_at intact.
-	var legacyCount int
-	err = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations_v0_legacy`).Scan(&legacyCount)
-	require.NoError(t, err)
-	require.Equal(t, 8, legacyCount, "legacy table must retain every seeded row")
-
-	var sampleName string
-	err = db.QueryRowContext(ctx,
-		`SELECT name FROM schema_migrations_v0_legacy WHERE version = 201`).Scan(&sampleName)
-	require.NoError(t, err)
-	require.Equal(t, "001_v1alpha1_schema", sampleName)
+	require.Equal(t, 8, migratetest.LegacyRowCount(t, db), "legacy table must retain every seeded row")
+	require.Equal(t, "001_v1alpha1_schema", migratetest.LegacyRowName(t, db, 201))
 
 	// Assert 2: new schema_migrations has go-migrate shape with a
 	// single row at the highest carryable version. go-migrate keeps
@@ -158,19 +126,10 @@ func TestIntegration_BootstrapPreservesLegacyOSSRows(t *testing.T) {
 	// the highest legacy OSS version (208) stripped of the +200
 	// offset (8). The orphan v205 is dropped because no .up.sql for
 	// version 5 exists in the embed.
-	var version int
-	var dirty bool
-	err = db.QueryRowContext(ctx,
-		`SELECT version, dirty FROM schema_migrations`).Scan(&version, &dirty)
-	require.NoError(t, err)
-	require.Equal(t, 8, version, "highest legacy OSS row (208) bridged to v8")
-	require.False(t, dirty, "bridged row must be clean")
-
-	var newRowCount int
-	err = db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM schema_migrations`).Scan(&newRowCount)
-	require.NoError(t, err)
-	require.Equal(t, 1, newRowCount, "go-migrate stores only the current version as a single row")
+	bridged := migratetest.BridgedRow(t, db, "schema_migrations")
+	require.Equal(t, 8, bridged.Version, "highest legacy OSS row (208) bridged to v8")
+	require.False(t, bridged.Dirty, "bridged row must be clean")
+	require.Equal(t, 1, bridged.Rows, "go-migrate stores only the current version as a single row")
 
 	// Assert 3: v1alpha1.agents row survives byte-for-byte.
 	var ns, name, tag, payload string
@@ -194,15 +153,8 @@ func TestIntegration_BootstrapPreservesLegacyOSSRows(t *testing.T) {
 	require.NoError(t, srcErr)
 	require.NoError(t, dbErr)
 
-	var legacyCount2 int
-	err = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations_v0_legacy`).Scan(&legacyCount2)
-	require.NoError(t, err)
-	require.Equal(t, 8, legacyCount2, "legacy table unchanged on re-run")
-
-	var newRowCount2 int
-	err = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations`).Scan(&newRowCount2)
-	require.NoError(t, err)
-	require.Equal(t, 1, newRowCount2, "go-migrate row count unchanged on re-run")
+	require.Equal(t, 8, migratetest.LegacyRowCount(t, db), "legacy table unchanged on re-run")
+	require.Equal(t, 1, migratetest.BridgedRow(t, db, "schema_migrations").Rows, "go-migrate row count unchanged on re-run")
 
 	// Assert no extra "legacy" copies were created (a second bridge
 	// pass would have errored on RENAME, so this is also implicit).
