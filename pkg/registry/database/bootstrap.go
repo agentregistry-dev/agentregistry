@@ -13,10 +13,28 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib" // pgx stdlib driver — required by sql.Open("pgx", ...)
 )
 
-// bootstrapAdvisoryLockKey is the pg_advisory_xact_lock key under
-// which the OSS legacy-bootstrap serializes. ASCII "arboot-o" packed
-// into an int64 — stable, reproducible across processes.
-const bootstrapAdvisoryLockKey = int64(0x6172626f6f742d6f)
+// BootstrapAdvisoryLockKey is the pg_advisory_xact_lock key under
+// which BootstrapLegacyOSSMigrations serializes. ASCII "arboot-o"
+// packed into an int64 — stable, reproducible across processes.
+//
+// Downstream extensions running BootstrapLegacyTrack against the
+// renamed `schema_migrations_v0_legacy` table MUST pass this same
+// key as BootstrapLegacyTrackOptions.AdvisoryLockKey so all
+// bootstraps in the binary serialize globally against the OSS
+// rename. Concretely: in a rolling-deploy scenario with two server
+// pods, pod 1 might be running the OSS bootstrap (renaming
+// schema_migrations -> schema_migrations_v0_legacy) while pod 2 is
+// starting its downstream bootstrap (reading from
+// schema_migrations_v0_legacy). Without the shared lock, pod 2 sees
+// the old name and bails out as "nothing to bridge"; with the
+// shared lock, pod 2 waits for pod 1's COMMIT and observes the
+// renamed table.
+//
+// Downstream consumers that choose a different lock key for their
+// own reasons must instead poll for the renamed table's existence
+// with retry — this is materially more complex and is the documented
+// fallback, not the recommended path.
+const BootstrapAdvisoryLockKey = int64(0x6172626f6f742d6f)
 
 // identifierRE constrains the table-name strings BootstrapLegacyTrack
 // embeds into DDL. Init-time callers pass hardcoded values, so the
@@ -246,7 +264,7 @@ func BootstrapLegacyOSSMigrations(ctx context.Context, dsn string, migrationsFS 
 		NewTable:           "schema_migrations",
 		MigrationsFS:       migrationsFS,
 		Dir:                dir,
-		AdvisoryLockKey:    bootstrapAdvisoryLockKey,
+		AdvisoryLockKey:    BootstrapAdvisoryLockKey,
 	})
 }
 
@@ -268,7 +286,7 @@ func validateBootstrapOptions(opts BootstrapLegacyTrackOptions) error {
 		return fmt.Errorf("bootstrap option LegacyVersionRange=[%d, %d] must be non-empty", opts.LegacyVersionRange[0], opts.LegacyVersionRange[1])
 	}
 	if opts.AdvisoryLockKey == 0 {
-		return fmt.Errorf("bootstrap option AdvisoryLockKey must be non-zero (pass BootstrapAdvisoryLockKey to serialize against the OSS bridge)")
+		return fmt.Errorf("bootstrap option AdvisoryLockKey must be non-zero (pass database.BootstrapAdvisoryLockKey to serialize against the OSS bridge)")
 	}
 	return nil
 }
