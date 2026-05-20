@@ -26,10 +26,11 @@ import (
 // is used because go-migrate's advisory lock is session-level and must
 // not be shared.
 //
-// NewMigrator takes a context for symmetry with the surrounding
-// startup code, but go-migrate's API is synchronous and doesn't accept
-// a context after construction — ctx is only consulted at open time
-// via sql.Conn pinging through the driver's default behavior.
+// NewMigrator takes a context for API symmetry with the surrounding
+// startup code, but ctx is unused inside the function — sql.Open is
+// lazy (never pings), and go-migrate's API is synchronous and doesn't
+// accept a context. The legacy bootstrap is the only ctx-consuming
+// hop in the OSS factory; see NewOSSMigrator.
 func NewMigrator(_ context.Context, dsn string, migrationsFS fs.FS, dir, table string) (*migrate.Migrate, error) {
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
@@ -150,8 +151,9 @@ func RollbackToVersion(mg *migrate.Migrate, name string, targetVersion uint) err
 			// further to step back through.
 			return nil
 		}
-		// forceTarget >= 1 here, so cleanVersion >= 1 too — the
-		// signed→unsigned cast is well-defined.
+		// forceTarget >= 1 here, and forceTarget == cleanVersion on
+		// this path (we only rewrote to -1 inside the < 1 branch), so
+		// the signed→unsigned cast is well-defined.
 		currentVersion = uint(cleanVersion)
 	}
 

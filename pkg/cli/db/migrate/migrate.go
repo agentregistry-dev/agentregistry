@@ -383,7 +383,10 @@ func newStatusCmd() *cobra.Command {
 
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "%d migration(s) applied, %d pending\n", appliedTotal, pendingTotal)
-			if len(lines) > 1 {
+			// Same `multiSource` used to gate the stderr desync
+			// warning above — both signals live and die together so
+			// future "skip-this-source" branches can't desync them.
+			if multiSource {
 				for _, l := range lines {
 					if l.downgraded {
 						fmt.Fprintf(out, "  %s: %d applied, %d pending (db reports v%d — binary out of date)\n",
