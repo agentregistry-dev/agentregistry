@@ -91,15 +91,15 @@ declarative format and can be applied directly with 'arctl apply'.
 
 Supported types:
   agent NAME              # picker selects framework + language
-  mcp NAMESPACE/NAME      # picker selects framework + language
+  mcp NAME                # picker selects framework + language
   skill NAME
   prompt NAME
 
 Examples:
   arctl init agent myagent
   arctl init agent myagent --framework adk --language python
-  arctl init mcp acme/my-server
-  arctl init mcp acme/my-server --framework fastmcp --language python
+  arctl init mcp my-server
+  arctl init mcp my-server --framework fastmcp --language python
   arctl init skill my-skill
   arctl init prompt my-prompt
   arctl init                                    # interactive: picker for kind`,

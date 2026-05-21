@@ -396,7 +396,7 @@ func TestDeclarativeInit_Agent(t *testing.T) {
 // declarative mcp.yaml (offline, no registry required for generation).
 func TestDeclarativeInit_MCP(t *testing.T) {
 	tmpDir := t.TempDir()
-	// MCP names must be namespace/name format.
+	// MCP names must be DNS-1123 label.
 	dirName := UniqueNameWithPrefix("initmcp")
 	fullName := "e2etest-" + dirName
 
@@ -552,7 +552,7 @@ func TestDeclarativeBuild_MCP(t *testing.T) {
 	skipIfNoDocker(t)
 	tmpDir := t.TempDir()
 
-	// MCP names must be namespace/name format; directory uses just the name part.
+	// MCP names must be DNS-1123 label.
 	dirName := UniqueNameWithPrefix("bldmcp")
 	fullName := "e2etest-" + dirName
 	image := "localhost:5001/" + dirName + ":latest"
