@@ -185,7 +185,7 @@ func init() {
 			return deploymentToDocument(deployment)
 		},
 		TableColumns: []scheme.Column{
-			{Header: "ID"}, {Header: "NAME"}, {Header: "VERSION"},
+			{Header: "NAME"}, {Header: "TARGET"}, {Header: "VERSION"},
 			{Header: "TYPE"}, {Header: "RUNTIME"}, {Header: "STATUS"},
 		},
 	})

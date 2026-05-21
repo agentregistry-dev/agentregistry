@@ -2,6 +2,7 @@ package declarative
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -19,13 +20,15 @@ import (
 // v1alpha1.Status conditions block so imperative users keep the compact fields
 // they already consume while apply decode still ignores incoming status.
 type deploymentStatus struct {
-	ID              string         `json:"id,omitempty" yaml:"id,omitempty"`
-	Phase           string         `json:"phase,omitempty" yaml:"phase,omitempty"`
-	Origin          string         `json:"origin,omitempty" yaml:"origin,omitempty"`
-	Error           string         `json:"error,omitempty" yaml:"error,omitempty"`
-	RuntimeMetadata map[string]any `json:"runtimeMetadata,omitempty" yaml:"runtimeMetadata,omitempty"`
-	DeployedAt      time.Time      `json:"deployedAt,omitempty" yaml:"deployedAt,omitempty"`
-	UpdatedAt       time.Time      `json:"updatedAt,omitempty" yaml:"updatedAt,omitempty"`
+	ID              string               `json:"id,omitempty" yaml:"id,omitempty"`
+	Phase           string               `json:"phase,omitempty" yaml:"phase,omitempty"`
+	Origin          string               `json:"origin,omitempty" yaml:"origin,omitempty"`
+	Error           string               `json:"error,omitempty" yaml:"error,omitempty"`
+	RuntimeMetadata map[string]any       `json:"runtimeMetadata,omitempty" yaml:"runtimeMetadata,omitempty"`
+	DeployedAt      time.Time            `json:"deployedAt,omitempty" yaml:"deployedAt,omitempty"`
+	UpdatedAt       time.Time            `json:"updatedAt,omitempty" yaml:"updatedAt,omitempty"`
+	Conditions      []v1alpha1.Condition `json:"conditions,omitempty" yaml:"conditions,omitempty"`
+	Details         json.RawMessage      `json:"details,omitempty" yaml:"details,omitempty"`
 }
 
 // listAny lists rows of the given kind. The zero scheme.ListOpts returns
@@ -221,6 +224,8 @@ func deploymentToDocument(dep *cliCommon.DeploymentRecord) any {
 			RuntimeMetadata: dep.RuntimeMetadata,
 			DeployedAt:      dep.CreatedAt,
 			UpdatedAt:       dep.UpdatedAt,
+			Conditions:      dep.Conditions,
+			Details:         dep.Details,
 		},
 	}
 }

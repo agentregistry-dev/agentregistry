@@ -23,6 +23,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
 // PerKindHooks groups optional, per-kind callbacks layered on top of
@@ -70,6 +71,7 @@ func Register(
 	resolver v1alpha1.ResolverFunc,
 	registryValidator v1alpha1.RegistryValidatorFunc,
 	perKind PerKindHooks,
+	deleteAdmission types.DeleteAdmission,
 ) {
 	cfgFor := func(kind string) (resource.Config, bool) {
 		store, ok := stores[kind]
@@ -86,6 +88,7 @@ func Register(
 			ListFilter:        perKind.ListFilters[kind],
 			PostUpsert:        perKind.PostUpserts[kind],
 			PostDelete:        perKind.PostDeletes[kind],
+			DeleteAdmission:   deleteAdmission,
 			InitialFinalizers: perKind.InitialFinalizers[kind],
 		}, true
 	}

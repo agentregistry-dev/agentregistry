@@ -33,7 +33,7 @@ func validateMCPServerSpec(s *MCPServerSpec) FieldErrors {
 	return errs
 }
 
-func validateMCPServerRemote(t *MCPTransport) FieldErrors {
+func validateMCPServerRemote(t *MCPRemote) FieldErrors {
 	var errs FieldErrors
 	if t.Type == "" {
 		errs.Append("spec.remote.type", fmt.Errorf("%w", ErrRequiredField))

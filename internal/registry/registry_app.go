@@ -213,10 +213,14 @@ func buildRouteOptions(
 	adapters map[string]types.DeploymentAdapter,
 ) *router.RouteOptions {
 	routeOpts := &router.RouteOptions{
-		ExtraRoutes:       options.ExtraRoutes,
-		Stores:            stores,
-		PerKindHooks:      crudPerKindHooks(options),
-		RegistryValidator: options.RegistryValidator,
+		ExtraRoutes:         options.ExtraRoutes,
+		Stores:              stores,
+		PerKindHooks:        crudPerKindHooks(options),
+		RegistryValidator:   options.RegistryValidator,
+		Admission:           options.Admission,
+		DeleteAdmission:     options.DeleteAdmission,
+		ResolverWrapper:     options.ResolverWrapper,
+		ExtraResourceRoutes: options.ExtraResourceRoutes,
 	}
 
 	if stores != nil {
@@ -370,7 +374,7 @@ func openDatabase(
 		return db, nil
 	}
 
-	baseDB, err := internaldb.NewPostgreSQL(dbCtx, cfg.DatabaseURL, authz, cfg.Embeddings.Enabled)
+	baseDB, err := internaldb.NewPostgreSQL(dbCtx, cfg.DatabaseURL, authz)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to PostgreSQL: %w", err)
 	}

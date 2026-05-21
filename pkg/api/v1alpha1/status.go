@@ -2,6 +2,8 @@ package v1alpha1
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"time"
 )
 
@@ -44,6 +46,106 @@ type Condition struct {
 type Status struct {
 	ObservedGeneration int64       `json:"-" yaml:"-"`
 	Conditions         []Condition `json:"conditions,omitempty" yaml:"conditions,omitempty"`
+
+	// Details is an opaque JSON object populated by runtime adapters that need
+	// to surface structured state beyond what Conditions can express. Each
+	// adapter owns its own top-level key inside Details; consumers parse only
+	// the keys they care about. Empty when no adapter has written.
+	//
+	// Use SetDetailsKey / GetDetailsKey to merge or read keys without clobbering
+	// other adapters' state.
+	Details json.RawMessage `json:"details,omitempty" yaml:"details,omitempty"`
+}
+
+// SetDetailsKey merges value (as JSON) under key in s.Details. Other top-level keys
+// in s.Details are preserved; a nil value removes the key. Returns an error if
+// value cannot be marshaled or if existing Details is not a JSON object.
+func (s *Status) SetDetailsKey(key string, value any) error {
+	if key == "" {
+		return errors.New("status: SetDetailsKey key must not be empty")
+	}
+	m := map[string]json.RawMessage{}
+	if len(s.Details) > 0 {
+		if err := json.Unmarshal(s.Details, &m); err != nil {
+			return fmt.Errorf("status: existing Details is not a JSON object: %w", err)
+		}
+	}
+	if value == nil {
+		delete(m, key)
+	} else {
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			return fmt.Errorf("status: marshal %q: %w", key, err)
+		}
+		m[key] = encoded
+	}
+	if len(m) == 0 {
+		s.Details = nil
+		return nil
+	}
+	out, err := json.Marshal(m)
+	if err != nil {
+		return fmt.Errorf("status: marshal Details: %w", err)
+	}
+	s.Details = out
+	return nil
+}
+
+// SetDetailsKeyJSON is SetDetailsKey for callers that already hold the value as
+// pre-encoded JSON bytes. Skips the marshal step so byte equality is
+// preserved (useful when the caller wants the on-disk JSON to match a
+// canonical form). encoded must be a valid JSON value; pass nil to remove
+// the key.
+func (s *Status) SetDetailsKeyJSON(key string, encoded json.RawMessage) error {
+	if key == "" {
+		return errors.New("status: SetDetailsKeyJSON key must not be empty")
+	}
+	m := map[string]json.RawMessage{}
+	if len(s.Details) > 0 {
+		if err := json.Unmarshal(s.Details, &m); err != nil {
+			return fmt.Errorf("status: existing Details is not a JSON object: %w", err)
+		}
+	}
+	if len(encoded) == 0 {
+		delete(m, key)
+	} else {
+		// Validate encoded is well-formed before storing.
+		if !json.Valid(encoded) {
+			return fmt.Errorf("status: SetDetailsKeyJSON(%q): value is not valid JSON", key)
+		}
+		m[key] = encoded
+	}
+	if len(m) == 0 {
+		s.Details = nil
+		return nil
+	}
+	out, err := json.Marshal(m)
+	if err != nil {
+		return fmt.Errorf("status: marshal Details: %w", err)
+	}
+	s.Details = out
+	return nil
+}
+
+// GetDetailsKey unmarshals the value at key in s.Details into out. Returns (false,
+// nil) when the key is absent. Returns an error if Details is malformed or out
+// cannot receive the value.
+func (s *Status) GetDetailsKey(key string, out any) (bool, error) {
+	if len(s.Details) == 0 || key == "" {
+		return false, nil
+	}
+	m := map[string]json.RawMessage{}
+	if err := json.Unmarshal(s.Details, &m); err != nil {
+		return false, fmt.Errorf("status: existing Details is not a JSON object: %w", err)
+	}
+	v, ok := m[key]
+	if !ok {
+		return false, nil
+	}
+	if err := json.Unmarshal(v, out); err != nil {
+		return false, fmt.Errorf("status: unmarshal %q: %w", key, err)
+	}
+	return true, nil
 }
 
 // SetCondition adds or updates the condition matching c.Type on s. If an entry
@@ -108,6 +210,7 @@ type conditionStore struct {
 type statusStore struct {
 	ObservedGeneration int64            `json:"observedGeneration,omitempty"`
 	Conditions         []conditionStore `json:"conditions,omitempty"`
+	Details            json.RawMessage  `json:"details,omitempty"`
 }
 
 // MarshalStatusForStorage serializes a Status to JSON suitable for
@@ -124,6 +227,7 @@ func MarshalStatusForStorage(s Status) ([]byte, error) {
 	return json.Marshal(statusStore{
 		ObservedGeneration: s.ObservedGeneration,
 		Conditions:         storeConds,
+		Details:            s.Details,
 	})
 }
 
@@ -171,6 +275,7 @@ func UnmarshalStatusFromStorage(data []byte, s *Status) error {
 	*s = Status{
 		ObservedGeneration: w.ObservedGeneration,
 		Conditions:         conds,
+		Details:            w.Details,
 	}
 	return nil
 }
