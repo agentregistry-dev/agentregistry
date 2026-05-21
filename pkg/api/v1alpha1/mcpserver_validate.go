@@ -5,7 +5,16 @@ import "fmt"
 // Validate runs structural validation on the MCPServer envelope.
 func (m *MCPServer) Validate() error {
 	var errs FieldErrors
-	errs = append(errs, ValidateObjectMeta(m.Metadata)...)
+	// Use ObjectMeta's namespace+labels checks but replace its generic loose name
+	// check with the MCP-specific DNS-1123 label rule.
+	for _, e := range ValidateObjectMeta(m.Metadata) {
+		if e.Path != "metadata.name" {
+			errs = append(errs, e)
+		}
+	}
+	if err := validateMCPServerName(m.Metadata.Name); err != nil {
+		errs.Append("metadata.name", err)
+	}
 	errs = append(errs, validateMCPServerSpec(&m.Spec)...)
 	if len(errs) == 0 {
 		return nil

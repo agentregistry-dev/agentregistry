@@ -114,7 +114,7 @@ describe("ServerCard", () => {
     const minimal: ServerResponse = {
       server: {
         $schema: "https://modelcontextprotocol.io/schemas/server.json",
-        name: "test/minimal",
+        name: "test-minimal",
         description: "Bare minimum.",
         tag: "0.0.1",
       },
