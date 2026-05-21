@@ -39,7 +39,7 @@ TYPE must be one of: agent, mcp, skill, prompt, deployment
   arctl delete -f my-server/mcp.yaml
   arctl delete agent acme/summarizer --tag stable
   arctl delete agent acme/summarizer --all-tags
-  arctl delete mcp acme/fetch --tag stable
+  arctl delete mcp acme-fetch --tag stable
   arctl delete deployment my-agent --force`,
 		SilenceUsage: true,
 		RunE:         runDeclarativeDelete,

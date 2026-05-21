@@ -40,20 +40,20 @@ func TestE2E_InitAgent_CreatesExpectedTree(t *testing.T) {
 	assert.Contains(t, string(agentYAML), "kind: Agent")
 }
 
-func TestE2E_InitMCP_RequiresNamespaceSlashName(t *testing.T) {
-	tmp := t.TempDir()
-	require.NoError(t, os.Chdir(tmp))
-
-	result := RunArctl(t, tmp, "init", "mcp", "noslash",
-		"--framework", "fastmcp", "--language", "python")
-	require.NotEqual(t, 0, result.ExitCode, "expected non-zero exit when name lacks slash")
-}
-
-func TestE2E_InitMCP_AcceptsNamespaceSlashName(t *testing.T) {
+func TestE2E_InitMCP_RejectsNonDNSLabelName(t *testing.T) {
 	tmp := t.TempDir()
 	require.NoError(t, os.Chdir(tmp))
 
 	result := RunArctl(t, tmp, "init", "mcp", "acme/my-mcp",
+		"--framework", "fastmcp", "--language", "python")
+	require.NotEqual(t, 0, result.ExitCode, "expected non-zero exit when name is not DNS-1123 label")
+}
+
+func TestE2E_InitMCP_AcceptsDNSLabelName(t *testing.T) {
+	tmp := t.TempDir()
+	require.NoError(t, os.Chdir(tmp))
+
+	result := RunArctl(t, tmp, "init", "mcp", "my-mcp",
 		"--framework", "fastmcp", "--language", "python")
 	RequireSuccess(t, result)
 
@@ -62,7 +62,7 @@ func TestE2E_InitMCP_AcceptsNamespaceSlashName(t *testing.T) {
 	require.NoError(t, err)
 	mcp, err := os.ReadFile(filepath.Join(pd, "mcp.yaml"))
 	require.NoError(t, err)
-	assert.Contains(t, string(mcp), "name: acme/my-mcp")
+	assert.Contains(t, string(mcp), "name: my-mcp")
 }
 
 func TestE2E_RunDryRun_ReadsArctlYAMLAndDispatches(t *testing.T) {

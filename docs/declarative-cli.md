@@ -10,7 +10,7 @@ arctl build summarizer/ --push    # optional: build and push Docker image
 arctl apply -f summarizer/agent.yaml
 ```
 
-`arctl init agent NAME` and `arctl init mcp NAMESPACE/NAME` pick a framework + language interactively unless `--framework` and `--language` are provided. Run `arctl init agent NAME` (or `arctl init mcp NAMESPACE/NAME`) on its own to see the available choices.
+`arctl init agent NAME` and `arctl init mcp NAME` pick a framework + language interactively unless `--framework` and `--language` are provided. Run `arctl init agent NAME` (or `arctl init mcp NAME`) on its own to see the available choices. MCP server names must be DNS-1123 label (lowercase alphanumeric and hyphens only; max 63 chars; must start and end with alphanumeric).
 
 ## Tags And Mutable Objects
 
@@ -44,11 +44,11 @@ arctl run --dry-run   # print the command without executing
 ## MCP Servers
 
 ```bash
-arctl init mcp acme/my-server --framework fastmcp --language python
+arctl init mcp my-server --framework fastmcp --language python
 arctl build my-server/ --push    # optional: build and push Docker image
 arctl apply -f my-server/mcp.yaml
 arctl get mcps
-arctl delete mcp acme/my-server --tag stable
+arctl delete mcp my-server --tag stable
 ```
 
 `arctl run` also works for MCP server projects — it dispatches to the framework selected in `arctl.yaml`.
@@ -90,7 +90,7 @@ Fetch a registered resource's source back to a local directory:
 
 ```bash
 arctl pull agent summarizer
-arctl pull mcp acme/my-server ./vendor/my-server
+arctl pull mcp my-server ./vendor/my-server
 arctl pull skill summarize --version 1.2.0
 ```
 

@@ -551,6 +551,20 @@ func writeDeclarativeAgentYAML(projectDir, name, image, modelProvider, modelName
 
 // --- init mcp ---
 
+// validateMCPProjectName mirrors the backend MCPServer.metadata.name rule
+// (pkg/api/v1alpha1/validation.go: DNSLabelRegex / DNSLabelMaxLen) so the CLI
+// rejects non-compliant names client-side with the same shape the backend
+// will enforce.
+func validateMCPProjectName(s string) error {
+	if s == "" {
+		return fmt.Errorf("name must not be empty")
+	}
+	if len(s) > v1alpha1.DNSLabelMaxLen || !v1alpha1.DNSLabelRegex.MatchString(s) {
+		return fmt.Errorf("name must be DNS-1123 label: lowercase alphanumeric and hyphens, max %d chars, start/end with alphanumeric (got %q)", v1alpha1.DNSLabelMaxLen, s)
+	}
+	return nil
+}
+
 func newInitMCPCmd() *cobra.Command {
 	var (
 		initDescription string
@@ -561,40 +575,34 @@ func newInitMCPCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "mcp NAMESPACE/NAME",
+		Use:   "mcp NAME",
 		Short: "Scaffold a new MCP server project",
 		Long: `Scaffold a new MCP server project.
 
-NAME must be in namespace/name format (registry requirement).
+NAME must be DNS-1123 label: lowercase alphanumeric and hyphens, max 63 chars,
+must start and end with alphanumeric.
 Picks a framework + language interactively (or via --framework / --language).`,
-		Example: `  arctl init mcp acme/my-mcp
-  arctl init mcp acme/my-mcp --framework fastmcp --language python`,
+		Example: `  arctl init mcp my-mcp
+  arctl init mcp my-mcp --framework fastmcp --language python`,
 		Args:         cobra.MaximumNArgs(1),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			var full string
+			var name string
 			if len(args) == 1 {
-				full = args[0]
+				name = args[0]
 			} else {
-				typed, err := promptText("Project name", "myorg/mymcp",
-					func(s string) error {
-						parts := strings.SplitN(s, "/", 2)
-						if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-							return fmt.Errorf("name must be in namespace/name format")
-						}
-						return nil
-					},
+				typed, err := promptText("Project name", "my-mcp",
+					validateMCPProjectName,
 					cmd.OutOrStdout(), cmd.InOrStdin())
 				if err != nil {
 					return err
 				}
-				full = typed
+				name = typed
 			}
-			parts := strings.SplitN(full, "/", 2)
-			if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-				return fmt.Errorf("name must be in namespace/name format (got %q)", full)
+			if err := validateMCPProjectName(name); err != nil {
+				return err
 			}
-			projectName := parts[1]
+			projectName := name
 
 			projectDir, err := resolveInitProjectPath(cmd, projectName)
 			if err != nil {
@@ -630,7 +638,7 @@ Picks a framework + language interactively (or via --framework / --language).`,
 				image = fmt.Sprintf("%s/%s:latest", registry, projectName)
 			}
 
-			vars := mcpTemplateVars(full, projectName, initDescription, image, framework.SourceDir, projectDir)
+			vars := mcpTemplateVars(name, projectName, initDescription, image, framework.SourceDir, projectDir)
 			if err := frameworks.RenderTemplates(framework, projectDir, vars); err != nil {
 				return err
 			}
@@ -649,12 +657,12 @@ Picks a framework + language interactively (or via --framework / --language).`,
 					return fmt.Errorf("update .gitignore: %w", err)
 				}
 			}
-			if err := writeDeclarativeMCPYAML(projectDir, full, image, initDescription); err != nil {
+			if err := writeDeclarativeMCPYAML(projectDir, name, image, initDescription); err != nil {
 				return err
 			}
 
 			disp := displayPath(projectDir)
-			fmt.Fprintf(cmd.OutOrStdout(), "✓ Created MCP server: %s (framework: %s, language: %s, port: %d)\n", full, framework.Framework, framework.Language, initPort)
+			fmt.Fprintf(cmd.OutOrStdout(), "✓ Created MCP server: %s (framework: %s, language: %s, port: %d)\n", name, framework.Framework, framework.Language, initPort)
 			fmt.Fprintf(cmd.OutOrStdout(), "\n🚀 Next steps:\n")
 			fmt.Fprintf(cmd.OutOrStdout(), "  1. Run locally (optional):\n")
 			fmt.Fprintf(cmd.OutOrStdout(), "     arctl run %s\n", disp)
@@ -704,12 +712,9 @@ func mcpTemplateVars(name, baseName, description, image, frameworkDir, projectDi
 }
 
 func writeDeclarativeMCPYAML(projectDir, name, image, description string) error {
-	nameParts := strings.SplitN(name, "/", 2)
-	shortName := nameParts[len(nameParts)-1]
-
 	desc := description
 	if desc == "" {
-		desc = fmt.Sprintf("%s MCP server", shortName)
+		desc = fmt.Sprintf("%s MCP server", name)
 	}
 
 	server := v1alpha1.MCPServer{
@@ -721,7 +726,7 @@ func writeDeclarativeMCPYAML(projectDir, name, image, description string) error 
 			Name: name,
 		},
 		Spec: v1alpha1.MCPServerSpec{
-			Title:       shortName,
+			Title:       name,
 			Description: desc,
 			Source: &v1alpha1.MCPServerSource{
 				Package: &v1alpha1.MCPPackage{

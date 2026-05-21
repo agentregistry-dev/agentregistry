@@ -93,7 +93,7 @@ func TestDecodeBytesMultiDoc(t *testing.T) {
 apiVersion: ar.dev/v1alpha1
 kind: MCPServer
 metadata:
-  name: acme/fetch
+  name: acme-fetch
 spec:
   description: "Fetches URLs"
 ---

@@ -18,7 +18,7 @@ func TestMCPManagerLoad_EnvelopeFormat(t *testing.T) {
 	envelopeYAML := `apiVersion: ar.dev/v1alpha1
 kind: MCPServer
 metadata:
-  name: acme/fetch
+  name: acme-fetch
 spec:
   title: Fetch Server
   description: "Fetches content"
@@ -37,14 +37,14 @@ spec:
 	require.NoError(t, err)
 	require.NotNil(t, got)
 
-	assert.Equal(t, "acme/fetch", got.Name)
+	assert.Equal(t, "acme-fetch", got.Name)
 	assert.Equal(t, "Fetches content", got.Description)
 	assert.Equal(t, "docker", got.RuntimeHint)
 }
 
 func TestMCPManagerLoad_LegacyFlatFormat(t *testing.T) {
 	dir := t.TempDir()
-	flatYAML := `name: acme/legacy
+	flatYAML := `name: acme-legacy
 framework: fastmcp-python
 version: "1.0.0"
 description: "Legacy flat mcp"
@@ -56,7 +56,7 @@ description: "Legacy flat mcp"
 	require.NoError(t, err)
 	require.NotNil(t, got)
 
-	assert.Equal(t, "acme/legacy", got.Name)
+	assert.Equal(t, "acme-legacy", got.Name)
 	assert.Equal(t, "fastmcp-python", got.Framework)
 	assert.Equal(t, "1.0.0", got.Version)
 }
@@ -76,7 +76,7 @@ func TestMCPManagerLoad_EnvelopeNoPackages(t *testing.T) {
 	envelopeYAML := `apiVersion: ar.dev/v1alpha1
 kind: MCPServer
 metadata:
-  name: acme/no-pkgs
+  name: acme-no-pkgs
 spec:
   title: No Packages
   description: "No packages in this spec"
@@ -87,6 +87,6 @@ spec:
 	got, err := m.Load()
 	require.NoError(t, err)
 	require.NotNil(t, got)
-	assert.Equal(t, "acme/no-pkgs", got.Name)
+	assert.Equal(t, "acme-no-pkgs", got.Name)
 	assert.Empty(t, got.RuntimeHint, "RuntimeHint must be empty when no packages are present")
 }
