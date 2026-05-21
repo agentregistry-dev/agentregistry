@@ -591,3 +591,36 @@ func TestMCPServerValidate_MCPPackageName_OptionalWhenEmpty(t *testing.T) {
 	}
 	require.NoError(t, m.Validate())
 }
+
+func TestMCPServerValidateRegistries_FallsBackToMetadataNameWhenMCPNameUnset(t *testing.T) {
+	var gotClaim string
+	validator := func(_ context.Context, _ RegistryPackage, claim string) error {
+		gotClaim = claim
+		return nil
+	}
+	m := &MCPServer{
+		Metadata: ObjectMeta{Namespace: "default", Name: "my-server"},
+		Spec: MCPServerSpec{Source: &MCPServerSource{Package: &MCPPackage{
+			RegistryType: "npm", Identifier: "my-pkg", Transport: MCPTransport{Type: "stdio"},
+		}}},
+	}
+	require.NoError(t, m.ValidateRegistries(context.Background(), validator))
+	require.Equal(t, "my-server", gotClaim)
+}
+
+func TestMCPServerValidateRegistries_UsesMCPNameWhenSet(t *testing.T) {
+	var gotClaim string
+	validator := func(_ context.Context, _ RegistryPackage, claim string) error {
+		gotClaim = claim
+		return nil
+	}
+	m := &MCPServer{
+		Metadata: ObjectMeta{Namespace: "default", Name: "my-server"},
+		Spec: MCPServerSpec{Source: &MCPServerSource{Package: &MCPPackage{
+			RegistryType: "pypi", Identifier: "mcp-server-fetch", Transport: MCPTransport{Type: "stdio"},
+			MCPName: "io.github.modelcontextprotocol/server-fetch",
+		}}},
+	}
+	require.NoError(t, m.ValidateRegistries(context.Background(), validator))
+	require.Equal(t, "io.github.modelcontextprotocol/server-fetch", gotClaim)
+}

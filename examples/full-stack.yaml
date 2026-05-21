@@ -10,7 +10,7 @@
 apiVersion: ar.dev/v1alpha1
 kind: MCPServer
 metadata:
-  name: acme/fetch
+  name: acme-fetch
   tag: stable
 spec:
   title: Fetch Server
@@ -57,5 +57,5 @@ spec:
   # References to resources defined above -- resolved from the registry at deploy time.
   mcpServers:
     - kind: MCPServer
-      name: acme/fetch
+      name: acme-fetch
       tag: stable

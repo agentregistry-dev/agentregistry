@@ -13,6 +13,6 @@ spec:
   # References to other registry resources -- resolved at deploy time:
   # mcpServers:
   #   - kind: MCPServer
-  #     name: acme/fetch        # published via: arctl apply -f mcp.yaml
+  #     name: acme-fetch        # published via: arctl apply -f mcp.yaml
   #     tag: stable
   # See full-stack.yaml for a complete example with all dependencies.

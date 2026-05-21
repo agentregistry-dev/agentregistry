@@ -1,7 +1,7 @@
 apiVersion: ar.dev/v1alpha1
 kind: MCPServer
 metadata:
-  name: acme/fetch
+  name: acme-fetch
 spec:
   title: Fetch Server
   description: "Fetches and extracts content from URLs"
@@ -12,3 +12,8 @@ spec:
       runtimeHint: docker                       # optional: hint for local runtime
       transport:
         type: stdio                             # stdio | sse | streamable-http
+      # mcpName declares the upstream MCP-ecosystem catalogue identity
+      # this package claims. Optional. Required only when registering a
+      # public-registry package whose published mcp name label uses the `namespace/name`
+      # shape that metadata.name cannot represent.
+      # mcpName: io.example.acme/fetch
