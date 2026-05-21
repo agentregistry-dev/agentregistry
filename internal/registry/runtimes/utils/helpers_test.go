@@ -12,10 +12,10 @@ import (
 func TestSpecToPlatformMCPServer_RemoteTransport(t *testing.T) {
 	spec := v1alpha1.MCPServerSpec{
 		Description: "weather",
-		Remote: &v1alpha1.MCPTransport{
+		Remote: &v1alpha1.MCPRemote{
 			Type: "streamable-http",
 			URL:  "https://api.weather.example/mcp",
-			Headers: []v1alpha1.MCPKeyValueInput{{
+			Headers: []v1alpha1.HTTPHeader{{
 				Name:  "X-Token",
 				Value: "supersecret",
 			}},
@@ -172,12 +172,12 @@ func TestSpecToPlatformAgent_ResolvesRemoteMCPServerHeaders(t *testing.T) {
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindMCPServer},
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "remote-tools", Tag: "1.0.0"},
 		Spec: v1alpha1.MCPServerSpec{
-			Remote: &v1alpha1.MCPTransport{
+			Remote: &v1alpha1.MCPRemote{
 				Type: "streamable-http",
 				URL:  "https://remote.example/mcp",
-				Headers: []v1alpha1.MCPKeyValueInput{
-					{Name: "Authorization", IsRequired: true},
-					{Name: "X-Trace", Default: "trace-default"},
+				Headers: []v1alpha1.HTTPHeader{
+					{Name: "Authorization"},
+					{Name: "X-Trace", Value: "trace-default"},
 				},
 			},
 		},

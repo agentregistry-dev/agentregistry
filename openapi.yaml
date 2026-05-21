@@ -208,6 +208,16 @@ components:
           format: uri
           type: string
       type: object
+    HTTPHeader:
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+        value:
+          type: string
+      required:
+      - name
+      type: object
     HealthBody:
       additionalProperties: false
       properties:
@@ -445,6 +455,23 @@ components:
       - identifier
       - transport
       type: object
+    MCPRemote:
+      additionalProperties: false
+      properties:
+        headers:
+          items:
+            $ref: '#/components/schemas/HTTPHeader'
+          type:
+          - array
+          - "null"
+        type:
+          type: string
+        url:
+          type: string
+      required:
+      - type
+      - url
+      type: object
     MCPServer:
       additionalProperties: false
       properties:
@@ -478,7 +505,7 @@ components:
         description:
           type: string
         remote:
-          $ref: '#/components/schemas/MCPTransport'
+          $ref: '#/components/schemas/MCPRemote'
         source:
           $ref: '#/components/schemas/MCPServerSource'
         title:

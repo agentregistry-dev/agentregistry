@@ -116,6 +116,11 @@ export type ErrorModel = {
     type?: string;
 };
 
+export type HttpHeader = {
+    name: string;
+    value?: string;
+};
+
 export type HealthBody = {
     /**
      * Platform mode
@@ -214,6 +219,12 @@ export type McpPackage = {
     version?: string;
 };
 
+export type McpRemote = {
+    headers?: Array<HttpHeader> | null;
+    type: string;
+    url: string;
+};
+
 export type McpServer = {
     apiVersion: string;
     kind: string;
@@ -229,7 +240,7 @@ export type McpServerSource = {
 
 export type McpServerSpec = {
     description?: string;
-    remote?: McpTransport;
+    remote?: McpRemote;
     source?: McpServerSource;
     title?: string;
 };

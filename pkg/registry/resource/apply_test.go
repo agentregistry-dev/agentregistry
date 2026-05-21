@@ -421,7 +421,7 @@ func TestRegisterApply_DefaultsRemoteMCPServerTagBeforeAuthorize(t *testing.T) {
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "test-mcp-server"},
 		Spec: v1alpha1.MCPServerSpec{
 			Title:  "Test MCP Server",
-			Remote: &v1alpha1.MCPTransport{Type: "streamable-http", URL: "https://example.test/mcp"},
+			Remote: &v1alpha1.MCPRemote{Type: "streamable-http", URL: "https://example.test/mcp"},
 		},
 	})
 	require.NoError(t, err)
