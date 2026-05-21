@@ -672,7 +672,7 @@ components:
           type:
           - array
           - "null"
-        raw: {}
+        details: {}
       type: object
     VersionBody:
       additionalProperties: false

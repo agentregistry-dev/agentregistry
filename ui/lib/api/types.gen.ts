@@ -326,7 +326,7 @@ export type SkillSpec = {
 
 export type Status = {
     conditions?: Array<Condition> | null;
-    raw?: unknown;
+    details?: unknown;
 };
 
 export type VersionBody = {

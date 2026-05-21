@@ -281,17 +281,17 @@ func (c *Coordinator) persistApplyResult(ctx context.Context, deployment *v1alph
 		return err
 	}
 	patch := v1alpha1store.PatchOpts{}
-	if len(result.Conditions) > 0 || len(result.Raw) > 0 {
+	if len(result.Conditions) > 0 || len(result.Details) > 0 {
 		patch.Status = v1alpha1.StatusPatcher(func(s *v1alpha1.Status) {
 			for _, cond := range result.Conditions {
 				s.SetCondition(cond)
 			}
-			for key, encoded := range result.Raw {
-				// Best-effort: a malformed Raw value should not block the
+			for key, encoded := range result.Details {
+				// Best-effort: a malformed Details value should not block the
 				// rest of the status patch. Adapter authors are responsible
 				// for handling valid JSON; a returned error here just means
 				// that one key is skipped.
-				_ = s.SetRawKeyJSON(key, encoded)
+				_ = s.SetDetailsKeyJSON(key, encoded)
 			}
 		})
 	}

@@ -28,7 +28,7 @@ type deploymentStatus struct {
 	DeployedAt      time.Time            `json:"deployedAt,omitempty" yaml:"deployedAt,omitempty"`
 	UpdatedAt       time.Time            `json:"updatedAt,omitempty" yaml:"updatedAt,omitempty"`
 	Conditions      []v1alpha1.Condition `json:"conditions,omitempty" yaml:"conditions,omitempty"`
-	Raw             json.RawMessage      `json:"raw,omitempty" yaml:"raw,omitempty"`
+	Details         json.RawMessage      `json:"details,omitempty" yaml:"details,omitempty"`
 }
 
 // listAny lists rows of the given kind. The zero scheme.ListOpts returns
@@ -225,7 +225,7 @@ func deploymentToDocument(dep *cliCommon.DeploymentRecord) any {
 			DeployedAt:      dep.CreatedAt,
 			UpdatedAt:       dep.UpdatedAt,
 			Conditions:      dep.Conditions,
-			Raw:             dep.Raw,
+			Details:         dep.Details,
 		},
 	}
 }

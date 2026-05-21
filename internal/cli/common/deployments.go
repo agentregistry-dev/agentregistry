@@ -39,8 +39,8 @@ type DeploymentRecord struct {
 	// consumers can see fine-grained state without losing the compact view.
 	Conditions []v1alpha1.Condition `json:"conditions,omitempty"`
 
-	// Raw is the opaque adapter-owned status map (see v1alpha1.Status.Raw).
-	Raw json.RawMessage `json:"raw,omitempty"`
+	// Details is the opaque adapter-owned status map (see v1alpha1.Status.Details).
+	Details json.RawMessage `json:"details,omitempty"`
 }
 
 // ListDeployments returns every Deployment row visible from the default namespace.
@@ -113,7 +113,7 @@ func DeploymentRecordFromObject(dep *v1alpha1.Deployment) *DeploymentRecord {
 		UpdatedAt:         dep.Metadata.UpdatedAt,
 		DeletionTimestamp: dep.Metadata.DeletionTimestamp,
 		Conditions:        cloneConditions(dep.Status.Conditions),
-		Raw:               cloneRaw(dep.Status.Raw),
+		Details:           cloneDetails(dep.Status.Details),
 	}
 }
 
@@ -126,7 +126,7 @@ func cloneConditions(in []v1alpha1.Condition) []v1alpha1.Condition {
 	return out
 }
 
-func cloneRaw(in json.RawMessage) json.RawMessage {
+func cloneDetails(in json.RawMessage) json.RawMessage {
 	if len(in) == 0 {
 		return nil
 	}
