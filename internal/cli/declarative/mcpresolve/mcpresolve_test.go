@@ -30,10 +30,10 @@ func TestResolve_RemoteMCP_ReturnsURLAndHeaders(t *testing.T) {
 	server := &v1alpha1.MCPServer{
 		Metadata: v1alpha1.ObjectMeta{Name: "acme/fetch", Tag: "v1.0.0"},
 		Spec: v1alpha1.MCPServerSpec{
-			Remote: &v1alpha1.MCPTransport{
+			Remote: &v1alpha1.MCPRemote{
 				Type: "streamable-http",
 				URL:  "https://mcp.acme.com/mcp",
-				Headers: []v1alpha1.MCPKeyValueInput{
+				Headers: []v1alpha1.HTTPHeader{
 					{Name: "X-Hello", Value: "world"},
 					{Name: "X-Empty", Value: ""}, // dropped — unfilled placeholder
 				},

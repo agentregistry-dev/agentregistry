@@ -2,6 +2,7 @@ package declarative
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -28,7 +29,7 @@ spec:
 `), 0o644))
 
 	var buf bytes.Buffer
-	err := runProject(&buf, dir, nil, true /*dryRun*/, false, false)
+	err := runProject(context.Background(), &buf, dir, nil, true /*dryRun*/, false, false, false)
 	require.Error(t, err, "remote-only mcp.yaml must yield a Run-B error")
 	assert.Contains(t, err.Error(), "remote MCPServer")
 	assert.Contains(t, err.Error(), "https://example.com/mcp")

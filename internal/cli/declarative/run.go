@@ -418,7 +418,7 @@ func mergeEnv(dotEnv map[string]string, overrides []string) []string {
 // Spec.Remote set and Spec.Source unset — the case where arctl run has no
 // local image to spawn. Returns (nil, ...) for source-mode or no-mcp.yaml
 // so callers fall through to the normal run flow.
-func loadRemoteOnlyMCP(projectDir string) (*v1alpha1.MCPTransport, string, error) {
+func loadRemoteOnlyMCP(projectDir string) (*v1alpha1.MCPRemote, string, error) {
 	doc, err := readMCPYAML(projectDir)
 	if err != nil {
 		return nil, "", err

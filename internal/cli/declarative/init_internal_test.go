@@ -79,7 +79,7 @@ func TestInitAgent_MCP_RemoteRef_WritesEnv(t *testing.T) {
 		"acme/fetch@latest": {
 			Metadata: v1alpha1.ObjectMeta{Name: "acme/fetch", Tag: "latest"},
 			Spec: v1alpha1.MCPServerSpec{
-				Remote: &v1alpha1.MCPTransport{Type: "streamable-http", URL: "https://mcp.acme.com/mcp"},
+				Remote: &v1alpha1.MCPRemote{Type: "streamable-http", URL: "https://mcp.acme.com/mcp"},
 			},
 		},
 	}}

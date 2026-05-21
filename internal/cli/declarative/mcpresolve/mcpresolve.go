@@ -47,10 +47,10 @@ func Resolve(ctx context.Context, f Fetcher, name, tag string) (*ResolvedMCP, er
 	return r, nil
 }
 
-// flattenHeaders turns MCPKeyValueInput rows into a plain map, dropping
-// entries with no Value (unfilled placeholders / required-without-default).
+// flattenHeaders turns HTTPHeader rows into a plain map, dropping entries
+// with no Value (unfilled placeholders / required-without-default).
 // Returns nil when no usable rows survive so JSON omitempty drops the key.
-func flattenHeaders(in []v1alpha1.MCPKeyValueInput) map[string]string {
+func flattenHeaders(in []v1alpha1.HTTPHeader) map[string]string {
 	var out map[string]string
 	for _, h := range in {
 		if h.Value == "" {
