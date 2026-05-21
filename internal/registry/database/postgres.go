@@ -3,8 +3,10 @@ package database
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
@@ -40,6 +42,12 @@ func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authori
 	config.MinConns = 5
 	config.MaxConnIdleTime = 30 * time.Minute
 	config.MaxConnLifetime = 2 * time.Hour
+
+	// Forward PostgreSQL NOTICE messages (e.g. RAISE NOTICE from data-rewriting
+	// migrations) to slog so operators see them in the server's log stream.
+	config.ConnConfig.OnNotice = func(_ *pgconn.PgConn, n *pgconn.Notice) {
+		slog.Info("postgres notice", "message", n.Message, "detail", n.Detail)
+	}
 
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
