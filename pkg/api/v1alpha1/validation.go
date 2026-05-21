@@ -103,6 +103,26 @@ var labelValueRegex = regexp.MustCompile(`^([a-zA-Z0-9]([-a-zA-Z0-9._]{0,61}[a-z
 
 var tagRegex = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$`)
 
+// DNS-1123 label form: lowercase alphanumeric and hyphens only, must start
+// and end with alphanumeric, max 63 chars.
+const DNSLabelPattern = `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+
+// DNSLabelMaxLen is the upper length bound for DNS-1123 label values.
+const DNSLabelMaxLen = 63
+
+var DNSLabelRegex = regexp.MustCompile(DNSLabelPattern)
+
+// Upstream MCP-ecosystem catalogue name pattern: `namespace/name` in
+// reverse-DNS form (e.g. `io.github.modelcontextprotocol/server-fetch`).
+const UpstreamMCPPackageNamePattern = `^[a-zA-Z0-9.-]+/[a-zA-Z0-9._-]+$`
+
+const (
+	UpstreamMCPPackageNameMinLen = 3
+	UpstreamMCPPackageNameMaxLen = 200
+)
+
+var UpstreamMCPPackageNameRegex = regexp.MustCompile(UpstreamMCPPackageNamePattern)
+
 // -----------------------------------------------------------------------------
 // ObjectMeta validation — shared across every kind.
 // -----------------------------------------------------------------------------

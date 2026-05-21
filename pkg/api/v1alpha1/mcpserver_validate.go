@@ -13,6 +13,39 @@ func (m *MCPServer) Validate() error {
 	return errs
 }
 
+// validateMCPServerName enforces DNS-1123 label for MCPServer's metadata.name:
+// lowercase alphanumeric and hyphens only, must start and end with alphanumeric,
+// max 63 chars.
+func validateMCPServerName(name string) error {
+	if name == "" {
+		return fmt.Errorf("%w", ErrRequiredField)
+	}
+	if len(name) > DNSLabelMaxLen {
+		return fmt.Errorf("%w: must be DNS-1123 label (max %d chars), got %d", ErrInvalidFormat, DNSLabelMaxLen, len(name))
+	}
+	if !DNSLabelRegex.MatchString(name) {
+		return fmt.Errorf("%w: must be DNS-1123 label (lowercase alphanumeric and hyphens; start/end with alphanumeric): %q", ErrInvalidFormat, name)
+	}
+	return nil
+}
+
+// validateMCPPackageName enforces the upstream MCP-ecosystem catalogue name format
+// for the optional MCPPackage.MCPName field (e.g. "io.github.user/server").
+// Matches the upstream modelcontextprotocol/registry server.json schema for
+// the `name` field.
+func validateMCPPackageName(s string) error {
+	if s == "" {
+		return nil // optional field
+	}
+	if l := len(s); l < UpstreamMCPPackageNameMinLen || l > UpstreamMCPPackageNameMaxLen {
+		return fmt.Errorf("%w: mcpName length must be %d-%d chars, got %d", ErrInvalidFormat, UpstreamMCPPackageNameMinLen, UpstreamMCPPackageNameMaxLen, l)
+	}
+	if !UpstreamMCPPackageNameRegex.MatchString(s) {
+		return fmt.Errorf("%w: mcpName must match upstream pattern `namespace/name` (e.g. \"io.github.user/server\"): %q", ErrInvalidFormat, s)
+	}
+	return nil
+}
+
 func validateMCPServerSpec(s *MCPServerSpec) FieldErrors {
 	var errs FieldErrors
 	errs.Append("spec.title", validateTitle(s.Title))
@@ -65,6 +98,9 @@ func validateMCPServerSource(src *MCPServerSource) FieldErrors {
 	}
 	if pkg.Transport.Type == "" {
 		errs.Append("spec.source.package.transport.type", fmt.Errorf("%w", ErrRequiredField))
+	}
+	if err := validateMCPPackageName(pkg.MCPName); err != nil {
+		errs.Append("spec.source.package.mcpName", err)
 	}
 	return errs
 }

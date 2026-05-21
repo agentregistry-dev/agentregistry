@@ -205,6 +205,7 @@ export type McpPackage = {
     environmentVariables?: Array<McpKeyValueInput> | null;
     fileSha256?: string;
     identifier: string;
+    mcpName?: string;
     packageArguments?: Array<McpArgument> | null;
     registryBaseUrl?: string;
     registryType: string;

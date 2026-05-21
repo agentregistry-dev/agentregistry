@@ -2,9 +2,12 @@ package v1alpha1
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
 // Helper: extract field paths from a Validate() result so tests can
@@ -444,4 +447,147 @@ func TestMCPServerValidate_RequiresSourceOrRemote(t *testing.T) {
 	}
 	paths := failedFields(t, m.Validate())
 	require.Contains(t, paths, "spec")
+}
+
+func TestValidateMCPServerName(t *testing.T) {
+	maxLenName := strings.Repeat("a", 63) // exact max length
+	tooLongName := strings.Repeat("a", 64)
+
+	testCases := []struct{
+		label string
+		name string
+		expectErr bool
+	}{
+		{"at least min length long", "a", false},
+		{"lowercase only", "myserver", false},
+		{"contains hyphen", "my-server", false},
+		{"max length", maxLenName, false},
+		{"empty", "", true},
+		{"contains uppercase", "MyServer", true},
+		{"contains underscore", "my_server", true},
+		{"contains slash", "example/server", true},
+		{"contains period", "io.example", true},
+		{"contains leading hyphen", "-server", true},
+		{"contains trailing hyphen", "server-", true},
+		{"longer than max len", tooLongName, true},
+		{"single hyphen", "-", true},
+		{"non-ascii", "café", true},
+		{"contains space", "my server", true},
+	}
+	for _, c := range testCases {
+		t.Run(c.name, func(t *testing.T) {
+			err := validateMCPServerName(c.name)
+			if c.expectErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateMCPServerName_ErrorMessage(t *testing.T) {
+	// Format errors should mention DNS-1123 so operators can self-diagnose.
+	err := validateMCPServerName("io.example/foo")
+	require.Error(t, err)
+	require.True(t, errors.Is(err, ErrInvalidFormat))
+	assert.Contains(t, err.Error(), "DNS-1123 label")
+
+	// Required-field errors should be the standard sentinel.
+	err = validateMCPServerName("")
+	require.Error(t, err)
+	require.True(t, errors.Is(err, ErrRequiredField))
+}
+
+func TestValidateMCPPackageName(t *testing.T) {
+	maxLenStr := strings.Repeat("a", 100) + "/" + strings.Repeat("b", 99) // 200 chars, exact max
+	longLenStr := strings.Repeat("a", 100) + "/" + strings.Repeat("b", 101) // 202 chars
+
+	testCases := []struct{
+		label string
+		name string
+		expectErr bool
+	}{
+		{"empty (optional)", "", false},
+		{"multi-period dns name", "io.github.user/server", false},
+		{"follows dns naming scheme", "com.example/foo", false},
+		{"contains multiple special ascii chars", "foo.bar-baz/my_server", false},
+		{"within max len", maxLenStr, false},
+		{"missing slash", "domainname", true},
+		{"missing domain prefix", "/missing-domain", true},
+		{"missing name", "missing-name/", true},
+		{"too short", "a/", true},
+		{"too long", longLenStr, true},
+		{"multiple slashes", "a/b/c", true},
+		{"non-ascii", "café/foo", true},
+		{"contains space", "io.example/my server", true},
+		{"underscore in domain", "io_example/foo", true},
+	}
+	for _, c := range testCases {
+		t.Run(c.label, func(t *testing.T) {
+			err := validateMCPPackageName(c.name)
+			if c.expectErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestMCPServerValidate_MCPPackageName_RejectsBadFormat(t *testing.T) {
+	m := &MCPServer{
+		TypeMeta: TypeMeta{APIVersion: "ar.dev/v1alpha1", Kind: KindMCPServer},
+		Metadata: ObjectMeta{Namespace: "default", Name: "my-server"},
+		Spec: MCPServerSpec{
+			Source: &MCPServerSource{
+				Package: &MCPPackage{
+					RegistryType: "npm",
+					Identifier:   "my-pkg",
+					Transport:    MCPTransport{Type: "stdio"},
+					MCPName:      "noslash", // invalid: must be namespace/name
+				},
+			},
+		},
+	}
+	err := m.Validate()
+	require.Error(t, err)
+	paths := failedFields(t, err)
+	require.Contains(t, paths, "spec.source.package.mcpName")
+}
+
+func TestMCPServerValidate_MCPPackageName_AcceptsValid(t *testing.T) {
+	m := &MCPServer{
+		TypeMeta: TypeMeta{APIVersion: "ar.dev/v1alpha1", Kind: KindMCPServer},
+		Metadata: ObjectMeta{Namespace: "default", Name: "my-server"},
+		Spec: MCPServerSpec{
+			Source: &MCPServerSource{
+				Package: &MCPPackage{
+					RegistryType: "pypi",
+					Identifier:   "mcp-server-fetch",
+					Transport:    MCPTransport{Type: "stdio"},
+					MCPName:      "io.github.modelcontextprotocol/server-fetch",
+				},
+			},
+		},
+	}
+	require.NoError(t, m.Validate())
+}
+
+func TestMCPServerValidate_MCPPackageName_OptionalWhenEmpty(t *testing.T) {
+	m := &MCPServer{
+		TypeMeta: TypeMeta{APIVersion: "ar.dev/v1alpha1", Kind: KindMCPServer},
+		Metadata: ObjectMeta{Namespace: "default", Name: "my-server"},
+		Spec: MCPServerSpec{
+			Source: &MCPServerSource{
+				Package: &MCPPackage{
+					RegistryType: "npm",
+					Identifier:   "my-pkg",
+					Transport:    MCPTransport{Type: "stdio"},
+					// MCPName intentionally omitted
+				},
+			},
+		},
+	}
+	require.NoError(t, m.Validate())
 }

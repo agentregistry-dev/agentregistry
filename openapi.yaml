@@ -418,6 +418,8 @@ components:
           type: string
         identifier:
           type: string
+        mcpName:
+          type: string
         packageArguments:
           items:
             $ref: '#/components/schemas/MCPArgument'
