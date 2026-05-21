@@ -42,11 +42,10 @@ func writeDeclarativeYAML(t *testing.T, dir, filename, content string) string {
 // Namespace is implicit ("default") and elided from the path post-flatten;
 // callers that target a non-default namespace pass `?namespace=...` directly.
 //
-// Resource names that contain "/" (common for MCPServer identifiers like
-// "e2e-test/decl-mcp-123") are URL-encoded into a single path segment so
-// Huma's router treats them as one {name} parameter. Apply stores these
-// names literally under the default namespace; the CLI itself uses
-// url.PathEscape on delete/get, so the HTTP client must match.
+// Resource names for taggable artifacts other than MCPServer (Agent, Skill,
+// Prompt) may contain "/", which is URL-encoded into a single path segment so
+// Huma's router treats them as one {name} parameter. MCPServer names are
+// DNS-1123 label (no "/") as of migration 008; PathEscape is a no-op for them.
 func resourceURL(regURL, resource, name, tag string) string {
 	return fmt.Sprintf("%s/%s/%s/%s",
 		regURL, resource, url.PathEscape(name), tag)
@@ -217,7 +216,7 @@ func TestDeclarativeApply_MCPServer(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 
-	serverName := "e2e-test/" + UniqueNameWithPrefix("decl-mcp")
+	serverName := "e2etest-" + UniqueNameWithPrefix("decl-mcp")
 	tag := defaultArtifactTag
 
 	// Clean up any stale entry.
@@ -255,7 +254,7 @@ func TestDeclarativeApply_MultiDoc(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 
-	serverName := "e2e-test/" + UniqueNameWithPrefix("decl-multi-mcp")
+	serverName := "e2etest-" + UniqueNameWithPrefix("decl-multi-mcp")
 	agentName := UniqueAgentName("declmultiagent")
 	tag := defaultArtifactTag
 
@@ -399,7 +398,7 @@ func TestDeclarativeInit_MCP(t *testing.T) {
 	tmpDir := t.TempDir()
 	// MCP names must be namespace/name format.
 	dirName := UniqueNameWithPrefix("initmcp")
-	fullName := "e2e-test/" + dirName
+	fullName := "e2etest-" + dirName
 
 	// init is offline — no registry-url needed.
 	result := RunArctl(t, tmpDir, "init", "mcp", fullName, "--framework", "fastmcp", "--language", "python")
@@ -555,7 +554,7 @@ func TestDeclarativeBuild_MCP(t *testing.T) {
 
 	// MCP names must be namespace/name format; directory uses just the name part.
 	dirName := UniqueNameWithPrefix("bldmcp")
-	fullName := "e2e-test/" + dirName
+	fullName := "e2etest-" + dirName
 	image := "localhost:5001/" + dirName + ":latest"
 	CleanupDockerImage(t, image)
 
@@ -627,7 +626,7 @@ func TestDeclarativeInit_InvalidArgs(t *testing.T) {
 		},
 		{
 			name:        "mcp unsupported framework",
-			args:        []string{"init", "mcp", "acme/myserver", "--framework", "typescript", "--language", "python"},
+			args:        []string{"init", "mcp", "myserver", "--framework", "typescript", "--language", "python"},
 			errContains: "no mcp framework",
 		},
 	}
@@ -792,7 +791,7 @@ func TestDeclarativeApply_MCPServer_Idempotent(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 
-	serverName := "e2e-test/" + UniqueNameWithPrefix("decl-mcp-idemp")
+	serverName := "e2etest-" + UniqueNameWithPrefix("decl-mcp-idemp")
 	tag := defaultArtifactTag
 
 	RunArctl(t, tmpDir, "delete", "mcp", serverName, "--tag", tag, "--registry-url", regURL)
@@ -1320,7 +1319,7 @@ func TestDeclarative_MCPRoundTrip(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 
-	serverName := "e2e-test/" + UniqueNameWithPrefix("mcp-rt")
+	serverName := "e2etest-" + UniqueNameWithPrefix("mcp-rt")
 	tag := defaultArtifactTag
 
 	RunArctl(t, tmpDir, "delete", "mcp", serverName, "--tag", tag, "--registry-url", regURL)
@@ -1543,7 +1542,7 @@ func TestDeclarative_DeleteFileMultiKind(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	agentName := UniqueAgentName("delmulti")
-	mcpName := "e2e-test/" + UniqueNameWithPrefix("delmulti-mcp")
+	mcpName := "e2etest-" + UniqueNameWithPrefix("delmulti-mcp")
 	skillName := UniqueNameWithPrefix("delmulti-skill")
 	promptName := UniqueNameWithPrefix("delmulti-prompt")
 	tag := defaultArtifactTag
@@ -1678,7 +1677,7 @@ func TestMCPBuild_EnvelopeManifest(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	dirName := UniqueNameWithPrefix("envmcp")
-	fullName := "e2e-test/" + dirName
+	fullName := "e2etest-" + dirName
 	image := "localhost:5001/" + dirName + ":latest"
 	CleanupDockerImage(t, image)
 
@@ -1723,7 +1722,7 @@ func TestDeclarativeApply_InvalidKind(t *testing.T) {
 	invalidYAML := `apiVersion: ar.dev/v1alpha1
 kind: NotARealKind
 metadata:
-  name: e2e-test/invalid-kind
+  name: e2etest-invalid-kind
 spec:
   description: "bogus kind for client-side rejection test"
 `

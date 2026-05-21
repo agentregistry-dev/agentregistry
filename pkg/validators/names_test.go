@@ -85,44 +85,6 @@ func TestValidateAgentName(t *testing.T) {
 	}
 }
 
-func TestValidateMCPServerName(t *testing.T) {
-	tests := []struct {
-		name    string
-		input   string
-		wantErr bool
-	}{
-		{"valid simple", "myorg/my-server", false},
-		{"valid with dots", "my.org/my.server", false},
-		{"valid with underscore in name", "myorg/my_server", false},
-		{"valid mixed", "my-org.com/server-v1.0", false},
-		{"valid alphanumeric", "org123/server456", false},
-		{"empty", "", true},
-		{"missing slash", "myorgserver", true},
-		{"empty namespace", "/server", true},
-		{"empty name", "myorg/", true},
-		{"namespace too short", "a/server", true},
-		{"name too short", "myorg/s", true},
-		{"namespace starts with dot", ".org/server", true},
-		{"namespace ends with dot", "org./server", true},
-		{"name starts with dot", "myorg/.server", true},
-		{"name ends with dot", "myorg/server.", true},
-		{"namespace with underscore", "my_org/server", true},
-		{"multiple slashes", "my/org/server", true},
-		{"namespace with space", "my org/server", true},
-		{"name with space", "myorg/my server", true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := ValidateMCPServerName(tt.input)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ValidateMCPServerName(%q) error = %v, wantErr %v",
-					tt.input, err, tt.wantErr)
-			}
-		})
-	}
-}
-
 func TestValidateSkillName(t *testing.T) {
 	tests := []struct {
 		name    string

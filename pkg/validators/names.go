@@ -8,24 +8,9 @@ import (
 	"strings"
 )
 
-// Name validation patterns
-var (
-	// namespaceRegex validates the namespace part of a server name
-	// - Must start and end with alphanumeric
-	// - Can contain dots and hyphens in the middle
-	// - Minimum 2 characters
-	namespaceRegex = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9]$`)
-
-	// serverNamePartRegex validates the name part of a server name
-	// - Must start and end with alphanumeric
-	// - Can contain dots, underscores, and hyphens in the middle
-	// - Minimum 2 characters
-	serverNamePartRegex = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]$`)
-
-	// skillNameRegex matches the database constraint for skill names
-	// - Can contain alphanumeric, underscores, and hyphens
-	skillNameRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
-)
+// skillNameRegex matches the database constraint for skill names
+// - Can contain alphanumeric, underscores, and hyphens
+var skillNameRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
 // Python keywords that cannot be used as agent names
 var pythonKeywords = map[string]struct{}{
@@ -76,40 +61,6 @@ func ValidateAgentName(name string) error {
 	// Reject Python keywords to avoid issues in generated code
 	if _, isKeyword := pythonKeywords[name]; isKeyword {
 		return fmt.Errorf("agent name %q is a Python keyword and cannot be used", name)
-	}
-
-	return nil
-}
-
-// ValidateMCPServerName checks if the MCP server name matches the required format.
-// Server name must be in format "namespace/name" where:
-// - namespace: starts/ends with alphanumeric, can contain dots and hyphens, min 2 chars
-// - name: starts/ends with alphanumeric, can contain dots, underscores, and hyphens, min 2 chars
-func ValidateMCPServerName(name string) error {
-	if name == "" {
-		return fmt.Errorf("server name cannot be empty")
-	}
-
-	parts := strings.SplitN(name, "/", 2)
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return fmt.Errorf("server name must be in format 'namespace/name'")
-	}
-
-	namespace, serverName := parts[0], parts[1]
-
-	if len(namespace) < 2 {
-		return fmt.Errorf("namespace must be at least 2 characters")
-	}
-	if len(serverName) < 2 {
-		return fmt.Errorf("server name part must be at least 2 characters")
-	}
-
-	if !namespaceRegex.MatchString(namespace) {
-		return fmt.Errorf("invalid namespace %q: must start and end with alphanumeric, can contain letters, numbers, dots (.), and hyphens (-)", namespace)
-	}
-
-	if !serverNamePartRegex.MatchString(serverName) {
-		return fmt.Errorf("invalid server name %q: must start and end with alphanumeric, can contain letters, numbers, dots (.), underscores (_), and hyphens (-)", serverName)
 	}
 
 	return nil
