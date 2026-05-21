@@ -10,6 +10,21 @@ import { createServerV0, type ServerJson } from "@/lib/admin-api"
 import { Loader2, AlertCircle, Plus, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
+// Mirror the backend rules in pkg/api/v1alpha1/validation.go.
+const DNS_LABEL_RE = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/
+const UPSTREAM_MCP_PACKAGE_NAME_RE = /^[a-zA-Z0-9.-]+\/[a-zA-Z0-9._-]+$/
+
+// isValidName checks if the resource name is valid for the MCP server (DNS label)
+function isValidName(s: string): boolean {
+  return s.length > 0 && s.length <= 63 && DNS_LABEL_RE.test(s)
+}
+
+// isValidMCPPackageName checks if an optional MCP package's name is valid (NAMESPACE/NAME)
+// Note: This NAMESPACE !== the registry resource namespace, and is a naming convention for MCPs
+function isValidMCPPackageName(s: string): boolean {
+  return s.length == 0 || (s.length >= 3 && s.length <= 200 && UPSTREAM_MCP_PACKAGE_NAME_RE.test(s))
+}
+
 interface AddServerDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -28,7 +43,7 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
   const [repositoryUrl, setRepositoryUrl] = useState("")
 
   // Schema collapsed to a single package per server.
-  type PackageDraft = { identifier: string; version: string; registryType: string; transport: string }
+  type PackageDraft = { identifier: string; version: string; registryType: string; transport: string; mcpName: string }
   const [pkg, setPkg] = useState<PackageDraft | null>(null)
 
   const resetForm = () => {
@@ -49,13 +64,13 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
       if (!name.trim()) {
         throw new Error("Server name is required")
       }
-      
-      // Validate name format (namespace/name)
-      const namePattern = /^[a-zA-Z0-9.-]+\/[a-zA-Z0-9._-]+$/
-      if (!namePattern.test(name.trim())) {
-        throw new Error("Server name must be in format 'namespace/name' (e.g., 'io.example/my-server')")
+      if (!isValidName(name.trim())) {
+        throw new Error("Server name must be DNS-1123 label: lowercase alphanumeric and hyphens, max 63 chars, start/end with alphanumeric")
       }
-      
+      if (!isValidMCPPackageName(pkg?.mcpName.trim() || "")) {
+        throw new Error("Upstream catalogue name must be unset or in 'domain/name' shape (e.g. 'io.github.user/server')")
+      }
+
       if (!tag.trim()) {
         throw new Error("Tag is required")
       }
@@ -88,6 +103,9 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
           registryType: pkg.registryType as 'npm' | 'pypi' | 'docker',
           transport: { type: pkg.transport || 'stdio' },
         }
+        if (pkg.mcpName.trim()) {
+          source.package.mcpName = pkg.mcpName.trim()
+        }
       }
       if (source.repository || source.package) {
         server.source = source
@@ -112,7 +130,7 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
   }
 
   const addPackage = () => {
-    setPkg({ identifier: "", version: "", registryType: "npm", transport: "stdio" })
+    setPkg({ identifier: "", version: "", registryType: "npm", transport: "stdio", mcpName: "" })
   }
 
   const removePackage = () => {
@@ -140,15 +158,15 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
               <Label htmlFor="name">Server Name *</Label>
               <Input
                 id="name"
-                placeholder="io.example/my-server"
+                placeholder="my-server"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 disabled={loading}
-                className={name && !/^[a-zA-Z0-9.-]+\/[a-zA-Z0-9._-]+$/.test(name) ? "border-yellow-500" : ""}
+                className={name && !isValidName(name) ? "border-yellow-500" : ""}
               />
-              <p className={`text-xs flex items-center gap-1 min-h-[1.25rem] ${name && !/^[a-zA-Z0-9.-]+\/[a-zA-Z0-9._-]+$/.test(name) ? 'text-yellow-600' : 'invisible'}`}>
+              <p className={`text-xs flex items-center gap-1 min-h-[1.25rem] ${name && !isValidName(name) ? 'text-yellow-600' : 'invisible'}`}>
                 <AlertCircle className="h-3 w-3" />
-                Must be in format namespace/name (e.g., io.example/my-server)
+                Lowercase alphanumeric and hyphens only. Max 63 chars. (e.g., my-server)
               </p>
             </div>
 
@@ -271,6 +289,29 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
                       <span className="text-sm">{transport}</span>
                     </label>
                   ))}
+                </div>
+                {/* Optional upstream catalogue identity. Required only when the package's published
+                    mcpName/mcp-name/OCI label uses the upstream `namespace/name` shape that the
+                    DNS-label Server Name can't represent. */}
+                <div className="pl-2">
+                  <Label htmlFor="mcpName" className="text-sm text-muted-foreground">
+                    Upstream catalogue name (mcpName)
+                  </Label>
+                  <Input
+                    id="mcpName"
+                    placeholder="io.github.user/server"
+                    value={pkg.mcpName}
+                    onChange={(e) => updatePackage("mcpName", e.target.value)}
+                    disabled={loading}
+                    className={!isValidMCPPackageName(pkg.mcpName) ? "border-yellow-500" : ""}
+                  />
+                  <p className={`text-xs flex items-center gap-1 min-h-[1.25rem] ${!isValidMCPPackageName(pkg.mcpName) ? 'text-yellow-600' : 'text-muted-foreground'}`}>
+                    {!isValidMCPPackageName(pkg.mcpName) ? (
+                      <><AlertCircle className="h-3 w-3" /> Must match `namespace/name` shape.</>
+                    ) : (
+                      <>Optional. Ignored for MCPB packages.</>
+                    )}
+                  </p>
                 </div>
               </div>
             ) : (

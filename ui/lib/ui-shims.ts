@@ -277,12 +277,13 @@ async function applySingleDoc<T>(envelope: T & { kind?: string; metadata: { name
 export async function createServerV0(opts: LegacyCreateOpts<ServerJson>): Promise<{
   data: ServerResponse
 }> {
-  const { namespace, name } = splitName(opts.body.name)
+  // MCPServer.metadata.name is DNS-1123 label; do not split on "/".
+  // The name does NOT represent a "NAMESPACE/NAME" format.
   const spec = stripLegacy(opts.body) as McpServerSpec
   const envelope: McpServer = {
     apiVersion: "ar.dev/v1alpha1",
     kind: "MCPServer",
-    metadata: { namespace, name, tag: opts.body.tag },
+    metadata: { namespace: "default", name: opts.body.name, tag: opts.body.tag },
     spec,
   }
   await applySingleDoc(envelope)
