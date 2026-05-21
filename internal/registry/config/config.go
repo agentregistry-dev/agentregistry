@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"log/slog"
 	"os"
+	"time"
 
 	env "github.com/caarlos0/env/v11"
 )
@@ -31,6 +32,15 @@ type Config struct {
 	// Runtime Configuration
 	RuntimeDir string `env:"RUNTIME_DIR" envDefault:"/tmp/arctl-runtime"`
 	Verbose    bool   `env:"VERBOSE" envDefault:"false"`
+
+	// Controller foundation retention. These settings bound the KRT
+	// controller's durable invalidation/work tables once the controller loop is
+	// wired. A zero duration disables pruning for that table.
+	ControllerEventRetention           time.Duration `env:"CONTROLLER_EVENT_RETENTION" envDefault:"24h"`
+	ControllerEventKeepAfterRevision   int64         `env:"CONTROLLER_EVENT_KEEP_AFTER_REVISION" envDefault:"0"`
+	ControllerWorkRetention            time.Duration `env:"CONTROLLER_WORK_RETENTION" envDefault:"24h"`
+	ControllerAttemptRetention         time.Duration `env:"CONTROLLER_ATTEMPT_RETENTION" envDefault:"168h"`
+	ControllerRetentionPruneBatchLimit int           `env:"CONTROLLER_RETENTION_PRUNE_BATCH_LIMIT" envDefault:"500"`
 }
 
 // NewConfig creates a new configuration with default values

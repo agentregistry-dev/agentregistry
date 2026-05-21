@@ -670,3 +670,79 @@ func TestReconcileWorkStore_ClaimBackoffEventAndComplete(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, claimed)
 }
+
+func TestControlPlaneEventStore_PruneBeforeHonorsKeepAfterRevision(t *testing.T) {
+	pool := NewTestPool(t)
+	store := NewStore(pool, testTable)
+	events := NewControlPlaneEventStore(pool)
+	ctx := context.Background()
+
+	upsertAgent(t, store, "pruned", v1alpha1.AgentSpec{Title: "first"}, nil)
+	upsertAgent(t, store, "pruned", v1alpha1.AgentSpec{Title: "second"}, nil)
+
+	batch, err := events.ListAfter(ctx, 0, 10)
+	require.NoError(t, err)
+	require.Len(t, batch, 2)
+	keep := batch[1].Revision
+
+	deleted, err := events.PruneBefore(ctx, time.Now().Add(time.Hour), keep, 10)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), deleted)
+
+	remaining, err := events.ListAfter(ctx, 0, 10)
+	require.NoError(t, err)
+	require.Len(t, remaining, 1)
+	require.Equal(t, keep, remaining[0].Revision)
+}
+
+func TestReconcileStores_PruneBoundedHistory(t *testing.T) {
+	pool := NewTestPool(t)
+	ctx := context.Background()
+	workStore := NewReconcileWorkStore(pool)
+	eventStore := NewReconcileEventStore(pool)
+
+	_, err := pool.Exec(ctx, `
+		INSERT INTO v1alpha1.reconcile_work (
+			key, kind, namespace, name, generation, action, reason, state, completed_at, updated_at
+		) VALUES (
+			'completed-work', 'Deployment', 'default', 'old', 1, 'apply', 'test', 'completed', NOW() - INTERVAL '2 hours', NOW() - INTERVAL '2 hours'
+		)`)
+	require.NoError(t, err)
+
+	require.NoError(t, workStore.Upsert(ctx, ReconcileWork{
+		Key:           "pending-work",
+		Resource:      ResourceKey{Kind: v1alpha1.KindDeployment, Namespace: testNS, Name: "pending"},
+		Generation:    1,
+		Action:        "apply",
+		Reason:        "desired-deployed",
+		NextAttemptAt: time.Now().Add(time.Hour),
+	}))
+
+	deleted, err := workStore.Prune(ctx, time.Now().Add(time.Hour), 10)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), deleted)
+
+	var completedCount int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT COUNT(*) FROM v1alpha1.reconcile_work WHERE key='completed-work'`).Scan(&completedCount))
+	require.Zero(t, completedCount)
+	var pendingCount int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT COUNT(*) FROM v1alpha1.reconcile_work WHERE key='pending-work'`).Scan(&pendingCount))
+	require.Equal(t, 1, pendingCount)
+
+	_, err = eventStore.Append(ctx, ReconcileEvent{
+		WorkKey:    "pending-work",
+		Resource:   ResourceKey{Kind: v1alpha1.KindDeployment, Namespace: testNS, Name: "pending"},
+		Generation: 1,
+		Action:     "apply",
+		Outcome:    "success",
+	})
+	require.NoError(t, err)
+
+	deleted, err = eventStore.Prune(ctx, time.Now().Add(time.Hour), 10)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), deleted)
+
+	history, err := eventStore.ListByWorkKey(ctx, "pending-work", 10)
+	require.NoError(t, err)
+	require.Empty(t, history)
+}
