@@ -563,3 +563,110 @@ func TestStore_NotifyPayloadDiscreteFields(t *testing.T) {
 		"name must round-trip intact, including the / character")
 	require.Equal(t, DefaultTag(), payload.Tag, "tag emitted as the default latest tag")
 }
+
+func TestStore_ControlPlaneEventsTrackSourceWritesOnly(t *testing.T) {
+	pool := NewTestPool(t)
+	store := NewStore(pool, testTable)
+	events := NewControlPlaneEventStore(pool)
+	ctx := context.Background()
+
+	_, err := store.Upsert(ctx, &v1alpha1.Agent{
+		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "evented"},
+		Spec:     v1alpha1.AgentSpec{Title: "first"},
+	})
+	require.NoError(t, err)
+
+	batch, err := events.ListAfter(ctx, 0, 10)
+	require.NoError(t, err)
+	require.NotEmpty(t, batch)
+	insert := batch[len(batch)-1]
+	require.Equal(t, v1alpha1.KindAgent, insert.Key.Kind)
+	require.Equal(t, testNS, insert.Key.Namespace)
+	require.Equal(t, "evented", insert.Key.Name)
+	require.Equal(t, DefaultTag(), insert.Key.Tag)
+	require.Equal(t, "insert", insert.Operation)
+
+	err = store.PatchStatus(ctx, testNS, "evented", DefaultTag(), v1alpha1.StatusPatcher(func(s *v1alpha1.Status) {
+		s.SetCondition(v1alpha1.Condition{Type: "Ready", Status: v1alpha1.ConditionTrue})
+	}))
+	require.NoError(t, err)
+	batch, err = events.ListAfter(ctx, insert.Revision, 10)
+	require.NoError(t, err)
+	require.Empty(t, batch, "status-only patches must not invalidate controller source collections")
+
+	_, err = store.Upsert(ctx, &v1alpha1.Agent{
+		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "evented"},
+		Spec:     v1alpha1.AgentSpec{Title: "second"},
+	})
+	require.NoError(t, err)
+	batch, err = events.ListAfter(ctx, insert.Revision, 10)
+	require.NoError(t, err)
+	require.Len(t, batch, 1)
+	require.Equal(t, "update", batch[0].Operation)
+	require.Equal(t, int64(2), batch[0].Generation)
+
+	require.NoError(t, store.Delete(ctx, testNS, "evented", DefaultTag()))
+	batch, err = events.ListAfter(ctx, batch[0].Revision, 10)
+	require.NoError(t, err)
+	require.Len(t, batch, 1)
+	require.Equal(t, "delete", batch[0].Operation)
+}
+
+func TestReconcileWorkStore_ClaimBackoffEventAndComplete(t *testing.T) {
+	pool := NewTestPool(t)
+	ctx := context.Background()
+	workStore := NewReconcileWorkStore(pool)
+	eventStore := NewReconcileEventStore(pool)
+
+	work := ReconcileWork{
+		Key:           "Deployment:default:weather:uid-1:1:apply",
+		Resource:      ResourceKey{Kind: v1alpha1.KindDeployment, Namespace: testNS, Name: "weather"},
+		Generation:    1,
+		Action:        "apply",
+		Reason:        "desired-deployed",
+		Payload:       json.RawMessage(`{"targetRef":{"kind":"MCPServer","name":"weather"}}`),
+		NextAttemptAt: time.Now().Add(-time.Minute),
+	}
+	require.NoError(t, workStore.Upsert(ctx, work))
+
+	claimed, err := workStore.ClaimDue(ctx, "worker-a", time.Now().Add(time.Minute), 10)
+	require.NoError(t, err)
+	require.Len(t, claimed, 1)
+	require.Equal(t, work.Key, claimed[0].Key)
+	require.Equal(t, "running", claimed[0].State)
+	require.Equal(t, 1, claimed[0].Attempt)
+	require.Equal(t, "worker-a", claimed[0].LeaseOwner)
+
+	claimed, err = workStore.ClaimDue(ctx, "worker-b", time.Now().Add(time.Minute), 10)
+	require.NoError(t, err)
+	require.Empty(t, claimed, "non-expired running leases must not double-claim")
+
+	require.NoError(t, workStore.Backoff(ctx, work.Key, "temporary", time.Now().Add(-time.Second)))
+	claimed, err = workStore.ClaimDue(ctx, "worker-b", time.Now().Add(time.Minute), 10)
+	require.NoError(t, err)
+	require.Len(t, claimed, 1)
+	require.Equal(t, 2, claimed[0].Attempt)
+	require.Equal(t, "worker-b", claimed[0].LeaseOwner)
+
+	id, err := eventStore.Append(ctx, ReconcileEvent{
+		WorkKey:    work.Key,
+		Resource:   work.Resource,
+		Generation: work.Generation,
+		Action:     work.Action,
+		Attempt:    claimed[0].Attempt,
+		Outcome:    "success",
+		Message:    "claimed work completed",
+	})
+	require.NoError(t, err)
+	require.NotZero(t, id)
+
+	history, err := eventStore.ListByWorkKey(ctx, work.Key, 10)
+	require.NoError(t, err)
+	require.Len(t, history, 1)
+	require.Equal(t, "success", history[0].Outcome)
+
+	require.NoError(t, workStore.Complete(ctx, work.Key))
+	claimed, err = workStore.ClaimDue(ctx, "worker-c", time.Now().Add(time.Minute), 10)
+	require.NoError(t, err)
+	require.Empty(t, claimed)
+}
