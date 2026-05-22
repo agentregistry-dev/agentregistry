@@ -67,20 +67,6 @@ func WithPlural(plural string) KindOption {
 	}
 }
 
-// WithTable sets the backing PostgreSQL table for the kind.
-func WithTable(table string) KindOption {
-	return func(d *KindDescriptor) {
-		d.Table = strings.TrimSpace(table)
-	}
-}
-
-// WithTaggedArtifactStorage marks the kind as namespace/name/tag content.
-func WithTaggedArtifactStorage() KindOption {
-	return func(d *KindDescriptor) {
-		d.Storage = KindStorageTaggedArtifact
-	}
-}
-
 // WithMutableObjectStorage marks the kind as namespace/name mutable state.
 func WithMutableObjectStorage() KindOption {
 	return func(d *KindDescriptor) {
