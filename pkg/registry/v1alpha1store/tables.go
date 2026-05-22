@@ -29,18 +29,17 @@ var TableFor = map[string]string{
 // "Agent", "MCPServer") and is the single input the router/apply
 // layers take. They never look up tables by string literal themselves.
 //
-// KindDeployment and KindRuntime are bound through NewMutableObjectStore —
-// both are infra/lifecycle state, not tagged artifacts. Every other built-in
-// kind uses NewStore (tagged-artifact behavior). Iterates v1alpha1.BuiltinKinds so
-// registration order stays stable across builds (important for
-// OpenAPI output).
+// Storage behavior comes from v1alpha1.BuiltinKindDescriptors so built-in kind
+// registration has one source of truth. Iteration order stays stable across
+// builds (important for OpenAPI output).
 //
 // The variadic opts are applied to every Store produced. Downstream
 // callers pass WithAuditor(...) here to plumb a single audit sink
 // across all kinds in one call.
 func NewStores(pool *pgxpool.Pool, opts ...StoreOption) map[string]*Store {
 	out := make(map[string]*Store, len(v1alpha1.BuiltinKinds))
-	for _, kind := range v1alpha1.BuiltinKinds {
+	for _, descriptor := range v1alpha1.BuiltinKindDescriptors() {
+		kind := descriptor.Kind
 		table, ok := TableFor[kind]
 		if !ok {
 			// BuiltinKinds and TableFor must stay in sync — a missing
@@ -52,15 +51,14 @@ func NewStores(pool *pgxpool.Pool, opts ...StoreOption) map[string]*Store {
 		// Caller-supplied opts win (they appear after WithKind in the
 		// option chain).
 		kindOpts := append([]StoreOption{WithKind(kind)}, opts...)
-		if kind == v1alpha1.KindRuntime {
+		switch descriptor.Storage {
+		case v1alpha1.KindStorageMutableObject:
 			out[kind] = NewMutableObjectStore(pool, table, kindOpts...)
-			continue
+		case v1alpha1.KindStorageTaggedArtifact:
+			out[kind] = NewStore(pool, table, kindOpts...)
+		default:
+			panic("v1alpha1store: no storage behavior registered for kind " + kind)
 		}
-		if kind == v1alpha1.KindDeployment {
-			out[kind] = NewMutableObjectStore(pool, table, kindOpts...)
-			continue
-		}
-		out[kind] = NewStore(pool, table, kindOpts...)
 	}
 	return out
 }

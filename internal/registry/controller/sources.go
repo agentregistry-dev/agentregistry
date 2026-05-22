@@ -49,9 +49,13 @@ func NewSourceIndex(stores map[string]*v1alpha1store.Store) *SourceIndex {
 		if _, ok := newRegisteredObject(kind); !ok {
 			continue
 		}
+		var projection v1alpha1.ProjectionPolicy
+		if descriptor, ok := v1alpha1.BuiltinKindDescriptor(kind); ok {
+			projection = descriptor.Projection
+		}
 		kinds[kind] = sourceKind{
 			Kind:               kind,
-			IncludeTerminating: kind == v1alpha1.KindDeployment,
+			IncludeTerminating: projection.IncludeTerminating,
 		}
 	}
 	return &SourceIndex{

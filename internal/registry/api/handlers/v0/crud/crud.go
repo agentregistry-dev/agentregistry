@@ -62,7 +62,7 @@ type PerKindHooks struct {
 // entry or no registered binding are silently skipped; callers that
 // want strict behavior should validate the maps ahead of the call.
 //
-// Adding a new kind: append to v1alpha1.BuiltinKinds and add one
+// Adding a new built-in kind: add one v1alpha1.KindDescriptor and one typed
 // `register(...)` call in bindings.go's init().
 func Register(
 	api huma.API,

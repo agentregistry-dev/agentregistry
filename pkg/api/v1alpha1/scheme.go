@@ -42,12 +42,9 @@ var Default = newDefaultScheme()
 
 func newDefaultScheme() *Scheme {
 	s := NewScheme()
-	s.MustRegister(KindAgent, AgentSpec{}, func() any { return &Agent{} })
-	s.MustRegister(KindMCPServer, MCPServerSpec{}, func() any { return &MCPServer{} })
-	s.MustRegister(KindSkill, SkillSpec{}, func() any { return &Skill{} })
-	s.MustRegister(KindPrompt, PromptSpec{}, func() any { return &Prompt{} })
-	s.MustRegister(KindDeployment, DeploymentSpec{}, func() any { return &Deployment{} })
-	s.MustRegister(KindRuntime, RuntimeSpec{}, func() any { return &Runtime{} })
+	for _, descriptor := range BuiltinKindDescriptors() {
+		s.MustRegister(descriptor.Kind, descriptor.SpecSample, descriptor.NewObject)
+	}
 	return s
 }
 
@@ -147,12 +144,8 @@ func IsContentRegistryKind(kind string) bool {
 // IsTaggedArtifactKind reports whether refs to kind may use tag pinning and
 // whether the private store behavior keys rows by namespace/name/tag.
 func IsTaggedArtifactKind(kind string) bool {
-	switch kind {
-	case KindAgent, KindMCPServer, KindSkill, KindPrompt:
-		return true
-	default:
-		return false
-	}
+	descriptor, ok := BuiltinKindDescriptor(kind)
+	return ok && descriptor.Storage == KindStorageTaggedArtifact
 }
 
 // DecodeMulti parses a YAML stream (possibly containing multiple `---`-

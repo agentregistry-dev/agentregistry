@@ -17,6 +17,48 @@ func TestScheme_RegisterAllBuiltins(t *testing.T) {
 	}
 }
 
+func TestBuiltinKindDescriptorsDriveKindMetadata(t *testing.T) {
+	descriptors := BuiltinKindDescriptors()
+	gotKinds := make([]string, 0, len(descriptors))
+	for _, descriptor := range descriptors {
+		gotKinds = append(gotKinds, descriptor.Kind)
+		if descriptor.SpecSample == nil {
+			t.Fatalf("%s descriptor missing spec sample", descriptor.Kind)
+		}
+		if descriptor.NewObject == nil {
+			t.Fatalf("%s descriptor missing object constructor", descriptor.Kind)
+		}
+	}
+	if !reflect.DeepEqual(gotKinds, BuiltinKinds) {
+		t.Fatalf("descriptor kinds = %v, want BuiltinKinds %v", gotKinds, BuiltinKinds)
+	}
+
+	agent, ok := BuiltinKindDescriptor(KindAgent)
+	if !ok {
+		t.Fatalf("missing %s descriptor", KindAgent)
+	}
+	if agent.Storage != KindStorageTaggedArtifact {
+		t.Fatalf("agent storage = %s, want %s", agent.Storage, KindStorageTaggedArtifact)
+	}
+	if !IsTaggedArtifactKind(KindAgent) {
+		t.Fatalf("agent should be tagged artifact kind")
+	}
+
+	deployment, ok := BuiltinKindDescriptor(KindDeployment)
+	if !ok {
+		t.Fatalf("missing %s descriptor", KindDeployment)
+	}
+	if deployment.Storage != KindStorageMutableObject {
+		t.Fatalf("deployment storage = %s, want %s", deployment.Storage, KindStorageMutableObject)
+	}
+	if !deployment.Projection.IncludeTerminating {
+		t.Fatalf("deployment projection should include terminating rows")
+	}
+	if IsTaggedArtifactKind(KindDeployment) {
+		t.Fatalf("deployment should not be tagged artifact kind")
+	}
+}
+
 func TestScheme_Register_Duplicate(t *testing.T) {
 	s := NewScheme()
 	if err := s.Register("Foo", struct{}{}, func() any { return &struct{}{} }); err != nil {
