@@ -9,7 +9,7 @@ type MCPServer struct {
 }
 
 func init() {
-	MustRegisterKind[*MCPServer, MCPServerSpec](KindMCPServer)
+	MustRegisterKind[*MCPServer, MCPServerSpec](KindMCPServer, withBuiltinKind())
 }
 
 // MCPServerSpec is the MCP server's declarative body.

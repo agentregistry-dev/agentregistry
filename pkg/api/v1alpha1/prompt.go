@@ -9,7 +9,7 @@ type Prompt struct {
 }
 
 func init() {
-	MustRegisterKind[*Prompt, PromptSpec](KindPrompt)
+	MustRegisterKind[*Prompt, PromptSpec](KindPrompt, withBuiltinKind())
 }
 
 // PromptSpec is the prompt resource's declarative body. Content holds the
