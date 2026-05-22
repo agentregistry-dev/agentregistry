@@ -34,7 +34,7 @@ func StartDeploymentController(
 	pool *pgxpool.Pool,
 	stores map[string]*v1alpha1store.Store,
 	adapters map[string]types.DeploymentAdapter,
-	projectionPolicies map[string]v1alpha1.ProjectionPolicy,
+	initialFinalizers map[string]func(v1alpha1.Object) []string,
 ) (*Runtime, error) {
 	if pool == nil {
 		return nil, nil
@@ -45,7 +45,7 @@ func StartDeploymentController(
 
 	workStore := v1alpha1store.NewReconcileWorkStore(pool)
 	eventStore := v1alpha1store.NewReconcileEventStore(pool)
-	sources := NewSourceIndex(stores, SourceIndexOptions{ProjectionPolicies: projectionPolicies})
+	sources := NewSourceIndex(stores, SourceIndexOptions{InitialFinalizers: initialFinalizers})
 	deriver := &DeploymentWorkDeriver{Sources: sources, Work: workStore}
 	projector := &Projector{
 		Events: v1alpha1store.NewControlPlaneEventStore(pool),

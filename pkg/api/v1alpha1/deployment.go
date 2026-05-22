@@ -18,7 +18,6 @@ func init() {
 	MustRegisterKind[*Deployment, DeploymentSpec](
 		KindDeployment,
 		WithMutableObjectStorage(),
-		WithProjectionPolicy(ProjectionPolicy{IncludeTerminating: true}),
 	)
 }
 

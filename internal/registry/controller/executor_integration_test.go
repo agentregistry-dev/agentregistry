@@ -23,7 +23,7 @@ func TestDeploymentController_DerivesAndExecutesApply(t *testing.T) {
 	seedMCPServer(t, stores, "weather")
 	deployment := seedDeployment(t, stores, "weather-deploy", v1alpha1.DesiredStateDeployed)
 
-	sources := NewSourceIndex(stores)
+	sources := newDeploymentTestSourceIndex(stores)
 	require.NoError(t, sources.Refresh(ctx))
 	deriver := &DeploymentWorkDeriver{Sources: sources, Work: workStore}
 	_, err := deriver.DeriveAll(ctx)
@@ -58,7 +58,7 @@ func TestDeploymentController_BlocksMissingTargetWithoutAdapterCall(t *testing.T
 	seedRuntime(t, stores, "local")
 	seedDeployment(t, stores, "missing-target", v1alpha1.DesiredStateDeployed)
 
-	sources := NewSourceIndex(stores)
+	sources := newDeploymentTestSourceIndex(stores)
 	require.NoError(t, sources.Refresh(ctx))
 	deriver := &DeploymentWorkDeriver{Sources: sources, Work: workStore}
 	_, err := deriver.DeriveAll(ctx)
@@ -84,7 +84,7 @@ func TestDeploymentController_ReappliesWhenMissingTargetAppears(t *testing.T) {
 	seedRuntime(t, stores, "local")
 	deployment := seedDeployment(t, stores, "target-later", v1alpha1.DesiredStateDeployed)
 
-	sources := NewSourceIndex(stores)
+	sources := newDeploymentTestSourceIndex(stores)
 	require.NoError(t, sources.Refresh(ctx))
 	deriver := &DeploymentWorkDeriver{Sources: sources, Work: workStore}
 	_, err := deriver.DeriveAll(ctx)
@@ -135,7 +135,7 @@ func TestDeploymentController_DeleteWaitsForRemoveThenClearsFinalizer(t *testing
 	terminating := loadDeployment(t, stores, deployment.Metadata.Name)
 	require.NotNil(t, terminating.Metadata.DeletionTimestamp)
 
-	sources := NewSourceIndex(stores)
+	sources := newDeploymentTestSourceIndex(stores)
 	require.NoError(t, sources.Refresh(ctx))
 	deriver := &DeploymentWorkDeriver{Sources: sources, Work: workStore}
 	_, err := deriver.DeriveAll(ctx)
@@ -165,7 +165,7 @@ func TestDeploymentController_RemoveFailureKeepsFinalizerAndRetries(t *testing.T
 	deployment := seedDeployment(t, stores, "remove-retry", v1alpha1.DesiredStateDeployed)
 
 	require.NoError(t, stores[v1alpha1.KindDeployment].Delete(ctx, "default", deployment.Metadata.Name, ""))
-	sources := NewSourceIndex(stores)
+	sources := newDeploymentTestSourceIndex(stores)
 	require.NoError(t, sources.Refresh(ctx))
 	deriver := &DeploymentWorkDeriver{Sources: sources, Work: workStore}
 	_, err := deriver.DeriveAll(ctx)
@@ -249,6 +249,16 @@ func newControllerTestStores(t *testing.T) (map[string]*v1alpha1store.Store, *v1
 	pool := v1alpha1store.NewTestPool(t)
 	stores := v1alpha1store.NewStores(pool)
 	return stores, v1alpha1store.NewReconcileWorkStore(pool), v1alpha1store.NewReconcileEventStore(pool)
+}
+
+func newDeploymentTestSourceIndex(stores map[string]*v1alpha1store.Store) *SourceIndex {
+	return NewSourceIndex(stores, SourceIndexOptions{
+		InitialFinalizers: map[string]func(v1alpha1.Object) []string{
+			v1alpha1.KindDeployment: func(v1alpha1.Object) []string {
+				return []string{DeploymentControllerFinalizer}
+			},
+		},
+	})
 }
 
 func newTestExecutor(

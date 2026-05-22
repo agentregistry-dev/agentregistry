@@ -45,7 +45,7 @@ type SourceIndex struct {
 
 // SourceIndexOptions configures generic source projection behavior.
 type SourceIndexOptions struct {
-	ProjectionPolicies map[string]v1alpha1.ProjectionPolicy
+	InitialFinalizers map[string]func(v1alpha1.Object) []string
 }
 
 // NewSourceIndex creates a KRT source read model for registered v1alpha1 stores.
@@ -59,10 +59,9 @@ func NewSourceIndex(stores map[string]*v1alpha1store.Store, opts ...SourceIndexO
 		if _, ok := newRegisteredObject(kind); !ok {
 			continue
 		}
-		projection := sourceProjectionPolicy(kind, options.ProjectionPolicies)
 		kinds[kind] = sourceKind{
 			Kind:               kind,
-			IncludeTerminating: projection.IncludeTerminating,
+			IncludeTerminating: hasInitialFinalizer(kind, options.InitialFinalizers),
 		}
 	}
 	return &SourceIndex{
@@ -72,15 +71,8 @@ func NewSourceIndex(stores map[string]*v1alpha1store.Store, opts ...SourceIndexO
 	}
 }
 
-func sourceProjectionPolicy(kind string, overrides map[string]v1alpha1.ProjectionPolicy) v1alpha1.ProjectionPolicy {
-	var projection v1alpha1.ProjectionPolicy
-	if descriptor, ok := v1alpha1.KindDescriptorFor(kind); ok {
-		projection = descriptor.Projection
-	}
-	if override, ok := overrides[kind]; ok {
-		projection = override
-	}
-	return projection
+func hasInitialFinalizer(kind string, finalizers map[string]func(v1alpha1.Object) []string) bool {
+	return finalizers[kind] != nil
 }
 
 // Refresh rebuilds every source collection from canonical store tables.

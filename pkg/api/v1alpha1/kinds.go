@@ -19,16 +19,6 @@ const (
 	KindStorageMutableObject  KindStorage = "MutableObject"
 )
 
-// ProjectionPolicy tells the controller source projector how to read rows for a
-// kind. It does not decide what work to do; it only controls which rows are
-// visible to the read model.
-type ProjectionPolicy struct {
-	// IncludeTerminating keeps soft-deleted rows visible to the projector.
-	// Kinds that need async delete cleanup, such as Deployment finalizer
-	// teardown, need this so the controller can still see the row after DELETE.
-	IncludeTerminating bool
-}
-
 // KindDescriptor is the single registration record for a v1alpha1 kind. Scheme
 // decoding, store construction, plural routing, and source projection all share
 // this metadata.
@@ -39,7 +29,6 @@ type KindDescriptor struct {
 	Plural     string
 	Table      string
 	Storage    KindStorage
-	Projection ProjectionPolicy
 }
 
 // KindRegistry owns registered v1alpha1 kind metadata.
@@ -71,13 +60,6 @@ func WithPlural(plural string) KindOption {
 func WithMutableObjectStorage() KindOption {
 	return func(d *KindDescriptor) {
 		d.Storage = KindStorageMutableObject
-	}
-}
-
-// WithProjectionPolicy sets controller source projection behavior.
-func WithProjectionPolicy(policy ProjectionPolicy) KindOption {
-	return func(d *KindDescriptor) {
-		d.Projection = policy
 	}
 }
 

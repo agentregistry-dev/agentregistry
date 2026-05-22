@@ -64,9 +64,6 @@ func TestKindDescriptorsDriveKindMetadata(t *testing.T) {
 	if deployment.Plural != "deployments" || deployment.Table != "v1alpha1.deployments" {
 		t.Fatalf("deployment routing/storage = %s/%s", deployment.Plural, deployment.Table)
 	}
-	if !deployment.Projection.IncludeTerminating {
-		t.Fatalf("deployment projection should include terminating rows")
-	}
 	if IsTaggedArtifactKind(KindDeployment) {
 		t.Fatalf("deployment should not be tagged artifact kind")
 	}

@@ -9,21 +9,21 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
-func TestSourceIndexProjectionPolicyDefaultsAndOverrides(t *testing.T) {
+func TestSourceIndexIncludesTerminatingRowsForFinalizedKinds(t *testing.T) {
 	stores := map[string]*v1alpha1store.Store{
 		v1alpha1.KindDeployment: nil,
 		v1alpha1.KindRuntime:    nil,
 	}
 
 	sources := NewSourceIndex(stores)
-	require.True(t, sources.kinds[v1alpha1.KindDeployment].IncludeTerminating)
+	require.False(t, sources.kinds[v1alpha1.KindDeployment].IncludeTerminating)
 	require.False(t, sources.kinds[v1alpha1.KindRuntime].IncludeTerminating)
 
 	sources = NewSourceIndex(stores, SourceIndexOptions{
-		ProjectionPolicies: map[string]v1alpha1.ProjectionPolicy{
-			v1alpha1.KindRuntime: {IncludeTerminating: true},
+		InitialFinalizers: map[string]func(v1alpha1.Object) []string{
+			v1alpha1.KindRuntime: func(v1alpha1.Object) []string { return nil },
 		},
 	})
 	require.True(t, sources.kinds[v1alpha1.KindRuntime].IncludeTerminating)
-	require.True(t, sources.kinds[v1alpha1.KindDeployment].IncludeTerminating)
+	require.False(t, sources.kinds[v1alpha1.KindDeployment].IncludeTerminating)
 }

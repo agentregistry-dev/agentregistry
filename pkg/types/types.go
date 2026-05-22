@@ -249,26 +249,6 @@ type AppOptions struct {
 	// TODO(krt): temporary bridge for pending staged refs in HTTP apply.
 	ResolverWrapper func(v1alpha1.ResolverFunc) v1alpha1.ResolverFunc
 
-	// V1Alpha1StoreTables registers additional v1alpha1 kinds with their
-	// backing PostgreSQL tables. Downstream builds that add their own
-	// Scheme kinds should populate this so the shared /v0/apply,
-	// resolver, and generic route plumbing can see the same store map
-	// as any ExtraRoutes they register.
-	V1Alpha1StoreTables map[string]string
-
-	// V1Alpha1MutableStoreKinds marks extra v1alpha1 kinds that use mutable
-	// namespace/name object behavior instead of tagged artifact semantics.
-	// Downstream control-plane/config kinds are v1alpha1-shaped but are not
-	// content artifacts.
-	V1Alpha1MutableStoreKinds map[string]bool
-
-	// V1Alpha1ProjectionPolicies overrides controller source projection
-	// behavior for additional v1alpha1 kinds. Built-ins get defaults from
-	// v1alpha1.KindDescriptor; downstream mutable kinds that need
-	// delete/finalizer reconciliation can set IncludeTerminating here without
-	// adding controller switch cases.
-	V1Alpha1ProjectionPolicies map[string]v1alpha1.ProjectionPolicy
-
 	// RegistryValidator overrides the per-package registry
 	// validator (the dispatcher consulted on apply to confirm
 	// each declared package — npm / pypi / oci / nuget / mcpb — exists

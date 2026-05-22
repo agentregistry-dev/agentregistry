@@ -102,8 +102,9 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	}
 	maps.Copy(deploymentAdapters, options.DeploymentAdapters)
 	pool := db.Pool()
-	stores := buildStores(pool, options.V1Alpha1StoreTables, options.V1Alpha1MutableStoreKinds, options.Auditor)
-	if _, err := controller.StartDeploymentController(ctx, pool, stores, deploymentAdapters, options.V1Alpha1ProjectionPolicies); err != nil {
+	stores := buildStores(pool, options.Auditor)
+	perKindHooks := crudPerKindHooks(options)
+	if _, err := controller.StartDeploymentController(ctx, pool, stores, deploymentAdapters, perKindHooks.InitialFinalizers); err != nil {
 		return fmt.Errorf("start deployment controller: %w", err)
 	}
 
@@ -127,7 +128,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		}
 	}()
 
-	routeOpts := buildRouteOptions(options, stores, deploymentAdapters)
+	routeOpts := buildRouteOptions(options, stores, deploymentAdapters, perKindHooks)
 
 	// Initialize HTTP server
 	baseServer, err := api.NewServer(cfg, metrics, versionInfo, options.UIHandler, authnProvider, routeOpts)
@@ -181,23 +182,11 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	return nil
 }
 
-func buildStores(pool *pgxpool.Pool, extraStoreTables map[string]string, mutableExtraKinds map[string]bool, auditor types.Auditor) map[string]*v1alpha1store.Store {
+func buildStores(pool *pgxpool.Pool, auditor types.Auditor) map[string]*v1alpha1store.Store {
 	if auditor == nil {
 		auditor = types.NoopAuditor
 	}
 	stores := v1alpha1store.NewStores(pool, v1alpha1store.WithAuditor(auditor))
-	for kind, table := range extraStoreTables {
-		if kind == "" || table == "" {
-			slog.Warn("skipping v1alpha1 extra store with empty kind or table", "kind", kind, "table", table)
-			continue
-		}
-		opts := []v1alpha1store.StoreOption{v1alpha1store.WithKind(kind), v1alpha1store.WithAuditor(auditor)}
-		if mutableExtraKinds[kind] {
-			stores[kind] = v1alpha1store.NewMutableObjectStore(pool, table, opts...)
-			continue
-		}
-		stores[kind] = v1alpha1store.NewStore(pool, table, opts...)
-	}
 
 	// pool == nil is the noop/DatabaseFactory path used by gen-openapi
 	// and the release-openapi make target. Routes still register so the
@@ -217,11 +206,12 @@ func buildRouteOptions(
 	options types.AppOptions,
 	stores map[string]*v1alpha1store.Store,
 	adapters map[string]types.DeploymentAdapter,
+	perKindHooks crud.PerKindHooks,
 ) *router.RouteOptions {
 	routeOpts := &router.RouteOptions{
 		ExtraRoutes:         options.ExtraRoutes,
 		Stores:              stores,
-		PerKindHooks:        crudPerKindHooks(options),
+		PerKindHooks:        perKindHooks,
 		RegistryValidator:   options.RegistryValidator,
 		Admission:           options.Admission,
 		DeleteAdmission:     options.DeleteAdmission,
