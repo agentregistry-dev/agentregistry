@@ -7,7 +7,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	cliCommon "github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
@@ -167,7 +166,7 @@ func init() {
 			if err != nil {
 				return nil, err
 			}
-			return common.DeploymentRecordFromObject(deployment), nil
+			return cliCommon.DeploymentRecordFromObject(deployment), nil
 		},
 		Delete: func(ctx context.Context, name, tag string, force bool) error {
 			return deleteAny(ctx, v1alpha1.KindDeployment, name, tag, force, func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} })
