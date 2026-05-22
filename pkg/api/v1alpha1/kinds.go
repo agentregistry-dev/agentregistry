@@ -19,17 +19,19 @@ const (
 	KindStorageMutableObject  KindStorage = "MutableObject"
 )
 
-// ProjectionPolicy captures controller read-model behavior that differs by
-// kind. Derivers/executors remain feature-specific; this policy only tells the
-// generic source projector how to read canonical rows.
+// ProjectionPolicy tells the controller source projector how to read rows for a
+// kind. It does not decide what work to do; it only controls which rows are
+// visible to the read model.
 type ProjectionPolicy struct {
+	// IncludeTerminating keeps soft-deleted rows visible to the projector.
+	// Kinds that need async delete cleanup, such as Deployment finalizer
+	// teardown, need this so the controller can still see the row after DELETE.
 	IncludeTerminating bool
 }
 
-// KindDescriptor is the single registration record for a v1alpha1 kind.
-// Built-in and extension kinds both register descriptors, so scheme decoding,
-// store construction, plural routing, and source projection all share one
-// authoritative kind registry.
+// KindDescriptor is the single registration record for a v1alpha1 kind. Scheme
+// decoding, store construction, plural routing, and source projection all share
+// this metadata.
 type KindDescriptor struct {
 	Kind       string
 	SpecSample any
@@ -38,7 +40,6 @@ type KindDescriptor struct {
 	Table      string
 	Storage    KindStorage
 	Projection ProjectionPolicy
-	builtin    bool
 }
 
 // KindRegistry owns registered v1alpha1 kind metadata.
@@ -55,10 +56,6 @@ func NewKindRegistry() *KindRegistry {
 // DefaultKindRegistry is the package-level registry used by the app, stores,
 // controller sources, and generic clients. Kind packages register here at init.
 var DefaultKindRegistry = NewKindRegistry()
-
-// BuiltinKinds is retained for compatibility with older callers. New code
-// should call RegisteredKinds so it observes the live registry directly.
-var BuiltinKinds []string
 
 // KindOption customizes RegisterKind defaults.
 type KindOption func(*KindDescriptor)
@@ -95,12 +92,6 @@ func WithMutableObjectStorage() KindOption {
 func WithProjectionPolicy(policy ProjectionPolicy) KindOption {
 	return func(d *KindDescriptor) {
 		d.Projection = policy
-	}
-}
-
-func withBuiltinKind() KindOption {
-	return func(d *KindDescriptor) {
-		d.builtin = true
 	}
 }
 
@@ -145,9 +136,6 @@ func RegisterKind[T Object, S any](kind string, opts ...KindOption) error {
 	}
 	if err := DefaultKindRegistry.Register(descriptor); err != nil {
 		return err
-	}
-	if descriptor.builtin {
-		BuiltinKinds = DefaultKindRegistry.BuiltinKinds()
 	}
 	return nil
 }
@@ -227,46 +215,6 @@ func (r *KindRegistry) Descriptors() []KindDescriptor {
 	return out
 }
 
-// BuiltinKinds returns registered OSS built-in kind names in deterministic
-// order. Extension kinds are excluded.
-func (r *KindRegistry) BuiltinKinds() []string {
-	descriptors := r.BuiltinDescriptors()
-	out := make([]string, 0, len(descriptors))
-	for _, descriptor := range descriptors {
-		out = append(out, descriptor.Kind)
-	}
-	return out
-}
-
-// BuiltinDescriptors returns registered OSS built-in descriptors in
-// deterministic kind order. Extension kinds are excluded.
-func (r *KindRegistry) BuiltinDescriptors() []KindDescriptor {
-	if r == nil {
-		return nil
-	}
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	out := make([]KindDescriptor, 0, len(r.descriptors))
-	for _, descriptor := range r.descriptors {
-		if descriptor.builtin {
-			out = append(out, descriptor)
-		}
-	}
-	slices.SortFunc(out, func(a, b KindDescriptor) int {
-		return strings.Compare(strings.ToLower(a.Kind), strings.ToLower(b.Kind))
-	})
-	return out
-}
-
-// BuiltinLookup returns descriptor for a registered OSS built-in kind.
-func (r *KindRegistry) BuiltinLookup(kind string) (KindDescriptor, bool) {
-	descriptor, ok := r.Lookup(kind)
-	if !ok || !descriptor.builtin {
-		return KindDescriptor{}, false
-	}
-	return descriptor, true
-}
-
 // Lookup returns descriptor for kind.
 func (r *KindRegistry) Lookup(kind string) (KindDescriptor, bool) {
 	if r == nil {
@@ -322,16 +270,6 @@ func KindDescriptors() []KindDescriptor {
 // KindDescriptorFor returns descriptor for kind.
 func KindDescriptorFor(kind string) (KindDescriptor, bool) {
 	return DefaultKindRegistry.Lookup(kind)
-}
-
-// BuiltinKindDescriptors returns OSS built-in descriptors.
-func BuiltinKindDescriptors() []KindDescriptor {
-	return DefaultKindRegistry.BuiltinDescriptors()
-}
-
-// BuiltinKindDescriptor returns descriptor for an OSS built-in kind.
-func BuiltinKindDescriptor(kind string) (KindDescriptor, bool) {
-	return DefaultKindRegistry.BuiltinLookup(kind)
 }
 
 func newObjectFor[T Object](kind string) (func() any, error) {

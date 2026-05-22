@@ -9,7 +9,7 @@ type Agent struct {
 }
 
 func init() {
-	MustRegisterKind[*Agent, AgentSpec](KindAgent, withBuiltinKind())
+	MustRegisterKind[*Agent, AgentSpec](KindAgent)
 }
 
 // AgentSpec is the agent resource's declarative body.

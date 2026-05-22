@@ -9,7 +9,7 @@ type Skill struct {
 }
 
 func init() {
-	MustRegisterKind[*Skill, SkillSpec](KindSkill, withBuiltinKind())
+	MustRegisterKind[*Skill, SkillSpec](KindSkill)
 }
 
 // SkillSpec is the skill resource's declarative body.

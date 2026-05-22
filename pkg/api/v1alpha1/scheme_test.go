@@ -17,8 +17,8 @@ func TestScheme_RegisterAllBuiltins(t *testing.T) {
 	}
 }
 
-func TestBuiltinKindDescriptorsDriveKindMetadata(t *testing.T) {
-	descriptors := BuiltinKindDescriptors()
+func TestKindDescriptorsDriveKindMetadata(t *testing.T) {
+	descriptors := KindDescriptors()
 	gotKinds := make([]string, 0, len(descriptors))
 	for _, descriptor := range descriptors {
 		gotKinds = append(gotKinds, descriptor.Kind)
@@ -29,11 +29,11 @@ func TestBuiltinKindDescriptorsDriveKindMetadata(t *testing.T) {
 			t.Fatalf("%s descriptor missing object constructor", descriptor.Kind)
 		}
 	}
-	if !reflect.DeepEqual(gotKinds, BuiltinKinds) {
-		t.Fatalf("descriptor kinds = %v, want BuiltinKinds %v", gotKinds, BuiltinKinds)
+	if !reflect.DeepEqual(gotKinds, RegisteredKinds()) {
+		t.Fatalf("descriptor kinds = %v, want RegisteredKinds %v", gotKinds, RegisteredKinds())
 	}
 
-	agent, ok := BuiltinKindDescriptor(KindAgent)
+	agent, ok := KindDescriptorFor(KindAgent)
 	if !ok {
 		t.Fatalf("missing %s descriptor", KindAgent)
 	}
@@ -54,7 +54,7 @@ func TestBuiltinKindDescriptorsDriveKindMetadata(t *testing.T) {
 		t.Fatalf("mcpserver routing/storage = %s/%s", mcp.Plural, mcp.Table)
 	}
 
-	deployment, ok := BuiltinKindDescriptor(KindDeployment)
+	deployment, ok := KindDescriptorFor(KindDeployment)
 	if !ok {
 		t.Fatalf("missing %s descriptor", KindDeployment)
 	}

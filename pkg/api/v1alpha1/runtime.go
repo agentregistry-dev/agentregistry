@@ -12,7 +12,7 @@ type Runtime struct {
 }
 
 func init() {
-	MustRegisterKind[*Runtime, RuntimeSpec](KindRuntime, withBuiltinKind(), WithMutableObjectStorage())
+	MustRegisterKind[*Runtime, RuntimeSpec](KindRuntime, WithMutableObjectStorage())
 }
 
 // Built-in runtime type discriminators. Canonical form is CamelCase.

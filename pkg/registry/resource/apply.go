@@ -282,11 +282,10 @@ func resolveBatchTarget(cfg ApplyConfig, obj v1alpha1.Object, verb string) (*v1a
 	}
 
 	// Defense-in-depth: when any Authorizers are wired, a kind without
-	// an entry must DENY rather than silently allow. Downstream boot guards
-	// can ensure every OSS BuiltinKinds entry has an authorizer when authz
-	// is enabled, so this only fires for extension kinds the operator added
-	// without updating PerKindHooks — fail closed there. Mirrors the same
-	// contract on the import handler.
+	// an entry must DENY rather than silently allow. Callers that install
+	// authz should validate their hook maps at boot; this keeps extension
+	// kinds fail-closed if that wiring is missed. Mirrors the same contract
+	// on the import handler.
 	if len(cfg.Authorizers) > 0 {
 		if authz, ok := cfg.Authorizers[kind]; !ok || authz == nil {
 			return nil, *meta, &applyError{
