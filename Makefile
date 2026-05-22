@@ -21,11 +21,19 @@ OUTDIR ?= _output
 # DOCKER_REGISTRY (localhost:5001) is kept for helm chart image references.
 DOCKER_BUILD_REGISTRY ?= kind-registry:5000
 DOCKER_BUILD_ARGS ?= --push --platform linux/$(LOCALARCH)
-BUILD_DATE ?= $(shell date -u '+%Y-%m-%d')
-GIT_COMMIT ?= $(shell git rev-parse --short HEAD || echo "unknown")
-VERSION ?= $(shell git describe --tags --always 2>/dev/null | grep v || echo "v0.0.0-g$(GIT_COMMIT)")
+ifndef BUILD_DATE
+BUILD_DATE := $(shell date -u '+%Y-%m-%d')
+endif
+ifndef GIT_COMMIT
+GIT_COMMIT := $(shell git rev-parse --short HEAD || echo "unknown")
+endif
+ifndef VERSION
+VERSION := $(shell git describe --tags --always 2>/dev/null | grep v || echo "v0.0.0-g$(GIT_COMMIT)")
+endif
 KAGENT_VERSION ?= v0.8.0-beta6
-KAGENT_HELM_VERSION ?= $(shell echo $(KAGENT_VERSION) | sed 's/^v//')
+ifndef KAGENT_HELM_VERSION
+KAGENT_HELM_VERSION := $(shell echo $(KAGENT_VERSION) | sed 's/^v//')
+endif
 KAGENT_NAMESPACE ?= kagent
 KAGENT_HELM_CHART_CRDS ?= oci://ghcr.io/kagent-dev/kagent/helm/kagent-crds
 KAGENT_HELM_CHART ?= oci://ghcr.io/kagent-dev/kagent/helm/kagent
@@ -43,7 +51,9 @@ LDFLAGS := \
 	-X 'github.com/agentregistry-dev/agentregistry/internal/version.DockerRegistry=$(DOCKER_REGISTRY)'
 
 # Local architecture detection to build for the current platform
-LOCALARCH ?= $(shell uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/')
+ifndef LOCALARCH
+LOCALARCH := $(shell uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/')
+endif
 
 # Developer tools (golangci-lint, gotestsum, kind) are pinned in tools/go.mod
 # and invoked via `go tool -modfile=tools/go.mod <name>`. This keeps their
@@ -58,7 +68,9 @@ KIND          ?= $(GO_TOOL) kind
 
 ## Helm / Chart settings
 # CHART_VERSION strips the leading 'v' from VERSION for use in Chart.yaml (Helm requires semver without the prefix).
-CHART_VERSION ?= $(shell echo $(VERSION) | sed 's/^v//')
+ifndef CHART_VERSION
+CHART_VERSION := $(shell echo $(VERSION) | sed 's/^v//')
+endif
 HELM_CHART_DIR ?= ./charts/agentregistry
 HELM_PACKAGE_DIR ?= build/charts
 HELM_REGISTRY ?= ghcr.io
