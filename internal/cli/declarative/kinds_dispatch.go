@@ -18,12 +18,13 @@ import (
 // than treating it as an error.
 var errNotListable = errors.New("list not supported for this kind")
 
-// listItems fetches all items for the given kind using its registered ListFunc.
-func listItems(k *scheme.Kind) ([]any, error) {
+// listItems fetches items for the given kind using its registered ListFunc.
+// opts may be the zero value to list every row.
+func listItems(k *scheme.Kind, opts scheme.ListOpts) ([]any, error) {
 	if k.ListFunc == nil {
 		return nil, fmt.Errorf("%w: %q", errNotListable, k.Kind)
 	}
-	return k.ListFunc(context.Background())
+	return k.ListFunc(context.Background(), opts)
 }
 
 // getItem fetches a single item by name for the given kind. Empty tag resolves

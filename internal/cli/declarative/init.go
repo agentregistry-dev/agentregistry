@@ -8,37 +8,33 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/spf13/cobra"
+	"sigs.k8s.io/yaml"
+
 	"github.com/agentregistry-dev/agentregistry/internal/cli/buildconfig"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative/mcpresolve"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/frameworks"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	skilltemplates "github.com/agentregistry-dev/agentregistry/internal/cli/skill/templates"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/validators"
-	"github.com/spf13/cobra"
-	"sigs.k8s.io/yaml"
 )
 
 // InitCmd is the cobra command for "init".
 // Tests should use NewInitCmd() for a fresh instance.
 var InitCmd = newInitCmd()
 
-// lookupOutputDir walks the cmd → parent chain to find the --output-dir
-// flag value. The flag is defined as persistent on the parent `init`
-// command; cobra normally merges it into child flag sets at Execute time,
-// but the kindless dispatch (top-level RunE → child.RunE directly) skips
-// that merge, so we walk explicitly.
+// mcpFetcherForTest is the indirection point unit tests use to inject a
+// fake registry. Nil in production; the RunE substitutes apiClientMCPFetcher.
+var mcpFetcherForTest mcpresolve.Fetcher
+
+// lookupOutputDir resolves --output-dir from the parent init command for
+// child RunEs invoked directly by the kindless dispatcher (top-level
+// RunE → child.RunE) — that path skips cobra's persistent-flag merge.
 func lookupOutputDir(cmd *cobra.Command) string {
-	for c := cmd; c != nil; c = c.Parent() {
-		if f := c.Flags().Lookup("output-dir"); f != nil {
-			return f.Value.String()
-		}
-		if f := c.PersistentFlags().Lookup("output-dir"); f != nil {
-			return f.Value.String()
-		}
-	}
-	return ""
+	return lookupPersistentFlag(cmd, "output-dir")
 }
 
 // resolveInitProjectPath returns the absolute path the new project should
@@ -144,6 +140,8 @@ func newInitAgentCmd() *cobra.Command {
 		initLanguage      string
 		initImage         string
 		initGit           string
+		initGitBranch     string
+		initGitCommit     string
 		initMCPs          []string
 		initLocalMCPs     []string
 	)
@@ -196,6 +194,34 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 					return nil
 				}
 				return err
+			}
+
+			// Resolve --mcp refs against the registry BEFORE touching project
+			// files, so a registry failure leaves no partial state.
+			fetcher := mcpFetcherForTest
+			if fetcher == nil {
+				fetcher = apiClientMCPFetcher{cmd: cmd}
+			}
+			var remoteEntries []mcpEnvEntry
+			var resolvedRefs []*mcpresolve.ResolvedMCP
+			for _, raw := range initMCPs {
+				if strings.TrimSpace(raw) == "" {
+					return fmt.Errorf("--mcp: empty ref (expected name or name@version)")
+				}
+				refName, tag := parseNameVersion(raw)
+				r, rerr := mcpresolve.Resolve(cmd.Context(), fetcher, refName, tag)
+				if rerr != nil {
+					return rerr
+				}
+				resolvedRefs = append(resolvedRefs, r)
+				if r.RemoteURL != "" {
+					remoteEntries = append(remoteEntries, mcpEnvEntry{
+						Name:    r.Name,
+						Type:    "remote",
+						URL:     r.RemoteURL,
+						Headers: r.RemoteHeaders,
+					})
+				}
 			}
 
 			r, err := loadFrameworkRegistry(projectDir)
@@ -283,12 +309,29 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 			}
 
 			// --local-mcp wires sibling MCP projects via the runtime's
-			// MCP_SERVERS_CONFIG env var. Each path's arctl.yaml carries
-			// the port; we write a JSON array of {name, url} entries.
-			if len(initLocalMCPs) > 0 {
-				if err := appendLocalMCPsToDotEnv(projectDir, initLocalMCPs); err != nil {
-					return fmt.Errorf("wire local MCPs: %w", err)
+			// MCP_SERVERS_CONFIG env var; --mcp remote refs join the same line.
+			localEntries, err := localMCPEntries(initLocalMCPs)
+			if err != nil {
+				return fmt.Errorf("wire local MCPs: %w", err)
+			}
+			if err := writeMCPServersConfig(projectDir, append(localEntries, remoteEntries...)); err != nil {
+				return fmt.Errorf("write MCP_SERVERS_CONFIG: %w", err)
+			}
+
+			headersWired := false
+			for _, r := range resolvedRefs {
+				if r.RemoteURL != "" {
+					fmt.Fprintf(cmd.ErrOrStderr(), "  wired .env: %s → %s\n", r.Name, r.RemoteURL)
+					if len(r.RemoteHeaders) > 0 {
+						headersWired = true
+					}
 				}
+			}
+			if headersWired {
+				// Catalog Header values land in .env verbatim. .env is
+				// gitignored above, but warn so the user knows a shared
+				// catalog can leak tokens into local checkouts.
+				fmt.Fprintln(cmd.ErrOrStderr(), "  note: remote MCP headers written to .env in plaintext; rotate any tokens stored in the catalog if shared.")
 			}
 
 			// Skills/Prompts/Language/Framework removed from AgentSpec (Phase 11);
@@ -296,7 +339,7 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 			// agent.yaml carries only canonical AgentSpec fields.
 			if err := writeDeclarativeAgentYAML(projectDir, name, image,
 				provider, modelName,
-				initDescription, initGit, initMCPs); err != nil {
+				initDescription, initGit, initGitBranch, initGitCommit, initMCPs); err != nil {
 				return fmt.Errorf("write agent.yaml: %w", err)
 			}
 
@@ -321,56 +364,37 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 	cmd.Flags().StringVar(&initModelName, "model-name", "", "Model name")
 	cmd.Flags().StringVar(&initImage, "image", "", "Image tag override")
 	cmd.Flags().StringVar(&initGit, "git", "", "Git repository URL")
+	cmd.Flags().StringVar(&initGitBranch, "git-branch", "", "Git branch to record on the agent's source repository")
+	cmd.Flags().StringVar(&initGitCommit, "git-commit", "", "Git commit SHA to pin the agent's source repository to")
 	cmd.Flags().StringSliceVar(&initMCPs, "mcp", nil, "Registry MCP server ref (name@version). Repeatable.")
 	cmd.Flags().StringSliceVar(&initLocalMCPs, "local-mcp", nil, "Path to a sibling MCP project; wires it into .env so the local agent can reach it. Repeatable.")
 	return cmd
 }
 
-// appendLocalMCPsToDotEnv resolves each sibling MCP project path, reads its
-// arctl.yaml for the port, derives the registry-style name from the sibling's
-// mcp.yaml, and appends a single MCP_SERVERS_CONFIG line to projectDir/.env
-// carrying a JSON array of {name, url} entries.
+// mcpEnvEntry is one row of the MCP_SERVERS_CONFIG JSON array written to
+// .env. Type is always "remote" today; the kagent ADK runtime's mcp_tools.py
+// dispatches on this field.
+type mcpEnvEntry struct {
+	Name    string            `json:"name"`
+	Type    string            `json:"type"`
+	URL     string            `json:"url"`
+	Headers map[string]string `json:"headers,omitempty"`
+}
+
+// writeMCPServersConfig writes a single MCP_SERVERS_CONFIG=... line carrying
+// the supplied entries to projectDir/.env. Callers collect entries from both
+// --local-mcp (sibling paths) and --mcp (remote catalog refs) so one writer
+// covers both flag sources. Any pre-existing MCP_SERVERS_CONFIG= line is
+// stripped first so re-running init can't leave two lines (dotenv parsing
+// would silently take the last, masking the older one).
 //
 // host.docker.internal works on Docker Desktop (Mac/Windows) by default. Linux
 // users need `--add-host=host.docker.internal:host-gateway` in the agent's
 // docker-compose; we don't auto-inject that here.
-func appendLocalMCPsToDotEnv(projectDir string, paths []string) error {
-	// The kagent ADK runtime's mcp_tools.py reads this JSON and dispatches on
-	// `type`: "command" for in-cluster sidecar services (URL derived from
-	// service name) vs everything else (uses `url` directly). For local-dev
-	// wiring we always emit "remote" so the runtime takes the URL path.
-	type entry struct {
-		Name string `json:"name"`
-		Type string `json:"type"`
-		URL  string `json:"url"`
+func writeMCPServersConfig(projectDir string, entries []mcpEnvEntry) error {
+	if len(entries) == 0 {
+		return nil
 	}
-	var entries []entry
-	for _, p := range paths {
-		abs, err := filepath.Abs(p)
-		if err != nil {
-			return fmt.Errorf("resolve %q: %w", p, err)
-		}
-		cfg, err := buildconfig.Read(abs)
-		if err != nil {
-			return fmt.Errorf("read sibling arctl.yaml at %s: %w", abs, err)
-		}
-		port := cfg.Port
-		if port == 0 {
-			port = 3000
-		}
-
-		// Sibling MCP's registry-style name (e.g. "acme/foo") lives in mcp.yaml.
-		siblingName, err := readMCPName(abs)
-		if err != nil {
-			return err
-		}
-		entries = append(entries, entry{
-			Name: siblingName,
-			Type: "remote",
-			URL:  fmt.Sprintf("http://host.docker.internal:%d/mcp", port),
-		})
-	}
-
 	jsonBlob, err := json.Marshal(entries)
 	if err != nil {
 		return fmt.Errorf("marshal MCP_SERVERS_CONFIG: %w", err)
@@ -380,34 +404,97 @@ func appendLocalMCPsToDotEnv(projectDir string, paths []string) error {
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	out := string(existing)
+	out := stripMCPServersConfigLines(string(existing))
 	if out != "" && !strings.HasSuffix(out, "\n") {
 		out += "\n"
 	}
-	out += "\n# Wired by arctl init --local-mcp.\n"
+	out += "\n# Wired by arctl init --mcp / --local-mcp.\n"
 	out += "MCP_SERVERS_CONFIG=" + string(jsonBlob) + "\n"
 	return os.WriteFile(envPath, []byte(out), 0o644)
+}
+
+// stripMCPServersConfigLines removes existing MCP_SERVERS_CONFIG= lines and
+// the "# Wired by arctl init ..." marker comment that immediately precedes
+// them, so a re-write replaces rather than appends.
+func stripMCPServersConfigLines(env string) string {
+	lines := strings.Split(env, "\n")
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if strings.HasPrefix(line, "MCP_SERVERS_CONFIG=") {
+			// Drop the preceding marker comment too (the one we emit).
+			if n := len(out); n > 0 && strings.HasPrefix(out[n-1], "# Wired by arctl init") {
+				out = out[:n-1]
+				if n2 := len(out); n2 > 0 && out[n2-1] == "" {
+					out = out[:n2-1]
+				}
+			}
+			continue
+		}
+		out = append(out, line)
+	}
+	return strings.Join(out, "\n")
+}
+
+// localMCPEntries resolves sibling MCP project paths into mcpEnvEntries.
+// Extracted from the old appendLocalMCPsToDotEnv so the caller can mix
+// local entries with --mcp-derived remote entries before writing once.
+func localMCPEntries(paths []string) ([]mcpEnvEntry, error) {
+	var entries []mcpEnvEntry
+	for _, p := range paths {
+		abs, err := filepath.Abs(p)
+		if err != nil {
+			return nil, fmt.Errorf("resolve %q: %w", p, err)
+		}
+		cfg, err := buildconfig.Read(abs)
+		if err != nil {
+			return nil, fmt.Errorf("read sibling arctl.yaml at %s: %w", abs, err)
+		}
+		port := cfg.Port
+		if port == 0 {
+			port = 3000
+		}
+		siblingName, err := readMCPName(abs)
+		if err != nil {
+			return nil, err
+		}
+		entries = append(entries, mcpEnvEntry{
+			Name: siblingName,
+			Type: "remote",
+			URL:  fmt.Sprintf("http://host.docker.internal:%d/mcp", port),
+		})
+	}
+	return entries, nil
+}
+
+// readMCPYAML reads <projectDir>/mcp.yaml and decodes it into a typed
+// v1alpha1.MCPServer. Returns (nil, nil) when the file doesn't exist so
+// callers can distinguish "no mcp.yaml here" from a real parse error.
+func readMCPYAML(projectDir string) (*v1alpha1.MCPServer, error) {
+	data, err := os.ReadFile(filepath.Join(projectDir, "mcp.yaml"))
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read mcp.yaml: %w", err)
+	}
+	var doc v1alpha1.MCPServer
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return nil, fmt.Errorf("parse mcp.yaml: %w", err)
+	}
+	return &doc, nil
 }
 
 // readMCPName pulls metadata.name out of a sibling mcp.yaml. Used to label
 // entries in MCP_SERVERS_CONFIG.
 func readMCPName(projectDir string) (string, error) {
-	data, err := os.ReadFile(filepath.Join(projectDir, "mcp.yaml"))
+	doc, err := readMCPYAML(projectDir)
 	if err != nil {
-		return "", fmt.Errorf("read sibling mcp.yaml: %w", err)
+		return "", err
 	}
-	var env struct {
-		Metadata struct {
-			Name string `yaml:"name"`
-		} `yaml:"metadata"`
-	}
-	if err := yaml.Unmarshal(data, &env); err != nil {
-		return "", fmt.Errorf("parse sibling mcp.yaml: %w", err)
-	}
-	if env.Metadata.Name == "" {
+	if doc == nil || doc.Metadata.Name == "" {
 		return "", fmt.Errorf("sibling mcp.yaml missing metadata.name")
 	}
-	return env.Metadata.Name, nil
+	return doc.Metadata.Name, nil
 }
 
 // defaultInitModelName returns the default model name for a provider when
@@ -495,7 +582,7 @@ func parseNameVersion(s string) (string, string) {
 // metadata.tag is intentionally omitted — tagging is a publish-time concern.
 // The server stores untagged applies as the literal "latest"; users who want
 // a deterministic tag set it on the YAML by hand before `arctl apply`.
-func writeDeclarativeAgentYAML(projectDir, name, image, modelProvider, modelName, description, gitURL string, mcps []string) error {
+func writeDeclarativeAgentYAML(projectDir, name, image, modelProvider, modelName, description, gitURL, gitBranch, gitCommit string, mcps []string) error {
 	desc := description
 	if desc == "" {
 		desc = fmt.Sprintf("%s agent", name)
@@ -521,7 +608,9 @@ func writeDeclarativeAgentYAML(projectDir, name, image, modelProvider, modelName
 
 	if gitURL != "" {
 		agent.Spec.Source.Repository = &v1alpha1.Repository{
-			URL: gitURL,
+			URL:    gitURL,
+			Branch: gitBranch,
+			Commit: gitCommit,
 		}
 	}
 

@@ -29,12 +29,11 @@ func NewKubernetesDeploymentAdapter() *kubernetesDeploymentAdapter {
 func (a *kubernetesDeploymentAdapter) Type() string { return v1alpha1.TypeKubernetes }
 
 // SupportedTargetKinds reports the v1alpha1 Kinds this adapter can
-// deploy: Agent and MCPServer.
+// deploy: Agent and MCPServer (bundled or remote via Spec.Remote).
 func (a *kubernetesDeploymentAdapter) SupportedTargetKinds() []string {
 	return []string{
 		v1alpha1.KindAgent,
 		v1alpha1.KindMCPServer,
-		v1alpha1.KindRemoteMCPServer,
 	}
 }
 
@@ -174,7 +173,7 @@ func (a *kubernetesDeploymentAdapter) Discover(ctx context.Context, in types.Dis
 				continue
 			}
 			out = append(out, types.DiscoveryResult{
-				TargetKind: v1alpha1.KindRemoteMCPServer,
+				TargetKind: v1alpha1.KindMCPServer,
 				Namespace:  remote.Namespace,
 				Name:       remote.Name,
 			})
@@ -206,15 +205,6 @@ func (a *kubernetesDeploymentAdapter) buildDesiredStateFromV1Alpha1(
 			Namespace:    namespace,
 			EnvValues:    envValues,
 			ArgValues:    argValues,
-		})
-		if err != nil {
-			return nil, err
-		}
-		return &runtimetypes.DesiredState{MCPServers: []*runtimetypes.MCPServer{server}}, nil
-	case *v1alpha1.RemoteMCPServer:
-		server, err := utils.SpecToPlatformRemoteMCPServer(ctx, target.Metadata, target.Spec, utils.RemoteMCPServerTranslateOpts{
-			DeploymentID: deploymentID,
-			Namespace:    namespace,
 			HeaderValues: headerValues,
 		})
 		if err != nil {

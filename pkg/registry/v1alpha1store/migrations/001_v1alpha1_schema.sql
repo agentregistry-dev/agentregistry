@@ -206,7 +206,7 @@ CREATE OR REPLACE TRIGGER prompts_notify_status   AFTER  INSERT OR UPDATE OR DEL
 -- Runtimes and Deployments: lifecycle/infra state, NOT tagged artifacts.
 -- Both use Kubernetes-like mutable storage. Runtime belongs with Deployment as
 -- infra/config — the actual tagged artifacts that get deployed are
--- Agents/MCPServers/Skills/Prompts/RemoteMCPServers.
+-- Agents/MCPServers/Skills/Prompts.
 -- -----------------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS v1alpha1.runtimes (

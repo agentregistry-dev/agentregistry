@@ -8,7 +8,7 @@ AgentRegistry is a centralized registry for securely curating, discovering, depl
 
 **Tech Stack:**
 - **Backend/CLI:** Go 1.25+
-- **Database:** PostgreSQL with pgvector (accessed via pgx)
+- **Database:** PostgreSQL (accessed via pgx)
 - **Frontend:** Next.js 14 (App Router) with Tailwind CSS
 - **CLI Framework:** Cobra
 - **API Framework:** Huma (OpenAPI)
@@ -93,7 +93,7 @@ Authz is enforced at the **database layer** by default — every store method ca
 **When to gate at the API or service layer instead:** only when the operation doesn't reach the DB with a check. Current cases:
 
 - External platform calls with no downstream DB write — e.g. `UndeployDeployment` and `CancelDeployment` hit adapters before any DB update, so the gate has to fire in the service before the adapter call.
-- Admin-scope handlers with no per-resource authz — e.g. `POST /v0/embeddings/index` is gated on `IsRegistryAdmin` in the handler.
+- Admin-scope handlers with no per-resource authz — call `authz.IsRegistryAdmin` directly in the handler.
 
 **List operations intentionally skip per-row authz checks.** The DB's `List*` methods return what matches the SQL filter; they do not invoke `authz.Check` per row. The `AuthzProvider` interface only gates single-resource operations (`Check`, `IsRegistryAdmin`) — it has no row-filter hook. Per-row visibility filtering for Lists would require a custom `database.Store` implementation wired in at the composition root (`registry_app.go`), either joining against a permissions table in SQL or calling `authz.Check` per row.
 

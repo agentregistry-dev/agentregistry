@@ -7,18 +7,18 @@ import (
 	"os"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	"github.com/agentregistry-dev/agentregistry/internal/cli"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/configure"
 	clidaemon "github.com/agentregistry-dev/agentregistry/internal/cli/daemon"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative"
-	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/cli/annotations"
 	"github.com/agentregistry-dev/agentregistry/pkg/daemon/dockercompose"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
-	"github.com/spf13/cobra"
 )
 
 // ClientFactory creates an API client for the given base URL and token.
@@ -130,7 +130,6 @@ func init() {
 	// Don't use the default value from the env var here as the CLI help text would print it and this is a sensitive credential to access the API
 	rootCmd.PersistentFlags().StringVar(&registryToken, "registry-token", "", "Registry bearer token (defaults to value of ARCTL_API_TOKEN env var)")
 
-	rootCmd.AddCommand(mcp.McpCmd)
 	rootCmd.AddCommand(configure.ConfigureCmd)
 	rootCmd.AddCommand(cli.VersionCmd)
 	rootCmd.AddCommand(clidaemon.New(dockercompose.NewManager(dockercompose.DefaultConfig())))
@@ -204,9 +203,7 @@ var preRunSkipCommands = map[string]map[string]bool{
 		"configure":  true,
 		"init":       true,
 		"build":      true,
-	},
-	"mcp": {
-		"add-tool": true,
+		"help":       true,
 	},
 }
 

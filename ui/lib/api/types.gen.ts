@@ -56,7 +56,13 @@ export type Deployment = {
     status?: Status;
 };
 
+export type DeploymentRef = {
+    name: string;
+    namespace?: string;
+};
+
 export type DeploymentSpec = {
+    deploymentRefs?: Array<DeploymentRef> | null;
     desiredState?: string;
     env?: {
         [key: string]: string;
@@ -110,6 +116,11 @@ export type ErrorModel = {
     type?: string;
 };
 
+export type HttpHeader = {
+    name: string;
+    value?: string;
+};
+
 export type HealthBody = {
     /**
      * Platform mode
@@ -138,11 +149,6 @@ export type ListOutputMcpServerBody = {
 
 export type ListOutputPromptBody = {
     items: Array<Prompt> | null;
-    nextCursor?: string;
-};
-
-export type ListOutputRemoteMcpServerBody = {
-    items: Array<RemoteMcpServer> | null;
     nextCursor?: string;
 };
 
@@ -213,6 +219,12 @@ export type McpPackage = {
     version?: string;
 };
 
+export type McpRemote = {
+    headers?: Array<HttpHeader> | null;
+    type: string;
+    url: string;
+};
+
 export type McpServer = {
     apiVersion: string;
     kind: string;
@@ -228,6 +240,7 @@ export type McpServerSource = {
 
 export type McpServerSpec = {
     description?: string;
+    remote?: McpRemote;
     source?: McpServerSource;
     title?: string;
 };
@@ -274,21 +287,9 @@ export type PromptSpec = {
     description?: string;
 };
 
-export type RemoteMcpServer = {
-    apiVersion: string;
-    kind: string;
-    metadata: ObjectMeta;
-    spec: RemoteMcpServerSpec;
-    status?: Status;
-};
-
-export type RemoteMcpServerSpec = {
-    description?: string;
-    remote: McpTransport;
-    title?: string;
-};
-
 export type Repository = {
+    branch?: string;
+    commit?: string;
     subfolder?: string;
     url?: string;
 };
@@ -336,6 +337,7 @@ export type SkillSpec = {
 
 export type Status = {
     conditions?: Array<Condition> | null;
+    details?: unknown;
 };
 
 export type VersionBody = {
@@ -374,7 +376,11 @@ export type ListAgentsData = {
          */
         labels?: string;
         /**
-         * Only return the literal latest tag per (namespace, name).
+         * Restrict the result set to one tag value (tagged artifact kinds only).
+         */
+        tag?: string;
+        /**
+         * Only return the literal latest tag per (namespace, name). Equivalent to tag=latest for tagged kinds.
          */
         latestOnly?: boolean;
         /**
@@ -542,7 +548,7 @@ export type DeleteBatchData = {
     path?: never;
     query?: {
         /**
-         * Run validation and enrichment without mutating the store. Defaults to false.
+         * Run validation without mutating the store. Defaults to false.
          */
         dryRun?: boolean;
     };
@@ -572,7 +578,7 @@ export type ApplyBatchData = {
     path?: never;
     query?: {
         /**
-         * Run validation and enrichment without mutating the store. Defaults to false.
+         * Run validation without mutating the store. Defaults to false.
          */
         dryRun?: boolean;
     };
@@ -618,7 +624,11 @@ export type ListDeploymentsData = {
          */
         labels?: string;
         /**
-         * Only return the literal latest tag per (namespace, name).
+         * Restrict the result set to one tag value (tagged artifact kinds only).
+         */
+        tag?: string;
+        /**
+         * Only return the literal latest tag per (namespace, name). Equivalent to tag=latest for tagged kinds.
          */
         latestOnly?: boolean;
         /**
@@ -793,7 +803,11 @@ export type ListMcpserversData = {
          */
         labels?: string;
         /**
-         * Only return the literal latest tag per (namespace, name).
+         * Restrict the result set to one tag value (tagged artifact kinds only).
+         */
+        tag?: string;
+        /**
+         * Only return the literal latest tag per (namespace, name). Equivalent to tag=latest for tagged kinds.
          */
         latestOnly?: boolean;
         /**
@@ -1002,7 +1016,11 @@ export type ListPromptsData = {
          */
         labels?: string;
         /**
-         * Only return the literal latest tag per (namespace, name).
+         * Restrict the result set to one tag value (tagged artifact kinds only).
+         */
+        tag?: string;
+        /**
+         * Only return the literal latest tag per (namespace, name). Equivalent to tag=latest for tagged kinds.
          */
         latestOnly?: boolean;
         /**
@@ -1165,190 +1183,6 @@ export type ListTagsPromptResponses = {
 
 export type ListTagsPromptResponse = ListTagsPromptResponses[keyof ListTagsPromptResponses];
 
-export type ListRemotemcpserversData = {
-    body?: never;
-    path?: never;
-    query?: {
-        /**
-         * Namespace (defaults to 'default'; 'all' lists across all namespaces).
-         */
-        namespace?: string;
-        /**
-         * Max items to return (default 50).
-         */
-        limit?: number;
-        /**
-         * Opaque pagination cursor.
-         */
-        cursor?: string;
-        /**
-         * Label selector: key=value,key2=value2.
-         */
-        labels?: string;
-        /**
-         * Only return the literal latest tag per (namespace, name).
-         */
-        latestOnly?: boolean;
-        /**
-         * Include rows with a deletionTimestamp.
-         */
-        includeTerminating?: boolean;
-    };
-    url: '/v0/remotemcpservers';
-};
-
-export type ListRemotemcpserversErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type ListRemotemcpserversError = ListRemotemcpserversErrors[keyof ListRemotemcpserversErrors];
-
-export type ListRemotemcpserversResponses = {
-    /**
-     * OK
-     */
-    200: ListOutputRemoteMcpServerBody;
-};
-
-export type ListRemotemcpserversResponse = ListRemotemcpserversResponses[keyof ListRemotemcpserversResponses];
-
-export type GetLatestRemotemcpserverData = {
-    body?: never;
-    path: {
-        name: string;
-    };
-    query?: {
-        /**
-         * Namespace (internal; defaults to 'default').
-         */
-        namespace?: string;
-    };
-    url: '/v0/remotemcpservers/{name}';
-};
-
-export type GetLatestRemotemcpserverErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetLatestRemotemcpserverError = GetLatestRemotemcpserverErrors[keyof GetLatestRemotemcpserverErrors];
-
-export type GetLatestRemotemcpserverResponses = {
-    /**
-     * OK
-     */
-    200: RemoteMcpServer;
-};
-
-export type GetLatestRemotemcpserverResponse = GetLatestRemotemcpserverResponses[keyof GetLatestRemotemcpserverResponses];
-
-export type DeleteRemotemcpserverData = {
-    body?: never;
-    path: {
-        name: string;
-        tag: string;
-    };
-    query?: {
-        /**
-         * Namespace (internal; defaults to 'default').
-         */
-        namespace?: string;
-        /**
-         * Skip provider-specific teardown and only remove the registry record.
-         */
-        force?: boolean;
-    };
-    url: '/v0/remotemcpservers/{name}/{tag}';
-};
-
-export type DeleteRemotemcpserverErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type DeleteRemotemcpserverError = DeleteRemotemcpserverErrors[keyof DeleteRemotemcpserverErrors];
-
-export type DeleteRemotemcpserverResponses = {
-    /**
-     * No Content
-     */
-    204: void;
-};
-
-export type DeleteRemotemcpserverResponse = DeleteRemotemcpserverResponses[keyof DeleteRemotemcpserverResponses];
-
-export type GetRemotemcpserverData = {
-    body?: never;
-    path: {
-        name: string;
-        tag: string;
-    };
-    query?: {
-        /**
-         * Namespace (internal; defaults to 'default').
-         */
-        namespace?: string;
-    };
-    url: '/v0/remotemcpservers/{name}/{tag}';
-};
-
-export type GetRemotemcpserverErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type GetRemotemcpserverError = GetRemotemcpserverErrors[keyof GetRemotemcpserverErrors];
-
-export type GetRemotemcpserverResponses = {
-    /**
-     * OK
-     */
-    200: RemoteMcpServer;
-};
-
-export type GetRemotemcpserverResponse = GetRemotemcpserverResponses[keyof GetRemotemcpserverResponses];
-
-export type ListTagsRemotemcpserverData = {
-    body?: never;
-    path: {
-        name: string;
-    };
-    query?: {
-        /**
-         * Namespace (internal; defaults to 'default').
-         */
-        namespace?: string;
-    };
-    url: '/v0/remotemcpservers/{name}/tags';
-};
-
-export type ListTagsRemotemcpserverErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type ListTagsRemotemcpserverError = ListTagsRemotemcpserverErrors[keyof ListTagsRemotemcpserverErrors];
-
-export type ListTagsRemotemcpserverResponses = {
-    /**
-     * OK
-     */
-    200: ListOutputRemoteMcpServerBody;
-};
-
-export type ListTagsRemotemcpserverResponse = ListTagsRemotemcpserverResponses[keyof ListTagsRemotemcpserverResponses];
-
 export type ListRuntimesData = {
     body?: never;
     path?: never;
@@ -1370,7 +1204,11 @@ export type ListRuntimesData = {
          */
         labels?: string;
         /**
-         * Only return the literal latest tag per (namespace, name).
+         * Restrict the result set to one tag value (tagged artifact kinds only).
+         */
+        tag?: string;
+        /**
+         * Only return the literal latest tag per (namespace, name). Equivalent to tag=latest for tagged kinds.
          */
         latestOnly?: boolean;
         /**
@@ -1520,7 +1358,11 @@ export type ListSkillsData = {
          */
         labels?: string;
         /**
-         * Only return the literal latest tag per (namespace, name).
+         * Restrict the result set to one tag value (tagged artifact kinds only).
+         */
+        tag?: string;
+        /**
+         * Only return the literal latest tag per (namespace, name). Equivalent to tag=latest for tagged kinds.
          */
         latestOnly?: boolean;
         /**

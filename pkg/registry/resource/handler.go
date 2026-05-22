@@ -14,8 +14,8 @@
 //	DELETE {basePrefix}/{pluralKind}/{name}/{tag}?namespace={ns}     delete exact tag (tagged content kinds only)
 //
 // Direct PUT is registered only for mutable object stores. Content-registry
-// artifact kinds (Agent, MCPServer, RemoteMCPServer, Skill, Prompt) use
-// metadata.tag and are written through POST /v0/apply.
+// artifact kinds (Agent, MCPServer, Skill, Prompt) use metadata.tag and are
+// written through POST /v0/apply.
 package resource
 
 import (
@@ -31,6 +31,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
 // unescapePath URL-decodes a path segment captured by Huma. Resource
@@ -111,6 +112,11 @@ type Config struct {
 	// Coordinator.Remove, which tears down runtime resources
 	// and writes the terminal Removed condition.
 	PostDelete func(ctx context.Context, obj v1alpha1.Object) error
+
+	// DeleteAdmission optionally owns the final delete after authz. Nil uses
+	// ProductionDeleteAdmission, which deletes from the configured Store and
+	// runs PostDelete.
+	DeleteAdmission types.DeleteAdmission
 
 	// InitialFinalizers, when non-nil, seeds finalizers atomically on create.
 	// Updates preserve existing finalizers.
@@ -257,7 +263,8 @@ type listInput struct {
 	Limit      int    `query:"limit" doc:"Max items to return (default 50)." default:"50"`
 	Cursor     string `query:"cursor" doc:"Opaque pagination cursor."`
 	Labels     string `query:"labels" doc:"Label selector: key=value,key2=value2."`
-	LatestOnly bool   `query:"latestOnly" doc:"Only return the literal latest tag per (namespace, name)."`
+	Tag        string `query:"tag" doc:"Restrict the result set to one tag value (tagged artifact kinds only)."`
+	LatestOnly bool   `query:"latestOnly" doc:"Only return the literal latest tag per (namespace, name). Equivalent to tag=latest for tagged kinds."`
 	// IncludeTerminating surfaces soft-deleted rows (deletionTimestamp != nil)
 	// which are hidden by default.
 	IncludeTerminating bool `query:"includeTerminating" doc:"Include rows with a deletionTimestamp."`
@@ -318,6 +325,7 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 			Labels:             in.Labels,
 			Limit:              in.Limit,
 			Cursor:             in.Cursor,
+			Tag:                in.Tag,
 			LatestOnly:         in.LatestOnly,
 			IncludeTerminating: in.IncludeTerminating,
 		})
@@ -340,7 +348,12 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 				return nil, err
 			}
 		}
-		row, err := cfg.Store.GetLatest(ctx, ns, name)
+		// Mirror LIST's view of terminating rows: kinds that opt in via
+		// IncludeTerminatingByDefault surface in-flight teardown to operators,
+		// so the single-row GET must also return the row (with
+		// deletionTimestamp populated) instead of 404'ing while LIST still
+		// lists it.
+		row, err := getLatestForRead(ctx, cfg, ns, name)
 		if err != nil {
 			return nil, mapNotFound(err, kind, ns, name, "")
 		}
@@ -546,7 +559,16 @@ func registerDelete[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T
 }
 
 func runDeleteLatest[T v1alpha1.Object](ctx context.Context, cfg Config, newObj func() T, kind, ns, name string, force bool) (*deleteOutput, error) {
-	row, err := cfg.Store.GetLatest(ctx, ns, name)
+	// Use the terminating-aware lookup so a repeated DELETE on a row that's
+	// already mid-teardown stays idempotent. Without this the second call
+	// 404s the moment deletion_timestamp lands (GetLatest filters those
+	// out), which contradicts LIST for kinds that opt into
+	// IncludeTerminatingByDefault, and breaks scripts that retry DELETE
+	// expecting the same response shape. Store.Delete is already a no-op
+	// on terminating rows (see v1alpha1store.deleteMutable), and the
+	// PostDelete re-fire mirrors PostUpsert's operator-friendly retry path
+	// for transient platform-adapter failures.
+	row, err := cfg.Store.GetLatestIncludingTerminating(ctx, ns, name)
 	if err != nil {
 		return nil, mapNotFound(err, kind, ns, name, "")
 	}
@@ -557,12 +579,27 @@ func runDeleteLatest[T v1alpha1.Object](ctx context.Context, cfg Config, newObj 
 	dopts := deleteOpts{Authorize: cfg.Authorize}
 	if cfg.PostDelete != nil && !force {
 		dopts.PostDelete = cfg.PostDelete
+	}
+	if cfg.DeleteAdmission != nil || dopts.PostDelete != nil {
 		dopts.PreDeleteObject = obj
 	}
-	if ae := deleteCore(ctx, cfg.Store, kind, ns, name, "", dopts); ae != nil {
+	dopts.DeleteAdmission = cfg.DeleteAdmission
+	dopts.Force = force
+	if _, ae := deleteCore(ctx, cfg.Store, kind, ns, name, "", dopts, false); ae != nil {
 		return nil, mapApplyErrorToHuma(ae, kind, ns, name, "")
 	}
 	return &deleteOutput{}, nil
+}
+
+// getLatestForRead reads the current row for the kind's GET-latest endpoint,
+// choosing between the terminating-excluded and terminating-included lookups
+// based on Config.IncludeTerminatingByDefault. Keeps GET coherent with LIST
+// for kinds whose teardown is operator-observable.
+func getLatestForRead(ctx context.Context, cfg Config, ns, name string) (*v1alpha1.RawObject, error) {
+	if cfg.IncludeTerminatingByDefault {
+		return cfg.Store.GetLatestIncludingTerminating(ctx, ns, name)
+	}
+	return cfg.Store.GetLatest(ctx, ns, name)
 }
 
 func runDelete[T v1alpha1.Object](ctx context.Context, cfg Config, newObj func() T, kind, ns, name, tag string, force bool) (*deleteOutput, error) {
@@ -587,7 +624,9 @@ func runDelete[T v1alpha1.Object](ctx context.Context, cfg Config, newObj func()
 	if runHook {
 		dopts.PostDelete = cfg.PostDelete
 	}
-	if ae := deleteCore(ctx, cfg.Store, kind, ns, name, tag, dopts); ae != nil {
+	dopts.DeleteAdmission = cfg.DeleteAdmission
+	dopts.Force = force
+	if _, ae := deleteCore(ctx, cfg.Store, kind, ns, name, tag, dopts, false); ae != nil {
 		return nil, mapApplyErrorToHuma(ae, kind, ns, name, tag)
 	}
 	return &deleteOutput{}, nil
@@ -608,6 +647,8 @@ func mapApplyErrorToHuma(ae *applyError, kind, ns, name, tag string) error {
 		return huma.Error400BadRequest("refs: " + ae.Err.Error())
 	case stageRegistries:
 		return huma.Error400BadRequest("registries: " + ae.Err.Error())
+	case stageAdmission:
+		return ae.Err
 	case stageMarshal:
 		return huma.Error400BadRequest("marshal spec: " + ae.Err.Error())
 	case stageUpsert:
@@ -639,6 +680,7 @@ type listParams struct {
 	Labels             string
 	Limit              int
 	Cursor             string
+	Tag                string
 	LatestOnly         bool
 	IncludeTerminating bool
 }
@@ -652,6 +694,7 @@ func runList[T v1alpha1.Object](
 		Namespace:          p.Namespace,
 		Limit:              p.Limit,
 		Cursor:             p.Cursor,
+		Tag:                p.Tag,
 		LatestOnly:         p.LatestOnly,
 		IncludeTerminating: p.IncludeTerminating || cfg.IncludeTerminatingByDefault,
 	}

@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative/chat/theme"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -22,6 +21,8 @@ import (
 	"github.com/muesli/reflow/wordwrap"
 	a2aclient "trpc.group/trpc-go/trpc-a2a-go/client"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
+
+	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative/chat/theme"
 )
 
 // SendMessageFn mirrors the A2A client's StreamMessage signature.

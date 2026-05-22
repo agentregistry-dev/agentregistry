@@ -21,7 +21,19 @@ type Column struct {
 	Header string
 }
 
-type ListFunc func(context.Context) ([]any, error)
+// ListOpts are CLI-facing filters forwarded to the per-kind ListFunc.
+// Empty fields mean "no filter" — the default `arctl get <plural>` lists
+// every row of the kind.
+type ListOpts struct {
+	// Tag, when set, restricts the list to rows with this tag value
+	// (tagged content kinds only). Mutually exclusive with LatestOnly.
+	Tag string
+	// LatestOnly restricts the list to the literal "latest" tag (tagged
+	// content kinds) or the latest mutable-object row.
+	LatestOnly bool
+}
+
+type ListFunc func(context.Context, ListOpts) ([]any, error)
 type RowFunc func(any) []string
 type ToYAMLFunc func(any) any
 type GetFunc func(ctx context.Context, name, tag string) (any, error)

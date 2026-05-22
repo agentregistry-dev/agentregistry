@@ -27,8 +27,9 @@ type MCPServerTranslateOpts struct {
 }
 
 // SpecToPlatformMCPServer translates a v1alpha1 MCPServer envelope into the
-// platform-internal *runtimetypes.MCPServer. The kind only carries packages,
-// so the output is always local transport.
+// platform-internal *runtimetypes.MCPServer. Bundled servers (Spec.Source)
+// produce local transport; remote servers (Spec.Remote) produce remote
+// transport. The translator dispatches based on which Spec field is set.
 func SpecToPlatformMCPServer(
 	ctx context.Context,
 	meta v1alpha1.ObjectMeta,
@@ -46,39 +47,6 @@ func SpecToPlatformMCPServer(
 	platformServer, err := TranslateMCPServer(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("translate mcp server %s@%s: %w", meta.Name, meta.Tag, err)
-	}
-	if opts.Namespace != "" {
-		platformServer.Namespace = opts.Namespace
-	} else if meta.Namespace != "" && platformServer.Namespace == "" {
-		platformServer.Namespace = meta.Namespace
-	}
-	return platformServer, nil
-}
-
-// RemoteMCPServerTranslateOpts bundles knobs for SpecToPlatformRemoteMCPServer.
-type RemoteMCPServerTranslateOpts struct {
-	DeploymentID string
-	Namespace    string
-	HeaderValues map[string]string
-}
-
-// SpecToPlatformRemoteMCPServer translates a v1alpha1 RemoteMCPServer envelope
-// into the platform-internal *runtimetypes.MCPServer with remote transport.
-func SpecToPlatformRemoteMCPServer(
-	ctx context.Context,
-	meta v1alpha1.ObjectMeta,
-	spec v1alpha1.RemoteMCPServerSpec,
-	opts RemoteMCPServerTranslateOpts,
-) (*runtimetypes.MCPServer, error) {
-	req := &RemoteMCPServerRunRequest{
-		Name:         meta.Name,
-		Spec:         spec,
-		DeploymentID: opts.DeploymentID,
-		HeaderValues: nonNilStringMap(opts.HeaderValues),
-	}
-	platformServer, err := TranslateRemoteMCPServer(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("translate remote mcp server %s@%s: %w", meta.Name, meta.Tag, err)
 	}
 	if opts.Namespace != "" {
 		platformServer.Namespace = opts.Namespace
@@ -108,8 +76,9 @@ type AgentTranslateOpts struct {
 	// it lands as OTEL_EXPORTER_OTLP_ENDPOINT on the agent process. Explicit
 	// entries in DeploymentEnv take precedence.
 	TelemetryEndpoint string
-	// HeaderValues are per-deployment header overrides for RemoteMCPServer
-	// refs, already split from Deployment.Spec.Env by the adapter.
+	// HeaderValues are per-deployment header overrides for remote MCPServer
+	// refs (MCPServer.Spec.Remote.Headers), already split from
+	// Deployment.Spec.Env by the adapter via the HEADER_ prefix convention.
 	HeaderValues map[string]string
 	// Getter resolves AgentSpec.MCPServers refs to v1alpha1.MCPServer objects.
 	Getter v1alpha1.GetterFunc
@@ -169,38 +138,26 @@ func SpecToPlatformAgent(
 		if err != nil {
 			return nil, nil, fmt.Errorf("spec.mcpServers[%d] resolve %s/%s: %w", i, normalized.Namespace, normalized.Name, err)
 		}
-		switch normalized.Kind {
-		case v1alpha1.KindMCPServer:
-			mcp, ok := obj.(*v1alpha1.MCPServer)
-			if !ok || mcp == nil {
-				return nil, nil, fmt.Errorf("spec.mcpServers[%d]: getter returned unexpected type for %s/%s", i, normalized.Namespace, normalized.Name)
-			}
-			platformServer, err := SpecToPlatformMCPServer(ctx, mcp.Metadata, mcp.Spec, MCPServerTranslateOpts{
-				DeploymentID: opts.DeploymentID,
-				Namespace:    opts.Namespace,
-			})
-			if err != nil {
-				return nil, nil, fmt.Errorf("spec.mcpServers[%d]: %w", i, err)
-			}
-			resolvedServers = append(resolvedServers, platformServer)
-			resolvedConfigs = append(resolvedConfigs, mcpServerConfigFromSpec(mcp.Metadata.Name, mcp.Spec, opts.DeploymentID))
-		case v1alpha1.KindRemoteMCPServer:
-			remote, ok := obj.(*v1alpha1.RemoteMCPServer)
-			if !ok || remote == nil {
-				return nil, nil, fmt.Errorf("spec.mcpServers[%d]: getter returned unexpected type for %s/%s", i, normalized.Namespace, normalized.Name)
-			}
-			platformServer, err := SpecToPlatformRemoteMCPServer(ctx, remote.Metadata, remote.Spec, RemoteMCPServerTranslateOpts{
-				DeploymentID: opts.DeploymentID,
-				Namespace:    opts.Namespace,
-				HeaderValues: opts.HeaderValues,
-			})
-			if err != nil {
-				return nil, nil, fmt.Errorf("spec.mcpServers[%d]: %w", i, err)
-			}
-			resolvedServers = append(resolvedServers, platformServer)
-			resolvedConfigs = append(resolvedConfigs, remoteMCPServerConfig(remote.Metadata.Name, remote.Spec, opts.DeploymentID, platformServer))
-		default:
+		if normalized.Kind != v1alpha1.KindMCPServer {
 			return nil, nil, fmt.Errorf("spec.mcpServers[%d]: unsupported ref kind %q", i, normalized.Kind)
+		}
+		mcp, ok := obj.(*v1alpha1.MCPServer)
+		if !ok || mcp == nil {
+			return nil, nil, fmt.Errorf("spec.mcpServers[%d]: getter returned unexpected type for %s/%s", i, normalized.Namespace, normalized.Name)
+		}
+		platformServer, err := SpecToPlatformMCPServer(ctx, mcp.Metadata, mcp.Spec, MCPServerTranslateOpts{
+			DeploymentID: opts.DeploymentID,
+			Namespace:    opts.Namespace,
+			HeaderValues: opts.HeaderValues,
+		})
+		if err != nil {
+			return nil, nil, fmt.Errorf("spec.mcpServers[%d]: %w", i, err)
+		}
+		resolvedServers = append(resolvedServers, platformServer)
+		if mcp.Spec.Remote != nil {
+			resolvedConfigs = append(resolvedConfigs, remoteMCPServerConfig(mcp.Metadata.Name, mcp.Spec, opts.DeploymentID, platformServer))
+		} else {
+			resolvedConfigs = append(resolvedConfigs, mcpServerConfigFromSpec(mcp.Metadata.Name, mcp.Spec, opts.DeploymentID))
 		}
 	}
 
@@ -256,10 +213,9 @@ func SplitDeploymentRuntimeInputs(input map[string]string) (env, args, headers m
 }
 
 // mcpServerConfigFromSpec builds the per-server entry injected into the
-// MCP_SERVERS_CONFIG env var on the agent. MCPServer is a bundled kind
-// (packages only); the agent dials it as a "command" via the gateway.
-// Remote endpoints reference the RemoteMCPServer kind separately and are
-// emitted by remoteMCPServerConfig.
+// MCP_SERVERS_CONFIG env var on the agent for a bundled MCPServer
+// (Spec.Source set). The agent dials it as a "command" via the gateway.
+// Remote MCPServers (Spec.Remote set) use remoteMCPServerConfig instead.
 func mcpServerConfigFromSpec(name string, _ v1alpha1.MCPServerSpec, deploymentID string) runtimetypes.ResolvedMCPServerConfig {
 	return runtimetypes.ResolvedMCPServerConfig{
 		Name: GenerateInternalNameForDeployment(name, deploymentID),
@@ -268,10 +224,10 @@ func mcpServerConfigFromSpec(name string, _ v1alpha1.MCPServerSpec, deploymentID
 }
 
 // remoteMCPServerConfig builds the per-server entry for an agent that
-// references a RemoteMCPServer. Type is always "remote". Headers come from the
-// translated platform server so required/default/override processing matches
-// the platform apply path.
-func remoteMCPServerConfig(name string, spec v1alpha1.RemoteMCPServerSpec, deploymentID string, platformServer *runtimetypes.MCPServer) runtimetypes.ResolvedMCPServerConfig {
+// references a remote MCPServer (Spec.Remote set). Type is always "remote".
+// Headers come from the translated platform server so required/default/
+// override processing matches the platform apply path.
+func remoteMCPServerConfig(name string, spec v1alpha1.MCPServerSpec, deploymentID string, platformServer *runtimetypes.MCPServer) runtimetypes.ResolvedMCPServerConfig {
 	cfg := runtimetypes.ResolvedMCPServerConfig{
 		Name: GenerateInternalNameForDeployment(name, deploymentID),
 		Type: "remote",

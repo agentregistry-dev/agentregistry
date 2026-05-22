@@ -9,13 +9,14 @@ import (
 	"strings"
 	"time"
 
+	"sigs.k8s.io/yaml"
+
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	internaldaemon "github.com/agentregistry-dev/agentregistry/internal/daemon"
 	"github.com/agentregistry-dev/agentregistry/internal/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/daemon"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
-	"sigs.k8s.io/yaml"
 )
 
 const (

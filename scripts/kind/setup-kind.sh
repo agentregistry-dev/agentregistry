@@ -4,9 +4,11 @@ set -o errexit
 set -o pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+TOOLS_MODFILE="${REPO_ROOT}/tools/go.mod"
 
-# Use kind via go tool directives (go.mod) so no separate install step is needed.
-KIND=(go tool kind)
+# kind is pinned in tools/go.mod. Override KIND in the env to use a different binary.
+KIND="${KIND:-go tool -modfile=${TOOLS_MODFILE} kind}"
 
 KIND_CLUSTER_NAME=${KIND_CLUSTER_NAME:-agentregistry}
 KIND_IMAGE_VERSION=${KIND_IMAGE_VERSION:-1.34.0}
@@ -50,7 +52,7 @@ if [ "$(uname -s)" = "Linux" ]; then
     "${TMP_CONFIG}"
 fi
 
-"${KIND[@]}" create cluster --name "${KIND_CLUSTER_NAME}" \
+${KIND} create cluster --name "${KIND_CLUSTER_NAME}" \
   --config "${TMP_CONFIG}" \
   --image="kindest/node:v${KIND_IMAGE_VERSION}"
 
@@ -85,7 +87,7 @@ fi
 # We want a consistent name that works from both ends, so we tell containerd to
 # alias localhost:${REG_PORT} to the registry container when pulling images
 REGISTRY_DIR="/etc/containerd/certs.d/localhost:${REG_PORT}"
-for node in $("${KIND[@]}" get nodes --name "${KIND_CLUSTER_NAME}"); do
+for node in $(${KIND} get nodes --name "${KIND_CLUSTER_NAME}"); do
   docker exec "${node}" mkdir -p "${REGISTRY_DIR}"
   cat <<EOF | docker exec -i "${node}" cp /dev/stdin "${REGISTRY_DIR}/hosts.toml"
 [host."http://${REG_NAME}:5000"]

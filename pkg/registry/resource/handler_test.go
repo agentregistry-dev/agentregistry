@@ -20,6 +20,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
 // registerAgent wires the generic resource handler for *v1alpha1.Agent and
@@ -28,8 +29,8 @@ import (
 // into these tests.
 //
 // Direct PUT on the per-kind item URL is no longer registered for
-// content-registry kinds (Agent, MCPServer, RemoteMCPServer, Skill,
-// Prompt) — POST /v0/apply is the single create/update entry point. The
+// content-registry kinds (Agent, MCPServer, Skill, Prompt) — POST /v0/apply
+// is the single create/update entry point. The
 // helper wires both so tests can drive applies through /v0/apply and
 // reads/deletes through the per-kind GET/DELETE.
 func registerAgent(api huma.API, store *v1alpha1store.Store) {
@@ -222,6 +223,50 @@ func TestResourceRegister_DeleteTaggedPassesTagToAuthorizer(t *testing.T) {
 	require.Equal(t, "default", seen.Namespace)
 	require.Equal(t, "alice", seen.Name)
 	require.Equal(t, "stable", seen.Tag)
+}
+
+func TestResourceRegister_DeleteAdmissionCanStageTaggedDelete(t *testing.T) {
+	pool := v1alpha1store.NewTestPool(t)
+	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+	_, err := store.Upsert(t.Context(), &v1alpha1.Agent{
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "alice", Tag: "stable"},
+		Spec:     v1alpha1.AgentSpec{Title: "Stable Alice"},
+	})
+	require.NoError(t, err)
+
+	var admitted types.DeleteAdmissionInput
+	postDeleteCalled := false
+	_, api := humatest.New(t)
+	resource.Register[*v1alpha1.Agent](api, resource.Config{
+		Kind:       v1alpha1.KindAgent,
+		BasePrefix: "/v0",
+		Store:      store,
+		PostDelete: func(context.Context, v1alpha1.Object) error {
+			postDeleteCalled = true
+			return nil
+		},
+		DeleteAdmission: func(ctx context.Context, in types.DeleteAdmissionInput) (types.DeleteAdmissionResult, error) {
+			admitted = in
+			return types.DeleteAdmissionResult{Status: arv0.ApplyStatusStaged, Tag: in.Tag}, nil
+		},
+	}, func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
+
+	resp := api.Delete("/v0/agents/alice/stable")
+	require.Equal(t, http.StatusNoContent, resp.Code, resp.Body.String())
+	require.False(t, postDeleteCalled, "staged deletes must not fire production side effects")
+	require.Equal(t, types.AdmissionSourceDelete, admitted.Source)
+	require.Equal(t, "delete", admitted.Verb)
+	require.Equal(t, v1alpha1.KindAgent, admitted.Kind)
+	require.Equal(t, "default", admitted.Namespace)
+	require.Equal(t, "alice", admitted.Name)
+	require.Equal(t, "stable", admitted.Tag)
+	require.NotNil(t, admitted.Object)
+	require.NotNil(t, admitted.PostDelete)
+	require.Same(t, store, admitted.Store)
+
+	row, err := store.Get(t.Context(), "default", "alice", "stable")
+	require.NoError(t, err)
+	require.Equal(t, "stable", row.Metadata.Tag)
 }
 
 func TestResourceRegister_AgentNamespaceIsolation(t *testing.T) {
@@ -444,7 +489,7 @@ func TestResourceRegister_ListFilter(t *testing.T) {
 // TestResourceRegister_PutNotRegisteredForContentKinds pins the
 // post-redesign contract: direct PUT on the per-kind item URL is no
 // longer registered for content-registry kinds (Agent, MCPServer,
-// RemoteMCPServer, Skill, Prompt). POST /v0/apply is the single
+// Skill, Prompt). POST /v0/apply is the single
 // create/update entry point — user-controlled tags live in metadata.tag rather
 // than the URL segment of a direct PUT. Runtime/Deployment mutable-object
 // stores still expose direct namespace/name PUT.
@@ -762,4 +807,64 @@ func TestResourceRegister_IncludeTerminatingByDefault(t *testing.T) {
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &list))
 	require.Len(t, list.Items, 1)
 	require.Equal(t, "draining", list.Items[0].Metadata.Name)
+
+	// GET-latest must mirror LIST: kinds with IncludeTerminatingByDefault
+	// return the terminating row (with deletionTimestamp) instead of 404.
+	// Without this, LIST and GET contradict each other for operators
+	// watching teardown progress.
+	resp = api.Get("/v0/runtimes/draining?namespace=" + testNamespace)
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	var got v1alpha1.Runtime
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &got))
+	require.Equal(t, "draining", got.Metadata.Name)
+	require.NotNil(t, got.Metadata.DeletionTimestamp,
+		"GET-latest must surface the deletionTimestamp on terminating rows")
+
+	// DELETE-latest must be idempotent on terminating rows. Repeating the
+	// soft-delete on a row that's already mid-teardown should succeed
+	// (204), not 404; the Store.Delete path is a no-op in that case and
+	// the handler must not short-circuit on the terminating filter.
+	resp = api.Delete("/v0/runtimes/draining?namespace=" + testNamespace)
+	require.Equal(t, http.StatusNoContent, resp.Code, resp.Body.String())
+}
+
+// TestResourceRegister_DeleteIdempotentOnTerminating pins the
+// idempotent-DELETE contract for mutable-object kinds: even without
+// IncludeTerminatingByDefault, a DELETE on an already-terminating row
+// returns 204 rather than 404. The handler uses the terminating-aware
+// lookup so retry scripts get a coherent response shape.
+func TestResourceRegister_DeleteIdempotentOnTerminating(t *testing.T) {
+	pool := v1alpha1store.NewTestPool(t)
+	store := v1alpha1store.NewMutableObjectStore(pool, "v1alpha1.runtimes")
+	const testNamespace = "delete-idempotent"
+
+	_, api := humatest.New(t)
+	resource.Register[*v1alpha1.Runtime](api, resource.Config{
+		Kind:       v1alpha1.KindRuntime,
+		BasePrefix: "/v0",
+		Store:      store,
+	}, func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} })
+
+	_, err := store.Upsert(t.Context(), &v1alpha1.Runtime{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindRuntime},
+		Metadata: v1alpha1.ObjectMeta{Namespace: testNamespace, Name: "draining"},
+		Spec:     v1alpha1.RuntimeSpec{Type: "noop"},
+	})
+	require.NoError(t, err)
+
+	// Attach a finalizer so the first DELETE soft-deletes (leaves the row
+	// in terminating state) instead of hard-deleting.
+	require.NoError(t, store.PatchFinalizers(t.Context(), testNamespace, "draining", "",
+		func([]string) []string { return []string{"finalizer.example.com"} }))
+
+	// First DELETE → soft-delete, 204.
+	resp := api.Delete("/v0/runtimes/draining?namespace=" + testNamespace)
+	require.Equal(t, http.StatusNoContent, resp.Code, resp.Body.String())
+
+	// Second DELETE on the terminating row must remain 204 (idempotent),
+	// not 404; otherwise retry scripts can't distinguish "still
+	// terminating" from "fully purged".
+	resp = api.Delete("/v0/runtimes/draining?namespace=" + testNamespace)
+	require.Equal(t, http.StatusNoContent, resp.Code, resp.Body.String(),
+		"DELETE on an already-terminating row must stay idempotent")
 }

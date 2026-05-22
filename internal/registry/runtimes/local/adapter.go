@@ -41,12 +41,11 @@ func NewLocalDeploymentAdapter(runtimeDir string, agentGatewayPort uint16) *loca
 func (a *localDeploymentAdapter) Type() string { return v1alpha1.TypeLocal }
 
 // SupportedTargetKinds reports the v1alpha1 Kinds this adapter can deploy:
-// Agent and MCPServer.
+// Agent and MCPServer (bundled or remote via Spec.Remote).
 func (a *localDeploymentAdapter) SupportedTargetKinds() []string {
 	return []string{
 		v1alpha1.KindAgent,
 		v1alpha1.KindMCPServer,
-		v1alpha1.KindRemoteMCPServer,
 	}
 }
 
@@ -155,14 +154,6 @@ func (a *localDeploymentAdapter) buildDesiredStateFromV1Alpha1(
 			DeploymentID: deploymentID,
 			EnvValues:    envValues,
 			ArgValues:    argValues,
-		})
-		if err != nil {
-			return nil, err
-		}
-		return &runtimetypes.DesiredState{MCPServers: []*runtimetypes.MCPServer{server}}, nil
-	case *v1alpha1.RemoteMCPServer:
-		server, err := utils.SpecToPlatformRemoteMCPServer(ctx, target.Metadata, target.Spec, utils.RemoteMCPServerTranslateOpts{
-			DeploymentID: deploymentID,
 			HeaderValues: headerValues,
 		})
 		if err != nil {

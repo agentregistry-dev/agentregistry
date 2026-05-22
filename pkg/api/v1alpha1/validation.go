@@ -193,6 +193,13 @@ func validateRepository(r *Repository) FieldErrors {
 		if err := validateWebsiteURL(r.URL); err != nil {
 			errs.Append("repository.url", err)
 		}
+	} else {
+		if r.Branch != "" {
+			errs.Append("repository.branch", fmt.Errorf("%w: branch requires repository.url", ErrInvalidFormat))
+		}
+		if r.Commit != "" {
+			errs.Append("repository.commit", fmt.Errorf("%w: commit requires repository.url", ErrInvalidFormat))
+		}
 	}
 	return errs
 }

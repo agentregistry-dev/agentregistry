@@ -45,8 +45,7 @@ const (
 //     Storage key is (namespace, name, tag). Users may supply the tag
 //     declaratively; missing tags are filled with the literal "latest".
 //     Re-applying the same tag replaces the prior row atomically when the
-//     content changes. Used for agents, mcp_servers,
-//     remote_mcp_servers, skills, and prompts.
+//     content changes. Used for agents, mcp_servers, skills, and prompts.
 //
 //   - MutableObjectStore (produced by NewMutableObjectStore). Storage key is
 //     (namespace, name). Used for Runtime/Deployment and additional
@@ -180,8 +179,18 @@ type ListOpts struct {
 	Limit int
 	// Cursor is an opaque pagination token. Empty starts from the beginning.
 	Cursor string
+	// Tag restricts the result set to a single tag value on tagged-artifact
+	// stores. Empty means "no tag filter" — every tag of every name is
+	// returned. Ignored on mutable-object stores (they have no tag column).
+	// Mutually exclusive with LatestOnly (validated at the caller level;
+	// the store treats LatestOnly as the literal `Tag = "latest"` filter
+	// when both are set, but new callers should pick one).
+	Tag string
 	// LatestOnly restricts to the literal "latest" tag per (namespace, name),
-	// or the private latest row for mutable-object stores.
+	// or the private latest row for mutable-object stores. Equivalent to
+	// `Tag = "latest"` on tagged stores; kept as a separate field because
+	// it also covers the mutable-object latest-row case (where there's no
+	// user-facing tag column).
 	LatestOnly bool
 	// IncludeTerminating includes rows with deletion_timestamp set. Default
 	// false — callers asking for "alive" rows shouldn't see terminating ones.
@@ -733,6 +742,30 @@ func (s *Store) GetLatest(ctx context.Context, namespace, name string) (*v1alpha
 	return scanRow(row, false)
 }
 
+// GetLatestIncludingTerminating is GetLatest without the
+// `deletion_timestamp IS NULL` filter, so soft-deleted rows are still
+// returned. Used by resource-handler GET / DELETE paths when the kind
+// opts into IncludeTerminatingByDefault; without this view those
+// handlers contradict LIST, which surfaces the terminating row.
+// Returns pkgdb.ErrNotFound only when no row exists at all.
+func (s *Store) GetLatestIncludingTerminating(ctx context.Context, namespace, name string) (*v1alpha1.RawObject, error) {
+	var query string
+	if s.behavior == TaggedArtifactStore {
+		query = fmt.Sprintf(`
+			SELECT %s
+			FROM %s
+			WHERE namespace=$1 AND name=$2 AND tag=$3`, s.selectColumns(), s.table)
+		row := s.pool.QueryRow(ctx, query, namespace, name, DefaultTag())
+		return scanRow(row, true)
+	}
+	query = fmt.Sprintf(`
+		SELECT %s
+		FROM %s
+		WHERE namespace=$1 AND name=$2`, s.selectColumns(), s.table)
+	row := s.pool.QueryRow(ctx, query, namespace, name)
+	return scanRow(row, false)
+}
+
 // Delete removes a single row. Mutable-object stores may use soft-delete plus
 // finalizer drain. Tagged-artifact rows have no finalizers and are hard-deleted
 // immediately so name/tag can be reapplied without waiting for GC. Returns
@@ -965,8 +998,14 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 		args = append(args, opts.Namespace)
 		where = append(where, fmt.Sprintf("namespace = $%d", len(args)))
 	}
-	if opts.LatestOnly {
-		if s.behavior == TaggedArtifactStore {
+	if s.behavior == TaggedArtifactStore {
+		// Tag wins when set; otherwise LatestOnly falls back to the literal
+		// "latest" filter for callers that pre-date the Tag field.
+		switch {
+		case opts.Tag != "":
+			args = append(args, opts.Tag)
+			where = append(where, fmt.Sprintf("tag = $%d", len(args)))
+		case opts.LatestOnly:
 			args = append(args, DefaultTag())
 			where = append(where, fmt.Sprintf("tag = $%d", len(args)))
 		}

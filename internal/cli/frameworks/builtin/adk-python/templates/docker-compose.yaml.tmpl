@@ -4,9 +4,16 @@
 services:
   otel-collector:
     image: otel/opentelemetry-collector:latest
+    # Host-side ports are bumped to 14317/14318 so they don't collide with
+    # other OTLP collectors that conventionally bind 4317/4318 on the host
+    # (e.g. a kagent helm install exposes its telemetry gateway on those
+    # ports; a native otel-collector binary; an active `kubectl port-forward`).
+    # The container still listens on 4317/4318 internally and the agent
+    # reaches it via the compose network at `otel-collector:4318` — unchanged.
+    # Only the host's visibility into the collector moves.
     ports:
-      - "4317:4317"  # OTLP gRPC
-      - "4318:4318"  # OTLP HTTP
+      - "14317:4317"  # OTLP gRPC  (host 14317 -> container 4317)
+      - "14318:4318"  # OTLP HTTP  (host 14318 -> container 4318)
     volumes:
       - ./otel-collector-config.yaml:/etc/otelcol/config.yaml
     command: ["--config", "/etc/otelcol/config.yaml"]

@@ -7,7 +7,6 @@ import (
 	"os"
 
 	env "github.com/caarlos0/env/v11"
-	"github.com/joho/godotenv"
 )
 
 // Config holds the application configuration
@@ -32,34 +31,12 @@ type Config struct {
 	// Runtime Configuration
 	RuntimeDir string `env:"RUNTIME_DIR" envDefault:"/tmp/arctl-runtime"`
 	Verbose    bool   `env:"VERBOSE" envDefault:"false"`
-
-	// Embeddings / Semantic Search
-	Embeddings EmbeddingsConfig
-}
-
-// EmbeddingsConfig is the runtime gate for the (currently unwired)
-// semantic-search feature. Enabled drives the database migrator's
-// Skip predicate so the pgvector migration only runs when the flag
-// is true; the public HTTP / generated-client surface for semantic
-// search has been removed pending a rebuild.
-//
-// TODO(semantic-search): when re-implementing semantic search, add
-// back the provider/model/dimensions/credentials fields needed to
-// reach an embedding provider, decide on hybrid-search lexical
-// inputs, and gate the public surface (list params, response fields,
-// admin endpoints) on this same flag.
-type EmbeddingsConfig struct {
-	Enabled bool `env:"EMBEDDINGS_ENABLED" envDefault:"false"`
 }
 
 // NewConfig creates a new configuration with default values
 func NewConfig() *Config {
-	err := godotenv.Load()
-	if err != nil {
-		slog.Info("no .env file found or error loading .env file", "error", err)
-	}
 	var cfg Config
-	err = env.ParseWithOptions(&cfg, env.Options{
+	err := env.ParseWithOptions(&cfg, env.Options{
 		Prefix: "AGENT_REGISTRY_",
 	})
 	if err != nil {

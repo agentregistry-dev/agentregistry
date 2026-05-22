@@ -7,12 +7,13 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
+
 	"github.com/agentregistry-dev/agentregistry/internal/cli/buildconfig"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
-	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
 )
 
 // labelInjectableKinds is the set of envelope kinds that participate in
@@ -73,7 +74,7 @@ func runApply(cmd *cobra.Command, dryRun bool) error {
 	for _, path := range filePaths {
 		var data []byte
 		if path == "-" {
-			data, err = io.ReadAll(os.Stdin)
+			data, err = io.ReadAll(cmd.InOrStdin())
 			if err != nil {
 				return fmt.Errorf("reading stdin: %w", err)
 			}

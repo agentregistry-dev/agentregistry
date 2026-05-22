@@ -182,10 +182,15 @@ func (c *Client) GetVersion() (*VersionBody, error) {
 // scopes to the default namespace; "all" widens to every namespace.
 // Any other value scopes to that exact namespace.
 type ListOpts struct {
-	Namespace          string
-	Labels             string
-	Limit              int
-	Cursor             string
+	Namespace string
+	Labels    string
+	Limit     int
+	Cursor    string
+	// Tag, when set, restricts results to one tag value on tagged-artifact
+	// kinds. Empty means "every tag of every name".
+	Tag string
+	// LatestOnly is equivalent to Tag = "latest" for tagged kinds and also
+	// covers the mutable-object latest-row case.
 	LatestOnly         bool
 	IncludeTerminating bool
 }
@@ -280,6 +285,9 @@ func (c *Client) List(ctx context.Context, kind string, opts ListOpts) ([]v1alph
 	}
 	if opts.Labels != "" {
 		q.Set("labels", opts.Labels)
+	}
+	if opts.Tag != "" {
+		q.Set("tag", opts.Tag)
 	}
 	if opts.LatestOnly {
 		q.Set("latestOnly", "true")

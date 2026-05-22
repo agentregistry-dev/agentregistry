@@ -16,6 +16,26 @@ type MCPServerSpec struct {
 	// Source declares where the bundled MCP server comes from — Package (the
 	// runnable distribution) and/or Repository (the source code).
 	Source *MCPServerSource `json:"source,omitempty" yaml:"source,omitempty"`
+
+	// Remote declares a remote MCP server instead of a bundled one. These are pre-existing
+	// MCP servers that the registry does not deploy but can be referenced by Agents.
+	Remote *MCPRemote `json:"remote,omitempty" yaml:"remote,omitempty"`
+}
+
+// MCPRemote describes a pre-running remote MCP server that the registry
+// does not deploy. Distinct from MCPTransport (used inside MCPPackage to
+// describe a deployable package's transport) because remote headers carry
+// only static name/value pairs - no templating.
+type MCPRemote struct {
+	Type    string       `json:"type" yaml:"type"`
+	URL     string       `json:"url" yaml:"url"`
+	Headers []HTTPHeader `json:"headers,omitempty" yaml:"headers,omitempty"`
+}
+
+// HTTPHeader is an HTTP header sent on requests to a remote MCP server.
+type HTTPHeader struct {
+	Name  string `json:"name" yaml:"name"`
+	Value string `json:"value,omitempty" yaml:"value,omitempty"`
 }
 
 // MCPServerSource is the distribution origin of a bundled MCP server —

@@ -111,6 +111,45 @@ func TestAgentValidate_AccumulatesErrors(t *testing.T) {
 	require.Contains(t, paths, "spec.title")
 }
 
+func TestAgentValidate_AcceptsRepositoryWithBranchAndCommit(t *testing.T) {
+	a := &Agent{
+		Metadata: ObjectMeta{Namespace: "default", Name: "a"},
+		Spec: AgentSpec{
+			Source: &AgentSource{
+				Repository: &Repository{
+					URL:    "https://github.com/example/repo",
+					Branch: "feature/x",
+					Commit: "abc1234def",
+				},
+			},
+		},
+	}
+	require.NoError(t, a.Validate())
+}
+
+func TestAgentValidate_RejectsBranchOrCommitWithoutURL(t *testing.T) {
+	cases := []struct {
+		name string
+		repo Repository
+		want string
+	}{
+		{"branch without url", Repository{Branch: "feature/x"}, "spec.source.repository.branch"},
+		{"commit without url", Repository{Commit: "abc1234"}, "spec.source.repository.commit"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := &Agent{
+				Metadata: ObjectMeta{Namespace: "default", Name: "a"},
+				Spec: AgentSpec{
+					Source: &AgentSource{Repository: &tc.repo},
+				},
+			}
+			paths := failedFields(t, a.Validate())
+			require.Contains(t, paths, tc.want)
+		})
+	}
+}
+
 func TestAgentResolveRefs_OK(t *testing.T) {
 	resolver := func(ctx context.Context, ref ResourceRef) error { return nil }
 	a := &Agent{
@@ -224,6 +263,48 @@ func TestDeploymentValidate_RejectsBadDesiredState(t *testing.T) {
 	require.Contains(t, paths, "spec.desiredState")
 }
 
+func TestDeploymentValidate_DeploymentRefsOK(t *testing.T) {
+	d := &Deployment{
+		Metadata: ObjectMeta{Namespace: "default", Name: "agent-prod"},
+		Spec: DeploymentSpec{
+			TargetRef:    ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
+			RuntimeRef:   ResourceRef{Kind: KindRuntime, Name: "local"},
+			DesiredState: DesiredStateDeployed,
+			DeploymentRefs: []DeploymentRef{
+				{Name: "weather-mcp-prod"},
+				{Namespace: "tools", Name: "fs-mcp-prod"},
+			},
+		},
+	}
+	require.NoError(t, d.Validate())
+}
+
+func TestDeploymentValidate_DeploymentRefsRejectMissingName(t *testing.T) {
+	d := &Deployment{
+		Metadata: ObjectMeta{Namespace: "default", Name: "agent-prod"},
+		Spec: DeploymentSpec{
+			TargetRef:      ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
+			RuntimeRef:     ResourceRef{Kind: KindRuntime, Name: "local"},
+			DeploymentRefs: []DeploymentRef{{Namespace: "tools"}}, // missing Name
+		},
+	}
+	paths := failedFields(t, d.Validate())
+	require.Contains(t, paths, "spec.deploymentRefs[0].name")
+}
+
+func TestDeploymentValidate_DeploymentRefsRejectBadNamespace(t *testing.T) {
+	d := &Deployment{
+		Metadata: ObjectMeta{Namespace: "default", Name: "agent-prod"},
+		Spec: DeploymentSpec{
+			TargetRef:      ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
+			RuntimeRef:     ResourceRef{Kind: KindRuntime, Name: "local"},
+			DeploymentRefs: []DeploymentRef{{Namespace: "Bad NS", Name: "ok"}},
+		},
+	}
+	paths := failedFields(t, d.Validate())
+	require.Contains(t, paths, "spec.deploymentRefs[0].namespace")
+}
+
 // Deployment.spec.targetRef may omit tag; reference resolution treats blank as
 // the literal "latest" tag.
 func TestDeploymentValidate_AllowsEmptyTargetRefTag(t *testing.T) {
@@ -327,13 +408,40 @@ func TestMCPServerValidate_OK(t *testing.T) {
 	require.NoError(t, m.Validate())
 }
 
-func TestRemoteMCPServerValidate_RejectsBadRemote(t *testing.T) {
-	r := &RemoteMCPServer{
+func TestMCPServerValidate_RejectsBadRemote(t *testing.T) {
+	r := &MCPServer{
 		Metadata: ObjectMeta{Namespace: "default", Name: "tools", Tag: "v1"},
-		Spec: RemoteMCPServerSpec{
-			Remote: MCPTransport{Type: "streamable-http"}, // missing URL
+		Spec: MCPServerSpec{
+			Remote: &MCPRemote{Type: "streamable-http"}, // missing URL
 		},
 	}
 	paths := failedFields(t, r.Validate())
 	require.Contains(t, paths, "spec.remote.url")
+}
+
+func TestMCPServerValidate_RemoteAndSourceMutuallyExclusive(t *testing.T) {
+	m := &MCPServer{
+		Metadata: ObjectMeta{Namespace: "default", Name: "tools", Tag: "v1"},
+		Spec: MCPServerSpec{
+			Source: &MCPServerSource{
+				Package: &MCPPackage{
+					RegistryType: "oci",
+					Identifier:   "ghcr.io/example/mcp-tools:1.0.0",
+					Transport:    MCPTransport{Type: "stdio"},
+				},
+			},
+			Remote: &MCPRemote{Type: "streamable-http", URL: "https://example.test/mcp"},
+		},
+	}
+	paths := failedFields(t, m.Validate())
+	require.Contains(t, paths, "spec")
+}
+
+func TestMCPServerValidate_RequiresSourceOrRemote(t *testing.T) {
+	m := &MCPServer{
+		Metadata: ObjectMeta{Namespace: "default", Name: "tools", Tag: "v1"},
+		Spec:     MCPServerSpec{},
+	}
+	paths := failedFields(t, m.Validate())
+	require.Contains(t, paths, "spec")
 }

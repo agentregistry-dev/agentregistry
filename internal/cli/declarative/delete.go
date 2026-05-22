@@ -2,12 +2,14 @@ package declarative
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
-	"github.com/spf13/cobra"
 )
 
 // DeleteCmd is the cobra command for "delete".
@@ -106,9 +108,18 @@ func deleteAllTagsResource(cmd *cobra.Command, typeName, name string) error {
 // deleteFromFile reads a YAML file and sends a single DELETE /v0/apply request.
 // Per-resource results are printed; non-zero exit if any failed.
 func deleteFromFile(cmd *cobra.Command, filename string) error {
-	data, err := os.ReadFile(filename)
-	if err != nil {
-		return err
+	var data []byte
+	var err error
+	if filename == "-" {
+		data, err = io.ReadAll(cmd.InOrStdin())
+		if err != nil {
+			return fmt.Errorf("reading stdin: %w", err)
+		}
+	} else {
+		data, err = os.ReadFile(filename)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Validate locally so unknown kinds fail before hitting the network.
@@ -144,6 +155,13 @@ func deleteResource(cmd *cobra.Command, typeName, name, tag string, force bool) 
 
 	if force && k.Kind != "deployment" {
 		return fmt.Errorf("--force is only supported for deployments")
+	}
+
+	// Deployments and runtimes have no tag of their own; rejecting --tag here
+	// keeps users from confusing a deployment's target tag (or a runtime's
+	// non-existent tag) with the metadata identity used for delete.
+	if tag != "" && (k.Kind == "deployment" || k.Kind == "runtime") {
+		return fmt.Errorf("--tag is not supported for %s", k.Kind)
 	}
 
 	if apiClient == nil {

@@ -2,7 +2,6 @@ package resource
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 
@@ -10,8 +9,8 @@ import (
 
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
-	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
 // ApplyConfig is the per-server configuration for the multi-doc apply
@@ -63,6 +62,24 @@ type ApplyConfig struct {
 
 	// InitialFinalizers mirrors resource.Config.InitialFinalizers per kind.
 	InitialFinalizers map[string]func(obj v1alpha1.Object) []string
+
+	// Source labels the producer of objects entering this apply pipeline.
+	// Empty defaults to types.AdmissionSourceApply.
+	Source string
+
+	// Admission optionally owns the final apply write. Nil uses
+	// ProductionAdmission, which writes to the configured production Store.
+	Admission types.Admission
+
+	// DeleteAdmission optionally owns the final delete. Nil uses
+	// ProductionDeleteAdmission, which deletes from the configured production
+	// Store and runs the per-kind PostDelete hook.
+	DeleteAdmission types.DeleteAdmission
+
+	// Prepare optionally mutates an object after validation and before
+	// admission. Import uses this to merge scanner output while still
+	// persisting through the shared apply path.
+	Prepare func(ctx context.Context, obj v1alpha1.Object) error
 }
 
 // applyInput receives a raw multi-doc YAML stream. RawBody keeps bytes
@@ -73,7 +90,7 @@ type ApplyConfig struct {
 // DryRun runs validate + resolve + registries + uniqueness but does not
 // mutate the store.
 type applyInput struct {
-	DryRun  bool   `query:"dryRun" doc:"Run validation and enrichment without mutating the store. Defaults to false."`
+	DryRun  bool   `query:"dryRun" doc:"Run validation without mutating the store. Defaults to false."`
 	RawBody []byte `contentType:"application/yaml" doc:"Multi-document YAML stream of v1alpha1 resources."`
 }
 
@@ -150,6 +167,20 @@ func runApplyBatch(ctx context.Context, cfg ApplyConfig, scheme *v1alpha1.Scheme
 	return out
 }
 
+// ApplyObject runs one already-decoded object through the same production
+// apply path used by POST /v0/apply. Downstream routes can call this to replay
+// a previously accepted object without duplicating validation, authz,
+// persistence, or post-upsert behavior.
+func ApplyObject(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun bool) arv0.ApplyResult {
+	return applyOne(ctx, cfg, obj, dryRun)
+}
+
+// DeleteObject runs one already-decoded object through the same production
+// delete path used by DELETE /v0/apply.
+func DeleteObject(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun bool) arv0.ApplyResult {
+	return deleteOne(ctx, cfg, obj, dryRun)
+}
+
 // applyOne runs a single document through the shared apply pipeline.
 // Never errors; encodes any failure into the returned ApplyResult.
 func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun bool) arv0.ApplyResult {
@@ -164,36 +195,26 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 		return failResult(res, ae)
 	}
 
-	up, ae := applyCore(ctx, store, obj, applyOpts{
+	admitted, ae := applyCore(ctx, store, obj, applyOpts{
 		Authorize:         batchAuthorize(cfg, obj.GetKind()),
 		Resolver:          cfg.Resolver,
 		RegistryValidator: cfg.RegistryValidator,
 		PostUpsert:        cfg.PostUpserts[obj.GetKind()],
 		InitialFinalizers: cfg.InitialFinalizers[obj.GetKind()],
+		Admission:         cfg.Admission,
+		Source:            cfg.Source,
+		Prepare:           cfg.Prepare,
 	}, dryRun)
 	if ae != nil {
 		return failResult(res, ae)
 	}
 
-	if dryRun {
-		res.Status = arv0.ApplyStatusDryRun
-		return res
-	}
-	// Map the Store outcome onto the wire status. Tagged-artifact creates
-	// surface as created, same-tag replacements as configured, and exact
-	// re-applies as unchanged.
-	switch up.Outcome {
-	case v1alpha1store.UpsertCreated:
-		res.Status = arv0.ApplyStatusCreated
-	case v1alpha1store.UpsertReplaced:
-		res.Status = arv0.ApplyStatusConfigured
-	case v1alpha1store.UpsertNoOp:
+	res.Status = admitted.Status
+	if res.Status == "" {
 		res.Status = arv0.ApplyStatusUnchanged
 	}
-	if up.Tag != "" {
-		res.Tag = up.Tag
-	}
-	res.Generation = up.Generation
+	res.Tag = admitted.Tag
+	res.Generation = admitted.Generation
 	return res
 }
 
@@ -219,38 +240,21 @@ func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun
 		return failResult(res, ae)
 	}
 
-	if dryRun {
-		res.Status = arv0.ApplyStatusDryRun
-		return res
+	admitted, ae := deleteCore(ctx, store, obj.GetKind(), meta.Namespace, meta.Name, meta.Tag, deleteOpts{
+		Authorize:       batchAuthorize(cfg, obj.GetKind()),
+		PostDelete:      cfg.PostDeletes[obj.GetKind()],
+		PreDeleteObject: obj,
+		DeleteAdmission: cfg.DeleteAdmission,
+		Source:          cfg.Source,
+	}, dryRun)
+	if ae != nil {
+		return failResult(res, ae)
 	}
-
-	authz := batchAuthorize(cfg, obj.GetKind())
-	if authz != nil {
-		if err := authz(ctx, AuthorizeInput{
-			Verb: "delete", Kind: obj.GetKind(),
-			Namespace: meta.Namespace, Name: meta.Name, Tag: meta.Tag,
-			Object: obj,
-		}); err != nil {
-			return failResult(res, &applyError{Stage: stageAuth, Err: err})
-		}
+	res.Status = admitted.Status
+	if res.Status == "" {
+		res.Status = arv0.ApplyStatusDeleted
 	}
-
-	err := store.DeleteByRef(ctx, meta.Namespace, meta.Name, meta.Tag)
-	if err != nil {
-		return failResult(res, &applyError{
-			Stage:    stageDelete,
-			Err:      err,
-			NotFound: errors.Is(err, pkgdb.ErrNotFound),
-		})
-	}
-
-	res.Tag = meta.Tag
-	if hook := cfg.PostDeletes[obj.GetKind()]; hook != nil {
-		if err := hook(ctx, obj); err != nil {
-			return failResult(res, &applyError{Stage: stagePostDelete, Err: err})
-		}
-	}
-	res.Status = arv0.ApplyStatusDeleted
+	res.Tag = admitted.Tag
 	return res
 }
 
