@@ -109,7 +109,7 @@ func TestRun_InspectorDryRunNarratesURL(t *testing.T) {
 
 	require.NoError(t, os.Chdir(tmp))
 	initCmd := declarative.NewInitCmd()
-	initCmd.SetArgs([]string{"mcp", "acme/inspmcp", "--framework", "fastmcp", "--language", "python"})
+	initCmd.SetArgs([]string{"mcp", "acme-inspmcp", "--framework", "fastmcp", "--language", "python"})
 	require.NoError(t, initCmd.Execute())
 
 	require.NoError(t, os.Chdir(filepath.Join(tmp, "inspmcp")))
@@ -136,7 +136,7 @@ func TestRun_NoChatOnMCPErrors(t *testing.T) {
 
 	require.NoError(t, os.Chdir(tmp))
 	initCmd := declarative.NewInitCmd()
-	initCmd.SetArgs([]string{"mcp", "acme/mcpproj", "--framework", "fastmcp", "--language", "python"})
+	initCmd.SetArgs([]string{"mcp", "acme-mcpproj", "--framework", "fastmcp", "--language", "python"})
 	require.NoError(t, initCmd.Execute())
 
 	require.NoError(t, os.Chdir(filepath.Join(tmp, "mcpproj")))
