@@ -118,6 +118,7 @@ CREATE TABLE IF NOT EXISTS v1alpha1.reconcile_work (
     next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     lease_owner     TEXT,
     lease_until     TIMESTAMPTZ,
+    lease_token     UUID,
     last_error      TEXT,
     completed_at    TIMESTAMPTZ,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),

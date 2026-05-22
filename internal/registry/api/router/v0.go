@@ -14,7 +14,6 @@ import (
 	v0version "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/version"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
-	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
@@ -47,14 +46,10 @@ type RouteOptions struct {
 	// REQUIRED — RegisterRoutes errors when this is nil/empty.
 	Stores Stores
 
-	// DeploymentCoordinator drives post-persist reconciliation
-	// for the Deployment kind: PUT → adapter.Apply; DELETE → adapter.Remove.
-	// Constructed alongside Stores at bootstrap, wired into the
-	// generic resource handler as a per-kind PostUpsert/PostDelete hook
-	// for KindDeployment. Nil disables Deployment reconciliation — PUT
-	// still persists the row, DELETE still soft-deletes, but no adapter
-	// dispatch happens.
-	DeploymentCoordinator *deploymentsvc.Coordinator
+	// DeploymentLogResolver supports the Deployment logs subresource. Adapter
+	// Apply/Remove side effects are owned by the controller executor, not by
+	// CRUD hook wiring.
+	DeploymentLogResolver deploymentlogs.LogResolver
 
 	// PerKindHooks injects per-kind Authorize + ListFilter
 	// callbacks into the generic resource handler. Downstream integrations
@@ -123,13 +118,13 @@ func RegisterRoutes(
 	v0version.RegisterVersionEndpoint(api, pathPrefix, versionInfo)
 
 	// v1alpha1 generic routes. Cross-kind dangling-ref detection uses
-	// a Store-backed resolver. Deployment reconciliation hooks plug in
-	// when the coordinator is supplied.
+	// a Store-backed resolver. Deployment side effects are handled by
+	// the always-on controller executor after the row is persisted.
 	registerKindRoutes(
 		api,
 		pathPrefix,
 		opts.Stores,
-		opts.DeploymentCoordinator,
+		opts.DeploymentLogResolver,
 		opts.PerKindHooks,
 		opts.RegistryValidator,
 		opts.Admission,
@@ -152,15 +147,11 @@ func RegisterRoutes(
 // widens scope across every namespace. The multi-doc apply endpoint
 // lives at `{basePrefix}/apply`. Cross-kind ResourceRef existence
 // dispatches through the shared internaldb.NewResolver.
-//
-// When coord is non-nil, Deployment PUT/DELETE fire
-// coord.Apply/coord.Remove after the row is persisted so the type
-// adapter converges runtime state synchronously with the API call.
 func registerKindRoutes(
 	api huma.API,
 	basePrefix string,
 	stores Stores,
-	coord *deploymentsvc.Coordinator,
+	logResolver deploymentlogs.LogResolver,
 	perKind crud.PerKindHooks,
 	registryValidator v1alpha1.RegistryValidatorFunc,
 	admission types.Admission,
@@ -175,49 +166,18 @@ func registerKindRoutes(
 	if registryValidator == nil {
 		registryValidator = registries.Dispatcher
 	}
-	// When a Deployment coordinator is supplied, install its Apply/Remove
-	// as the KindDeployment PostUpsert/PostDelete. Deployment
-	// reconciliation is a reserved seam in the v1alpha1 generic handler:
-	// the coordinator hooks override any caller-supplied Deployment
-	// hook so PUT/DELETE always drive the type adapter. The same
-	// hook table feeds both the per-kind PUT/DELETE handlers and the
-	// /v0/apply batch path so a Deployment in a multi-doc apply
-	// reconciles identically to a single-resource apply.
-	if coord != nil {
-		if perKind.PostUpserts == nil {
-			perKind.PostUpserts = map[string]func(context.Context, v1alpha1.Object) error{}
-		}
-		if perKind.PostDeletes == nil {
-			perKind.PostDeletes = map[string]func(context.Context, v1alpha1.Object) error{}
-		}
-		perKind.PostUpserts[v1alpha1.KindDeployment] = func(ctx context.Context, obj v1alpha1.Object) error {
-			dep, ok := obj.(*v1alpha1.Deployment)
-			if !ok {
-				return nil
-			}
-			return coord.Apply(ctx, dep)
-		}
-		perKind.PostDeletes[v1alpha1.KindDeployment] = func(ctx context.Context, obj v1alpha1.Object) error {
-			dep, ok := obj.(*v1alpha1.Deployment)
-			if !ok {
-				return nil
-			}
-			return coord.Remove(ctx, dep)
-		}
-	}
-
 	// Per-kind CRUD endpoints — one call per built-in kind, hidden
 	// inside crud.Register.
 	crud.Register(api, basePrefix, stores, resolver, registryValidator, perKind, deleteAdmission)
 
 	// Deployment-specific endpoints: logs stream (cancel is subsumed
 	// by DesiredState=undeployed + DELETE in the v1alpha1 lifecycle).
-	if coord != nil {
+	if logResolver != nil {
 		deploymentlogs.Register(api, deploymentlogs.Config{
-			BasePrefix:  basePrefix,
-			Store:       stores[v1alpha1.KindDeployment],
-			Coordinator: coord,
-			Authorize:   perKind.Authorizers[v1alpha1.KindDeployment],
+			BasePrefix: basePrefix,
+			Store:      stores[v1alpha1.KindDeployment],
+			Resolver:   logResolver,
+			Authorize:  perKind.Authorizers[v1alpha1.KindDeployment],
 		})
 	}
 

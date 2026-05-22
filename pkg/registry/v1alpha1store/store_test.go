@@ -636,17 +636,22 @@ func TestReconcileWorkStore_ClaimBackoffEventAndComplete(t *testing.T) {
 	require.Equal(t, "running", claimed[0].State)
 	require.Equal(t, 1, claimed[0].Attempt)
 	require.Equal(t, "worker-a", claimed[0].LeaseOwner)
+	require.NotEmpty(t, claimed[0].LeaseToken)
+	firstToken := claimed[0].LeaseToken
 
 	claimed, err = workStore.ClaimDue(ctx, "worker-b", time.Now().Add(time.Minute), 10)
 	require.NoError(t, err)
 	require.Empty(t, claimed, "non-expired running leases must not double-claim")
 
-	require.NoError(t, workStore.Backoff(ctx, work.Key, "temporary", time.Now().Add(-time.Second)))
+	applied, err := workStore.Backoff(ctx, work.Key, firstToken, "temporary", time.Now().Add(-time.Second))
+	require.NoError(t, err)
+	require.True(t, applied)
 	claimed, err = workStore.ClaimDue(ctx, "worker-b", time.Now().Add(time.Minute), 10)
 	require.NoError(t, err)
 	require.Len(t, claimed, 1)
 	require.Equal(t, 2, claimed[0].Attempt)
 	require.Equal(t, "worker-b", claimed[0].LeaseOwner)
+	require.NotEqual(t, firstToken, claimed[0].LeaseToken)
 
 	id, err := eventStore.Append(ctx, ReconcileEvent{
 		WorkKey:    work.Key,
@@ -665,10 +670,130 @@ func TestReconcileWorkStore_ClaimBackoffEventAndComplete(t *testing.T) {
 	require.Len(t, history, 1)
 	require.Equal(t, "success", history[0].Outcome)
 
-	require.NoError(t, workStore.Complete(ctx, work.Key))
+	applied, err = workStore.Complete(ctx, work.Key, claimed[0].LeaseToken)
+	require.NoError(t, err)
+	require.True(t, applied)
 	claimed, err = workStore.ClaimDue(ctx, "worker-c", time.Now().Add(time.Minute), 10)
 	require.NoError(t, err)
 	require.Empty(t, claimed)
+}
+
+func TestReconcileWorkStore_LeaseTokenProtectsReclaimedWork(t *testing.T) {
+	pool := NewTestPool(t)
+	ctx := context.Background()
+	workStore := NewReconcileWorkStore(pool)
+
+	work := ReconcileWork{
+		Key:           "Deployment:default:weather:uid-1:1:apply",
+		Resource:      ResourceKey{Kind: v1alpha1.KindDeployment, Namespace: testNS, Name: "weather"},
+		Generation:    1,
+		Action:        "apply",
+		Reason:        "desired-deployed",
+		NextAttemptAt: time.Now().Add(-time.Minute),
+	}
+	require.NoError(t, workStore.Upsert(ctx, work))
+
+	claimed, err := workStore.ClaimDue(ctx, "worker-a", time.Now().Add(-time.Second), 1)
+	require.NoError(t, err)
+	require.Len(t, claimed, 1)
+	staleToken := claimed[0].LeaseToken
+
+	claimed, err = workStore.ClaimDue(ctx, "worker-b", time.Now().Add(time.Minute), 1)
+	require.NoError(t, err)
+	require.Len(t, claimed, 1)
+	require.NotEqual(t, staleToken, claimed[0].LeaseToken)
+
+	applied, err := workStore.Complete(ctx, work.Key, staleToken)
+	require.NoError(t, err)
+	require.False(t, applied)
+
+	applied, err = workStore.Backoff(ctx, work.Key, staleToken, "stale", time.Now())
+	require.NoError(t, err)
+	require.False(t, applied)
+}
+
+func TestReconcileWorkStore_UpsertPreservesActiveLease(t *testing.T) {
+	pool := NewTestPool(t)
+	ctx := context.Background()
+	workStore := NewReconcileWorkStore(pool)
+
+	work := ReconcileWork{
+		Key:           "Deployment:default:weather:uid-1:1:apply",
+		Resource:      ResourceKey{Kind: v1alpha1.KindDeployment, Namespace: testNS, Name: "weather"},
+		Generation:    1,
+		Action:        "apply",
+		Reason:        "desired-deployed",
+		NextAttemptAt: time.Now().Add(-time.Minute),
+	}
+	require.NoError(t, workStore.Upsert(ctx, work))
+	claimed, err := workStore.ClaimDue(ctx, "worker-a", time.Now().Add(time.Minute), 1)
+	require.NoError(t, err)
+	require.Len(t, claimed, 1)
+
+	refreshed := work
+	refreshed.Reason = "refreshed"
+	require.NoError(t, workStore.Upsert(ctx, refreshed))
+
+	reclaimed, err := workStore.ClaimDue(ctx, "worker-b", time.Now().Add(time.Minute), 1)
+	require.NoError(t, err)
+	require.Empty(t, reclaimed)
+
+	var (
+		state      string
+		owner      string
+		leaseToken string
+	)
+	require.NoError(t, pool.QueryRow(ctx, `
+		SELECT state, COALESCE(lease_owner, ''), COALESCE(lease_token::text, '')
+		FROM v1alpha1.reconcile_work
+		WHERE key=$1`, work.Key).Scan(&state, &owner, &leaseToken))
+	require.Equal(t, "running", state)
+	require.Equal(t, "worker-a", owner)
+	require.Equal(t, claimed[0].LeaseToken, leaseToken)
+}
+
+func TestReconcileWorkStore_AbandonSupersededPendingBackoff(t *testing.T) {
+	pool := NewTestPool(t)
+	ctx := context.Background()
+	workStore := NewReconcileWorkStore(pool)
+
+	oldPending := ReconcileWork{
+		Key:           "Deployment:default:weather:uid-1:1:apply",
+		Resource:      ResourceKey{Kind: v1alpha1.KindDeployment, Namespace: testNS, Name: "weather"},
+		UID:           "00000000-0000-0000-0000-000000000001",
+		Generation:    1,
+		Action:        "apply",
+		Reason:        "desired-deployed",
+		NextAttemptAt: time.Now().Add(time.Hour),
+	}
+	require.NoError(t, workStore.Upsert(ctx, oldPending))
+	oldBackoff := oldPending
+	oldBackoff.Key = "Deployment:default:weather:uid-1:2:remove"
+	oldBackoff.Generation = 2
+	oldBackoff.Action = "remove"
+	require.NoError(t, workStore.Upsert(ctx, oldBackoff))
+	claimed, err := workStore.ClaimDue(ctx, "worker-a", time.Now().Add(time.Minute), 1)
+	require.NoError(t, err)
+	require.Empty(t, claimed)
+	_, err = pool.Exec(ctx, `
+		UPDATE v1alpha1.reconcile_work
+		SET state='backoff', next_attempt_at=NOW() + INTERVAL '1 hour'
+		WHERE key=$1`, oldBackoff.Key)
+	require.NoError(t, err)
+
+	newWork := oldPending
+	newWork.Key = "Deployment:default:weather:uid-1:3:apply"
+	newWork.Generation = 3
+	require.NoError(t, workStore.Upsert(ctx, newWork))
+	n, err := workStore.AbandonSuperseded(ctx, newWork)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), n)
+
+	var abandoned int
+	require.NoError(t, pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM v1alpha1.reconcile_work
+		WHERE state='abandoned'`).Scan(&abandoned))
+	require.Equal(t, 2, abandoned)
 }
 
 func TestControlPlaneEventStore_PruneBeforeHonorsKeepAfterRevision(t *testing.T) {

@@ -48,10 +48,10 @@ func TestRegisterDeploymentLogs_RespectsAuthorize(t *testing.T) {
 
 	_, api := humatest.New(t)
 	deploymentlogs.Register(api, deploymentlogs.Config{
-		BasePrefix:  "/v0",
-		Store:       deployments,
-		Coordinator: coord,
-		Authorize:   authorize,
+		BasePrefix: "/v0",
+		Store:      deployments,
+		Resolver:   coord,
+		Authorize:  authorize,
 	})
 
 	// Denied row → 403. The gate fires before Store.Get, so the row
@@ -85,10 +85,10 @@ func TestRegisterDeploymentLogs_NilAuthorizeAllowsThrough(t *testing.T) {
 
 	_, api := humatest.New(t)
 	deploymentlogs.Register(api, deploymentlogs.Config{
-		BasePrefix:  "/v0",
-		Store:       deployments,
-		Coordinator: coord,
-		Authorize:   nil,
+		BasePrefix: "/v0",
+		Store:      deployments,
+		Resolver:   coord,
+		Authorize:  nil,
 	})
 
 	resp := api.Get("/v0/deployments/anything/logs")

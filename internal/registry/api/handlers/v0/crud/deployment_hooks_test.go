@@ -3,11 +3,11 @@
 package crud_test
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
 
+	"github.com/agentregistry-dev/agentregistry/internal/registry/controller"
 	"github.com/danielgtaylor/huma/v2/humatest"
 	"github.com/stretchr/testify/require"
 
@@ -17,7 +17,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/noop"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
-	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
@@ -64,28 +63,23 @@ func seedDeploymentFixtures(t *testing.T) (humatest.TestAPI, map[string]*v1alpha
 		database.NewResolver(stores),
 		nil, // registryValidator
 		crud.PerKindHooks{
-			PostUpserts: map[string]func(context.Context, v1alpha1.Object) error{
-				v1alpha1.KindDeployment: func(ctx context.Context, obj v1alpha1.Object) error {
-					return coord.Apply(ctx, obj.(*v1alpha1.Deployment))
-				},
-			},
-			PostDeletes: map[string]func(context.Context, v1alpha1.Object) error{
-				v1alpha1.KindDeployment: func(ctx context.Context, obj v1alpha1.Object) error {
-					return coord.Remove(ctx, obj.(*v1alpha1.Deployment))
+			InitialFinalizers: map[string]func(v1alpha1.Object) []string{
+				v1alpha1.KindDeployment: func(v1alpha1.Object) []string {
+					return []string{controller.DeploymentControllerFinalizer}
 				},
 			},
 		},
 		nil,
 	)
 	deploymentlogs.Register(api, deploymentlogs.Config{
-		BasePrefix:  "/v0",
-		Store:       stores[v1alpha1.KindDeployment],
-		Coordinator: coord,
+		BasePrefix: "/v0",
+		Store:      stores[v1alpha1.KindDeployment],
+		Resolver:   coord,
 	})
 	return api, stores
 }
 
-func TestDeploymentPut_TriggersAdapterApply(t *testing.T) {
+func TestDeploymentPut_PersistsWithoutSynchronousAdapterApply(t *testing.T) {
 	api, stores := seedDeploymentFixtures(t)
 
 	body := v1alpha1.Deployment{
@@ -100,24 +94,20 @@ func TestDeploymentPut_TriggersAdapterApply(t *testing.T) {
 	resp := api.Put("/v0/deployments/weather-noop", body)
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 
-	// Response should reflect the PostUpsert status writes.
+	// Adapter status is no longer written during the API call; the
+	// controller executor patches it after claiming reconcile_work.
 	var got v1alpha1.Deployment
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &got))
-	require.NotEmpty(t, got.Status.Conditions, "expected status conditions from coordinator.Apply")
+	require.Empty(t, got.Status.Conditions, "adapter status is written asynchronously by the controller executor")
 
-	// Row in DB: status JSONB carries the Ready condition.
 	raw, err := stores[v1alpha1.KindDeployment].Get(t.Context(), "default", "weather-noop", "")
 	require.NoError(t, err)
-	// RawObject.Status is opaque bytes at the envelope layer; decode
-	// with the Status storage codec to inspect conditions.
 	var status v1alpha1.Status
 	require.NoError(t, v1alpha1.UnmarshalStatusFromStorage(raw.Status, &status))
-	ready := status.GetCondition("Ready")
-	require.NotNil(t, ready, "noop.Apply should have written Ready condition")
-	require.Equal(t, v1alpha1.ConditionTrue, ready.Status)
+	require.Nil(t, status.GetCondition("Ready"))
 }
 
-func TestDeploymentDelete_TriggersAdapterRemove(t *testing.T) {
+func TestDeploymentDelete_LeavesTerminatingRowForControllerRemove(t *testing.T) {
 	api, stores := seedDeploymentFixtures(t)
 
 	body := v1alpha1.Deployment{
@@ -135,13 +125,9 @@ func TestDeploymentDelete_TriggersAdapterRemove(t *testing.T) {
 	delResp := api.Delete("/v0/deployments/weather-noop")
 	require.Equal(t, http.StatusNoContent, delResp.Code, delResp.Body.String())
 
-	// Deployment carries no finalizers, so DELETE hard-deletes the row
-	// after Coordinator.Remove fires the adapter teardown. Re-apply
-	// with the same identity then succeeds without an ErrTerminating
-	// race — see commit fixing josh-pritchard's PR #455 report
-	// "Soft-delete blocks re-apply for every v1alpha1 kind."
-	_, err := stores[v1alpha1.KindDeployment].Get(t.Context(), "default", "weather-noop", "")
-	require.ErrorIs(t, err, pkgdb.ErrNotFound, "finalizer-free row must hard-delete")
+	raw, err := stores[v1alpha1.KindDeployment].GetLatestIncludingTerminating(t.Context(), "default", "weather-noop")
+	require.NoError(t, err)
+	require.NotNil(t, raw.Metadata.DeletionTimestamp)
 }
 
 func TestDeploymentLogs_EmptyForNoopAdapter(t *testing.T) {

@@ -46,18 +46,14 @@ type ApplyConfig struct {
 	// already has.
 	Authorizers map[string]func(ctx context.Context, in AuthorizeInput) error
 
-	// PostUpserts mirrors resource.Config.PostUpsert per kind. Without
-	// it, kinds that drive runtime reconciliation through PostUpsert
-	// (e.g. Deployment → Coordinator.Apply → platform adapter)
-	// are silently skipped when the resource is applied via the batch
-	// endpoint instead of the namespaced PUT. Per-doc errors fail the
-	// individual result; the rest of the batch continues.
+	// PostUpserts mirrors resource.Config.PostUpsert per kind for extension
+	// hooks. Built-in Deployment apply is controller-owned and does not use
+	// this synchronous surface.
 	PostUpserts map[string]func(ctx context.Context, obj v1alpha1.Object) error
 
-	// PostDeletes mirrors resource.Config.PostDelete per kind. Same
-	// rationale as PostUpserts — Deployment delete via batch otherwise
-	// soft-deletes the row but never tears down the platform adapter
-	// state.
+	// PostDeletes mirrors resource.Config.PostDelete per kind for extension
+	// hooks. Built-in Deployment teardown is controller-owned and does not use
+	// this synchronous surface.
 	PostDeletes map[string]func(ctx context.Context, obj v1alpha1.Object) error
 
 	// InitialFinalizers mirrors resource.Config.InitialFinalizers per kind.

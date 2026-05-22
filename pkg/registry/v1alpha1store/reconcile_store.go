@@ -29,6 +29,7 @@ type ReconcileWork struct {
 	NextAttemptAt time.Time
 	LeaseOwner    string
 	LeaseUntil    *time.Time
+	LeaseToken    string
 	LastError     string
 	CompletedAt   *time.Time
 	CreatedAt     time.Time
@@ -80,10 +81,31 @@ func (s *ReconcileWorkStore) Upsert(ctx context.Context, work ReconcileWork) err
 		    action = EXCLUDED.action,
 		    reason = EXCLUDED.reason,
 		    payload = EXCLUDED.payload,
-		    state = 'pending',
+		    state = CASE
+		        WHEN v1alpha1.reconcile_work.state = 'running'
+		         AND v1alpha1.reconcile_work.lease_until > NOW()
+		        THEN v1alpha1.reconcile_work.state
+		        ELSE 'pending'
+		    END,
 		    next_attempt_at = LEAST(v1alpha1.reconcile_work.next_attempt_at, EXCLUDED.next_attempt_at),
-		    lease_owner = NULL,
-		    lease_until = NULL,
+		    lease_owner = CASE
+		        WHEN v1alpha1.reconcile_work.state = 'running'
+		         AND v1alpha1.reconcile_work.lease_until > NOW()
+		        THEN v1alpha1.reconcile_work.lease_owner
+		        ELSE NULL
+		    END,
+		    lease_until = CASE
+		        WHEN v1alpha1.reconcile_work.state = 'running'
+		         AND v1alpha1.reconcile_work.lease_until > NOW()
+		        THEN v1alpha1.reconcile_work.lease_until
+		        ELSE NULL
+		    END,
+		    lease_token = CASE
+		        WHEN v1alpha1.reconcile_work.state = 'running'
+		         AND v1alpha1.reconcile_work.lease_until > NOW()
+		        THEN v1alpha1.reconcile_work.lease_token
+		        ELSE NULL
+		    END,
 		    completed_at = NULL,
 		    last_error = NULL`,
 		work.Key,
@@ -138,13 +160,14 @@ func (s *ReconcileWorkStore) ClaimDue(ctx context.Context, owner string, leaseUn
 		SET state = 'running',
 		    lease_owner = $2,
 		    lease_until = $3,
+		    lease_token = gen_random_uuid(),
 		    attempt = w.attempt + 1,
 		    last_error = NULL
 		FROM due
 		WHERE w.key = due.key
 		RETURNING w.key, w.kind, w.namespace, w.name, w.tag, COALESCE(w.uid::text, ''),
 		          w.generation, w.action, w.reason, w.payload, w.state, w.attempt,
-		          w.next_attempt_at, w.lease_owner, w.lease_until, w.last_error,
+		          w.next_attempt_at, w.lease_owner, w.lease_until, COALESCE(w.lease_token::text, ''), w.last_error,
 		          w.completed_at, w.created_at, w.updated_at`,
 		limit, owner, leaseUntil)
 	if err != nil {
@@ -167,44 +190,102 @@ func (s *ReconcileWorkStore) ClaimDue(ctx context.Context, owner string, leaseUn
 }
 
 // Complete deletes work after the caller has recorded its outcome in
-// reconcile_events. A missing key is a no-op, which keeps executor retries
-// idempotent around crash recovery.
-func (s *ReconcileWorkStore) Complete(ctx context.Context, key string) error {
+// reconcile_events. The lease token makes completion compare-and-swap: stale
+// workers cannot complete a claim that has been reclaimed.
+func (s *ReconcileWorkStore) Complete(ctx context.Context, key, leaseToken string) (bool, error) {
 	if s == nil || s.pool == nil {
-		return errors.New("v1alpha1 store: reconcile work store has nil pool")
+		return false, errors.New("v1alpha1 store: reconcile work store has nil pool")
 	}
 	if key == "" {
-		return errors.New("v1alpha1 store: reconcile work key is required")
+		return false, errors.New("v1alpha1 store: reconcile work key is required")
 	}
-	if _, err := s.pool.Exec(ctx, `DELETE FROM v1alpha1.reconcile_work WHERE key=$1`, key); err != nil {
-		return fmt.Errorf("complete reconcile work: %w", err)
+	if leaseToken == "" {
+		return false, errors.New("v1alpha1 store: reconcile work lease token is required")
 	}
-	return nil
+	cmd, err := s.pool.Exec(ctx, `
+		DELETE FROM v1alpha1.reconcile_work
+		WHERE key=$1
+		  AND lease_token=$2::uuid
+		  AND state='running'`, key, leaseToken)
+	if err != nil {
+		return false, fmt.Errorf("complete reconcile work: %w", err)
+	}
+	return cmd.RowsAffected() > 0, nil
 }
 
 // Backoff releases a claim and makes the work due again at nextAttemptAt.
-func (s *ReconcileWorkStore) Backoff(ctx context.Context, key, lastError string, nextAttemptAt time.Time) error {
+func (s *ReconcileWorkStore) Backoff(ctx context.Context, key, leaseToken, lastError string, nextAttemptAt time.Time) (bool, error) {
 	if s == nil || s.pool == nil {
-		return errors.New("v1alpha1 store: reconcile work store has nil pool")
+		return false, errors.New("v1alpha1 store: reconcile work store has nil pool")
 	}
 	if key == "" {
-		return errors.New("v1alpha1 store: reconcile work key is required")
+		return false, errors.New("v1alpha1 store: reconcile work key is required")
+	}
+	if leaseToken == "" {
+		return false, errors.New("v1alpha1 store: reconcile work lease token is required")
 	}
 	if nextAttemptAt.IsZero() {
-		return errors.New("v1alpha1 store: reconcile work next_attempt_at is required")
+		return false, errors.New("v1alpha1 store: reconcile work next_attempt_at is required")
 	}
-	_, err := s.pool.Exec(ctx, `
+	cmd, err := s.pool.Exec(ctx, `
 		UPDATE v1alpha1.reconcile_work
 		SET state='backoff',
 		    next_attempt_at=$2,
 		    lease_owner=NULL,
 		    lease_until=NULL,
+		    lease_token=NULL,
 		    last_error=$3
-		WHERE key=$1`, key, nextAttemptAt, lastError)
+		WHERE key=$1
+		  AND lease_token=$4::uuid
+		  AND state='running'`, key, nextAttemptAt, lastError, leaseToken)
 	if err != nil {
-		return fmt.Errorf("backoff reconcile work: %w", err)
+		return false, fmt.Errorf("backoff reconcile work: %w", err)
 	}
-	return nil
+	return cmd.RowsAffected() > 0, nil
+}
+
+// AbandonSuperseded marks older pending/backoff work for the same resource as
+// inert once a newer generation has been derived. Running rows are left alone;
+// stale workers detect UID/generation drift when they execute.
+func (s *ReconcileWorkStore) AbandonSuperseded(ctx context.Context, work ReconcileWork) (int64, error) {
+	if s == nil || s.pool == nil {
+		return 0, errors.New("v1alpha1 store: reconcile work store has nil pool")
+	}
+	if work.Resource.Kind == "" || work.Resource.Namespace == "" || work.Resource.Name == "" {
+		return 0, errors.New("v1alpha1 store: reconcile work resource identity is required")
+	}
+	if work.Generation <= 0 {
+		return 0, errors.New("v1alpha1 store: reconcile work generation must be positive")
+	}
+	cmd, err := s.pool.Exec(ctx, `
+		UPDATE v1alpha1.reconcile_work
+		SET state='abandoned',
+		    completed_at=NOW(),
+		    lease_owner=NULL,
+		    lease_until=NULL,
+		    lease_token=NULL,
+		    last_error=NULL
+		WHERE kind=$1
+		  AND namespace=$2
+		  AND name=$3
+		  AND tag=$4
+		  AND state IN ('pending', 'backoff')
+		  AND generation < $5
+		  AND (
+		      NULLIF($6, '')::uuid IS NULL
+		      OR uid = NULLIF($6, '')::uuid
+		  )`,
+		work.Resource.Kind,
+		work.Resource.Namespace,
+		work.Resource.Name,
+		work.Resource.Tag,
+		work.Generation,
+		work.UID,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("abandon superseded reconcile work: %w", err)
+	}
+	return cmd.RowsAffected(), nil
 }
 
 // Prune removes completed or abandoned rows in bounded batches. Pending,
@@ -396,6 +477,7 @@ func scanReconcileWork(row pgx.Row) (ReconcileWork, error) {
 		&work.NextAttemptAt,
 		&leaseOwner,
 		&leaseUntil,
+		&work.LeaseToken,
 		&lastError,
 		&completedAt,
 		&work.CreatedAt,

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
 	"strconv"
 	"syscall"
 	"time"
@@ -21,6 +22,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/crud"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/router"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
+	controller "github.com/agentregistry-dev/agentregistry/internal/registry/controller"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/kubernetes"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/local"
@@ -100,6 +102,9 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	maps.Copy(deploymentAdapters, options.DeploymentAdapters)
 	pool := db.Pool()
 	stores := buildStores(pool, options.V1Alpha1StoreTables, options.V1Alpha1MutableStoreKinds, options.Auditor)
+	if _, err := controller.StartDeploymentController(ctx, pool, stores, deploymentAdapters); err != nil {
+		return fmt.Errorf("start deployment controller: %w", err)
+	}
 
 	slog.Info("starting agentregistry", "version", version.Version, "commit", version.GitCommit)
 
@@ -224,7 +229,7 @@ func buildRouteOptions(
 	}
 
 	if stores != nil {
-		routeOpts.DeploymentCoordinator = deploymentsvc.NewCoordinator(deploymentsvc.Dependencies{
+		routeOpts.DeploymentLogResolver = deploymentsvc.NewCoordinator(deploymentsvc.Dependencies{
 			Stores:   stores,
 			Adapters: adapters,
 			Getter:   internaldb.NewGetter(stores),
@@ -283,6 +288,20 @@ func crudPerKindHooks(options types.AppOptions) crud.PerKindHooks {
 	if len(options.InitialFinalizers) > 0 {
 		hooks.InitialFinalizers = make(map[string]func(obj v1alpha1.Object) []string, len(options.InitialFinalizers))
 		maps.Copy(hooks.InitialFinalizers, options.InitialFinalizers)
+	}
+	if hooks.InitialFinalizers == nil {
+		hooks.InitialFinalizers = map[string]func(obj v1alpha1.Object) []string{}
+	}
+	previousDeploymentFinalizers := hooks.InitialFinalizers[v1alpha1.KindDeployment]
+	hooks.InitialFinalizers[v1alpha1.KindDeployment] = func(obj v1alpha1.Object) []string {
+		var finalizers []string
+		if previousDeploymentFinalizers != nil {
+			finalizers = previousDeploymentFinalizers(obj)
+		}
+		if slices.Contains(finalizers, controller.DeploymentControllerFinalizer) {
+			return finalizers
+		}
+		return append(finalizers, controller.DeploymentControllerFinalizer)
 	}
 	// RuntimeAdapters map dispatches the KindRuntime PostUpsert /
 	// PostDelete by Spec.Type → adapter. A Runtime whose type has

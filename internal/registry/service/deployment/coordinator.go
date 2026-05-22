@@ -14,12 +14,11 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
-// Coordinator is the v1alpha1-native orchestrator that glues the
-// generic v1alpha1store.Store to the set of registered DeploymentAdapter
-// implementations. It is the synchronous counterpart to the Phase 2 KRT
-// reconciler — HTTP handlers call it directly after Store.Upsert to drive
-// adapter.Apply / adapter.Remove and thread the results back into the
-// Deployment row via PatchStatus + annotation merges.
+// Coordinator glues the generic v1alpha1store.Store to the registered
+// DeploymentAdapter implementations. The always-on controller executor owns
+// built-in Deployment Apply/Remove side effects; this service remains as the
+// shared adapter resolver for adjacent operations such as logs/discovery and
+// for downstream callers that still need the helper methods directly.
 //
 // Responsibilities:
 //  1. resolve TargetRef + RuntimeRef via the supplied GetterFunc.
