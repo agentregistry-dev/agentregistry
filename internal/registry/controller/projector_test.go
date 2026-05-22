@@ -10,18 +10,18 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
-func TestProjectorSyncReplaysEventsIntoSourceCollection(t *testing.T) {
+func TestProjectorSyncReplaysEventsIntoProjectedCache(t *testing.T) {
 	reader := fakeEventReader{
 		events: []v1alpha1store.ControlPlaneEvent{
 			{Revision: 1, Key: v1alpha1store.ResourceKey{Kind: "Deployment", Namespace: "default", Name: "api"}, Operation: "insert"},
 			{Revision: 2, Key: v1alpha1store.ResourceKey{Kind: "Deployment", Namespace: "default", Name: "worker"}, Operation: "insert"},
 		},
 	}
-	collection := NewSourceCollection()
+	collection := newProjectedEventCache()
 	projector := &Projector{
 		Events: reader,
 		ApplyEvent: func(_ context.Context, event v1alpha1store.ControlPlaneEvent) error {
-			collection.Apply(event)
+			collection.apply(event)
 			return nil
 		},
 	}
@@ -31,9 +31,9 @@ func TestProjectorSyncReplaysEventsIntoSourceCollection(t *testing.T) {
 	require.Equal(t, int64(2), res.Checkpoint)
 	require.Equal(t, 2, res.Events)
 
-	_, ok := collection.Get(v1alpha1store.ResourceKey{Kind: "Deployment", Namespace: "default", Name: "api"})
+	_, ok := collection.get(v1alpha1store.ResourceKey{Kind: "Deployment", Namespace: "default", Name: "api"})
 	require.True(t, ok)
-	_, ok = collection.Get(v1alpha1store.ResourceKey{Kind: "Deployment", Namespace: "default", Name: "worker"})
+	_, ok = collection.get(v1alpha1store.ResourceKey{Kind: "Deployment", Namespace: "default", Name: "worker"})
 	require.True(t, ok)
 }
 
@@ -155,17 +155,37 @@ func TestProjectorFailedApplyDoesNotAdvanceCheckpoint(t *testing.T) {
 	require.Equal(t, int64(0), projector.Checkpoint())
 }
 
-func TestSourceCollectionDeletesOnDeleteEvent(t *testing.T) {
+func TestProjectedEventCacheDeletesOnDeleteEvent(t *testing.T) {
 	key := v1alpha1store.ResourceKey{Kind: "Deployment", Namespace: "default", Name: "api"}
-	collection := NewSourceCollection()
+	collection := newProjectedEventCache()
 
-	collection.Apply(v1alpha1store.ControlPlaneEvent{Revision: 1, Key: key, Operation: "insert"})
-	_, ok := collection.Get(key)
+	collection.apply(v1alpha1store.ControlPlaneEvent{Revision: 1, Key: key, Operation: "insert"})
+	_, ok := collection.get(key)
 	require.True(t, ok)
 
-	collection.Apply(v1alpha1store.ControlPlaneEvent{Revision: 2, Key: key, Operation: "delete"})
-	_, ok = collection.Get(key)
+	collection.apply(v1alpha1store.ControlPlaneEvent{Revision: 2, Key: key, Operation: "delete"})
+	_, ok = collection.get(key)
 	require.False(t, ok)
+}
+
+type projectedEventCache map[string]v1alpha1store.ControlPlaneEvent
+
+func newProjectedEventCache() projectedEventCache {
+	return projectedEventCache{}
+}
+
+func (c projectedEventCache) apply(event v1alpha1store.ControlPlaneEvent) {
+	key := sourceObjectKey(event.Key)
+	if event.Operation == "delete" {
+		delete(c, key)
+		return
+	}
+	c[key] = event
+}
+
+func (c projectedEventCache) get(key v1alpha1store.ResourceKey) (v1alpha1store.ControlPlaneEvent, bool) {
+	event, ok := c[sourceObjectKey(key)]
+	return event, ok
 }
 
 type fakeEventReader struct {

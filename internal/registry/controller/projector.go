@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
-	"istio.io/istio/pkg/kube/krt"
 )
 
 // ErrProjectorNotReady is returned until Refresh completes successfully.
@@ -248,65 +247,4 @@ func (p *Projector) markNotReady(err error) {
 	defer p.mu.Unlock()
 	p.ready = false
 	p.lastErr = err
-}
-
-// SourceObject is the KRT-facing row projected from the durable control-plane
-// event stream. Projectors keep these collections current; translators derive
-// desired work from them.
-type SourceObject struct {
-	Key   v1alpha1store.ResourceKey
-	Event v1alpha1store.ControlPlaneEvent
-}
-
-// ResourceName implements krt.ResourceNamer.
-func (s SourceObject) ResourceName() string {
-	return sourceObjectKey(s.Key)
-}
-
-// SourceCollection is a KRT StaticCollection-backed source read model.
-type SourceCollection struct {
-	items krt.StaticCollection[SourceObject]
-}
-
-// NewSourceCollection constructs an empty source collection.
-func NewSourceCollection() *SourceCollection {
-	return &SourceCollection{
-		items: krt.NewStaticCollection[SourceObject](nil, nil, krt.WithName("agentregistry-source")),
-	}
-}
-
-// Apply records the latest event for a source key, or removes it on delete.
-func (c *SourceCollection) Apply(event v1alpha1store.ControlPlaneEvent) {
-	if c == nil {
-		return
-	}
-	if event.Operation == "delete" {
-		c.items.DeleteObject(sourceObjectKey(event.Key))
-		return
-	}
-	c.items.UpdateObject(SourceObject{Key: event.Key, Event: event})
-}
-
-// Get returns the last applied event for key.
-func (c *SourceCollection) Get(key v1alpha1store.ResourceKey) (v1alpha1store.ControlPlaneEvent, bool) {
-	if c == nil {
-		return v1alpha1store.ControlPlaneEvent{}, false
-	}
-	item := c.items.GetKey(sourceObjectKey(key))
-	if item == nil {
-		return v1alpha1store.ControlPlaneEvent{}, false
-	}
-	return item.Event, true
-}
-
-// Collection exposes the KRT collection for derivation code.
-func (c *SourceCollection) Collection() krt.Collection[SourceObject] {
-	if c == nil {
-		return nil
-	}
-	return c.items
-}
-
-func sourceObjectKey(key v1alpha1store.ResourceKey) string {
-	return fmt.Sprintf("%s/%s/%s/%s", key.Kind, key.Namespace, key.Name, key.Tag)
 }

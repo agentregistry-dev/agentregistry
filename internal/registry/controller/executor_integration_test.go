@@ -22,7 +22,7 @@ func TestDeploymentController_DerivesAndExecutesApply(t *testing.T) {
 	seedMCPServer(t, stores, "weather")
 	deployment := seedDeployment(t, stores, "weather-deploy", v1alpha1.DesiredStateDeployed)
 
-	sources := NewDeploymentSources(stores)
+	sources := NewSourceIndex(stores)
 	require.NoError(t, sources.Refresh(ctx))
 	deriver := &DeploymentWorkDeriver{Sources: sources, Work: workStore}
 	_, err := deriver.DeriveAll(ctx)
@@ -57,7 +57,7 @@ func TestDeploymentController_BlocksMissingTargetWithoutAdapterCall(t *testing.T
 	seedRuntime(t, stores, "local")
 	seedDeployment(t, stores, "missing-target", v1alpha1.DesiredStateDeployed)
 
-	sources := NewDeploymentSources(stores)
+	sources := NewSourceIndex(stores)
 	require.NoError(t, sources.Refresh(ctx))
 	deriver := &DeploymentWorkDeriver{Sources: sources, Work: workStore}
 	_, err := deriver.DeriveAll(ctx)
@@ -88,7 +88,7 @@ func TestDeploymentController_DeleteWaitsForRemoveThenClearsFinalizer(t *testing
 	terminating := loadDeployment(t, stores, deployment.Metadata.Name)
 	require.NotNil(t, terminating.Metadata.DeletionTimestamp)
 
-	sources := NewDeploymentSources(stores)
+	sources := NewSourceIndex(stores)
 	require.NoError(t, sources.Refresh(ctx))
 	deriver := &DeploymentWorkDeriver{Sources: sources, Work: workStore}
 	_, err := deriver.DeriveAll(ctx)

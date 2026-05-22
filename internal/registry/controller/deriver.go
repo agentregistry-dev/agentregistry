@@ -12,7 +12,7 @@ import (
 // deliberately does not call adapters; side effects begin only after a work
 // claim is leased.
 type DeploymentWorkDeriver struct {
-	Sources *DeploymentSources
+	Sources *SourceIndex
 	Work    *v1alpha1store.ReconcileWorkStore
 	Now     func() time.Time
 }
@@ -23,10 +23,11 @@ func (d *DeploymentWorkDeriver) DeriveAll(ctx context.Context) (int, error) {
 	}
 	count := 0
 	for _, row := range d.Sources.DeploymentList() {
-		if row.Object == nil {
+		deployment, ok := row.Object.(*v1alpha1.Deployment)
+		if !ok || deployment == nil {
 			continue
 		}
-		if err := d.DeriveDeployment(ctx, row.Object); err != nil {
+		if err := d.DeriveDeployment(ctx, deployment); err != nil {
 			return count, err
 		}
 		count++

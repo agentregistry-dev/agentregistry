@@ -43,7 +43,7 @@ func StartDeploymentController(
 
 	workStore := v1alpha1store.NewReconcileWorkStore(pool)
 	eventStore := v1alpha1store.NewReconcileEventStore(pool)
-	sources := NewDeploymentSources(stores)
+	sources := NewSourceIndex(stores)
 	deriver := &DeploymentWorkDeriver{Sources: sources, Work: workStore}
 	projector := &Projector{
 		Events: v1alpha1store.NewControlPlaneEventStore(pool),
