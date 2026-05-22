@@ -1673,15 +1673,14 @@ func TestMCPBuild_EnvelopeManifest(t *testing.T) {
 	skipIfNoDocker(t)
 	tmpDir := t.TempDir()
 
-	dirName := UniqueNameWithPrefix("envmcp")
-	fullName := "e2etest-" + dirName
-	image := "localhost:5001/" + dirName + ":latest"
+	name := UniqueNameWithPrefix("e2etest-envmcp")
+	image := "localhost:5001/" + name + ":latest"
 	CleanupDockerImage(t, image)
 
-	result := RunArctl(t, tmpDir, "init", "mcp", fullName, "--framework", "fastmcp", "--language", "python")
+	result := RunArctl(t, tmpDir, "init", "mcp", name, "--framework", "fastmcp", "--language", "python")
 	RequireSuccess(t, result)
 
-	projectDir := filepath.Join(tmpDir, dirName)
+	projectDir := filepath.Join(tmpDir, name)
 	RequireDirExists(t, projectDir)
 
 	RequireFileContains(t, filepath.Join(projectDir, "mcp.yaml"), "apiVersion: ar.dev/v1alpha1")
@@ -1878,7 +1877,7 @@ spec:
 func TestMCPServer_PackagesShape(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
-	serverName := "user/" + UniqueNameWithPrefix("e2epkg")
+	serverName := UniqueNameWithPrefix("e2etest-pkg")
 	tag := defaultArtifactTag
 
 	t.Cleanup(func() {
@@ -1931,10 +1930,7 @@ spec:
 func TestMCPServer_RemoteShape(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
-	// The server's MCP validator requires the namespace of metadata.name to
-	// be the reverse-DNS of the remote URL host. URL below is
-	// https://mcp.example.com/mcp → host mcp.example.com → namespace com.example.mcp.
-	serverName := "com.example.mcp/" + UniqueNameWithPrefix("e2erem")
+	serverName := UniqueNameWithPrefix("e2etest-rem")
 	tag := defaultArtifactTag
 
 	t.Cleanup(func() {
@@ -1976,7 +1972,7 @@ spec:
 func TestMCPServer_RepositoryShape(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
-	serverName := "repo/" + UniqueNameWithPrefix("e2erepo")
+	serverName := UniqueNameWithPrefix("e2etest-repo")
 	tag := defaultArtifactTag
 
 	t.Cleanup(func() {
