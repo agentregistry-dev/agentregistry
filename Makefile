@@ -1,10 +1,20 @@
 # https://www.gnu.org/software/make/manual/html_node/Special-Variables.html#Special-Variables
 .DEFAULT_GOAL := help
 
-# Load .env into make's variable scope if it exists
+# Load .env into make's variable scope if it exists. Only variables actually
+# defined in .env are exported to recipes; bare `export` would export every
+# Makefile variable, which forces Make to re-evaluate all recursively-defined
+# $(shell ...) variables on every recipe invocation.
+#
+# Surrounding double quotes are stripped from .env values: `include .env`
+# keeps quotes as part of the value, whereas `source .env` in a shell would
+# strip them. Without this, lines like FOO="bar" leak the literal quotes
+# into child processes.
 ifneq (,$(wildcard .env))
   include .env
-  export
+  ENV_VARS := $(shell grep -v '^\s*\#' .env | grep -v '^\s*$$' | sed 's/=.*//')
+  $(foreach v,$(ENV_VARS),$(eval $(v) := $(patsubst "%,%,$(patsubst %",%,$($(v))))))
+  $(foreach v,$(ENV_VARS),$(eval export $(v)))
 endif
 
 # Image configuration
