@@ -33,8 +33,7 @@ func TestRegisterDeploymentLogs_RespectsAuthorize(t *testing.T) {
 	stores := v1alpha1store.NewStores(pool)
 	deployments := stores[v1alpha1.KindDeployment]
 
-	coord := deploymentsvc.NewCoordinator(deploymentsvc.Dependencies{
-		Stores:   stores,
+	resolver := deploymentsvc.NewAdapterResolver(deploymentsvc.ResolverDependencies{
 		Adapters: map[string]types.DeploymentAdapter{noop.RuntimeType: noop.New()},
 		Getter:   internaldb.NewGetter(stores),
 	})
@@ -50,7 +49,7 @@ func TestRegisterDeploymentLogs_RespectsAuthorize(t *testing.T) {
 	deploymentlogs.Register(api, deploymentlogs.Config{
 		BasePrefix: "/v0",
 		Store:      deployments,
-		Resolver:   coord,
+		Resolver:   resolver,
 		Authorize:  authorize,
 	})
 
@@ -77,8 +76,7 @@ func TestRegisterDeploymentLogs_NilAuthorizeAllowsThrough(t *testing.T) {
 	stores := v1alpha1store.NewStores(pool)
 	deployments := stores[v1alpha1.KindDeployment]
 
-	coord := deploymentsvc.NewCoordinator(deploymentsvc.Dependencies{
-		Stores:   stores,
+	resolver := deploymentsvc.NewAdapterResolver(deploymentsvc.ResolverDependencies{
 		Adapters: map[string]types.DeploymentAdapter{noop.RuntimeType: noop.New()},
 		Getter:   internaldb.NewGetter(stores),
 	})
@@ -87,7 +85,7 @@ func TestRegisterDeploymentLogs_NilAuthorizeAllowsThrough(t *testing.T) {
 	deploymentlogs.Register(api, deploymentlogs.Config{
 		BasePrefix: "/v0",
 		Store:      deployments,
-		Resolver:   coord,
+		Resolver:   resolver,
 		Authorize:  nil,
 	})
 

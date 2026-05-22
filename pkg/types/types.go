@@ -196,8 +196,9 @@ type AppOptions struct {
 
 	// DeploymentAdapters registers v1alpha1 DeploymentAdapter
 	// implementations keyed by lowercase Runtime.Spec.Type ("local",
-	// "kubernetes", ...). The reconciler/coordinator looks up by the
-	// type string; downstream builds inject additional adapters here.
+	// "kubernetes", ...). The controller executor and adjacent adapter
+	// resolver look up by the type string; downstream builds inject
+	// additional adapters here.
 	DeploymentAdapters map[string]DeploymentAdapter
 
 	// Authorizers gates every read + write operation on the

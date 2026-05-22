@@ -90,11 +90,12 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		}
 	}()
 
-	// v1alpha1 DeploymentAdapter map consumed by the coordinator below.
+	// v1alpha1 DeploymentAdapter map consumed by the controller executor and
+	// adjacent adapter resolver surfaces.
 	// Built OSS-side from the local + kubernetes ports; enterprise extends
 	// via AppOptions.DeploymentAdapters. Keys are the canonical CamelCase
 	// Spec.Type values; Runtime.Validate canonicalizes user-supplied case
-	// at admission so the coordinator's lookup can use exact-match.
+	// at admission so adapter lookup can use exact-match.
 	deploymentAdapters := map[string]types.DeploymentAdapter{
 		v1alpha1.TypeLocal:      local.NewLocalDeploymentAdapter(cfg.RuntimeDir, cfg.AgentGatewayPort),
 		v1alpha1.TypeKubernetes: kubernetes.NewKubernetesDeploymentAdapter(),
@@ -229,8 +230,7 @@ func buildRouteOptions(
 	}
 
 	if stores != nil {
-		routeOpts.DeploymentLogResolver = deploymentsvc.NewCoordinator(deploymentsvc.Dependencies{
-			Stores:   stores,
+		routeOpts.DeploymentLogResolver = deploymentsvc.NewAdapterResolver(deploymentsvc.ResolverDependencies{
 			Adapters: adapters,
 			Getter:   internaldb.NewGetter(stores),
 		})

@@ -51,8 +51,7 @@ func seedDeploymentFixtures(t *testing.T) (humatest.TestAPI, map[string]*v1alpha
 	})
 	require.NoError(t, err)
 
-	coord := deploymentsvc.NewCoordinator(deploymentsvc.Dependencies{
-		Stores:   stores,
+	resolver := deploymentsvc.NewAdapterResolver(deploymentsvc.ResolverDependencies{
 		Adapters: map[string]types.DeploymentAdapter{noop.RuntimeType: noop.New()},
 		Getter:   database.NewGetter(stores),
 	})
@@ -74,7 +73,7 @@ func seedDeploymentFixtures(t *testing.T) (humatest.TestAPI, map[string]*v1alpha
 	deploymentlogs.Register(api, deploymentlogs.Config{
 		BasePrefix: "/v0",
 		Store:      stores[v1alpha1.KindDeployment],
-		Resolver:   coord,
+		Resolver:   resolver,
 	})
 	return api, stores
 }
