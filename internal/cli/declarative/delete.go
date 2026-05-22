@@ -2,6 +2,7 @@ package declarative
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -107,9 +108,18 @@ func deleteAllTagsResource(cmd *cobra.Command, typeName, name string) error {
 // deleteFromFile reads a YAML file and sends a single DELETE /v0/apply request.
 // Per-resource results are printed; non-zero exit if any failed.
 func deleteFromFile(cmd *cobra.Command, filename string) error {
-	data, err := os.ReadFile(filename)
-	if err != nil {
-		return err
+	var data []byte
+	var err error
+	if filename == "-" {
+		data, err = io.ReadAll(cmd.InOrStdin())
+		if err != nil {
+			return fmt.Errorf("reading stdin: %w", err)
+		}
+	} else {
+		data, err = os.ReadFile(filename)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Validate locally so unknown kinds fail before hitting the network.

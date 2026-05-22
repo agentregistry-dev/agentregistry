@@ -49,7 +49,7 @@ func TestK8sV1Alpha1Apply_MCPServerTarget_CreatesResource(t *testing.T) {
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindMCPServer},
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather"},
 		Spec: v1alpha1.MCPServerSpec{
-			Remote: &v1alpha1.MCPTransport{Type: "streamable-http", URL: "https://api.weather.example/mcp"},
+			Remote: &v1alpha1.MCPRemote{Type: "streamable-http", URL: "https://api.weather.example/mcp"},
 		},
 	}
 	deployment := &v1alpha1.Deployment{

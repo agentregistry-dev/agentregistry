@@ -4,6 +4,7 @@
 package e2e
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -235,6 +236,95 @@ func TestE2E_RunWatch_RebuildsOnFileChange(t *testing.T) {
 		}
 	}
 	t.Fatalf("expected 'Change detected' within 5s; got:\n%s", got)
+}
+
+// TestE2E_InitAgent_MCP_RemoteRef_WiresEnv exercises the full happy path for
+// `arctl init agent --mcp <ref>` against a real registry: seed a remote
+// MCPServer via `arctl apply`, then init an agent referencing it, and verify
+// that the resulting .env carries a MCP_SERVERS_CONFIG entry pointing at the
+// remote URL and that agent.yaml records the ref.
+func TestE2E_InitAgent_MCP_RemoteRef_WiresEnv(t *testing.T) {
+	regURL := RegistryURL(t)
+	tmp := t.TempDir()
+	require.NoError(t, os.Chdir(tmp))
+
+	name := "e2e-test/" + UniqueNameWithPrefix("remote-mcp-wires-env")
+	tag := "latest"
+
+	// Cleanup the registry row even on test failure.
+	t.Cleanup(func() {
+		RunArctl(t, tmp, "delete", "mcpserver", name, "--tag", tag, "--registry-url", regURL)
+	})
+
+	// Seed a remote MCPServer in the registry so --mcp can resolve it.
+	yaml := fmt.Sprintf(`
+apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: %s
+spec:
+  title: E2E Remote MCP for init-wire test
+  remote:
+    type: streamable-http
+    url: https://example.test/mcp
+`, name)
+	yamlPath := writeDeclarativeYAML(t, tmp, "remote-mcp.yaml", yaml)
+	apply := RunArctl(t, tmp, "apply", "-f", yamlPath, "--registry-url", regURL)
+	RequireSuccess(t, apply)
+
+	// arctl init agent myagent --mcp <ref> should wire .env.
+	result := RunArctl(t, tmp,
+		"init", "agent", "myagent",
+		"--framework", "adk", "--language", "python",
+		"--mcp", name,
+		"--registry-url", regURL)
+	RequireSuccess(t, result)
+
+	pd := filepath.Join(tmp, "myagent")
+	env, err := os.ReadFile(filepath.Join(pd, ".env"))
+	require.NoError(t, err)
+	assert.Contains(t, string(env), "MCP_SERVERS_CONFIG=")
+	assert.Contains(t, string(env), fmt.Sprintf(`"name":"%s"`, name))
+	assert.Contains(t, string(env), `"url":"https://example.test/mcp"`)
+
+	agentYAML, err := os.ReadFile(filepath.Join(pd, "agent.yaml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(agentYAML), "name: "+name)
+
+	// Status output should mention the .env wire (printed to stderr).
+	assert.Contains(t, result.Stderr, "wired .env: "+name)
+}
+
+func TestE2E_Run_RemoteOnlyMCP_Errors(t *testing.T) {
+	tmp := t.TempDir()
+	require.NoError(t, os.Chdir(tmp))
+
+	// Hand-craft a project folder shaped like an mcp project (arctl.yaml)
+	// but whose mcp.yaml is Remote-only. arctl init mcp doesn't scaffold
+	// this shape; users would hit it via manual editing or after pulling
+	// a remote MCPServer down with `arctl get`.
+	require.NoError(t, os.WriteFile(filepath.Join(tmp, "arctl.yaml"), []byte(`
+framework: fastmcp
+language: python
+port: 3000
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tmp, "mcp.yaml"), []byte(`
+apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: acme/remote-only
+spec:
+  remote:
+    type: streamable-http
+    url: https://example.test/mcp
+`), 0o644))
+
+	result := RunArctl(t, tmp, "run", "--dry-run")
+	require.NotEqual(t, 0, result.ExitCode, "remote-only mcp.yaml should fail-fast")
+	combined := result.Stderr + result.Stdout
+	assert.Contains(t, combined, "remote MCPServer")
+	assert.Contains(t, combined, "npx -y @modelcontextprotocol/inspector")
+	assert.Contains(t, combined, "https://example.test/mcp")
 }
 
 func contains(s, sub string) bool {

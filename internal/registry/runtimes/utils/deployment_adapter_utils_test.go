@@ -12,12 +12,12 @@ func TestTranslateMCPServer_RemoteAppliesHeaderOverridesAndDefaults(t *testing.T
 	server, err := TranslateMCPServer(context.Background(), &MCPServerRunRequest{
 		Name: "remote server",
 		Spec: v1alpha1.MCPServerSpec{
-			Remote: &v1alpha1.MCPTransport{
+			Remote: &v1alpha1.MCPRemote{
 				Type: "streamable-http",
 				URL:  "https://example.com/mcp",
-				Headers: []v1alpha1.MCPKeyValueInput{
-					{Name: "Authorization", IsRequired: true},
-					{Name: "X-Trace", Default: "trace-default"},
+				Headers: []v1alpha1.HTTPHeader{
+					{Name: "Authorization"},
+					{Name: "X-Trace", Value: "trace-default"},
 				},
 			},
 		},

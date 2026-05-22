@@ -39,8 +39,6 @@ PostgreSQL is bundled in the Helm chart and deployed automatically. The default 
 | Username | `agentregistry`                  |
 | Password | `agentregistry`                  |
 
-Local setup uses `pgvector` for development of vector dependent capabilities.
-
 ### Connecting Directly
 
 Port-forward to access PostgreSQL from your local machine:
@@ -53,16 +51,6 @@ Then connect with psql:
 
 ```bash
 psql -h localhost -U agentregistry -d agentregistry
-```
-
-### pgvector Extension
-
-The `pgvector` extension is automatically available via the `pgvector/pgvector` image. The AgentRegistry server enables it on startup.
-
-To verify manually:
-
-```sql
-SELECT * FROM pg_extension WHERE extname = 'vector';
 ```
 
 ### Data Persistence

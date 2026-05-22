@@ -95,10 +95,16 @@ func (c *Coordinator) Apply(ctx context.Context, deployment *v1alpha1.Deployment
 
 	target, err := c.resolveTarget(ctx, deployment)
 	if err != nil {
+		if errors.Is(err, v1alpha1.ErrDanglingRef) {
+			return c.persistReferencePending(ctx, deployment, err)
+		}
 		return err
 	}
 	runtime, err := c.resolveRuntime(ctx, deployment)
 	if err != nil {
+		if errors.Is(err, v1alpha1.ErrDanglingRef) {
+			return c.persistReferencePending(ctx, deployment, err)
+		}
 		return err
 	}
 
@@ -122,6 +128,22 @@ func (c *Coordinator) Apply(ctx context.Context, deployment *v1alpha1.Deployment
 	}
 
 	return c.persistApplyResult(ctx, deployment, result)
+}
+
+func (c *Coordinator) persistReferencePending(ctx context.Context, deployment *v1alpha1.Deployment, cause error) error {
+	message := "referenced resource is not available yet"
+	if cause != nil {
+		message = cause.Error()
+	}
+	return c.persistApplyResult(ctx, deployment, &types.ApplyResult{
+		Conditions: []v1alpha1.Condition{{
+			Type:               "Ready",
+			Status:             v1alpha1.ConditionFalse,
+			Reason:             "ReferencePending",
+			Message:            message,
+			ObservedGeneration: deployment.Metadata.Generation,
+		}},
+	})
 }
 
 // Remove tears down a Deployment's runtime resources via the adapter and
@@ -259,10 +281,17 @@ func (c *Coordinator) persistApplyResult(ctx context.Context, deployment *v1alph
 		return err
 	}
 	patch := v1alpha1store.PatchOpts{}
-	if len(result.Conditions) > 0 {
+	if len(result.Conditions) > 0 || len(result.Details) > 0 {
 		patch.Status = v1alpha1.StatusPatcher(func(s *v1alpha1.Status) {
 			for _, cond := range result.Conditions {
 				s.SetCondition(cond)
+			}
+			for key, encoded := range result.Details {
+				// Best-effort: a malformed Details value should not block the
+				// rest of the status patch. Adapter authors are responsible
+				// for handling valid JSON; a returned error here just means
+				// that one key is skipped.
+				_ = s.SetDetailsKeyJSON(key, encoded)
 			}
 		})
 	}
