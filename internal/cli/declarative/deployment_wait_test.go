@@ -133,6 +133,45 @@ func TestDeploymentWait_TagFilter(t *testing.T) {
 	assert.Contains(t, out.String(), "deployment/summarizer deployed")
 }
 
+// Unknown --for values are rejected up front instead of waiting until the timeout.
+func TestDeploymentWait_RejectsUnknownForValue(t *testing.T) {
+	srv := deploymentWaitTestServer(t, []v1alpha1.Deployment{
+		deploymentFixture("aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "deploying"),
+	})
+	setupClientForServer(t, srv)
+
+	cmd := declarative.NewWaitCmd()
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+	cmd.SetArgs([]string{"deployment", "summarizer", "--for=garbage", "--interval=1ms", "--timeout=1s"})
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `invalid --for value "garbage"`)
+}
+
+// When --tag is omitted and multiple deployments share the target name, the
+// wait surfaces an ambiguity error rather than silently following one.
+func TestDeploymentWait_AmbiguousTargetWithoutTag(t *testing.T) {
+	srv := deploymentWaitTestServer(t, []v1alpha1.Deployment{
+		deploymentFixture("aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "deployed"),
+		deploymentFixture("aws-v2", "summarizer", "2.0.0", "my-aws", "agent", "deploying"),
+	})
+	setupClientForServer(t, srv)
+
+	cmd := declarative.NewWaitCmd()
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+	cmd.SetArgs([]string{"deployment", "summarizer", "--interval=1ms", "--timeout=1s"})
+
+	err := cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "multiple deployments share target")
+	assert.Contains(t, err.Error(), "--tag to disambiguate")
+	assert.Contains(t, err.Error(), "1.0.0", "ambiguity message must list every conflicting tag")
+	assert.Contains(t, err.Error(), "2.0.0", "ambiguity message must list every conflicting tag")
+}
+
 // Non-deployment kinds are rejected.
 func TestDeploymentWait_RejectsNonDeploymentKinds(t *testing.T) {
 	srv := deploymentWaitTestServer(t, nil)

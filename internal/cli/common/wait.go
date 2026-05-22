@@ -11,7 +11,9 @@ import (
 )
 
 const (
-	// DefaultWaitTimeout is used when WaitOptions.Timeout is zero.
+	// DefaultWaitTimeout is the default for the `arctl wait --timeout` flag.
+	// WaitForDeployment itself does not substitute this for a zero Timeout;
+	// see WaitOptions.Timeout for the helper's zero/negative semantics.
 	DefaultWaitTimeout = 5 * time.Minute
 
 	defaultPollInterval = 2 * time.Second
@@ -26,7 +28,8 @@ const (
 type WaitOptions struct {
 	// TargetStatus is the deployment status the wait succeeds on
 	// (e.g. "deployed", "failed"). Ignored when TargetDeleted is true.
-	// Defaults to "deployed" when both fields are zero.
+	// Defaults to "deployed" when TargetDeleted is false and TargetStatus
+	// is empty.
 	TargetStatus string
 
 	// TargetDeleted, when true, waits for the deployment to disappear
@@ -37,8 +40,8 @@ type WaitOptions struct {
 	// Timeout caps the total wait. See type doc for the three regimes.
 	Timeout time.Duration
 
-	// PollInterval is the delay between poll attempts. Zero uses
-	// defaultPollInterval (2s).
+	// PollInterval is the delay between poll attempts. Zero or negative
+	// values use defaultPollInterval (2s).
 	PollInterval time.Duration
 
 	// Progress is called once after each non-terminal poll with the
@@ -58,7 +61,8 @@ type ResolveDeploymentFunc func(ctx context.Context) (*DeploymentRecord, error)
 // With TargetStatus set, the wait succeeds on dep.Status == TargetStatus
 // and fails on any other terminal state (deployed / failed / undeployed).
 // With TargetDeleted, the wait succeeds on a not-found error and keeps
-// polling otherwise. Context cancellation surfaces as ctx.Err().
+// polling otherwise. Context cancellation unwraps to ctx.Err() (the
+// returned error wraps it via fmt.Errorf "%w").
 func WaitForDeployment(ctx context.Context, resolve ResolveDeploymentFunc, opts WaitOptions) error {
 	if resolve == nil {
 		return errors.New("WaitForDeployment: resolve function is nil")
@@ -86,7 +90,11 @@ func WaitForDeployment(ctx context.Context, resolve ResolveDeploymentFunc, opts 
 		case notFound && opts.TargetDeleted:
 			return nil
 		case notFound:
-			return errors.New("deployment not found")
+			return fmt.Errorf("deployment not found: %w", err)
+		// defensive: ResolveDeploymentFunc's contract forbids (nil, nil),
+		// but a misbehaving resolver would otherwise hit a nil deref below.
+		case dep == nil:
+			return errors.New("WaitForDeployment: resolver returned nil deployment with no error")
 		case !opts.TargetDeleted && dep.Status == target:
 			return nil
 		case !opts.TargetDeleted && isTerminalStatus(dep.Status):
@@ -98,10 +106,7 @@ func WaitForDeployment(ctx context.Context, resolve ResolveDeploymentFunc, opts 
 				dep.Status, target)
 		}
 
-		observed := "deleted"
-		if dep != nil {
-			observed = dep.Status
-		}
+		observed := dep.Status
 		elapsed := time.Since(start)
 
 		if opts.Timeout == 0 || (opts.Timeout > 0 && elapsed >= opts.Timeout) {

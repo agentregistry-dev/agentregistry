@@ -151,6 +151,21 @@ func TestWaitForDeployment_ContextCancellation(t *testing.T) {
 	assert.ErrorIs(t, err, context.Canceled)
 }
 
+func TestWaitForDeployment_ContextCancellationDuringResolve(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	resolve := func(ctx context.Context) (*DeploymentRecord, error) {
+		cancel()
+		return nil, ctx.Err()
+	}
+	err := WaitForDeployment(ctx, resolve, WaitOptions{
+		Timeout:      time.Second,
+		PollInterval: 5 * time.Millisecond,
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.Canceled,
+		"a ctx.Err() returned from resolve must unwrap to context.Canceled after the helper's wrap")
+}
+
 func TestWaitForDeployment_ResolveErrorIsPropagated(t *testing.T) {
 	sentinel := errors.New("registry exploded")
 	resolve := func(ctx context.Context) (*DeploymentRecord, error) {

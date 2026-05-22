@@ -2,6 +2,7 @@ package declarative
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -12,6 +13,10 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
+
+// errAPIClientNotInitialized is returned when the CLI's API client was never
+// constructed (typically because PersistentPreRunE did not run).
+var errAPIClientNotInitialized = errors.New("API client not initialized")
 
 // WaitCmd is the cobra command for "wait".
 // Tests should use NewWaitCmd() for a fresh instance.
@@ -36,7 +41,11 @@ Timeout regimes:
 
   --timeout=5m   (default) wait up to 5 minutes
   --timeout=0    poll once and return the current state
-  --timeout=-1   wait forever`,
+  --timeout=-1   wait forever
+
+When --tag is omitted and multiple deployments share the target name, the
+wait fails with an ambiguity error; pass --tag to pin to a specific
+deployment.`,
 		Example: `  arctl wait deployment my-agent
   arctl wait deployment my-agent --for=failed
   arctl wait deployment my-agent --for=delete --timeout=10m
@@ -64,7 +73,7 @@ func runDeclarativeWait(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("wait is only supported for deployments (got %q)", k.Kind)
 	}
 	if apiClient == nil {
-		return fmt.Errorf("API client not initialized")
+		return errAPIClientNotInitialized
 	}
 
 	forFlag, _ := cmd.Flags().GetString("for")
@@ -80,13 +89,16 @@ func runDeclarativeWait(cmd *cobra.Command, args []string) error {
 				name, status, elapsed.Round(time.Second))
 		},
 	}
-	switch strings.ToLower(strings.TrimSpace(forFlag)) {
-	case "delete", "deleted":
-		opts.TargetDeleted = true
+	normalizedFor := strings.ToLower(strings.TrimSpace(forFlag))
+	switch normalizedFor {
 	case "", "deployed":
 		opts.TargetStatus = "deployed"
+	case "failed", "undeployed":
+		opts.TargetStatus = normalizedFor
+	case "delete", "deleted":
+		opts.TargetDeleted = true
 	default:
-		opts.TargetStatus = strings.ToLower(strings.TrimSpace(forFlag))
+		return fmt.Errorf("invalid --for value %q (want one of: deployed, failed, undeployed, delete)", forFlag)
 	}
 
 	resolve := func(ctx context.Context) (*cliCommon.DeploymentRecord, error) {
@@ -110,6 +122,7 @@ func resolveDeploymentForWait(ctx context.Context, name, tag string) (*cliCommon
 	if err != nil {
 		return nil, err
 	}
+	var matches []*cliCommon.DeploymentRecord
 	for _, dep := range deployments {
 		if dep == nil || dep.TargetName != name {
 			continue
@@ -117,7 +130,19 @@ func resolveDeploymentForWait(ctx context.Context, name, tag string) (*cliCommon
 		if tag != "" && dep.TargetTag != tag {
 			continue
 		}
-		return dep, nil
+		matches = append(matches, dep)
 	}
-	return nil, database.ErrNotFound
+	switch len(matches) {
+	case 0:
+		return nil, database.ErrNotFound
+	case 1:
+		return matches[0], nil
+	default:
+		tags := make([]string, 0, len(matches))
+		for _, m := range matches {
+			tags = append(tags, m.TargetTag)
+		}
+		return nil, fmt.Errorf("multiple deployments share target %q (tags: %s); pass --tag to disambiguate",
+			name, strings.Join(tags, ", "))
+	}
 }
