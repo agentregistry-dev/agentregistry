@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	cliCommon "github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
@@ -162,7 +163,11 @@ func init() {
 		Plural:  "deployments",
 		Aliases: []string{"Deployment"},
 		Get: func(ctx context.Context, name, _ string) (any, error) {
-			return client.GetTyped(ctx, apiClient, v1alpha1.KindDeployment, v1alpha1.DefaultNamespace, name, "", func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} })
+			deployment, err := client.GetTyped(ctx, apiClient, v1alpha1.KindDeployment, v1alpha1.DefaultNamespace, name, "", func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} })
+			if err != nil {
+				return nil, err
+			}
+			return common.DeploymentRecordFromObject(deployment), nil
 		},
 		Delete: func(ctx context.Context, name, tag string, force bool) error {
 			return deleteAny(ctx, v1alpha1.KindDeployment, name, tag, force, func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} })

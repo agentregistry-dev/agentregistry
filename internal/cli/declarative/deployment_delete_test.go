@@ -40,17 +40,16 @@ func deploymentTestServer(t *testing.T, list []v1alpha1.Deployment, failIDs map[
 	mux.HandleFunc("/v0/deployments/", func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimPrefix(r.URL.Path, "/v0/deployments/")
 		parts := strings.Split(path, "/")
-		if len(parts) != 2 {
+		if len(parts) != 1 {
 			http.Error(w, `{"error":"bad get/delete path"}`, http.StatusBadRequest)
 			return
 		}
-		id := parts[0] + "/" + parts[1]
 		switch r.Method {
 		case http.MethodGet:
 			mu.Lock()
 			defer mu.Unlock()
 			for _, d := range list {
-				if d.Metadata.Name == id {
+				if d.Metadata.Name == parts[0] {
 					_ = json.NewEncoder(w).Encode(d)
 					return
 				}
@@ -59,10 +58,10 @@ func deploymentTestServer(t *testing.T, list []v1alpha1.Deployment, failIDs map[
 		case http.MethodDelete:
 			mu.Lock()
 			capturedQuery = append(capturedQuery, r.URL.RawQuery)
-			deleted = append(deleted, id)
+			deleted = append(deleted, parts[0])
 			mu.Unlock()
-			if failIDs[id] {
-				http.Error(w, fmt.Sprintf(`{"error":"simulated delete failure for %s"}`, id), http.StatusInternalServerError)
+			if failIDs[parts[0]] {
+				http.Error(w, fmt.Sprintf(`{"error":"simulated delete failure for %s"}`, parts[0]), http.StatusInternalServerError)
 				return
 			}
 			w.WriteHeader(http.StatusNoContent)
@@ -89,7 +88,7 @@ func setupClientForServer(t *testing.T, srv *httptest.Server) {
 // are left alone.
 func TestDeploymentDelete_RemovesNamedDeployment(t *testing.T) {
 	deployments := []v1alpha1.Deployment{
-		deploymentFixture("default/aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "pending"),
+		deploymentFixture("aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "pending"),
 		deploymentFixture("gcp-v1", "summarizer", "1.0.0", "my-gcp", "agent", "pending"),
 		deploymentFixture("aws-v2", "summarizer", "2.0.0", "my-aws", "agent", "pending"),
 		deploymentFixture("other", "unrelated", "1.0.0", "my-aws", "agent", "pending"),
@@ -98,23 +97,23 @@ func TestDeploymentDelete_RemovesNamedDeployment(t *testing.T) {
 	setupClientForServer(t, srv)
 
 	cmd := declarative.NewDeleteCmd()
-	cmd.SetArgs([]string{"deployment", "default/aws-v1"})
+	cmd.SetArgs([]string{"deployment", "aws-v1"})
 	require.NoError(t, cmd.Execute())
 
-	assert.ElementsMatch(t, []string{"default/aws-v1"}, *deleted,
+	assert.ElementsMatch(t, []string{"aws-v1"}, *deleted,
 		"every deployment targeting summarizer should be deleted; unrelated targets untouched")
 }
 
 // (2) When no deployment matches the target name, returns a not-found error.
 func TestDeploymentDelete_NotFound(t *testing.T) {
 	deployments := []v1alpha1.Deployment{
-		deploymentFixture("default/aws-v2", "other-target", "2.0.0", "my-aws", "agent", "pending"),
+		deploymentFixture("aws-v2", "other-target", "2.0.0", "my-aws", "agent", "pending"),
 	}
 	srv, deleted, _ := deploymentTestServer(t, deployments, nil)
 	setupClientForServer(t, srv)
 
 	cmd := declarative.NewDeleteCmd()
-	cmd.SetArgs([]string{"deployment", "default/summarizer"})
+	cmd.SetArgs([]string{"deployment", "summarizer"})
 	err := cmd.Execute()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found",
@@ -124,21 +123,21 @@ func TestDeploymentDelete_NotFound(t *testing.T) {
 
 func TestDeploymentDelete_ServerFailure(t *testing.T) {
 	deployments := []v1alpha1.Deployment{
-		deploymentFixture("default/aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "pending"),
-		deploymentFixture("default/gcp-v1", "summarizer", "1.0.0", "my-gcp", "agent", "pending"),
+		deploymentFixture("aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "pending"),
+		deploymentFixture("gcp-v1", "summarizer", "1.0.0", "my-gcp", "agent", "pending"),
 	}
 	// Fail the GCP delete only.
-	srv, deleted, _ := deploymentTestServer(t, deployments, map[string]bool{"default/gcp-v1": true})
+	srv, deleted, _ := deploymentTestServer(t, deployments, map[string]bool{"gcp-v1": true})
 	setupClientForServer(t, srv)
 
 	cmd := declarative.NewDeleteCmd()
-	cmd.SetArgs([]string{"deployment", "default/gcp-v1"})
+	cmd.SetArgs([]string{"deployment", "gcp-v1"})
 	err := cmd.Execute()
 	require.Error(t, err, "failure must propagate")
-	assert.Contains(t, err.Error(), "default/gcp-v1", "error should identify which deployment failed")
+	assert.Contains(t, err.Error(), "gcp-v1", "error should identify which deployment failed")
 
 	// Both DELETEs should have been attempted — we don't stop on first failure.
-	assert.ElementsMatch(t, []string{"default/gcp-v1"}, *deleted)
+	assert.ElementsMatch(t, []string{"gcp-v1"}, *deleted)
 }
 
 // (4) --tag is rejected for deployments and runtimes: neither kind has a tag
@@ -159,14 +158,14 @@ func TestDelete_RejectsTagForDeploymentAndRuntime(t *testing.T) {
 // (5) --force sends ?force=true query param to the server.
 func TestDeploymentDelete_ForcePassesQueryParam(t *testing.T) {
 	deployments := []v1alpha1.Deployment{
-		deploymentFixture("default/aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "deployed"),
+		deploymentFixture("aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "deployed"),
 	}
 
 	srv, _, capturedForce := deploymentTestServer(t, deployments, map[string]bool{"default/gcp-v1": true})
 	setupClientForServer(t, srv)
 
 	cmd := declarative.NewDeleteCmd()
-	cmd.SetArgs([]string{"deployment", "default/aws-v1", "--force"})
+	cmd.SetArgs([]string{"deployment", "aws-v1", "--force"})
 	require.NoError(t, cmd.Execute())
 
 	require.Len(t, (*capturedForce), 1)
@@ -185,14 +184,14 @@ func TestDeploymentDelete_ForceWithFileReturnsError(t *testing.T) {
 // (7) Without --force, no ?force query param is sent.
 func TestDeploymentDelete_NoForceFlagOmitsQueryParam(t *testing.T) {
 	deployments := []v1alpha1.Deployment{
-		deploymentFixture("default/aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "deployed"),
+		deploymentFixture("aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "deployed"),
 	}
 
-	srv, _, capturedQuery := deploymentTestServer(t, deployments, map[string]bool{"default/gcp-v1": true})
+	srv, _, capturedQuery := deploymentTestServer(t, deployments, map[string]bool{"gcp-v1": true})
 	setupClientForServer(t, srv)
 
 	cmd := declarative.NewDeleteCmd()
-	cmd.SetArgs([]string{"deployment", "default/aws-v1"})
+	cmd.SetArgs([]string{"deployment", "aws-v1"})
 	require.NoError(t, cmd.Execute())
 
 	require.Len(t, *capturedQuery, 1)

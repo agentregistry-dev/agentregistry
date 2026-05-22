@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -59,6 +60,7 @@ func deploymentFixture(metaName, targetName, targetTag, runtimeID, resourceType,
 
 func deploymentTestServerV1Alpha1(t *testing.T, deployments []v1alpha1.Deployment) *httptest.Server {
 	t.Helper()
+	var mu sync.Mutex
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v0/deployments", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -67,13 +69,37 @@ func deploymentTestServerV1Alpha1(t *testing.T, deployments []v1alpha1.Deploymen
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"items": deployments})
+
+	})
+	mux.HandleFunc("/v0/deployments/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+
+		path := strings.TrimPrefix(r.URL.Path, "/v0/deployments/")
+		parts := strings.Split(path, "/")
+		if len(parts) != 1 {
+			http.Error(w, `{"error":"bad get path"}`, http.StatusBadRequest)
+			return
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		for _, d := range deployments {
+			if d.Metadata.Name == parts[0] {
+				_ = json.NewEncoder(w).Encode(d)
+				return
+			}
+		}
+		w.WriteHeader(http.StatusNotFound)
 	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv
 }
 
-// (1) Get by name returns the matching deployment when exactly one exists.
+// (1) Get by name returns the matching deployment when one exists.
 func TestDeploymentGet_ReturnsMatchByName(t *testing.T) {
 	deployments := []v1alpha1.Deployment{
 		deploymentFixture("aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "deployed"),
@@ -85,39 +111,13 @@ func TestDeploymentGet_ReturnsMatchByName(t *testing.T) {
 	out := &bytes.Buffer{}
 	cmd := declarative.NewGetCmd()
 	cmd.SetOut(out)
-	cmd.SetArgs([]string{"deployment", "summarizer"})
+	cmd.SetArgs([]string{"deployment", "aws-v1"})
 	require.NoError(t, cmd.Execute())
 
-	assert.Contains(t, out.String(), "summarizer",
-		"get should render the matching deployment's name in the table output")
+	assert.Contains(t, out.String(), "default/aws-v1",
+		"get should render the matching deployment's name in the table output "+out.String())
 	assert.NotContains(t, out.String(), "unrelated",
 		"unrelated deployments must not appear")
-}
-
-// (2) Get returns the first match when multiple deployments share a name.
-// Users needing disambiguation should use `arctl get deployments`.
-func TestDeploymentGet_ReturnsFirstWhenMultipleShareName(t *testing.T) {
-	deployments := []v1alpha1.Deployment{
-		deploymentFixture("aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "deployed"),
-		deploymentFixture("gcp-v1", "summarizer", "1.0.0", "my-gcp", "agent", "deployed"),
-		deploymentFixture("aws-v2", "summarizer", "2.0.0", "my-aws", "agent", "deployed"),
-	}
-	srv := deploymentTestServerV1Alpha1(t, deployments)
-	setupClientForServer(t, srv)
-
-	out := &bytes.Buffer{}
-	cmd := declarative.NewGetCmd()
-	cmd.SetOut(out)
-	cmd.SetArgs([]string{"deployment", "summarizer"})
-	require.NoError(t, cmd.Execute())
-
-	// First match by list order is aws-v1; output should include its ID, not the others.
-	assert.Contains(t, out.String(), "default/aws-v1",
-		"first deployment for the name should be returned")
-	assert.NotContains(t, out.String(), "default/gcp-v1",
-		"only the first match is surfaced; subsequent matches are filtered out")
-	assert.NotContains(t, out.String(), "default/aws-v2",
-		"other deployments must not be surfaced when get returns first match")
 }
 
 // (3) Get surfaces the registry's not-found sentinel when no deployment matches.
@@ -176,7 +176,7 @@ func TestDeploymentGet_YAMLOutputIncludesStatus(t *testing.T) {
 	out := &bytes.Buffer{}
 	cmd := declarative.NewGetCmd()
 	cmd.SetOut(out)
-	cmd.SetArgs([]string{"deployment", "summarizer", "-o", "yaml"})
+	cmd.SetArgs([]string{"deployment", "aws-v1", "-o", "yaml"})
 	require.NoError(t, cmd.Execute())
 
 	got := out.String()
