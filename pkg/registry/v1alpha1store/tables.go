@@ -6,44 +6,20 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
-// TableFor is the canonical mapping from v1alpha1 Kind name to
-// its backing table in the dedicated `v1alpha1.*` PostgreSQL schema.
-// Callers that need a *Store should prefer NewStores below
-// rather than constructing one per kind.
-//
-// Downstream builds that register additional kinds via
-// v1alpha1.Scheme.Register should extend their own copy of this map
-// rather than mutating this one; the OSS side treats it as effectively
-// const after init.
-var TableFor = map[string]string{
-	v1alpha1.KindAgent:      "v1alpha1.agents",
-	v1alpha1.KindMCPServer:  "v1alpha1.mcp_servers",
-	v1alpha1.KindSkill:      "v1alpha1.skills",
-	v1alpha1.KindPrompt:     "v1alpha1.prompts",
-	v1alpha1.KindRuntime:    "v1alpha1.runtimes",
-	v1alpha1.KindDeployment: "v1alpha1.deployments",
-}
-
-// NewStores builds one *Store per built-in v1alpha1 Kind, bound
-// to its canonical table. The returned map is keyed by Kind name (e.g.
-// "Agent", "MCPServer") and is the single input the router/apply
-// layers take. They never look up tables by string literal themselves.
-//
-// Storage behavior comes from v1alpha1.BuiltinKindDescriptors so built-in kind
-// registration has one source of truth. Iteration order stays stable across
-// builds (important for OpenAPI output).
+// NewStores builds one *Store per registered v1alpha1 Kind, bound to the table
+// declared by v1alpha1.KindDescriptor. The returned map is keyed by Kind name
+// (e.g. "Agent", "MCPServer") and is the single input the router/apply layers
+// take. They never look up tables by string literal themselves.
 //
 // The variadic opts are applied to every Store produced. Downstream
 // callers pass WithAuditor(...) here to plumb a single audit sink
 // across all kinds in one call.
 func NewStores(pool *pgxpool.Pool, opts ...StoreOption) map[string]*Store {
-	out := make(map[string]*Store, len(v1alpha1.BuiltinKinds))
-	for _, descriptor := range v1alpha1.BuiltinKindDescriptors() {
+	descriptors := v1alpha1.KindDescriptors()
+	out := make(map[string]*Store, len(descriptors))
+	for _, descriptor := range descriptors {
 		kind := descriptor.Kind
-		table, ok := TableFor[kind]
-		if !ok {
-			// BuiltinKinds and TableFor must stay in sync — a missing
-			// table here is a coding error, not a runtime condition.
+		if descriptor.Table == "" {
 			panic("v1alpha1store: no table registered for kind " + kind)
 		}
 		// Prepend WithKind so per-kind audit events name the kind
@@ -53,9 +29,9 @@ func NewStores(pool *pgxpool.Pool, opts ...StoreOption) map[string]*Store {
 		kindOpts := append([]StoreOption{WithKind(kind)}, opts...)
 		switch descriptor.Storage {
 		case v1alpha1.KindStorageMutableObject:
-			out[kind] = NewMutableObjectStore(pool, table, kindOpts...)
+			out[kind] = NewMutableObjectStore(pool, descriptor.Table, kindOpts...)
 		case v1alpha1.KindStorageTaggedArtifact:
-			out[kind] = NewStore(pool, table, kindOpts...)
+			out[kind] = NewStore(pool, descriptor.Table, kindOpts...)
 		default:
 			panic("v1alpha1store: no storage behavior registered for kind " + kind)
 		}

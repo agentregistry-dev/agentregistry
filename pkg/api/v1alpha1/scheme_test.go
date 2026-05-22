@@ -40,8 +40,18 @@ func TestBuiltinKindDescriptorsDriveKindMetadata(t *testing.T) {
 	if agent.Storage != KindStorageTaggedArtifact {
 		t.Fatalf("agent storage = %s, want %s", agent.Storage, KindStorageTaggedArtifact)
 	}
+	if agent.Plural != "agents" || agent.Table != "v1alpha1.agents" {
+		t.Fatalf("agent routing/storage = %s/%s", agent.Plural, agent.Table)
+	}
 	if !IsTaggedArtifactKind(KindAgent) {
 		t.Fatalf("agent should be tagged artifact kind")
+	}
+	mcp, ok := KindDescriptorFor(KindMCPServer)
+	if !ok {
+		t.Fatalf("missing %s descriptor", KindMCPServer)
+	}
+	if mcp.Plural != "mcpservers" || mcp.Table != "v1alpha1.mcp_servers" {
+		t.Fatalf("mcpserver routing/storage = %s/%s", mcp.Plural, mcp.Table)
 	}
 
 	deployment, ok := BuiltinKindDescriptor(KindDeployment)
@@ -50,6 +60,9 @@ func TestBuiltinKindDescriptorsDriveKindMetadata(t *testing.T) {
 	}
 	if deployment.Storage != KindStorageMutableObject {
 		t.Fatalf("deployment storage = %s, want %s", deployment.Storage, KindStorageMutableObject)
+	}
+	if deployment.Plural != "deployments" || deployment.Table != "v1alpha1.deployments" {
+		t.Fatalf("deployment routing/storage = %s/%s", deployment.Plural, deployment.Table)
 	}
 	if !deployment.Projection.IncludeTerminating {
 		t.Fatalf("deployment projection should include terminating rows")

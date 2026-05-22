@@ -36,17 +36,9 @@ func NewScheme() *Scheme {
 	return &Scheme{kinds: make(map[string]kindEntry)}
 }
 
-// Default is the package-level Scheme pre-registered with every kind defined
-// in this package. Extension kinds may register onto it at init.
-var Default = newDefaultScheme()
-
-func newDefaultScheme() *Scheme {
-	s := NewScheme()
-	for _, descriptor := range BuiltinKindDescriptors() {
-		s.MustRegister(descriptor.Kind, descriptor.SpecSample, descriptor.NewObject)
-	}
-	return s
-}
+// Default is the package-level Scheme. Built-in and extension kinds register
+// onto it through MustRegisterKind at init.
+var Default = NewScheme()
 
 // Register associates a kind name with a spec type and a constructor for the
 // typed envelope. newObject must return a pointer to a zero-valued envelope
@@ -144,7 +136,7 @@ func IsContentRegistryKind(kind string) bool {
 // IsTaggedArtifactKind reports whether refs to kind may use tag pinning and
 // whether the private store behavior keys rows by namespace/name/tag.
 func IsTaggedArtifactKind(kind string) bool {
-	descriptor, ok := BuiltinKindDescriptor(kind)
+	descriptor, ok := KindDescriptorFor(kind)
 	return ok && descriptor.Storage == KindStorageTaggedArtifact
 }
 

@@ -15,8 +15,6 @@
 package v1alpha1
 
 import (
-	"errors"
-	"fmt"
 	"strings"
 	"sync"
 )
@@ -43,23 +41,7 @@ var (
 // resource handlers. It is intended for downstream kinds whose plural does not
 // match the default strings.ToLower(kind)+"s" convention.
 func RegisterPlural(kind, plural string) error {
-	kind = strings.TrimSpace(kind)
-	plural = strings.TrimSpace(plural)
-	if kind == "" {
-		return errors.New("v1alpha1: cannot register plural for empty kind")
-	}
-	if plural == "" {
-		return fmt.Errorf("v1alpha1: cannot register empty plural for kind %q", kind)
-	}
-
-	key := strings.ToLower(kind)
-	pluralOverridesMu.Lock()
-	defer pluralOverridesMu.Unlock()
-	if existing, ok := pluralOverrides[key]; ok && existing != plural {
-		return fmt.Errorf("v1alpha1: plural for kind %q already registered as %q", kind, existing)
-	}
-	pluralOverrides[key] = plural
-	return nil
+	return DefaultKindRegistry.UpdatePlural(kind, plural)
 }
 
 // MustRegisterPlural is RegisterPlural that panics on error. Use at init.
@@ -74,11 +56,14 @@ func MustRegisterPlural(kind, plural string) {
 // handler uses when cfg.PluralKind is empty: ToLower(kind) + "s". Downstream
 // builds can override irregular plurals with RegisterPlural.
 func PluralFor(kind string) string {
+	if descriptor, ok := KindDescriptorFor(kind); ok && descriptor.Plural != "" {
+		return descriptor.Plural
+	}
 	pluralOverridesMu.RLock()
 	plural, ok := pluralOverrides[strings.ToLower(kind)]
 	pluralOverridesMu.RUnlock()
 	if ok {
 		return plural
 	}
-	return strings.ToLower(kind) + "s"
+	return defaultRoutePlural(kind)
 }

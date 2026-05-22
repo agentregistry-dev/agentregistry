@@ -11,6 +11,10 @@ type Runtime struct {
 	Status   Status      `json:"status,omitzero" yaml:"status,omitempty"`
 }
 
+func init() {
+	MustRegisterKind[*Runtime, RuntimeSpec](KindRuntime, WithMutableObjectStorage())
+}
+
 // Built-in runtime type discriminators. Canonical form is CamelCase.
 // Manifests may write Spec.Type in any casing (`local`, `LOCAL`,
 // `Local`); Runtime.Validate looks the input up case-insensitively in

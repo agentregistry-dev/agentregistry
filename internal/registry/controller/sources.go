@@ -74,7 +74,7 @@ func NewSourceIndex(stores map[string]*v1alpha1store.Store, opts ...SourceIndexO
 
 func sourceProjectionPolicy(kind string, overrides map[string]v1alpha1.ProjectionPolicy) v1alpha1.ProjectionPolicy {
 	var projection v1alpha1.ProjectionPolicy
-	if descriptor, ok := v1alpha1.BuiltinKindDescriptor(kind); ok {
+	if descriptor, ok := v1alpha1.KindDescriptorFor(kind); ok {
 		projection = descriptor.Projection
 	}
 	if override, ok := overrides[kind]; ok {
