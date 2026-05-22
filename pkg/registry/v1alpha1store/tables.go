@@ -1,6 +1,8 @@
 package v1alpha1store
 
 import (
+	"fmt"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
@@ -18,23 +20,40 @@ func NewStores(pool *pgxpool.Pool, opts ...StoreOption) map[string]*Store {
 	descriptors := v1alpha1.KindDescriptors()
 	out := make(map[string]*Store, len(descriptors))
 	for _, descriptor := range descriptors {
-		kind := descriptor.Kind
-		if descriptor.Table == "" {
-			panic("v1alpha1store: no table registered for kind " + kind)
+		store, err := newStoreForDescriptor(pool, descriptor, opts...)
+		if err != nil {
+			panic(err)
 		}
-		// Prepend WithKind so per-kind audit events name the kind
-		// correctly even if the inbound object's TypeMeta is empty.
-		// Caller-supplied opts win (they appear after WithKind in the
-		// option chain).
-		kindOpts := append([]StoreOption{WithKind(kind)}, opts...)
-		switch descriptor.Storage {
-		case v1alpha1.KindStorageMutableObject:
-			out[kind] = NewMutableObjectStore(pool, descriptor.Table, kindOpts...)
-		case v1alpha1.KindStorageTaggedArtifact:
-			out[kind] = NewStore(pool, descriptor.Table, kindOpts...)
-		default:
-			panic("v1alpha1store: no storage behavior registered for kind " + kind)
-		}
+		out[descriptor.Kind] = store
 	}
 	return out
+}
+
+// NewStoreForKind builds the store described by the registered v1alpha1 kind.
+// Use this when a caller needs a dedicated handle for one kind but still wants
+// table and storage behavior to come from the shared kind registry.
+func NewStoreForKind(pool *pgxpool.Pool, kind string, opts ...StoreOption) (*Store, error) {
+	descriptor, ok := v1alpha1.KindDescriptorFor(kind)
+	if !ok {
+		return nil, fmt.Errorf("v1alpha1store: kind %q is not registered", kind)
+	}
+	return newStoreForDescriptor(pool, descriptor, opts...)
+}
+
+func newStoreForDescriptor(pool *pgxpool.Pool, descriptor v1alpha1.KindDescriptor, opts ...StoreOption) (*Store, error) {
+	kind := descriptor.Kind
+	if descriptor.Table == "" {
+		return nil, fmt.Errorf("v1alpha1store: no table registered for kind %s", kind)
+	}
+	// Prepend WithKind so per-kind audit events name the kind correctly even if
+	// the inbound object's TypeMeta is empty. Caller-supplied opts win.
+	kindOpts := append([]StoreOption{WithKind(kind)}, opts...)
+	switch descriptor.Storage {
+	case v1alpha1.KindStorageMutableObject:
+		return NewMutableObjectStore(pool, descriptor.Table, kindOpts...), nil
+	case v1alpha1.KindStorageTaggedArtifact:
+		return NewStore(pool, descriptor.Table, kindOpts...), nil
+	default:
+		return nil, fmt.Errorf("v1alpha1store: no storage behavior registered for kind %s", kind)
+	}
 }
