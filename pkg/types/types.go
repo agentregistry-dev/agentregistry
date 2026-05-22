@@ -262,6 +262,13 @@ type AppOptions struct {
 	// content artifacts.
 	V1Alpha1MutableStoreKinds map[string]bool
 
+	// V1Alpha1ProjectionPolicies overrides controller source projection
+	// behavior for additional v1alpha1 kinds. Built-ins get defaults from
+	// v1alpha1.KindDescriptor; downstream mutable kinds that need
+	// delete/finalizer reconciliation can set IncludeTerminating here without
+	// adding controller switch cases.
+	V1Alpha1ProjectionPolicies map[string]v1alpha1.ProjectionPolicy
+
 	// RegistryValidator overrides the per-package registry
 	// validator (the dispatcher consulted on apply to confirm
 	// each declared package — npm / pypi / oci / nuget / mcpb — exists

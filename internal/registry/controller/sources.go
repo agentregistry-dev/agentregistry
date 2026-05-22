@@ -43,16 +43,23 @@ type SourceIndex struct {
 	items krt.StaticCollection[SourceRow]
 }
 
-func NewSourceIndex(stores map[string]*v1alpha1store.Store) *SourceIndex {
+// SourceIndexOptions configures generic source projection behavior.
+type SourceIndexOptions struct {
+	ProjectionPolicies map[string]v1alpha1.ProjectionPolicy
+}
+
+// NewSourceIndex creates a KRT source read model for registered v1alpha1 stores.
+func NewSourceIndex(stores map[string]*v1alpha1store.Store, opts ...SourceIndexOptions) *SourceIndex {
+	var options SourceIndexOptions
+	if len(opts) > 0 {
+		options = opts[0]
+	}
 	kinds := make(map[string]sourceKind, len(stores))
 	for kind := range stores {
 		if _, ok := newRegisteredObject(kind); !ok {
 			continue
 		}
-		var projection v1alpha1.ProjectionPolicy
-		if descriptor, ok := v1alpha1.BuiltinKindDescriptor(kind); ok {
-			projection = descriptor.Projection
-		}
+		projection := sourceProjectionPolicy(kind, options.ProjectionPolicies)
 		kinds[kind] = sourceKind{
 			Kind:               kind,
 			IncludeTerminating: projection.IncludeTerminating,
@@ -63,6 +70,17 @@ func NewSourceIndex(stores map[string]*v1alpha1store.Store) *SourceIndex {
 		kinds:  kinds,
 		items:  krt.NewStaticCollection[SourceRow](nil, nil, krt.WithName("agentregistry-sources")),
 	}
+}
+
+func sourceProjectionPolicy(kind string, overrides map[string]v1alpha1.ProjectionPolicy) v1alpha1.ProjectionPolicy {
+	var projection v1alpha1.ProjectionPolicy
+	if descriptor, ok := v1alpha1.BuiltinKindDescriptor(kind); ok {
+		projection = descriptor.Projection
+	}
+	if override, ok := overrides[kind]; ok {
+		projection = override
+	}
+	return projection
 }
 
 // Refresh rebuilds every source collection from canonical store tables.

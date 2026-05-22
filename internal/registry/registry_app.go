@@ -103,7 +103,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	maps.Copy(deploymentAdapters, options.DeploymentAdapters)
 	pool := db.Pool()
 	stores := buildStores(pool, options.V1Alpha1StoreTables, options.V1Alpha1MutableStoreKinds, options.Auditor)
-	if _, err := controller.StartDeploymentController(ctx, pool, stores, deploymentAdapters); err != nil {
+	if _, err := controller.StartDeploymentController(ctx, pool, stores, deploymentAdapters, options.V1Alpha1ProjectionPolicies); err != nil {
 		return fmt.Errorf("start deployment controller: %w", err)
 	}
 

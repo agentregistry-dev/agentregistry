@@ -8,6 +8,7 @@ import (
 	"time"
 
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -33,6 +34,7 @@ func StartDeploymentController(
 	pool *pgxpool.Pool,
 	stores map[string]*v1alpha1store.Store,
 	adapters map[string]types.DeploymentAdapter,
+	projectionPolicies map[string]v1alpha1.ProjectionPolicy,
 ) (*Runtime, error) {
 	if pool == nil {
 		return nil, nil
@@ -43,7 +45,7 @@ func StartDeploymentController(
 
 	workStore := v1alpha1store.NewReconcileWorkStore(pool)
 	eventStore := v1alpha1store.NewReconcileEventStore(pool)
-	sources := NewSourceIndex(stores)
+	sources := NewSourceIndex(stores, SourceIndexOptions{ProjectionPolicies: projectionPolicies})
 	deriver := &DeploymentWorkDeriver{Sources: sources, Work: workStore}
 	projector := &Projector{
 		Events: v1alpha1store.NewControlPlaneEventStore(pool),
