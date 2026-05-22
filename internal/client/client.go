@@ -310,32 +310,13 @@ func (c *Client) List(ctx context.Context, kind string, opts ListOpts) ([]v1alph
 	return resp.Items, resp.NextCursor, nil
 }
 
-// DeleteOpts carries optional flags for Delete. Zero-value is the safe default.
-type DeleteOpts struct {
-	// Force=true asks the server to skip generic PostDelete hooks. Built-in
-	// Deployment teardown is controller-owned and still runs through its
-	// finalizer path.
-	Force bool
-}
-
 // Delete soft-deletes a row. When tag is empty it uses the name-only
 // mutable-object route; otherwise it deletes the exact tag route. Returns
 // ErrNotFound when the row doesn't exist. See Store.Delete for the
 // soft-delete semantics (the row stays visible with DeletionTimestamp
 // set until the GC pass purges it).
-func (c *Client) Delete(ctx context.Context, kind, namespace, name, tag string, opts ...DeleteOpts) error {
-	var force bool
-	if len(opts) > 0 {
-		force = opts[0].Force
-	}
+func (c *Client) Delete(ctx context.Context, kind, namespace, name, tag string) error {
 	q := namespaceQuery(namespace)
-	if force {
-		if q == "" {
-			q = "?force=true"
-		} else {
-			q += "&force=true"
-		}
-	}
 	path := fmt.Sprintf("/%s/%s%s",
 		v1alpha1.PluralFor(kind),
 		url.PathEscape(name),

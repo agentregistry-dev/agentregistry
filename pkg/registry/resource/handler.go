@@ -240,16 +240,11 @@ type deleteInput struct {
 	Namespace string `query:"namespace" doc:"Namespace (internal; defaults to 'default')."`
 	Name      string `path:"name"`
 	Tag       string `path:"tag"`
-	// Force=true skips the kind's generic PostDelete hook. Built-in
-	// Deployment teardown still runs asynchronously through the controller
-	// finalizer path.
-	Force bool `query:"force" doc:"Skip generic post-delete hooks; Deployment teardown is still controller-owned." default:"false"`
 }
 
 type deleteMutableInput struct {
 	Namespace string `query:"namespace" doc:"Namespace (internal; defaults to 'default')."`
 	Name      string `path:"name"`
-	Force     bool   `query:"force" doc:"Skip provider-specific teardown and only remove the registry record." default:"false"`
 }
 
 type listInput struct {
@@ -540,7 +535,7 @@ func registerDelete[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T
 			if err != nil {
 				return nil, err
 			}
-			return runDelete(ctx, cfg, newObj, kind, ns, name, tag, in.Force)
+			return runDelete(ctx, cfg, newObj, kind, ns, name, tag)
 		})
 		return
 	}
@@ -550,11 +545,11 @@ func registerDelete[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T
 		if err != nil {
 			return nil, err
 		}
-		return runDeleteLatest(ctx, cfg, newObj, kind, ns, name, in.Force)
+		return runDeleteLatest(ctx, cfg, newObj, kind, ns, name)
 	})
 }
 
-func runDeleteLatest[T v1alpha1.Object](ctx context.Context, cfg Config, newObj func() T, kind, ns, name string, force bool) (*deleteOutput, error) {
+func runDeleteLatest[T v1alpha1.Object](ctx context.Context, cfg Config, newObj func() T, kind, ns, name string) (*deleteOutput, error) {
 	// Use the terminating-aware lookup so a repeated DELETE on a row that's
 	// already mid-teardown stays idempotent. Without this the second call
 	// 404s the moment deletion_timestamp lands (GetLatest filters those
@@ -573,14 +568,13 @@ func runDeleteLatest[T v1alpha1.Object](ctx context.Context, cfg Config, newObj 
 		return nil, huma.Error500InternalServerError("decode "+kind, err)
 	}
 	dopts := deleteOpts{Authorize: cfg.Authorize}
-	if cfg.PostDelete != nil && !force {
+	if cfg.PostDelete != nil {
 		dopts.PostDelete = cfg.PostDelete
 	}
 	if cfg.DeleteAdmission != nil || dopts.PostDelete != nil {
 		dopts.PreDeleteObject = obj
 	}
 	dopts.DeleteAdmission = cfg.DeleteAdmission
-	dopts.Force = force
 	if _, ae := deleteCore(ctx, cfg.Store, kind, ns, name, "", dopts, false); ae != nil {
 		return nil, mapApplyErrorToHuma(ae, kind, ns, name, "")
 	}
@@ -598,10 +592,9 @@ func getLatestForRead(ctx context.Context, cfg Config, ns, name string) (*v1alph
 	return cfg.Store.GetLatest(ctx, ns, name)
 }
 
-func runDelete[T v1alpha1.Object](ctx context.Context, cfg Config, newObj func() T, kind, ns, name, tag string, force bool) (*deleteOutput, error) {
+func runDelete[T v1alpha1.Object](ctx context.Context, cfg Config, newObj func() T, kind, ns, name, tag string) (*deleteOutput, error) {
 	var preDelete v1alpha1.Object
-	runHook := cfg.PostDelete != nil && !force
-	if runHook {
+	if cfg.PostDelete != nil {
 		row, err := cfg.Store.Get(ctx, ns, name, tag)
 		if err != nil {
 			return nil, mapNotFound(err, kind, ns, name, tag)
@@ -617,11 +610,10 @@ func runDelete[T v1alpha1.Object](ctx context.Context, cfg Config, newObj func()
 		Authorize:       cfg.Authorize,
 		PreDeleteObject: preDelete,
 	}
-	if runHook {
+	if cfg.PostDelete != nil {
 		dopts.PostDelete = cfg.PostDelete
 	}
 	dopts.DeleteAdmission = cfg.DeleteAdmission
-	dopts.Force = force
 	if _, ae := deleteCore(ctx, cfg.Store, kind, ns, name, tag, dopts, false); ae != nil {
 		return nil, mapApplyErrorToHuma(ae, kind, ns, name, tag)
 	}

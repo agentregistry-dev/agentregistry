@@ -41,29 +41,24 @@ TYPE must be one of: agent, mcp, skill, prompt, deployment
   arctl delete agent acme-summarizer --tag stable
   arctl delete agent acme-summarizer --all-tags
   arctl delete mcp acme-fetch --tag stable
-  arctl delete deployment my-agent --force`,
+  arctl delete deployment my-agent`,
 		SilenceUsage: true,
 		RunE:         runDeclarativeDelete,
 	}
 	cmd.Flags().StringP("filename", "f", "", "YAML file to read resources from")
 	cmd.Flags().String("tag", "", "Specific tag to delete (taggable artifact kinds only; defaults to latest)")
-	cmd.Flags().Bool("force", false, "Skip provider-specific teardown and only remove the registry record (deployments only)")
 	cmd.Flags().Bool("all-tags", false, "Delete every tag of NAME (taggable artifact kinds only)")
 	return cmd
 }
 
 func runDeclarativeDelete(cmd *cobra.Command, args []string) error {
 	filename, _ := cmd.Flags().GetString("filename")
-	force, _ := cmd.Flags().GetBool("force")
 	allTags, _ := cmd.Flags().GetBool("all-tags")
 	tag, _ := cmd.Flags().GetString("tag")
 	allTagsFlag := "--all-tags"
 	tagFlag := "--tag"
 
 	if filename != "" {
-		if force {
-			return fmt.Errorf("--force cannot be used with -f; it only applies to explicit deployment deletes")
-		}
 		if allTags {
 			return fmt.Errorf("%s cannot be used with -f", allTagsFlag)
 		}
@@ -78,12 +73,9 @@ func runDeclarativeDelete(cmd *cobra.Command, args []string) error {
 		if tag != "" {
 			return fmt.Errorf("%s and %s are mutually exclusive", tagFlag, allTagsFlag)
 		}
-		if force {
-			return fmt.Errorf("--force cannot be used with %s", allTagsFlag)
-		}
 		return deleteAllTagsResource(cmd, args[0], args[1])
 	}
-	return deleteResource(cmd, args[0], args[1], tag, force)
+	return deleteResource(cmd, args[0], args[1], tag)
 }
 
 // deleteAllTagsResource removes every live tag of (kind, name).
@@ -147,14 +139,10 @@ func deleteFromFile(cmd *cobra.Command, filename string) error {
 }
 
 // deleteResource performs an explicit per-kind delete using the registry to resolve the kind.
-func deleteResource(cmd *cobra.Command, typeName, name, tag string, force bool) error {
+func deleteResource(cmd *cobra.Command, typeName, name, tag string) error {
 	k, err := scheme.Lookup(typeName)
 	if err != nil {
 		return err
-	}
-
-	if force && k.Kind != "deployment" {
-		return fmt.Errorf("--force is only supported for deployments")
 	}
 
 	// Deployments and runtimes have no tag of their own; rejecting --tag here
@@ -173,7 +161,7 @@ func deleteResource(cmd *cobra.Command, typeName, name, tag string, force bool) 
 	} else {
 		fmt.Fprintf(cmd.OutOrStdout(), "Deleting %s %s...\n", k.Kind, name)
 	}
-	if err := deleteItem(k, name, tag, force); err != nil {
+	if err := deleteItem(k, name, tag); err != nil {
 		if tag != "" {
 			return fmt.Errorf("failed to delete %s %q tag %s: %w", k.Kind, name, tag, err)
 		}

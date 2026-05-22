@@ -123,7 +123,6 @@ type DeleteAdmissionInput struct {
 	Object     v1alpha1.Object
 	Store      any
 	PostDelete PostDelete
-	Force      bool
 }
 
 type DeleteAdmissionResult struct {

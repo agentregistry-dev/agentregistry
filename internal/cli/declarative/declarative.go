@@ -145,8 +145,8 @@ func init() {
 		ListFunc: func(ctx context.Context, opts scheme.ListOpts) ([]any, error) {
 			return listAny(ctx, v1alpha1.KindRuntime, opts, func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} })
 		},
-		Delete: func(ctx context.Context, name, tag string, force bool) error {
-			return deleteAny(ctx, v1alpha1.KindRuntime, name, tag, force, func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} })
+		Delete: func(ctx context.Context, name, tag string) error {
+			return deleteAny(ctx, v1alpha1.KindRuntime, name, tag, func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} })
 		},
 	})
 
@@ -168,8 +168,8 @@ func init() {
 			}
 			return cliCommon.DeploymentRecordFromObject(deployment), nil
 		},
-		Delete: func(ctx context.Context, name, tag string, force bool) error {
-			return deleteAny(ctx, v1alpha1.KindDeployment, name, tag, force, func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} })
+		Delete: func(ctx context.Context, name, tag string) error {
+			return deleteAny(ctx, v1alpha1.KindDeployment, name, tag, func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} })
 		},
 		ListFunc: func(ctx context.Context, _ scheme.ListOpts) ([]any, error) {
 			return listDeploymentAny(ctx)
@@ -229,8 +229,8 @@ func typedKind[T v1alpha1.Object](
 		ListFunc: func(ctx context.Context, opts scheme.ListOpts) ([]any, error) {
 			return listAny(ctx, canonicalKind, opts, newObj)
 		},
-		Delete: func(ctx context.Context, name, tag string, force bool) error {
-			return deleteAny(ctx, canonicalKind, name, tag, force, newObj)
+		Delete: func(ctx context.Context, name, tag string) error {
+			return deleteAny(ctx, canonicalKind, name, tag, newObj)
 		},
 		ListTags: func(ctx context.Context, name string) ([]any, error) {
 			return listTagsAny(ctx, canonicalKind, name, newObj)
