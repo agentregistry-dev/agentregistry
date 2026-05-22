@@ -79,18 +79,17 @@ type Config struct {
 
 	// PostUpsert is optional; when set, the apply handler invokes it
 	// after a successful Upsert + read-back so the kind can drive
-	// post-persist reconciliation. Deployment uses this to call
-	// Coordinator.Apply, which dispatches to the platform
-	// adapter and patches status.
+	// post-persist reconciliation. Built-in Deployment adapter side effects
+	// are not wired through this hook; they are owned by the controller
+	// executor after a durable reconcile_work claim.
 	//
 	// Hook errors surface as 500 — the row is already persisted, so a
 	// failure here indicates degraded state the caller should retry.
 	//
-	// Known limitation (pre-Phase-2-KRT): Store.Upsert commits its own
-	// transaction before the hook fires, so a hook failure leaves the
-	// row persisted with stale Status (whatever the previous reconcile
-	// wrote). The caller sees a 500, but a follow-up GetLatest still
-	// returns the row.
+	// Known limitation: Store.Upsert commits its own transaction before the
+	// hook fires, so a hook failure leaves the row persisted with stale Status
+	// (whatever the previous reconcile wrote). The caller sees a 500, but a
+	// follow-up GetLatest still returns the row.
 	//
 	// The hook re-fires on every PUT — including identical-spec
 	// re-applies that are a no-op at the Store layer — because the
@@ -100,17 +99,15 @@ type Config struct {
 	// failure clears as soon as the operator re-applies (or a periodic
 	// CI re-apply succeeds), without forcing a spec bump.
 	//
-	// KRT will move this to an asynchronous reconcile loop with a
-	// proper Pending → Failed condition transition; the contract is
-	// pinned by TestResourceRegister_PostUpsertFailureLeavesPersistedRow.
+	// The generic hook failure contract is pinned by
+	// TestResourceRegister_PostUpsertFailureLeavesPersistedRow.
 	PostUpsert func(ctx context.Context, obj v1alpha1.Object) error
 
 	// PostDelete is optional; when set, the delete handler invokes it
 	// after Store.Delete (which sets DeletionTimestamp). The row still
 	// exists at this point — the soft-delete + GC pass owns hard
-	// removal. Deployment uses this hook to call
-	// Coordinator.Remove, which tears down runtime resources
-	// and writes the terminal Removed condition.
+	// removal. Built-in Deployment teardown is controller-owned and does not
+	// use this hook.
 	PostDelete func(ctx context.Context, obj v1alpha1.Object) error
 
 	// DeleteAdmission optionally owns the final delete after authz. Nil uses
@@ -243,11 +240,10 @@ type deleteInput struct {
 	Namespace string `query:"namespace" doc:"Namespace (internal; defaults to 'default')."`
 	Name      string `path:"name"`
 	Tag       string `path:"tag"`
-	// Force=true skips the kind's PostDelete reconciliation hook
-	// (e.g. provider teardown for Deployment) and only soft-deletes
-	// the row. Useful for orphaned records whose external state is
-	// already gone or unreachable.
-	Force bool `query:"force" doc:"Skip provider-specific teardown and only remove the registry record." default:"false"`
+	// Force=true skips the kind's generic PostDelete hook. Built-in
+	// Deployment teardown still runs asynchronously through the controller
+	// finalizer path.
+	Force bool `query:"force" doc:"Skip generic post-delete hooks; Deployment teardown is still controller-owned." default:"false"`
 }
 
 type deleteMutableInput struct {

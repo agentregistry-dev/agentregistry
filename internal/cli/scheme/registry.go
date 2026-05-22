@@ -38,11 +38,10 @@ type RowFunc func(any) []string
 type ToYAMLFunc func(any) any
 type GetFunc func(ctx context.Context, name, tag string) (any, error)
 
-// DeleteFunc deletes a single (name, tag) of the kind. force=true
-// asks the server to skip its PostDelete reconciliation hook (e.g.
-// runtime teardown for Deployment); kinds that don't honor force
-// should ignore the flag. The CLI's `arctl delete --force` plumbs
-// through here.
+// DeleteFunc deletes a single (name, tag) of the kind. force=true asks the
+// server to skip generic PostDelete hooks; built-in Deployment teardown remains
+// controller-owned. Kinds that don't honor force should ignore the flag. The
+// CLI's `arctl delete --force` plumbs through here.
 type DeleteFunc func(ctx context.Context, name, tag string, force bool) error
 
 // ListTagsFunc returns every live tag row for a single (name).

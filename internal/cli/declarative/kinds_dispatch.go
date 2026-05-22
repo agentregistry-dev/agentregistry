@@ -37,8 +37,8 @@ func getItem(k *scheme.Kind, name, tag string) (any, error) {
 }
 
 // deleteItem deletes a single item by (name, tag) for the given kind.
-// force=true asks the server to skip its PostDelete reconciliation hook
-// (e.g. provider teardown for Deployment).
+// force=true asks the server to skip generic PostDelete hooks. Built-in
+// Deployment teardown is controller-owned and still runs through finalizers.
 func deleteItem(k *scheme.Kind, name, tag string, force bool) error {
 	if k.Delete == nil {
 		return fmt.Errorf("delete not supported for kind %q", k.Kind)

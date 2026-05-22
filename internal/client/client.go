@@ -310,13 +310,11 @@ func (c *Client) List(ctx context.Context, kind string, opts ListOpts) ([]v1alph
 	return resp.Items, resp.NextCursor, nil
 }
 
-// DeleteOpts carries optional flags for Delete. Zero-value is the
-// safe default (provider teardown runs).
+// DeleteOpts carries optional flags for Delete. Zero-value is the safe default.
 type DeleteOpts struct {
-	// Force=true asks the server to skip the kind's PostDelete
-	// reconciliation hook (e.g. provider teardown for Deployment) and
-	// only soft-delete the row. Useful for orphaned records whose
-	// external state is already gone or unreachable.
+	// Force=true asks the server to skip generic PostDelete hooks. Built-in
+	// Deployment teardown is controller-owned and still runs through its
+	// finalizer path.
 	Force bool
 }
 
