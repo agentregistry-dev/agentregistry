@@ -69,7 +69,6 @@ func deploymentTestServerV1Alpha1(t *testing.T, deployments []v1alpha1.Deploymen
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"items": deployments})
-
 	})
 	mux.HandleFunc("/v0/deployments/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
