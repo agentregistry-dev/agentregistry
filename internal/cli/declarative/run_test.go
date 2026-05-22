@@ -139,7 +139,7 @@ func TestRun_NoChatOnMCPErrors(t *testing.T) {
 	initCmd.SetArgs([]string{"mcp", "acme-mcpproj", "--framework", "fastmcp", "--language", "python"})
 	require.NoError(t, initCmd.Execute())
 
-	require.NoError(t, os.Chdir(filepath.Join(tmp, "mcpproj")))
+	require.NoError(t, os.Chdir(filepath.Join(tmp, "acme-mcpproj")))
 	cmd := declarative.NewRunCmd()
 	cmd.SetArgs([]string{"--no-chat", "--dry-run"})
 	err = cmd.Execute()
