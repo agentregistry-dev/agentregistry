@@ -25,7 +25,9 @@ type FullResyncFunc func(ctx context.Context) error
 type EventApplyFunc func(ctx context.Context, event v1alpha1store.ControlPlaneEvent) error
 
 // Projector is the behavior-preserving replay skeleton for KRT source
-// collections. It owns no side effects; it only advances a checkpoint.
+// collections. It projects durable database invalidations into a controller
+// read model; translators/derivers later turn that read model into desired
+// work. It owns no adapter side effects and only advances a checkpoint.
 type Projector struct {
 	Events     ControlPlaneEventReader
 	FullResync FullResyncFunc
