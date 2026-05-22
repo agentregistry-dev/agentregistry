@@ -251,7 +251,7 @@ test-e2e: ## Run end-to-end tests (default: k8s)
 .PHONY: gen-openapi
 gen-openapi: ## Generate the OpenAPI specification
 	@echo "Generating OpenAPI spec..."
-	go run ./cmd/tools/gen-openapi -output openapi.yaml
+	go run ./hack/tools/gen-openapi -output openapi.yaml
 
 gen-client: gen-openapi install-ui ## Generate the TypeScript client
 	@echo "Generating TypeScript client..."
