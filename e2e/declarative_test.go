@@ -397,16 +397,14 @@ func TestDeclarativeInit_Agent(t *testing.T) {
 func TestDeclarativeInit_MCP(t *testing.T) {
 	tmpDir := t.TempDir()
 	// MCP names must be DNS-1123 label.
-	dirName := UniqueNameWithPrefix("initmcp")
-	fullName := "e2etest-" + dirName
+	name := UniqueNameWithPrefix("e2etest-initmcp")
 
 	// init is offline — no registry-url needed.
-	result := RunArctl(t, tmpDir, "init", "mcp", fullName, "--framework", "fastmcp", "--language", "python")
+	result := RunArctl(t, tmpDir, "init", "mcp", name, "--framework", "fastmcp", "--language", "python")
 	RequireSuccess(t, result)
 	RequireOutputContains(t, result, "✓ Created MCP server:")
 
-	// Directory uses just the name part after "/".
-	mcpYAMLPath := filepath.Join(tmpDir, dirName, "mcp.yaml")
+	mcpYAMLPath := filepath.Join(tmpDir, name, "mcp.yaml")
 	RequireFileExists(t, mcpYAMLPath)
 
 	m := parseDeclarativeYAML(t, mcpYAMLPath)
@@ -417,8 +415,8 @@ func TestDeclarativeInit_MCP(t *testing.T) {
 		t.Errorf("expected kind MCPServer, got %v", m["kind"])
 	}
 	metadata, _ := m["metadata"].(map[string]any)
-	if metadata["name"] != fullName {
-		t.Errorf("expected metadata.name %q, got %v", fullName, metadata["name"])
+	if metadata["name"] != name {
+		t.Errorf("expected metadata.name %q, got %v", name, metadata["name"])
 	}
 	spec, _ := m["spec"].(map[string]any)
 	source, ok := spec["source"].(map[string]any)
@@ -553,16 +551,15 @@ func TestDeclarativeBuild_MCP(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// MCP names must be DNS-1123 label.
-	dirName := UniqueNameWithPrefix("bldmcp")
-	fullName := "e2etest-" + dirName
-	image := "localhost:5001/" + dirName + ":latest"
+	name := UniqueNameWithPrefix("e2etest-bldmcp")
+	image := "localhost:5001/" + name + ":latest"
 	CleanupDockerImage(t, image)
 
 	// Step 1: init the project.
-	result := RunArctl(t, tmpDir, "init", "mcp", fullName, "--framework", "fastmcp", "--language", "python")
+	result := RunArctl(t, tmpDir, "init", "mcp", name, "--framework", "fastmcp", "--language", "python")
 	RequireSuccess(t, result)
 
-	projectDir := filepath.Join(tmpDir, dirName)
+	projectDir := filepath.Join(tmpDir, name)
 	RequireDirExists(t, projectDir)
 
 	// Step 2: build the Docker image.

@@ -248,7 +248,7 @@ func TestE2E_InitAgent_MCP_RemoteRef_WiresEnv(t *testing.T) {
 	tmp := t.TempDir()
 	require.NoError(t, os.Chdir(tmp))
 
-	name := "e2e-test/" + UniqueNameWithPrefix("remote-mcp-wires-env")
+	name := UniqueNameWithPrefix("e2etest-remote-mcp-wires-env")
 	tag := "latest"
 
 	// Cleanup the registry row even on test failure.
