@@ -2,6 +2,10 @@ package declarative
 
 import (
 	"context"
+	"os"
+	"strings"
+
+	"github.com/spf13/cobra"
 
 	cliCommon "github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
@@ -15,6 +19,66 @@ var apiClient *client.Client
 // Called by pkg/cli/root.go's PersistentPreRunE.
 func SetAPIClient(c *client.Client) {
 	apiClient = c
+}
+
+// apiClientMCPFetcher adapts the live registry client to mcpresolve.Fetcher
+// for use by `arctl init --mcp`. The init subtree skips PersistentPreRunE
+// (see pkg/cli/root.go's preRunSkipCommands), so apiClient is normally nil
+// here — Fetch lazily constructs a lightweight client from the resolved
+// --registry-url/--registry-token flags or their env-var defaults when that
+// happens. Plain `arctl init` without --mcp stays fully offline because
+// Fetch is only called when there's a ref to resolve.
+type apiClientMCPFetcher struct {
+	cmd *cobra.Command
+}
+
+func (f apiClientMCPFetcher) Fetch(ctx context.Context, name, tag string) (*v1alpha1.MCPServer, error) {
+	c := apiClient
+	if c == nil {
+		c = client.NewClient(lookupRegistryURL(f.cmd), lookupRegistryToken(f.cmd))
+	}
+	return client.GetTyped(ctx, c, v1alpha1.KindMCPServer, v1alpha1.DefaultNamespace, name, tag, func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} })
+}
+
+// lookupPersistentFlag walks the cmd→parent chain to find a persistent
+// flag value. Needed for commands that skip PersistentPreRunE: cobra
+// normally merges parent persistent flags into child flag sets at Execute
+// time, but commands routed through that path won't see them. Returns
+// "" if the flag isn't declared anywhere in the chain.
+func lookupPersistentFlag(cmd *cobra.Command, name string) string {
+	for c := cmd; c != nil; c = c.Parent() {
+		if f := c.PersistentFlags().Lookup(name); f != nil {
+			return f.Value.String()
+		}
+		if f := c.Flags().Lookup(name); f != nil {
+			return f.Value.String()
+		}
+	}
+	return ""
+}
+
+// lookupRegistryURL resolves --registry-url for commands that skip the
+// root pre-run hook, falling back to env then client.DefaultBaseURL.
+// Mirrors pkg/cli/root.go's resolveRegistryTarget+normalizeBaseURL.
+func lookupRegistryURL(cmd *cobra.Command) string {
+	raw := strings.TrimSpace(lookupPersistentFlag(cmd, "registry-url"))
+	if raw == "" {
+		raw = strings.TrimSpace(os.Getenv("ARCTL_API_BASE_URL"))
+	}
+	if raw == "" {
+		return client.DefaultBaseURL
+	}
+	if !strings.HasPrefix(raw, "http://") && !strings.HasPrefix(raw, "https://") {
+		raw = "http://" + raw
+	}
+	return raw
+}
+
+func lookupRegistryToken(cmd *cobra.Command) string {
+	if v := lookupPersistentFlag(cmd, "registry-token"); v != "" {
+		return v
+	}
+	return os.Getenv("ARCTL_API_TOKEN")
 }
 
 func init() {
@@ -121,7 +185,7 @@ func init() {
 			return deploymentToDocument(deployment)
 		},
 		TableColumns: []scheme.Column{
-			{Header: "ID"}, {Header: "NAME"}, {Header: "VERSION"},
+			{Header: "NAME"}, {Header: "TARGET"}, {Header: "VERSION"},
 			{Header: "TYPE"}, {Header: "RUNTIME"}, {Header: "STATUS"},
 		},
 	})

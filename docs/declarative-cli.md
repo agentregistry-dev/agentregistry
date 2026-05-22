@@ -41,6 +41,21 @@ arctl run --watch     # rebuild and restart on file change
 arctl run --dry-run   # print the command without executing
 ```
 
+`arctl run` rejects an `mcp.yaml` with `spec.remote` and no `spec.source` — nothing to build locally. To inspect a remote MCP's tools:
+
+```bash
+npx -y @modelcontextprotocol/inspector --server-url <url>
+```
+
+### Wiring MCP dependencies into a new agent
+
+`arctl init agent` takes two repeatable flags:
+
+- `--mcp <ref>` — adds the MCPServer to `agent.yaml.spec.mcpServers[]`. Accepts `name` or `name@tag` (defaults to `latest`). For remote catalog entries (`spec.remote` set), also appends an `MCP_SERVERS_CONFIG` entry to `.env`. Source-mode entries skip the `.env` write.
+- `--local-mcp <path>` — wires `.env` against a sibling `arctl init mcp` project at `http://host.docker.internal:<port>/mcp` (port read from its `arctl.yaml`).
+
+Repeatable; combined into one `MCP_SERVERS_CONFIG` line.
+
 ## MCP Servers
 
 ```bash

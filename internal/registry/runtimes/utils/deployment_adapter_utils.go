@@ -73,17 +73,14 @@ func TranslateMCPServer(ctx context.Context, req *MCPServerRunRequest) (*runtime
 
 // translateRemoteMCPServer emits a runtimetypes.MCPServer for a
 // pre-running remote endpoint. Header overrides resolve against the
-// transport's declared header inputs with required/default semantics
-// matching the MCP spec.
-func translateRemoteMCPServer(name string, remote *v1alpha1.MCPTransport, deploymentID string, headerValues map[string]string) (*runtimetypes.MCPServer, error) {
+// remote's declared headers, with overrides taking precedence over
+// spec values.
+func translateRemoteMCPServer(name string, remote *v1alpha1.MCPRemote, deploymentID string, headerValues map[string]string) (*runtimetypes.MCPServer, error) {
 	if remote.URL == "" {
 		return nil, fmt.Errorf("remote mcp server %s has no URL", name)
 	}
 
-	headersMap, err := processHeaders(remote.Headers, headerValues)
-	if err != nil {
-		return nil, err
-	}
+	headersMap := processHeaders(remote.Headers, headerValues)
 	headers := make([]runtimetypes.HeaderValue, 0, len(headersMap))
 	for k, v := range headersMap {
 		headers = append(headers, runtimetypes.HeaderValue{Name: k, Value: v})
@@ -418,41 +415,24 @@ func processEnvironmentVariables(
 	return result, nil
 }
 
-// processHeaders resolves a remote's header input list. Same required/default
-// semantics as processEnvironmentVariables.
+// processHeaders resolves a remote's declared headers against the supplied
+// overrides. Override values take precedence over spec values. Headers with
+// an empty effective value are dropped.
 func processHeaders(
-	headers []v1alpha1.MCPKeyValueInput,
+	headers []v1alpha1.HTTPHeader,
 	headerOverrides map[string]string,
-) (map[string]string, error) {
+) map[string]string {
 	result := make(map[string]string)
-	var missingRequired []string
-
 	for _, h := range headers {
-		var value string
-		if headerOverrides != nil {
-			if override, exists := headerOverrides[h.Name]; exists {
-				value = override
-			}
-		}
-		if value == "" {
-			value = h.Value
-		}
-		if value == "" {
-			value = h.Default
-		}
-		if h.IsRequired && value == "" {
-			missingRequired = append(missingRequired, h.Name)
+		value := h.Value
+		if override, exists := headerOverrides[h.Name]; exists {
+			value = override
 		}
 		if value != "" {
 			result[h.Name] = value
 		}
 	}
-
-	if len(missingRequired) > 0 {
-		return nil, fmt.Errorf("missing required headers: %s", strings.Join(missingRequired, ", "))
-	}
-
-	return result, nil
+	return result
 }
 
 // GetRegistryConfig picks the base image + command for a package based on

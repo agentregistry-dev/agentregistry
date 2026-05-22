@@ -412,7 +412,7 @@ func TestMCPServerValidate_RejectsBadRemote(t *testing.T) {
 	r := &MCPServer{
 		Metadata: ObjectMeta{Namespace: "default", Name: "tools", Tag: "v1"},
 		Spec: MCPServerSpec{
-			Remote: &MCPTransport{Type: "streamable-http"}, // missing URL
+			Remote: &MCPRemote{Type: "streamable-http"}, // missing URL
 		},
 	}
 	paths := failedFields(t, r.Validate())
@@ -430,7 +430,7 @@ func TestMCPServerValidate_RemoteAndSourceMutuallyExclusive(t *testing.T) {
 					Transport:    MCPTransport{Type: "stdio"},
 				},
 			},
-			Remote: &MCPTransport{Type: "streamable-http", URL: "https://example.test/mcp"},
+			Remote: &MCPRemote{Type: "streamable-http", URL: "https://example.test/mcp"},
 		},
 	}
 	paths := failedFields(t, m.Validate())

@@ -74,7 +74,7 @@ func runApply(cmd *cobra.Command, dryRun bool) error {
 	for _, path := range filePaths {
 		var data []byte
 		if path == "-" {
-			data, err = io.ReadAll(os.Stdin)
+			data, err = io.ReadAll(cmd.InOrStdin())
 			if err != nil {
 				return fmt.Errorf("reading stdin: %w", err)
 			}
