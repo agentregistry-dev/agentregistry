@@ -11,35 +11,35 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//go:embed migrations/008_mcp_dns_label.sql
-var migration008SQL string
+//go:embed migrations/009_mcp_dns_label.sql
+var migration009SQL string
 
-// runMigration008 executes the 008 SQL inside a single transaction,
+// runMigration009 executes the 009 SQL inside a single transaction,
 // matching how applyMigration wraps each migration file in production. The
 // migration is idempotent, so re-applying it to the already-migrated
 // template DB is safe. Non-compliant rows seeded by the test get rewritten.
 //
-// The transaction wrap is load-bearing: 008 contains a pre-flight DO block
+// The transaction wrap is load-bearing: 009 contains a pre-flight DO block
 // that may RAISE EXCEPTION followed by cascade UPDATEs. Without an explicit
 // transaction the abort only rolls back the DO block and the cascades would
 // still run, which doesn't match production behavior.
-func runMigration008(t *testing.T, pool *pgxpool.Pool) error {
+func runMigration009(t *testing.T, pool *pgxpool.Pool) error {
 	t.Helper()
 	ctx := context.Background()
 	tx, err := pool.Begin(ctx)
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err := tx.Exec(ctx, migration008SQL); err != nil {
+	if _, err := tx.Exec(ctx, migration009SQL); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
 }
 
-// TestMigration008_SanitizeOrdering pins the lower()/regexp_replace
+// TestMigration009_SanitizeOrdering pins the lower()/regexp_replace
 // ordering: regexp_replace MUST run on the lowercased input, otherwise
 // uppercase letters get eaten by `[^a-z0-9-]+` (POSIX regex is
 // case-sensitive).
-func TestMigration008_SanitizeOrdering(t *testing.T) {
+func TestMigration009_SanitizeOrdering(t *testing.T) {
 	pool := NewTestPool(t)
 	ctx := context.Background()
 
@@ -57,7 +57,7 @@ func TestMigration008_SanitizeOrdering(t *testing.T) {
 	}
 
 	// run the migration script which auto-sanitizes the pre-existing servers (e.g. an upgrade)
-	require.NoError(t, runMigration008(t, pool))
+	require.NoError(t, runMigration009(t, pool))
 
 	for _, c := range cases {
 		var got string
@@ -72,11 +72,11 @@ func TestMigration008_SanitizeOrdering(t *testing.T) {
 	}
 }
 
-// TestMigration008_ConditionalMcpNamePreservation verifies that mcpName is
+// TestMigration009_ConditionalMcpNamePreservation verifies that mcpName is
 // only populated when the original name matches the upstream catalogue
 // pattern (`namespace/name`). Originals that don't match (e.g.
 // "Snake_Case_Name") still get the annotation but not mcpName.
-func TestMigration008_ConditionalMcpNamePreservation(t *testing.T) {
+func TestMigration009_ConditionalMcpNamePreservation(t *testing.T) {
 	pool := NewTestPool(t)
 	ctx := context.Background()
 
@@ -85,7 +85,7 @@ func TestMigration008_ConditionalMcpNamePreservation(t *testing.T) {
 	// non-upstream-shape + package -> mcpName SKIPPED, annotation only
 	insertPackageRow(t, pool, "Snake_Case_Name", "v1")
 
-	require.NoError(t, runMigration008(t, pool))
+	require.NoError(t, runMigration009(t, pool))
 
 	// upstream-shaped row has mcpName populated with the original.
 	var mcpName string
@@ -116,11 +116,11 @@ func TestMigration008_ConditionalMcpNamePreservation(t *testing.T) {
 		"annotation must retain the original name even when mcpName is skipped")
 }
 
-// TestMigration008_ExistingMcpNamePreserved verifies that rows with an
+// TestMigration009_ExistingMcpNamePreserved verifies that rows with an
 // already-set mcpName are not overwritten by the preservation UPDATE.
-// Note: This is very unlikely to occur, because as of migration 008, this field
+// Note: This is very unlikely to occur, because as of migration 009, this field
 // was non-existent, but this acts as a guard.
-func TestMigration008_ExistingMcpNamePreserved(t *testing.T) {
+func TestMigration009_ExistingMcpNamePreserved(t *testing.T) {
 	pool := NewTestPool(t)
 	ctx := context.Background()
 
@@ -131,7 +131,7 @@ func TestMigration008_ExistingMcpNamePreserved(t *testing.T) {
 		   repeat('a', 64))`)
 	require.NoError(t, err)
 
-	require.NoError(t, runMigration008(t, pool))
+	require.NoError(t, runMigration009(t, pool))
 
 	var mcpName string
 	require.NoError(t, pool.QueryRow(ctx,
@@ -142,17 +142,17 @@ func TestMigration008_ExistingMcpNamePreserved(t *testing.T) {
 	require.Equal(t, "keep.me/original", mcpName, "existing mcpName must not be overwritten")
 }
 
-// TestMigration008_TagsAllowedSameOriginal verifies that two rows sharing
+// TestMigration009_TagsAllowedSameOriginal verifies that two rows sharing
 // the same original name but different tags coexist after rewrite. The
 // pre-flight allows count(distinct original)=1 even when final_name
 // collides across tags.
-func TestMigration008_TagsAllowedSameOriginal(t *testing.T) {
+func TestMigration009_TagsAllowedSameOriginal(t *testing.T) {
 	pool := NewTestPool(t)
 	ctx := context.Background()
 
 	insertRemoteRow(t, pool, "MyServer", "v1")
 	insertRemoteRow(t, pool, "MyServer", "v2")
-	require.NoError(t, runMigration008(t, pool))
+	require.NoError(t, runMigration009(t, pool))
 
 	var n int
 	require.NoError(t, pool.QueryRow(ctx,
@@ -162,10 +162,10 @@ func TestMigration008_TagsAllowedSameOriginal(t *testing.T) {
 	require.Equal(t, 2, n, "both tag versions should survive rewrite")
 }
 
-// TestMigration008_CollisionPreflightAborts verifies that two DIFFERENT
+// TestMigration009_CollisionPreflightAborts verifies that two DIFFERENT
 // originals sanitizing to the same final raise the collision exception and
 // roll back the transaction cleanly, no partial rewrites should leak.
-func TestMigration008_CollisionPreflightAborts(t *testing.T) {
+func TestMigration009_CollisionPreflightAborts(t *testing.T) {
 	pool := NewTestPool(t)
 	ctx := context.Background()
 
@@ -174,7 +174,7 @@ func TestMigration008_CollisionPreflightAborts(t *testing.T) {
 	insertRemoteRow(t, pool, "My_Server", "v1")
 	insertRemoteRow(t, pool, "my/server", "v1")
 
-	err := runMigration008(t, pool)
+	err := runMigration009(t, pool)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "collisions detected")
 
@@ -193,25 +193,25 @@ func TestMigration008_CollisionPreflightAborts(t *testing.T) {
 	require.Equal(t, 1, n, "collision abort must roll back; original row should remain")
 }
 
-// TestMigration008_EmptySanitizationAborts covers the second pre-flight:
+// TestMigration009_EmptySanitizationAborts covers the second pre-flight:
 // a name composed entirely of non-DNS-label characters sanitizes to empty
 // and must abort the migration with a clear error.
-func TestMigration008_EmptySanitizationAborts(t *testing.T) {
+func TestMigration009_EmptySanitizationAborts(t *testing.T) {
 	pool := NewTestPool(t)
 
 	insertRemoteRow(t, pool, "%%%", "v1")
 
-	err := runMigration008(t, pool)
+	err := runMigration009(t, pool)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "no DNS-label-compatible characters")
 }
 
-// TestMigration008_AgentMcpServersOrderingPreserved verifies that the
+// TestMigration009_AgentMcpServersOrderingPreserved verifies that the
 // Agent.spec.mcpServers[] cascade preserves element order via
 // WITH ORDINALITY + ORDER BY ord. Also incidentally confirms that
 // MCPServer entries get rewritten and non-MCPServer entries (Skill) are
 // left untouched.
-func TestMigration008_AgentMcpServersOrderingPreserved(t *testing.T) {
+func TestMigration009_AgentMcpServersOrderingPreserved(t *testing.T) {
 	pool := NewTestPool(t)
 	ctx := context.Background()
 
@@ -229,7 +229,7 @@ func TestMigration008_AgentMcpServersOrderingPreserved(t *testing.T) {
 		   repeat('a', 64))`)
 	require.NoError(t, err)
 
-	require.NoError(t, runMigration008(t, pool))
+	require.NoError(t, runMigration009(t, pool))
 
 	var names []string
 	rows, err := pool.Query(ctx,
@@ -252,17 +252,17 @@ func TestMigration008_AgentMcpServersOrderingPreserved(t *testing.T) {
 		"WITH ORDINALITY should pin element order through the rebuild")
 }
 
-// TestMigration008_RemoteRowsLeftAsRemote pins the contract that the
+// TestMigration009_RemoteRowsLeftAsRemote pins the contract that the
 // mcpName-preservation UPDATE only touches package-bearing rows. A
 // Remote MCPServer (spec.remote, no spec.source) gets its name sanitized
 // like everything else, but the spec body stays purely remote: no
 // spec.source key is introduced as a side effect.
-func TestMigration008_RemoteRowsLeftAsRemote(t *testing.T) {
+func TestMigration009_RemoteRowsLeftAsRemote(t *testing.T) {
 	pool := NewTestPool(t)
 	ctx := context.Background()
 
 	insertRemoteRow(t, pool, "MyServer", "v1")
-	require.NoError(t, runMigration008(t, pool))
+	require.NoError(t, runMigration009(t, pool))
 
 	var hasSource bool
 	require.NoError(t, pool.QueryRow(ctx,
@@ -273,7 +273,7 @@ func TestMigration008_RemoteRowsLeftAsRemote(t *testing.T) {
 		"migration must not introduce spec.source on a remote-only MCPServer row")
 }
 
-// TestMigration008_DeploymentTargetRefCascade verifies the
+// TestMigration009_DeploymentTargetRefCascade verifies the
 // Deployment.spec.targetRef.name cascade:
 //   - kind=MCPServer + non-compliant name -> rewritten, generation bumped
 //   - kind=MCPServer + compliant name     -> untouched (generation stays 1)
@@ -282,7 +282,7 @@ func TestMigration008_RemoteRowsLeftAsRemote(t *testing.T) {
 //     explicit design (sanitization is
 //     deterministic so resolution outcome
 //     is preserved).
-func TestMigration008_DeploymentTargetRefCascade(t *testing.T) {
+func TestMigration009_DeploymentTargetRefCascade(t *testing.T) {
 	pool := NewTestPool(t)
 	ctx := context.Background()
 
@@ -294,7 +294,7 @@ func TestMigration008_DeploymentTargetRefCascade(t *testing.T) {
 	insertDeployment(t, pool, "dep-other-kind", "Agent", "SomeAgent")
 	insertDeployment(t, pool, "dep-dangling", "MCPServer", "DanglingRef")
 
-	require.NoError(t, runMigration008(t, pool))
+	require.NoError(t, runMigration009(t, pool))
 
 	type row struct {
 		refName string
@@ -335,14 +335,14 @@ func TestMigration008_DeploymentTargetRefCascade(t *testing.T) {
 		"dangling-ref row that got sanitized must have generation bumped")
 }
 
-// TestMigration008_Idempotent re-runs the migration against the
+// TestMigration009_Idempotent re-runs the migration against the
 // already-rewritten state and asserts no rows are touched a second time.
-func TestMigration008_Idempotent(t *testing.T) {
+func TestMigration009_Idempotent(t *testing.T) {
 	pool := NewTestPool(t)
 	ctx := context.Background()
 
 	insertRemoteRow(t, pool, "MyServer", "v1")
-	require.NoError(t, runMigration008(t, pool))
+	require.NoError(t, runMigration009(t, pool))
 
 	var gen1 int64
 	require.NoError(t, pool.QueryRow(ctx,
@@ -350,7 +350,7 @@ func TestMigration008_Idempotent(t *testing.T) {
 		  WHERE namespace='default' AND name='myserver'`,
 	).Scan(&gen1))
 
-	require.NoError(t, runMigration008(t, pool))
+	require.NoError(t, runMigration009(t, pool))
 
 	var gen2 int64
 	require.NoError(t, pool.QueryRow(ctx,

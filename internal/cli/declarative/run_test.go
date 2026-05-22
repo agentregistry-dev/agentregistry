@@ -112,7 +112,7 @@ func TestRun_InspectorDryRunNarratesURL(t *testing.T) {
 	initCmd.SetArgs([]string{"mcp", "acme-inspmcp", "--framework", "fastmcp", "--language", "python"})
 	require.NoError(t, initCmd.Execute())
 
-	require.NoError(t, os.Chdir(filepath.Join(tmp, "inspmcp")))
+	require.NoError(t, os.Chdir(filepath.Join(tmp, "acme-inspmcp")))
 	cmd := declarative.NewRunCmd()
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
