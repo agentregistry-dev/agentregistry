@@ -2,12 +2,11 @@ package v1alpha1
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Helper: extract field paths from a Validate() result so tests can
@@ -453,9 +452,9 @@ func TestValidateMCPServerName(t *testing.T) {
 	maxLenName := strings.Repeat("a", 63) // exact max length
 	tooLongName := strings.Repeat("a", 64)
 
-	testCases := []struct{
-		label string
-		name string
+	testCases := []struct {
+		label     string
+		name      string
 		expectErr bool
 	}{
 		{"at least min length long", "a", false},
@@ -490,22 +489,22 @@ func TestValidateMCPServerName_ErrorMessage(t *testing.T) {
 	// Format errors should mention DNS-1123 so operators can self-diagnose.
 	err := validateMCPServerName("io.example/foo")
 	require.Error(t, err)
-	require.True(t, errors.Is(err, ErrInvalidFormat))
+	require.ErrorIs(t, err, ErrInvalidFormat)
 	assert.Contains(t, err.Error(), "DNS-1123 label")
 
 	// Required-field errors should be the standard sentinel.
 	err = validateMCPServerName("")
 	require.Error(t, err)
-	require.True(t, errors.Is(err, ErrRequiredField))
+	require.ErrorIs(t, err, ErrRequiredField)
 }
 
 func TestValidateMCPPackageName(t *testing.T) {
-	maxLenStr := strings.Repeat("a", 100) + "/" + strings.Repeat("b", 99) // 200 chars, exact max
+	maxLenStr := strings.Repeat("a", 100) + "/" + strings.Repeat("b", 99)   // 200 chars, exact max
 	longLenStr := strings.Repeat("a", 100) + "/" + strings.Repeat("b", 101) // 202 chars
 
-	testCases := []struct{
-		label string
-		name string
+	testCases := []struct {
+		label     string
+		name      string
 		expectErr bool
 	}{
 		{"empty (optional)", "", false},

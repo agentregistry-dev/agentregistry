@@ -279,9 +279,9 @@ func TestMigration008_RemoteRowsLeftAsRemote(t *testing.T) {
 //   - kind=MCPServer + compliant name     -> untouched (generation stays 1)
 //   - kind=Agent (non-MCPServer)          -> untouched even if name is non-compliant
 //   - kind=MCPServer + dangling ref       -> sanitized anyway, per the migration's
-//                                            explicit design (sanitization is
-//                                            deterministic so resolution outcome
-//                                            is preserved).
+//     explicit design (sanitization is
+//     deterministic so resolution outcome
+//     is preserved).
 func TestMigration008_DeploymentTargetRefCascade(t *testing.T) {
 	pool := NewTestPool(t)
 	ctx := context.Background()
