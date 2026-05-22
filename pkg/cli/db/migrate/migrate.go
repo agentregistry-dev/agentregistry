@@ -161,17 +161,22 @@ func withSourceMigrator(ctx context.Context, src Source, dsn string, fn func(mg 
 	return fn(mg)
 }
 
-// readVersion returns the highest applied version for mg, treating
-// ErrNilVersion (nothing applied) as 0.
-func readVersion(mg *migrate.Migrate) (uint, error) {
-	v, _, err := mg.Version()
+// readVersion returns the highest applied version for mg and whether
+// the schema_migrations row is dirty (mid-failed-migration). Callers
+// that don't need the dirty flag pass _ — but every display path
+// should surface it, since a dirty schema is a real operator signal
+// go-migrate gives us for free.
+//
+// ErrNilVersion (nothing applied) is normalized to (0, false, nil).
+func readVersion(mg *migrate.Migrate) (uint, bool, error) {
+	v, dirty, err := mg.Version()
 	if err != nil {
 		if errors.Is(err, migrate.ErrNilVersion) {
-			return 0, nil
+			return 0, false, nil
 		}
-		return 0, fmt.Errorf("read version: %w", err)
+		return 0, false, fmt.Errorf("read version: %w", err)
 	}
-	return v, nil
+	return v, dirty, nil
 }
 
 // sourceFileVersions returns the (ascending-sorted) NNN versions
@@ -217,6 +222,7 @@ type lineRow struct {
 	pending    int
 	dbVersion  int  // raw DB version for desync reporting
 	downgraded bool // dbVersion > total
+	dirty      bool // mid-failed-migration; surfaced as a (dirty) annotation
 }
 
 // upSnapshot tracks (src, mg, preVersion) for cross-track rollback.
@@ -289,7 +295,7 @@ func newUpCmd() *cobra.Command {
 					prior := priors[i]
 					if rbErr := database.RollbackToVersion(prior.mg, prior.src.Name, prior.preVersion); rbErr != nil {
 						fmt.Fprintf(os.Stderr,
-							"warning: rolling %s back to its pre-up version failed (likely up-only migrations); %s is left at its post-up state and may need manual reconciliation: %v\n",
+							"warning: rolling %s back to its pre-up version failed (up-only migrations, transient DB error, or similar); %s is left at its post-up state and may need manual reconciliation: %v\n",
 							prior.src.Name, prior.src.Name, rbErr)
 					}
 				}
@@ -302,15 +308,15 @@ func newUpCmd() *cobra.Command {
 					rollbackPriors(snaps)
 					return fmt.Errorf("construct %s migrator: %w", src.Name, err)
 				}
-				preVersion, err := readVersion(mg)
-				if err != nil {
-					_, _ = mg.Close()
-					rollbackPriors(snaps)
-					return fmt.Errorf("read pre-version for %s: %w", src.Name, err)
-				}
+				// RunUpWithRecovery reads pre-version internally and
+				// returns it; reuse that value as our snapshot source
+				// of truth (no duplicate Version() call). We always
+				// append to snaps so closeUpSnapshots tears mg down
+				// even on the failing source — snaps[:len-1] is what
+				// gates which sources get rolled back.
+				preVersion, runErr := database.RunUpWithRecovery(mg, src.Name)
 				snaps = append(snaps, upSnapshot{src: src, mg: mg, preVersion: preVersion})
-
-				if _, runErr := database.RunUpWithRecovery(mg, src.Name); runErr != nil {
+				if runErr != nil {
 					// The failing source's auto-recovery wrapper has
 					// already attempted to restore it to its
 					// pre-Up state; roll back the prior (succeeded)
@@ -320,15 +326,27 @@ func newUpCmd() *cobra.Command {
 				}
 			}
 
-			// Aggregate applied count across all sources from
-			// post-Up versions.
+			// Aggregate applied count via file versions: counting
+			// `postVersion - preVersion` as an integer delta overcounts
+			// across gaps in the migration sequence (e.g. a deleted v5
+			// makes 4→8 look like 4 migrations when only 3 ran). The
+			// same primitive used by `status` keeps the two paths
+			// from drifting.
 			totalApplied := 0
 			for _, s := range snaps {
-				postVersion, err := readVersion(s.mg)
+				versions, err := sourceFileVersions(s.src)
 				if err != nil {
 					return err
 				}
-				totalApplied += int(postVersion) - int(s.preVersion)
+				postVersion, _, err := readVersion(s.mg)
+				if err != nil {
+					return err
+				}
+				for _, fv := range versions {
+					if uint(fv) > s.preVersion && uint(fv) <= postVersion {
+						totalApplied++
+					}
+				}
 			}
 			if totalApplied == 0 {
 				fmt.Fprintln(cmd.OutOrStdout(), "no pending migrations; schema is up to date")
@@ -416,13 +434,14 @@ func newStatusCmd() *cobra.Command {
 					maxFileVersion = versions[len(versions)-1]
 				}
 				var applied, dbVersion int
-				var downgraded bool
+				var downgraded, dirty bool
 				if rerr := withSourceMigrator(cmd.Context(), src, dsn, func(mg *migrate.Migrate) error {
-					v, err := readVersion(mg)
+					v, d, err := readVersion(mg)
 					if err != nil {
 						return err
 					}
 					dbVersion = int(v)
+					dirty = d
 					// applied counts files whose version is ≤ dbVersion;
 					// pending counts the rest. This survives gaps in
 					// the version sequence (e.g. a deleted v5) where
@@ -450,7 +469,7 @@ func newStatusCmd() *cobra.Command {
 					return rerr
 				}
 				pending := len(versions) - applied
-				lines = append(lines, lineRow{src: src, applied: applied, pending: pending, dbVersion: dbVersion, downgraded: downgraded})
+				lines = append(lines, lineRow{src: src, applied: applied, pending: pending, dbVersion: dbVersion, downgraded: downgraded, dirty: dirty})
 				appliedTotal += applied
 				pendingTotal += pending
 			}
@@ -468,11 +487,11 @@ func newStatusCmd() *cobra.Command {
 					if l.downgraded {
 						// "db reports v" carries the version; no
 						// redundant "at v" needed.
-						fmt.Fprintf(out, "  %s: %d applied, %d pending (db reports v%d — binary out of date)\n",
-							l.src.Name, l.applied, l.pending, l.dbVersion)
+						fmt.Fprintf(out, "  %s: %d applied, %d pending (db reports v%d%s — binary out of date)\n",
+							l.src.Name, l.applied, l.pending, l.dbVersion, dirtyTag(l.dirty))
 					} else {
-						fmt.Fprintf(out, "  %s: %d applied (at v%d), %d pending\n",
-							l.src.Name, l.applied, l.dbVersion, l.pending)
+						fmt.Fprintf(out, "  %s: %d applied (at v%d%s), %d pending\n",
+							l.src.Name, l.applied, l.dbVersion, dirtyTag(l.dirty), l.pending)
 					}
 				}
 			} else {
@@ -483,8 +502,8 @@ func newStatusCmd() *cobra.Command {
 				// count capped at the file count, surfacing a desync
 				// when those numbers differ.
 				l := lines[0]
-				fmt.Fprintf(out, "%d migration(s) applied (at v%d), %d pending\n",
-					l.applied, l.dbVersion, l.pending)
+				fmt.Fprintf(out, "%d migration(s) applied (at v%d%s), %d pending\n",
+					l.applied, l.dbVersion, dirtyTag(l.dirty), l.pending)
 			}
 			return nil
 		},
@@ -509,6 +528,7 @@ type statusSourceJSON struct {
 	Pending    int    `json:"pending"`
 	Version    int    `json:"version"`
 	Downgraded bool   `json:"downgraded"`
+	Dirty      bool   `json:"dirty"`
 }
 
 func writeStatusJSON(out io.Writer, lines []lineRow, appliedTotal, pendingTotal int) error {
@@ -524,11 +544,22 @@ func writeStatusJSON(out io.Writer, lines []lineRow, appliedTotal, pendingTotal 
 			Pending:    l.pending,
 			Version:    l.dbVersion,
 			Downgraded: l.downgraded,
+			Dirty:      l.dirty,
 		})
 	}
 	enc := json.NewEncoder(out)
 	enc.SetIndent("", "  ")
 	return enc.Encode(payload)
+}
+
+// dirtyTag returns " (dirty)" when the source is mid-failed-migration,
+// "" otherwise. Used to annotate the version in status/version text
+// output without adding a separate line.
+func dirtyTag(dirty bool) string {
+	if dirty {
+		return " (dirty)"
+	}
+	return ""
 }
 
 func newVersionCmd() *cobra.Command {
@@ -567,21 +598,21 @@ registered, --source filters to a single track.`,
 			out := cmd.OutOrStdout()
 			if len(srcs) == 1 {
 				return withSourceMigrator(cmd.Context(), srcs[0], dsn, func(mg *migrate.Migrate) error {
-					v, err := readVersion(mg)
+					v, dirty, err := readVersion(mg)
 					if err != nil {
 						return err
 					}
-					fmt.Fprintln(out, v)
+					fmt.Fprintf(out, "%d%s\n", v, dirtyTag(dirty))
 					return nil
 				})
 			}
 			for _, src := range srcs {
 				if err := withSourceMigrator(cmd.Context(), src, dsn, func(mg *migrate.Migrate) error {
-					v, err := readVersion(mg)
+					v, dirty, err := readVersion(mg)
 					if err != nil {
 						return err
 					}
-					fmt.Fprintf(out, "%s: %d\n", src.Name, v)
+					fmt.Fprintf(out, "%s: %d%s\n", src.Name, v, dirtyTag(dirty))
 					return nil
 				}); err != nil {
 					return err
@@ -624,7 +655,7 @@ the source is rolled back.`,
 				if err := mg.Migrate(uint(v)); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 					return err
 				}
-				actual, aerr := readVersion(mg)
+				actual, _, aerr := readVersion(mg)
 				if aerr != nil {
 					return aerr
 				}

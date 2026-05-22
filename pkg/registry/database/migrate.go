@@ -116,60 +116,64 @@ func recoverFromFailedUp(logger *slog.Logger, mg *migrate.Migrate, name string, 
 	logger.Info(fmt.Sprintf("dirty bookkeeping cleared back to v%d; partial DDL from the failed migration may remain — inspect schema before retry", preVersion), "version", preVersion)
 }
 
-// RollbackToVersion clears go-migrate's dirty-state marker on mg and,
-// when the source has reversible `.down.sql` files, steps the schema
-// back to targetVersion via the standard `mg.Steps(-N)` path.
+// RollbackToVersion returns mg's schema_migrations row to targetVersion.
+// The function is rollback-only: callers must pass a targetVersion at
+// or below the current applied version. When targetVersion >= current,
+// it returns nil without touching the schema (the name promises
+// rollback semantics, and mg.Migrate would happily walk forward).
 //
-// Important behavioral note: when called from auto-recovery after a
-// failed Up at version current=preVersion+1, `Force(current-1)` clears
-// the dirty flag but `steps = (current-1) - preVersion = 0` so no
-// `.down.sql` is invoked. The function returns nil ("nothing to roll
-// back from the bookkeeping perspective") — it does NOT undo DDL that
-// the failed migration committed before erroring out. Callers that
-// expected full atomicity must rely on the migration's own
-// idempotency for safe retry.
+// Two paths:
 //
-// Used both for auto-recovery inside RunUpWithRecovery and by callers
-// coordinating cross-source rollback after a later source fails.
+//   - Dirty: clear the dirty marker by forcing to targetVersion. This
+//     is BOOKKEEPING ONLY — DDL committed by the partially-applied
+//     migration may remain. The idempotent-DDL convention is what
+//     makes a subsequent Up safe to retry.
+//   - Clean: walk down to targetVersion via mg.Migrate / mg.Down,
+//     which go-migrate routes through the source's known-version list
+//     (gap-safe; runs the right .down.sql files in order).
+//
+// targetVersion == 0 means "empty schema" — mg.Down rolls back every
+// applied migration in the source.
+//
+// Used by auto-recovery in RunUpWithRecovery and by cross-source
+// coordination after a later source fails. Up-only sources (whose
+// .down.sql files raise) succeed on the dirty path and fail on the
+// clean path; the caller is expected to surface partial state.
 func RollbackToVersion(mg *migrate.Migrate, name string, targetVersion uint) error {
 	currentVersion, dirty, err := mg.Version()
 	if err != nil {
 		if errors.Is(err, migrate.ErrNilVersion) {
 			return nil
 		}
-		return fmt.Errorf("get version after failure for %s: %w", name, err)
+		return fmt.Errorf("get version for %s: %w", name, err)
 	}
 
 	if dirty {
-		// go-migrate flags a row dirty when its Up failed partway.
-		// Force to current-1 so subsequent Steps(-N) can run; if the
-		// very first migration failed, Force(-1) removes the row
-		// entirely.
-		cleanVersion := int(currentVersion) - 1
-		forceTarget := cleanVersion
-		if forceTarget < 1 {
+		forceTarget := int(targetVersion)
+		if forceTarget == 0 {
+			// go-migrate represents "no version applied" by removing
+			// the row; Force(-1) is the supported signal for that.
 			forceTarget = -1
 		}
 		if err := mg.Force(forceTarget); err != nil {
 			return fmt.Errorf("clear dirty state for %s: %w", name, err)
 		}
-		if forceTarget < 0 {
-			// First migration failed; the row is gone, nothing
-			// further to step back through.
-			return nil
-		}
-		// forceTarget >= 1 here, and forceTarget == cleanVersion on
-		// this path (we only rewrote to -1 inside the < 1 branch), so
-		// the signed→unsigned cast is well-defined.
-		currentVersion = uint(cleanVersion)
-	}
-
-	steps := int(currentVersion) - int(targetVersion)
-	if steps <= 0 {
 		return nil
 	}
-	if err := mg.Steps(-steps); err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		return fmt.Errorf("roll back %d step(s) for %s: %w", steps, name, err)
+
+	if targetVersion >= currentVersion {
+		// Already at or below target; the rollback-only contract makes
+		// this a no-op rather than forwarding the schema via Migrate.
+		return nil
+	}
+	if targetVersion == 0 {
+		if err := mg.Down(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+			return fmt.Errorf("roll back to empty for %s: %w", name, err)
+		}
+		return nil
+	}
+	if err := mg.Migrate(targetVersion); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		return fmt.Errorf("roll back to v%d for %s: %w", targetVersion, name, err)
 	}
 	return nil
 }
