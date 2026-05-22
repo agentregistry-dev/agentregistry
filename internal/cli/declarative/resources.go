@@ -12,7 +12,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/printer"
-	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
 
 // deploymentStatus is the shape emitted under .status when a deployment is
@@ -128,51 +127,6 @@ func listDeploymentAny(ctx context.Context) ([]any, error) {
 		out = append(out, dep)
 	}
 	return out, nil
-}
-
-func getDeploymentByTarget(ctx context.Context, name string) (any, error) {
-	deployments, err := cliCommon.ListDeployments(ctx, apiClient)
-	if err != nil {
-		return nil, err
-	}
-	for _, dep := range deployments {
-		if dep != nil && dep.TargetName == name {
-			return dep, nil
-		}
-	}
-	return nil, database.ErrNotFound
-}
-
-// deleteDeploymentByTarget deletes every deployment whose target has the given
-// name. Deployments do not carry a tag of their own — the only tag in play is
-// the target's, which is not part of the deployment's identity — so the tag
-// parameter is ignored and rejected upstream at the CLI surface. The dispatch
-// signature is shared across kinds, which is why the parameter is still
-// present here.
-func deleteDeploymentByTarget(ctx context.Context, name, _ string, force bool) error {
-	deployments, err := cliCommon.ListDeployments(ctx, apiClient)
-	if err != nil {
-		return fmt.Errorf("listing deployments: %w", err)
-	}
-
-	var matches []*cliCommon.DeploymentRecord
-	for _, dep := range deployments {
-		if dep == nil || dep.TargetName != name {
-			continue
-		}
-		matches = append(matches, dep)
-	}
-	if len(matches) == 0 {
-		return database.ErrNotFound
-	}
-
-	var errs []error
-	for _, dep := range matches {
-		if err := apiClient.Delete(ctx, v1alpha1.KindDeployment, dep.Namespace, dep.Name, "", client.DeleteOpts{Force: force}); err != nil {
-			errs = append(errs, fmt.Errorf("deleting %s (runtime %s): %w", dep.ID, dep.RuntimeID, err))
-		}
-	}
-	return errorsJoin(errs)
 }
 
 func deploymentToDocument(dep *cliCommon.DeploymentRecord) any {
