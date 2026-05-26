@@ -17,8 +17,10 @@ import (
 const (
 	DeploymentControllerFinalizer = "agentregistry.dev/deployment-controller"
 
-	defaultExecutorOwner         = "deployment-controller"
-	defaultExecutorLeaseDuration = 30 * time.Second
+	defaultExecutorOwner = "deployment-controller"
+	// Keep the default lease long enough for external adapter calls; without
+	// lease renewal, an expired claim may be retried by another worker.
+	defaultExecutorLeaseDuration = 5 * time.Minute
 	defaultExecutorBackoff       = 30 * time.Second
 )
 
