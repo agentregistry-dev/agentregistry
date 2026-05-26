@@ -91,11 +91,6 @@ type GetterFunc func(ctx context.Context, ref ResourceRef) (Object, error)
 // Kubernetes namespace naming conventions.
 var namespaceRegex = regexp.MustCompile(`^[a-z0-9]([-a-z0-9.]{0,61}[a-z0-9])?$`)
 
-// nameRegex: resource name. More permissive than namespace — allows
-// uppercase, underscores, slashes (to support DNS-subdomain-style names
-// like "ai.exa/exa"). 1-255 chars. Must start and end with alphanumeric.
-var nameRegex = regexp.MustCompile(`^[a-zA-Z0-9]([-a-zA-Z0-9._/]{0,253}[a-zA-Z0-9])?$`)
-
 // labelKeyRegex: Kubernetes label key format (prefix/name, prefix optional).
 // Values up to 63 chars with the same character rules.
 var labelKeyRegex = regexp.MustCompile(`^([a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?/)?[a-zA-Z0-9]([-a-zA-Z0-9._]{0,61}[a-zA-Z0-9])?$`)
@@ -104,13 +99,29 @@ var labelValueRegex = regexp.MustCompile(`^([a-zA-Z0-9]([-a-zA-Z0-9._]{0,61}[a-z
 var tagRegex = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$`)
 
 // DNS-1123 label form: lowercase alphanumeric and hyphens only, must start
-// and end with alphanumeric, max 63 chars.
-const DNSLabelPattern = `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+// and end with alphanumeric, 1-63 chars. Length cap is baked into the
+// pattern via the `{0,61}` quantifier so callers don't need a separate
+// len() check.
+const DNSLabelPattern = `^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`
 
 // DNSLabelMaxLen is the upper length bound for DNS-1123 label values.
 const DNSLabelMaxLen = 63
 
 var DNSLabelRegex = regexp.MustCompile(DNSLabelPattern)
+
+// validateNameField is the single source of truth for resource-name validation
+// across the v1alpha1 surface — both metadata.name and ref.name. Every kind
+// (Agent, Skill, Prompt, Deployment, MCPServer) and every cross-resource
+// reference funnels through here.
+func validateNameField(name string) error {
+	if name == "" {
+		return fmt.Errorf("%w", ErrRequiredField)
+	}
+	if !DNSLabelRegex.MatchString(name) {
+		return fmt.Errorf("%w: must be DNS-1123 label (lowercase alphanumeric and hyphens; start/end with alphanumeric, max %d chars): %q", ErrInvalidFormat, DNSLabelMaxLen, name)
+	}
+	return nil
+}
 
 // Upstream MCP-ecosystem catalogue name pattern: `namespace/name` in
 // reverse-DNS form (e.g. `io.github.modelcontextprotocol/server-fetch`).
@@ -144,11 +155,8 @@ func ValidateObjectMeta(m ObjectMeta) FieldErrors {
 		errs.Append("metadata.namespace", fmt.Errorf("%w: %q", ErrInvalidFormat, m.Namespace))
 	}
 
-	switch {
-	case m.Name == "":
-		errs.Append("metadata.name", fmt.Errorf("%w", ErrRequiredField))
-	case !nameRegex.MatchString(m.Name):
-		errs.Append("metadata.name", fmt.Errorf("%w: %q", ErrInvalidFormat, m.Name))
+	if err := validateNameField(m.Name); err != nil {
+		errs.Append("metadata.name", err)
 	}
 
 	for key, val := range m.Labels {
@@ -239,10 +247,8 @@ func validateRef(r ResourceRef, allowedKinds ...string) FieldErrors {
 	if r.Namespace != "" && !namespaceRegex.MatchString(r.Namespace) {
 		errs.Append("namespace", fmt.Errorf("%w: %q", ErrInvalidFormat, r.Namespace))
 	}
-	if r.Name == "" {
-		errs.Append("name", fmt.Errorf("%w", ErrRequiredField))
-	} else if !nameRegex.MatchString(r.Name) {
-		errs.Append("name", fmt.Errorf("%w: %q", ErrInvalidFormat, r.Name))
+	if err := validateNameField(r.Name); err != nil {
+		errs.Append("name", err)
 	}
 	// Tag is optional on content refs — blank means "resolve to latest".
 	if r.Tag != "" {

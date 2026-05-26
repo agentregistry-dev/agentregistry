@@ -51,10 +51,12 @@ func TestValidateObjectMeta_RejectsBadNamespace(t *testing.T) {
 	}
 }
 
-func TestValidateObjectMeta_AcceptsDNSStyleName(t *testing.T) {
-	// Names can carry slashes (dns-like). Namespaces cannot.
-	errs := ValidateObjectMeta(ObjectMeta{Namespace: "default", Name: "ai.exa/exa"})
-	require.Empty(t, errs)
+func TestValidateObjectMeta_RejectsNonDNSLabelName(t *testing.T) {
+	// metadata.name across every kind must be DNS-1123 label form.
+	for _, bad := range []string{"ai.exa/exa", "UPPER", "has_underscore", "io.example", "name with space", "-leading", "trailing-"} {
+		errs := ValidateObjectMeta(ObjectMeta{Namespace: "default", Name: bad})
+		require.NotEmpty(t, errs, "name %q should be invalid", bad)
+	}
 }
 
 func TestValidateObjectMeta_RejectsBadLabelKey(t *testing.T) {
@@ -448,7 +450,7 @@ func TestMCPServerValidate_RequiresSourceOrRemote(t *testing.T) {
 	require.Contains(t, paths, "spec")
 }
 
-func TestValidateMCPServerName(t *testing.T) {
+func TestValidateNameField(t *testing.T) {
 	maxLenName := strings.Repeat("a", 63) // exact max length
 	tooLongName := strings.Repeat("a", 64)
 
@@ -474,8 +476,8 @@ func TestValidateMCPServerName(t *testing.T) {
 		{"contains space", "my server", true},
 	}
 	for _, c := range testCases {
-		t.Run(c.name, func(t *testing.T) {
-			err := validateMCPServerName(c.name)
+		t.Run(c.label, func(t *testing.T) {
+			err := validateNameField(c.name)
 			if c.expectErr {
 				assert.Error(t, err)
 			} else {
@@ -485,15 +487,15 @@ func TestValidateMCPServerName(t *testing.T) {
 	}
 }
 
-func TestValidateMCPServerName_ErrorMessage(t *testing.T) {
+func TestValidateNameField_ErrorMessage(t *testing.T) {
 	// Format errors should mention DNS-1123 so operators can self-diagnose.
-	err := validateMCPServerName("io.example/foo")
+	err := validateNameField("io.example/foo")
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrInvalidFormat)
 	assert.Contains(t, err.Error(), "DNS-1123 label")
 
 	// Required-field errors should be the standard sentinel.
-	err = validateMCPServerName("")
+	err = validateNameField("")
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrRequiredField)
 }

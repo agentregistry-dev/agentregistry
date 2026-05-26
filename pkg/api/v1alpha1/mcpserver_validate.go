@@ -5,37 +5,12 @@ import "fmt"
 // Validate runs structural validation on the MCPServer envelope.
 func (m *MCPServer) Validate() error {
 	var errs FieldErrors
-	// Use ObjectMeta's namespace+labels checks but replace its generic loose name
-	// check with the MCP-specific DNS-1123 label rule.
-	for _, e := range ValidateObjectMeta(m.Metadata) {
-		if e.Path != "metadata.name" {
-			errs = append(errs, e)
-		}
-	}
-	if err := validateMCPServerName(m.Metadata.Name); err != nil {
-		errs.Append("metadata.name", err)
-	}
+	errs = append(errs, ValidateObjectMeta(m.Metadata)...)
 	errs = append(errs, validateMCPServerSpec(&m.Spec)...)
 	if len(errs) == 0 {
 		return nil
 	}
 	return errs
-}
-
-// validateMCPServerName enforces DNS-1123 label for MCPServer's metadata.name:
-// lowercase alphanumeric and hyphens only, must start and end with alphanumeric,
-// max 63 chars.
-func validateMCPServerName(name string) error {
-	if name == "" {
-		return fmt.Errorf("%w", ErrRequiredField)
-	}
-	if len(name) > DNSLabelMaxLen {
-		return fmt.Errorf("%w: must be DNS-1123 label (max %d chars), got %d", ErrInvalidFormat, DNSLabelMaxLen, len(name))
-	}
-	if !DNSLabelRegex.MatchString(name) {
-		return fmt.Errorf("%w: must be DNS-1123 label (lowercase alphanumeric and hyphens; start/end with alphanumeric): %q", ErrInvalidFormat, name)
-	}
-	return nil
 }
 
 // validateMCPPackageName enforces the upstream MCP-ecosystem catalogue name format
