@@ -4,10 +4,15 @@ package validators
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
+
+// agentNameRegex enforces the strictest rule - names that work BOTH as Python identifiers AND as publishable agent names.
+// Must start with a lowercase letter, followed by lowercase alphanumeric only, minimum 2 characters.
+var agentNameRegex = regexp.MustCompile(`^[a-z][a-z0-9]+$`)
 
 // Python keywords that cannot be used as agent names — agent names become
 // Python identifiers in generated code, so the CLI layer rejects them in
@@ -49,16 +54,23 @@ func validateName(kind, name string) error {
 	return nil
 }
 
-// ValidateAgentName enforces DNS-1123 label form and rejects Python keywords.
-// Python keyword rejection is CLI-only — agent names become Python identifiers
-// in generated code, but the registry's API doesn't care.
+// ValidateAgentName checks if the agent name is valid.
+// Allowed: lowercase letters and digits only, must start with a letter, minimum 2 characters.
+// Not allowed: uppercase, underscores, dots, hyphens, or Python keywords.
 func ValidateAgentName(name string) error {
-	if err := validateName("agent", name); err != nil {
-		return err
+	if name == "" {
+		return fmt.Errorf("agent name cannot be empty")
 	}
+
+	if !agentNameRegex.MatchString(name) {
+		return fmt.Errorf("agent name must start with a lowercase letter and contain only lowercase letters and digits (no hyphens, underscores, or dots; minimum 2 characters)")
+	}
+
+	// Reject Python keywords to avoid issues in generated code
 	if _, isKeyword := pythonKeywords[name]; isKeyword {
 		return fmt.Errorf("agent name %q is a Python keyword and cannot be used", name)
 	}
+
 	return nil
 }
 
