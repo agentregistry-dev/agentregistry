@@ -10,7 +10,7 @@ arctl build summarizer/ --push    # optional: build and push Docker image
 arctl apply -f summarizer/agent.yaml
 ```
 
-`arctl init agent NAME` and `arctl init mcp NAME` pick a framework + language interactively unless `--framework` and `--language` are provided. Run `arctl init agent NAME` (or `arctl init mcp NAME`) on its own to see the available choices. MCP server names must be DNS-1123 label (lowercase alphanumeric and hyphens only; max 63 chars; must start and end with alphanumeric).
+`arctl init agent NAME` and `arctl init mcp NAME` pick a framework + language interactively unless `--framework` and `--language` are provided. Run `arctl init agent NAME` (or `arctl init mcp NAME`) on its own to see the available choices. All resource `metadata.name` values (Agent, Skill, Prompt, Deployment, MCPServer) must be DNS-1123 label: lowercase alphanumeric and hyphens only, max 63 chars, must start and end with alphanumeric. Agent names additionally cannot collide with Python keywords (`class`, `import`, `return`, …) because they become Python identifiers in generated code.
 
 ## Tags And Mutable Objects
 
