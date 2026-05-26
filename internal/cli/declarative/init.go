@@ -647,8 +647,8 @@ func newInitMCPCmd() *cobra.Command {
 		Short: "Scaffold a new MCP server project",
 		Long: `Scaffold a new MCP server project.
 
-NAME must be DNS-1123 label: lowercase alphanumeric and hyphens, max 63 chars,
-must start and end with alphanumeric.
+NAME must be DNS-1123 subdomain: lowercase alphanumeric, hyphens, and dots; max 253 chars;
+each dot-separated segment must start and end with alphanumeric (max 63 chars per segment).
 Picks a framework + language interactively (or via --framework / --language).`,
 		Example: `  arctl init mcp my-mcp
   arctl init mcp my-mcp --framework fastmcp --language python`,

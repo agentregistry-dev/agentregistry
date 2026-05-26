@@ -268,7 +268,7 @@ async function applySingleDoc<T>(envelope: T & { kind?: string; metadata: { name
 export async function createServerV0(opts: LegacyCreateOpts<ServerJson>): Promise<{
   data: ServerResponse
 }> {
-  // MCPServer.metadata.name is DNS-1123 label; do not split on "/".
+  // MCPServer.metadata.name is DNS-1123 subdomain; do not split on "/".
   // The name does NOT represent a "NAMESPACE/NAME" format.
   const spec = stripLegacy(opts.body) as McpServerSpec
   const envelope: McpServer = {
@@ -284,7 +284,7 @@ export async function createServerV0(opts: LegacyCreateOpts<ServerJson>): Promis
 export async function createSkillV0(opts: LegacyCreateOpts<SkillJson>): Promise<{
   data: SkillResponse
 }> {
-  // Skill.metadata.name is DNS-1123 label; no slash to split.
+  // Skill.metadata.name is DNS-1123 subdomain; no slash to split.
   const spec = stripLegacy(opts.body) as SkillSpec
   const envelope: Skill = {
     apiVersion: "ar.dev/v1alpha1",
@@ -299,7 +299,7 @@ export async function createSkillV0(opts: LegacyCreateOpts<SkillJson>): Promise<
 export async function createPromptV0(opts: LegacyCreateOpts<PromptJson>): Promise<{
   data: PromptResponse
 }> {
-  // Prompt.metadata.name is DNS-1123 label; no slash to split.
+  // Prompt.metadata.name is DNS-1123 subdomain; no slash to split.
   const spec = stripLegacy(opts.body) as PromptSpec
   const envelope: Prompt = {
     apiVersion: "ar.dev/v1alpha1",
@@ -341,7 +341,7 @@ function resourceTypeToKind(rt?: string): string {
 export async function deployServer(opts: { throwOnError?: true; body: DeployServerBody }): Promise<{
   data: Deployment
 }> {
-  // serverName is a DNS-1123 label; no slash to split.
+  // serverName is a DNS-1123 subdomain; no slash to split.
   const namespace = "default"
   const name = opts.body.serverName
   const kind = resourceTypeToKind(opts.body.resourceType)

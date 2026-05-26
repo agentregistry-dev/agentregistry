@@ -77,17 +77,17 @@ func ValidateAgentName(name string) error {
 	return nil
 }
 
-// ValidateSkillName enforces DNS-1123 label form.
+// ValidateSkillName enforces DNS-1123 subdomain form.
 func ValidateSkillName(name string) error {
 	return validateName("skill", name)
 }
 
-// ValidatePromptName enforces DNS-1123 label form.
+// ValidatePromptName enforces DNS-1123 subdomain form.
 func ValidatePromptName(name string) error {
 	return validateName("prompt", name)
 }
 
-// ValidateMCPServerName enforces DNS-1123 label form.
+// ValidateMCPServerName enforces DNS-1123 subdomain form.
 func ValidateMCPServerName(name string) error {
 	return validateName("MCP server", name)
 }

@@ -76,8 +76,8 @@ type MCPPackage struct {
 	// the package's published claim. When unset, the validator compares
 	// against metadata.name.
 	//
-	// Set this when `metadata.name` (DNS-1123 label compliant) cannot
-	// represent an upstream registry's naming shape (e.g. `domain/name`) shape.
+	// Set this when `metadata.name` (DNS-1123 subdomain compliant) cannot
+	// represent an upstream registry's naming shape (e.g. `domain/name`).
 	//
 	// Optional.
 	ServerName string `json:"serverName,omitempty" yaml:"serverName,omitempty"`
