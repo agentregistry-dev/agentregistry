@@ -14,7 +14,7 @@ import { toast } from "sonner"
 // Upstream MCP catalogue name (e.g. "io.github.user/server") — MCPServer-only.
 const UPSTREAM_MCP_PACKAGE_NAME_RE = /^[a-zA-Z0-9.-]+\/[a-zA-Z0-9._-]+$/
 
-// isValidMCPPackageName checks if an optional MCP package's mcpName is valid (NAMESPACE/NAME)
+// isValidMCPPackageName checks if an optional MCP package's serverName is valid (NAMESPACE/NAME)
 // Note: This NAMESPACE !== the registry resource namespace, and is a naming convention for MCPs
 function isValidMCPPackageName(s: string): boolean {
   return s.length == 0 || (s.length >= 3 && s.length <= 200 && UPSTREAM_MCP_PACKAGE_NAME_RE.test(s))
@@ -38,7 +38,7 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
   const [repositoryUrl, setRepositoryUrl] = useState("")
 
   // Schema collapsed to a single package per server.
-  type PackageDraft = { identifier: string; version: string; registryType: string; transport: string; mcpName: string }
+  type PackageDraft = { identifier: string; version: string; registryType: string; transport: string; serverName: string }
   const [pkg, setPkg] = useState<PackageDraft | null>(null)
 
   const resetForm = () => {
@@ -62,7 +62,7 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
       if (!isValidDNSLabel(name.trim())) {
         throw new Error("Server name must be DNS-1123 label: lowercase alphanumeric and hyphens, max 63 chars, start/end with alphanumeric")
       }
-      if (!isValidMCPPackageName(pkg?.mcpName.trim() || "")) {
+      if (!isValidMCPPackageName(pkg?.serverName.trim() || "")) {
         throw new Error("Upstream catalogue name must be unset or in 'domain/name' shape (e.g. 'io.github.user/server')")
       }
 
@@ -98,8 +98,8 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
           registryType: pkg.registryType as 'npm' | 'pypi' | 'docker',
           transport: { type: pkg.transport || 'stdio' },
         }
-        if (pkg.mcpName.trim()) {
-          source.package.mcpName = pkg.mcpName.trim()
+        if (pkg.serverName.trim()) {
+          source.package.serverName = pkg.serverName.trim()
         }
       }
       if (source.repository || source.package) {
@@ -125,7 +125,7 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
   }
 
   const addPackage = () => {
-    setPkg({ identifier: "", version: "", registryType: "npm", transport: "stdio", mcpName: "" })
+    setPkg({ identifier: "", version: "", registryType: "npm", transport: "stdio", serverName: "" })
   }
 
   const removePackage = () => {
@@ -289,19 +289,19 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
                     mcpName/mcp-name/OCI label uses the upstream `namespace/name` shape that the
                     DNS-label Server Name can't represent. */}
                 <div className="pl-2">
-                  <Label htmlFor="mcpName" className="text-sm text-muted-foreground">
+                  <Label htmlFor="serverName" className="text-sm text-muted-foreground">
                     Upstream catalogue name (mcpName)
                   </Label>
                   <Input
-                    id="mcpName"
+                    id="serverName"
                     placeholder="io.github.user/server"
-                    value={pkg.mcpName}
-                    onChange={(e) => updatePackage("mcpName", e.target.value)}
+                    value={pkg.serverName}
+                    onChange={(e) => updatePackage("serverName", e.target.value)}
                     disabled={loading}
-                    className={!isValidMCPPackageName(pkg.mcpName) ? "border-yellow-500" : ""}
+                    className={!isValidMCPPackageName(pkg.serverName) ? "border-yellow-500" : ""}
                   />
-                  <p className={`text-xs flex items-center gap-1 min-h-[1.25rem] ${!isValidMCPPackageName(pkg.mcpName) ? 'text-yellow-600' : 'text-muted-foreground'}`}>
-                    {!isValidMCPPackageName(pkg.mcpName) ? (
+                  <p className={`text-xs flex items-center gap-1 min-h-[1.25rem] ${!isValidMCPPackageName(pkg.serverName) ? 'text-yellow-600' : 'text-muted-foreground'}`}>
+                    {!isValidMCPPackageName(pkg.serverName) ? (
                       <><AlertCircle className="h-3 w-3" /> Must match `namespace/name` shape.</>
                     ) : (
                       <>Optional. Ignored for MCPB packages.</>

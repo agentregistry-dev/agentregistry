@@ -66,7 +66,7 @@ type MCPPackage struct {
 	Identifier      string `json:"identifier" yaml:"identifier"`
 	Version         string `json:"version,omitempty" yaml:"version,omitempty"`
 
-	// MCPName is the MCP-ecosystem catalogue identity claimed by this
+	// ServerName is the MCP-ecosystem catalogue identity claimed by this
 	// package.
 	//
 	// Mirrors the upstream `mcpName` in npm package.json, `mcp-name` in PyPI/NuGet READMEs,
@@ -80,7 +80,7 @@ type MCPPackage struct {
 	// represent an upstream registry's naming shape (e.g. `domain/name`) shape.
 	//
 	// Optional.
-	MCPName string `json:"mcpName,omitempty" yaml:"mcpName,omitempty"`
+	ServerName string `json:"serverName,omitempty" yaml:"serverName,omitempty"`
 
 	FileSHA256           string             `json:"fileSha256,omitempty" yaml:"fileSha256,omitempty"`
 	RuntimeHint          string             `json:"runtimeHint,omitempty" yaml:"runtimeHint,omitempty"`

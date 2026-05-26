@@ -71,7 +71,7 @@ arctl delete mcp my-server --tag stable
 ### Registering public-catalogue MCP packages
 
 Public MCP packages on npm / PyPI / OCI / NuGet declare their ownership using the upstream MCP-ecosystem `namespace/name` convention (e.g. `io.github.modelcontextprotocol/server-fetch`). The registry's ownership validator compares this against `metadata.name` by default.
-When that shape doesn't fit the `metadata.name` requirements (DNS label), set `spec.source.package.mcpName` to the upstream identity and the validator will use it as the comparison target instead:
+When that shape doesn't fit the `metadata.name` requirements (DNS label), set `spec.source.package.serverName` to the upstream identity and the validator will use it as the comparison target instead:
 
 ```yaml
 apiVersion: ar.dev/v1alpha1
@@ -82,7 +82,7 @@ spec:
   source:
     package:
       # ...
-      mcpName: io.github.modelcontextprotocol/server-fetch  # upstream catalogue identity
+      serverName: io.github.modelcontextprotocol/server-fetch  # upstream catalogue identity
 ```
 
 ## Skills & Prompts

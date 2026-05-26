@@ -68,13 +68,13 @@ func validatePackages(
 
 // ValidateRegistries on *MCPServer converts the bundled MCPPackage
 // entry (includes RegistryBaseURL + FileSHA256). The claim name passed
-// to the per-registry validator is p.MCPName when set, else m.Metadata.Name.
+// to the per-registry validator is p.ServerName when set, else m.Metadata.Name.
 func (m *MCPServer) ValidateRegistries(ctx context.Context, v RegistryValidatorFunc) error {
 	if v == nil || m.Spec.Source == nil || m.Spec.Source.Package == nil {
 		return nil
 	}
 	p := m.Spec.Source.Package
-	claimName := p.MCPName
+	claimName := p.ServerName
 	if claimName == "" {
 		claimName = m.Metadata.Name
 	}

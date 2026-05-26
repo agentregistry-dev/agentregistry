@@ -267,10 +267,10 @@ export function ServerDetail({ server, onServerCopied }: ServerDetailProps) {
                         <Badge variant="outline" className="text-xs">{pkg.registryType}</Badge>
                       </div>
                       <div className="space-y-1.5 text-sm mb-3 pb-3 border-b">
-                        {pkg.mcpName && (
+                        {pkg.serverName && (
                           <div className="flex justify-between text-xs gap-2">
                             <span className="text-muted-foreground shrink-0">MCP Name</span>
-                            <span className="font-mono truncate" title={pkg.mcpName}>{pkg.mcpName}</span>
+                            <span className="font-mono truncate" title={pkg.serverName}>{pkg.serverName}</span>
                           </div>
                         )}
                         <div className="flex justify-between text-xs">

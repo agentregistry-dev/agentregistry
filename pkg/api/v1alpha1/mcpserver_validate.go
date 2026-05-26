@@ -14,7 +14,7 @@ func (m *MCPServer) Validate() error {
 }
 
 // validateMCPPackageName enforces the upstream MCP-ecosystem catalogue name format
-// for the optional MCPPackage.MCPName field (e.g. "io.github.user/server").
+// for the optional MCPPackage.ServerName field (e.g. "io.github.user/server").
 // Matches the upstream modelcontextprotocol/registry server.json schema for
 // the `name` field.
 func validateMCPPackageName(s string) error {
@@ -22,10 +22,10 @@ func validateMCPPackageName(s string) error {
 		return nil // optional field
 	}
 	if l := len(s); l < UpstreamMCPPackageNameMinLen || l > UpstreamMCPPackageNameMaxLen {
-		return fmt.Errorf("%w: mcpName length must be %d-%d chars, got %d", ErrInvalidFormat, UpstreamMCPPackageNameMinLen, UpstreamMCPPackageNameMaxLen, l)
+		return fmt.Errorf("%w: serverName length must be %d-%d chars, got %d", ErrInvalidFormat, UpstreamMCPPackageNameMinLen, UpstreamMCPPackageNameMaxLen, l)
 	}
 	if !UpstreamMCPPackageNameRegex.MatchString(s) {
-		return fmt.Errorf("%w: mcpName must match upstream pattern `namespace/name` (e.g. \"io.github.user/server\"): %q", ErrInvalidFormat, s)
+		return fmt.Errorf("%w: serverName must match upstream pattern `namespace/name` (e.g. \"io.github.user/server\"): %q", ErrInvalidFormat, s)
 	}
 	return nil
 }
@@ -83,8 +83,8 @@ func validateMCPServerSource(src *MCPServerSource) FieldErrors {
 	if pkg.Transport.Type == "" {
 		errs.Append("spec.source.package.transport.type", fmt.Errorf("%w", ErrRequiredField))
 	}
-	if err := validateMCPPackageName(pkg.MCPName); err != nil {
-		errs.Append("spec.source.package.mcpName", err)
+	if err := validateMCPPackageName(pkg.ServerName); err != nil {
+		errs.Append("spec.source.package.serverName", err)
 	}
 	return errs
 }

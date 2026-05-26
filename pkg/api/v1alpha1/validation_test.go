@@ -546,7 +546,7 @@ func TestMCPServerValidate_MCPPackageName_RejectsBadFormat(t *testing.T) {
 					RegistryType: "npm",
 					Identifier:   "my-pkg",
 					Transport:    MCPTransport{Type: "stdio"},
-					MCPName:      "noslash", // invalid: must be namespace/name
+					ServerName:   "noslash", // invalid: must be namespace/name
 				},
 			},
 		},
@@ -554,7 +554,7 @@ func TestMCPServerValidate_MCPPackageName_RejectsBadFormat(t *testing.T) {
 	err := m.Validate()
 	require.Error(t, err)
 	paths := failedFields(t, err)
-	require.Contains(t, paths, "spec.source.package.mcpName")
+	require.Contains(t, paths, "spec.source.package.serverName")
 }
 
 func TestMCPServerValidate_MCPPackageName_AcceptsValid(t *testing.T) {
@@ -567,7 +567,7 @@ func TestMCPServerValidate_MCPPackageName_AcceptsValid(t *testing.T) {
 					RegistryType: "pypi",
 					Identifier:   "mcp-server-fetch",
 					Transport:    MCPTransport{Type: "stdio"},
-					MCPName:      "io.github.modelcontextprotocol/server-fetch",
+					ServerName:   "io.github.modelcontextprotocol/server-fetch",
 				},
 			},
 		},
@@ -585,7 +585,7 @@ func TestMCPServerValidate_MCPPackageName_OptionalWhenEmpty(t *testing.T) {
 					RegistryType: "npm",
 					Identifier:   "my-pkg",
 					Transport:    MCPTransport{Type: "stdio"},
-					// MCPName intentionally omitted
+					// ServerName intentionally omitted
 				},
 			},
 		},
@@ -593,7 +593,7 @@ func TestMCPServerValidate_MCPPackageName_OptionalWhenEmpty(t *testing.T) {
 	require.NoError(t, m.Validate())
 }
 
-func TestMCPServerValidateRegistries_FallsBackToMetadataNameWhenMCPNameUnset(t *testing.T) {
+func TestMCPServerValidateRegistries_FallsBackToMetadataNameWhenServerNameUnset(t *testing.T) {
 	var gotClaim string
 	validator := func(_ context.Context, _ RegistryPackage, claim string) error {
 		gotClaim = claim
@@ -609,7 +609,7 @@ func TestMCPServerValidateRegistries_FallsBackToMetadataNameWhenMCPNameUnset(t *
 	require.Equal(t, "my-server", gotClaim)
 }
 
-func TestMCPServerValidateRegistries_UsesMCPNameWhenSet(t *testing.T) {
+func TestMCPServerValidateRegistries_UsesServerNameWhenSet(t *testing.T) {
 	var gotClaim string
 	validator := func(_ context.Context, _ RegistryPackage, claim string) error {
 		gotClaim = claim
@@ -619,7 +619,7 @@ func TestMCPServerValidateRegistries_UsesMCPNameWhenSet(t *testing.T) {
 		Metadata: ObjectMeta{Namespace: "default", Name: "my-server"},
 		Spec: MCPServerSpec{Source: &MCPServerSource{Package: &MCPPackage{
 			RegistryType: "pypi", Identifier: "mcp-server-fetch", Transport: MCPTransport{Type: "stdio"},
-			MCPName: "io.github.modelcontextprotocol/server-fetch",
+			ServerName: "io.github.modelcontextprotocol/server-fetch",
 		}}},
 	}
 	require.NoError(t, m.ValidateRegistries(context.Background(), validator))
