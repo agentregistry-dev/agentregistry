@@ -36,10 +36,10 @@ func ValidateProjectName(name string) error {
 	return nil
 }
 
-// validateDNSLabel applies the v1alpha1 DNS-1123 label rule with a
+// validateName applies the v1alpha1 DNS-1123 label rule with a
 // kind-aware error message so CLI users see "agent name must be..." rather
 // than the generic backend error.
-func validateDNSLabel(kind, name string) error {
+func validateName(kind, name string) error {
 	if name == "" {
 		return fmt.Errorf("%s name cannot be empty", kind)
 	}
@@ -53,7 +53,7 @@ func validateDNSLabel(kind, name string) error {
 // Python keyword rejection is CLI-only — agent names become Python identifiers
 // in generated code, but the registry's API doesn't care.
 func ValidateAgentName(name string) error {
-	if err := validateDNSLabel("agent", name); err != nil {
+	if err := validateName("agent", name); err != nil {
 		return err
 	}
 	if _, isKeyword := pythonKeywords[name]; isKeyword {
@@ -64,20 +64,20 @@ func ValidateAgentName(name string) error {
 
 // ValidateSkillName enforces DNS-1123 label form.
 func ValidateSkillName(name string) error {
-	return validateDNSLabel("skill", name)
+	return validateName("skill", name)
 }
 
 // ValidatePromptName enforces DNS-1123 label form.
 func ValidatePromptName(name string) error {
-	return validateDNSLabel("prompt", name)
+	return validateName("prompt", name)
 }
 
 // ValidateDeploymentName enforces DNS-1123 label form.
 func ValidateDeploymentName(name string) error {
-	return validateDNSLabel("deployment", name)
+	return validateName("deployment", name)
 }
 
 // ValidateMCPServerName enforces DNS-1123 label form.
 func ValidateMCPServerName(name string) error {
-	return validateDNSLabel("MCP server", name)
+	return validateName("MCP server", name)
 }
