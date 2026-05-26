@@ -143,6 +143,7 @@ func init() {
 	rootCmd.AddCommand(declarative.BuildCmd)
 	rootCmd.AddCommand(declarative.RunCmd)
 	rootCmd.AddCommand(declarative.PullCmd)
+	rootCmd.AddCommand(declarative.WaitCmd)
 	rootCmd.AddCommand(db.NewCommand())
 
 	// Register the OSS migration source. Each source carries its own

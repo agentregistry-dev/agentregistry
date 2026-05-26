@@ -161,14 +161,18 @@ func init() {
 		Kind:    "deployment",
 		Plural:  "deployments",
 		Aliases: []string{"Deployment"},
-		Get: func(_ context.Context, name, _ string) (any, error) {
-			return getDeploymentByTarget(context.Background(), name)
+		Get: func(ctx context.Context, name, _ string) (any, error) {
+			deployment, err := client.GetTyped(ctx, apiClient, v1alpha1.KindDeployment, v1alpha1.DefaultNamespace, name, "", func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} })
+			if err != nil {
+				return nil, err
+			}
+			return cliCommon.DeploymentRecordFromObject(deployment), nil
 		},
-		Delete: func(_ context.Context, name, tag string, force bool) error {
-			return deleteDeploymentByTarget(context.Background(), name, tag, force)
+		Delete: func(ctx context.Context, name, tag string, force bool) error {
+			return deleteAny(ctx, v1alpha1.KindDeployment, name, tag, force, func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} })
 		},
-		ListFunc: func(_ context.Context, _ scheme.ListOpts) ([]any, error) {
-			return listDeploymentAny(context.Background())
+		ListFunc: func(ctx context.Context, _ scheme.ListOpts) ([]any, error) {
+			return listDeploymentAny(ctx)
 		},
 		RowFunc: func(item any) []string {
 			deployment, ok := item.(*cliCommon.DeploymentRecord)
