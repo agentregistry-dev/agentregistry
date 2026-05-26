@@ -82,6 +82,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- TODO(krt): this explicit trigger roster is scoped to the OSS
+-- Deployment-first controller slice. Before additional downstream or
+-- controller-owned resource tables depend on event replay, replace this with
+-- a DB-side resource-table registration helper so each resource-table
+-- migration installs its own control-plane trigger.
 CREATE OR REPLACE TRIGGER agents_control_plane_event
     AFTER INSERT OR UPDATE OR DELETE ON v1alpha1.agents
     FOR EACH ROW EXECUTE FUNCTION v1alpha1.record_control_plane_event('Agent');
