@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"slices"
 
+	"istio.io/istio/pkg/kube/krt"
+
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
-	"istio.io/istio/pkg/kube/krt"
 )
 
 const listAllPageSize = 500

@@ -290,28 +290,32 @@ func (e *DeploymentExecutor) persistApplyResult(ctx context.Context, deployment 
 	patch := v1alpha1store.PatchOpts{
 		Finalizers: ensureFinalizer(DeploymentControllerFinalizer),
 	}
-	if result != nil {
-		if len(result.Conditions) > 0 || len(result.Details) > 0 {
-			patch.Status = v1alpha1.StatusPatcher(func(s *v1alpha1.Status) {
-				if s.ObservedGeneration < deployment.Metadata.Generation {
-					s.ObservedGeneration = deployment.Metadata.Generation
-				}
-				for _, cond := range result.Conditions {
-					s.SetCondition(cond)
-				}
-				for key, encoded := range result.Details {
-					_ = s.SetDetailsKeyJSON(key, encoded)
-				}
-			})
+	if result == nil {
+		if err := e.deploymentStore().ApplyPatch(ctx, deployment.Metadata.NamespaceOrDefault(), deployment.Metadata.Name, "", patch); err != nil {
+			return fmt.Errorf("persist apply result: %w", err)
 		}
-		if len(result.RuntimeMetadata) > 0 {
-			patch.Annotations = func(annotations map[string]string) map[string]string {
-				if annotations == nil {
-					annotations = map[string]string{}
-				}
-				maps.Copy(annotations, result.RuntimeMetadata)
-				return annotations
+		return nil
+	}
+	if len(result.Conditions) > 0 || len(result.Details) > 0 {
+		patch.Status = v1alpha1.StatusPatcher(func(s *v1alpha1.Status) {
+			if s.ObservedGeneration < deployment.Metadata.Generation {
+				s.ObservedGeneration = deployment.Metadata.Generation
 			}
+			for _, cond := range result.Conditions {
+				s.SetCondition(cond)
+			}
+			for key, encoded := range result.Details {
+				_ = s.SetDetailsKeyJSON(key, encoded)
+			}
+		})
+	}
+	if len(result.RuntimeMetadata) > 0 {
+		patch.Annotations = func(annotations map[string]string) map[string]string {
+			if annotations == nil {
+				annotations = map[string]string{}
+			}
+			maps.Copy(annotations, result.RuntimeMetadata)
+			return annotations
 		}
 	}
 	if err := e.deploymentStore().ApplyPatch(ctx, deployment.Metadata.NamespaceOrDefault(), deployment.Metadata.Name, "", patch); err != nil {

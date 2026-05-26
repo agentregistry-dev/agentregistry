@@ -273,21 +273,28 @@ func snakeCase(s string) string {
 	runes := []rune(s)
 	var out []rune
 	for i, r := range runes {
-		if unicode.IsUpper(r) {
-			if i > 0 {
-				prev := runes[i-1]
-				var next rune
-				if i+1 < len(runes) {
-					next = runes[i+1]
-				}
-				if unicode.IsLower(prev) || unicode.IsDigit(prev) || (next != 0 && unicode.IsLower(next)) {
-					out = append(out, '_')
-				}
-			}
-			out = append(out, unicode.ToLower(r))
+		if !unicode.IsUpper(r) {
+			out = append(out, r)
 			continue
 		}
-		out = append(out, r)
+		if shouldInsertSnakeBoundary(runes, i) {
+			out = append(out, '_')
+		}
+		out = append(out, unicode.ToLower(r))
 	}
 	return string(out)
+}
+
+func shouldInsertSnakeBoundary(runes []rune, i int) bool {
+	if i == 0 {
+		return false
+	}
+	prev := runes[i-1]
+	if unicode.IsLower(prev) || unicode.IsDigit(prev) {
+		return true
+	}
+	if i+1 >= len(runes) {
+		return false
+	}
+	return unicode.IsLower(runes[i+1])
 }
