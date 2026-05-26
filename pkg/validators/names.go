@@ -84,11 +84,6 @@ func ValidatePromptName(name string) error {
 	return validateName("prompt", name)
 }
 
-// ValidateDeploymentName enforces DNS-1123 label form.
-func ValidateDeploymentName(name string) error {
-	return validateName("deployment", name)
-}
-
 // ValidateMCPServerName enforces DNS-1123 label form.
 func ValidateMCPServerName(name string) error {
 	return validateName("MCP server", name)

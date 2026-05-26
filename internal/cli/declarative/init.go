@@ -944,7 +944,7 @@ The generated file can be applied directly:
 				name = args[0]
 			} else {
 				typed, err := promptText("Project name", "myprompt",
-					func(s string) error { return validators.ValidateSkillName(s) },
+					func(s string) error { return validators.ValidatePromptName(s) },
 					cmd.OutOrStdout(), cmd.InOrStdin())
 				if err != nil {
 					return err
@@ -952,8 +952,7 @@ The generated file can be applied directly:
 				name = typed
 			}
 
-			// Prompt names follow the same DB constraint as skill names (^[a-zA-Z0-9_-]+$).
-			if err := validators.ValidateSkillName(name); err != nil {
+			if err := validators.ValidatePromptName(name); err != nil {
 				return fmt.Errorf("invalid prompt name: %w", err)
 			}
 

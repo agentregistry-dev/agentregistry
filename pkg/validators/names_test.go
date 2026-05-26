@@ -108,10 +108,9 @@ var dnsLabelCases = []struct {
 	{"trailing hyphen", "thing-", true},
 }
 
-func TestValidateSkillName(t *testing.T)      { runDNSLabelCases(t, ValidateSkillName) }
-func TestValidatePromptName(t *testing.T)     { runDNSLabelCases(t, ValidatePromptName) }
-func TestValidateDeploymentName(t *testing.T) { runDNSLabelCases(t, ValidateDeploymentName) }
-func TestValidateMCPServerName(t *testing.T)  { runDNSLabelCases(t, ValidateMCPServerName) }
+func TestValidateSkillName(t *testing.T)     { runDNSLabelCases(t, ValidateSkillName) }
+func TestValidatePromptName(t *testing.T)    { runDNSLabelCases(t, ValidatePromptName) }
+func TestValidateMCPServerName(t *testing.T) { runDNSLabelCases(t, ValidateMCPServerName) }
 
 func runDNSLabelCases(t *testing.T, fn func(string) error) {
 	t.Helper()
