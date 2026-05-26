@@ -53,7 +53,6 @@ Timeout regimes:
 	cmd.Flags().String("for", "deployed", "Target state to wait for: deployed, failed, undeployed, delete")
 	cmd.Flags().Duration("timeout", cliCommon.DefaultWaitTimeout,
 		"Maximum time to wait. 0 polls once and exits; negative waits forever.")
-	cmd.Flags().Duration("interval", 2*time.Second, "How often to poll the registry")
 	return cmd
 }
 
@@ -72,11 +71,9 @@ func runDeclarativeWait(cmd *cobra.Command, args []string) error {
 
 	forFlag, _ := cmd.Flags().GetString("for")
 	timeout, _ := cmd.Flags().GetDuration("timeout")
-	interval, _ := cmd.Flags().GetDuration("interval")
 
 	opts := cliCommon.WaitOptions{
-		Timeout:      timeout,
-		PollInterval: interval,
+		Timeout: timeout,
 		Progress: func(status string, elapsed time.Duration) {
 			fmt.Fprintf(cmd.ErrOrStderr(), "waiting for deployment/%s (status=%s, %s elapsed)\n",
 				name, status, elapsed.Round(time.Second))

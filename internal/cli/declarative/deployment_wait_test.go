@@ -68,7 +68,7 @@ func TestDeploymentWait_DeployedReturnsImmediately(t *testing.T) {
 	out := &bytes.Buffer{}
 	cmd := declarative.NewWaitCmd()
 	cmd.SetOut(out)
-	cmd.SetArgs([]string{"deployment", "aws-v1", "--interval=1ms", "--timeout=1s"})
+	cmd.SetArgs([]string{"deployment", "aws-v1", "--timeout=1s"})
 
 	require.NoError(t, cmd.Execute())
 	assert.Contains(t, out.String(), "deployment/aws-v1 deployed")
@@ -85,7 +85,7 @@ func TestDeploymentWait_FailedSurfacesError(t *testing.T) {
 	cmd := declarative.NewWaitCmd()
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
-	cmd.SetArgs([]string{"deployment", "aws-v1", "--interval=1ms", "--timeout=1s"})
+	cmd.SetArgs([]string{"deployment", "aws-v1", "--timeout=1s"})
 
 	err := cmd.Execute()
 	require.Error(t, err)
@@ -102,7 +102,7 @@ func TestDeploymentWait_ForFailedSucceedsOnFailed(t *testing.T) {
 	out := &bytes.Buffer{}
 	cmd := declarative.NewWaitCmd()
 	cmd.SetOut(out)
-	cmd.SetArgs([]string{"deployment", "aws-v1", "--for=failed", "--interval=1ms", "--timeout=1s"})
+	cmd.SetArgs([]string{"deployment", "aws-v1", "--for=failed", "--timeout=1s"})
 
 	require.NoError(t, cmd.Execute())
 	assert.Contains(t, out.String(), "deployment/aws-v1 failed")
@@ -118,7 +118,7 @@ func TestDeploymentWait_ForDeleteSucceedsWhenAbsent(t *testing.T) {
 	out := &bytes.Buffer{}
 	cmd := declarative.NewWaitCmd()
 	cmd.SetOut(out)
-	cmd.SetArgs([]string{"deployment", "aws-v1", "--for=delete", "--interval=1ms", "--timeout=1s"})
+	cmd.SetArgs([]string{"deployment", "aws-v1", "--for=delete", "--timeout=1s"})
 
 	require.NoError(t, cmd.Execute())
 	assert.Contains(t, out.String(), "deployment/aws-v1 deleted")
@@ -134,7 +134,7 @@ func TestDeploymentWait_NotFound(t *testing.T) {
 	cmd := declarative.NewWaitCmd()
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
-	cmd.SetArgs([]string{"deployment", "aws-v1", "--interval=1ms", "--timeout=1s"})
+	cmd.SetArgs([]string{"deployment", "aws-v1", "--timeout=1s"})
 
 	err := cmd.Execute()
 	require.Error(t, err)
@@ -151,7 +151,7 @@ func TestDeploymentWait_RejectsUnknownForValue(t *testing.T) {
 	cmd := declarative.NewWaitCmd()
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
-	cmd.SetArgs([]string{"deployment", "aws-v1", "--for=garbage", "--interval=1ms", "--timeout=1s"})
+	cmd.SetArgs([]string{"deployment", "aws-v1", "--for=garbage", "--timeout=1s"})
 
 	err := cmd.Execute()
 	require.Error(t, err)
