@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -14,10 +16,12 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
-// deploymentWaitTestServer returns an httptest server serving /v0/deployments
-// from the given list.
+// deploymentWaitTestServer serves /v0/deployments (list) and
+// /v0/deployments/{name} (get) from the given list, matching by
+// Metadata.Name.
 func deploymentWaitTestServer(t *testing.T, deployments []v1alpha1.Deployment) *httptest.Server {
 	t.Helper()
+	var mu sync.Mutex
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v0/deployments", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -26,6 +30,28 @@ func deploymentWaitTestServer(t *testing.T, deployments []v1alpha1.Deployment) *
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"items": deployments})
+	})
+	mux.HandleFunc("/v0/deployments/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		path := strings.TrimPrefix(r.URL.Path, "/v0/deployments/")
+		parts := strings.Split(path, "/")
+		if len(parts) != 1 {
+			http.Error(w, `{"error":"bad get path"}`, http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		mu.Lock()
+		defer mu.Unlock()
+		for _, d := range deployments {
+			if d.Metadata.Name == parts[0] {
+				_ = json.NewEncoder(w).Encode(d)
+				return
+			}
+		}
+		w.WriteHeader(http.StatusNotFound)
 	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -42,10 +68,10 @@ func TestDeploymentWait_DeployedReturnsImmediately(t *testing.T) {
 	out := &bytes.Buffer{}
 	cmd := declarative.NewWaitCmd()
 	cmd.SetOut(out)
-	cmd.SetArgs([]string{"deployment", "summarizer", "--interval=1ms", "--timeout=1s"})
+	cmd.SetArgs([]string{"deployment", "aws-v1", "--interval=1ms", "--timeout=1s"})
 
 	require.NoError(t, cmd.Execute())
-	assert.Contains(t, out.String(), "deployment/summarizer deployed")
+	assert.Contains(t, out.String(), "deployment/aws-v1 deployed")
 }
 
 // Terminal failure when waiting for "deployed" surfaces an error rather than
@@ -59,7 +85,7 @@ func TestDeploymentWait_FailedSurfacesError(t *testing.T) {
 	cmd := declarative.NewWaitCmd()
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
-	cmd.SetArgs([]string{"deployment", "summarizer", "--interval=1ms", "--timeout=1s"})
+	cmd.SetArgs([]string{"deployment", "aws-v1", "--interval=1ms", "--timeout=1s"})
 
 	err := cmd.Execute()
 	require.Error(t, err)
@@ -76,10 +102,10 @@ func TestDeploymentWait_ForFailedSucceedsOnFailed(t *testing.T) {
 	out := &bytes.Buffer{}
 	cmd := declarative.NewWaitCmd()
 	cmd.SetOut(out)
-	cmd.SetArgs([]string{"deployment", "summarizer", "--for=failed", "--interval=1ms", "--timeout=1s"})
+	cmd.SetArgs([]string{"deployment", "aws-v1", "--for=failed", "--interval=1ms", "--timeout=1s"})
 
 	require.NoError(t, cmd.Execute())
-	assert.Contains(t, out.String(), "deployment/summarizer failed")
+	assert.Contains(t, out.String(), "deployment/aws-v1 failed")
 }
 
 // --for=delete against a registry with no matching deployment succeeds.
@@ -92,14 +118,14 @@ func TestDeploymentWait_ForDeleteSucceedsWhenAbsent(t *testing.T) {
 	out := &bytes.Buffer{}
 	cmd := declarative.NewWaitCmd()
 	cmd.SetOut(out)
-	cmd.SetArgs([]string{"deployment", "summarizer", "--for=delete", "--interval=1ms", "--timeout=1s"})
+	cmd.SetArgs([]string{"deployment", "aws-v1", "--for=delete", "--interval=1ms", "--timeout=1s"})
 
 	require.NoError(t, cmd.Execute())
-	assert.Contains(t, out.String(), "deployment/summarizer deleted")
+	assert.Contains(t, out.String(), "deployment/aws-v1 deleted")
 }
 
-// A missing target name fails with "not found".
-func TestDeploymentWait_NotFoundOnMissingTarget(t *testing.T) {
+// A missing deployment name fails with "not found".
+func TestDeploymentWait_NotFound(t *testing.T) {
 	srv := deploymentWaitTestServer(t, []v1alpha1.Deployment{
 		deploymentFixture("other", "unrelated", "1.0.0", "my-aws", "agent", "deployed"),
 	})
@@ -108,29 +134,11 @@ func TestDeploymentWait_NotFoundOnMissingTarget(t *testing.T) {
 	cmd := declarative.NewWaitCmd()
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
-	cmd.SetArgs([]string{"deployment", "summarizer", "--interval=1ms", "--timeout=1s"})
+	cmd.SetArgs([]string{"deployment", "aws-v1", "--interval=1ms", "--timeout=1s"})
 
 	err := cmd.Execute()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
-}
-
-// --tag restricts the wait to one target tag when two deployments share a target name.
-func TestDeploymentWait_TagFilter(t *testing.T) {
-	srv := deploymentWaitTestServer(t, []v1alpha1.Deployment{
-		deploymentFixture("aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "deploying"),
-		deploymentFixture("aws-v2", "summarizer", "2.0.0", "my-aws", "agent", "deployed"),
-	})
-	setupClientForServer(t, srv)
-
-	out := &bytes.Buffer{}
-	cmd := declarative.NewWaitCmd()
-	cmd.SetOut(out)
-	cmd.SetArgs([]string{"deployment", "summarizer", "--tag=2.0.0", "--interval=1ms", "--timeout=1s"})
-
-	require.NoError(t, cmd.Execute(),
-		"wait must pick the matching tag even when another tag is still deploying")
-	assert.Contains(t, out.String(), "deployment/summarizer deployed")
 }
 
 // Unknown --for values are rejected up front instead of waiting until the timeout.
@@ -143,33 +151,11 @@ func TestDeploymentWait_RejectsUnknownForValue(t *testing.T) {
 	cmd := declarative.NewWaitCmd()
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
-	cmd.SetArgs([]string{"deployment", "summarizer", "--for=garbage", "--interval=1ms", "--timeout=1s"})
+	cmd.SetArgs([]string{"deployment", "aws-v1", "--for=garbage", "--interval=1ms", "--timeout=1s"})
 
 	err := cmd.Execute()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `invalid --for value "garbage"`)
-}
-
-// When --tag is omitted and multiple deployments share the target name, the
-// wait surfaces an ambiguity error rather than silently following one.
-func TestDeploymentWait_AmbiguousTargetWithoutTag(t *testing.T) {
-	srv := deploymentWaitTestServer(t, []v1alpha1.Deployment{
-		deploymentFixture("aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "deployed"),
-		deploymentFixture("aws-v2", "summarizer", "2.0.0", "my-aws", "agent", "deploying"),
-	})
-	setupClientForServer(t, srv)
-
-	cmd := declarative.NewWaitCmd()
-	cmd.SetOut(&bytes.Buffer{})
-	cmd.SetErr(&bytes.Buffer{})
-	cmd.SetArgs([]string{"deployment", "summarizer", "--interval=1ms", "--timeout=1s"})
-
-	err := cmd.Execute()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "multiple deployments share target")
-	assert.Contains(t, err.Error(), "--tag to disambiguate")
-	assert.Contains(t, err.Error(), "1.0.0", "ambiguity message must list every conflicting tag")
-	assert.Contains(t, err.Error(), "2.0.0", "ambiguity message must list every conflicting tag")
 }
 
 // Non-deployment kinds are rejected.

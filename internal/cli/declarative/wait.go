@@ -9,9 +9,10 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/agentregistry-dev/agentregistry/internal/client"
 	cliCommon "github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
-	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
 // errAPIClientNotInitialized is returned when the CLI's API client was never
@@ -41,15 +42,10 @@ Timeout regimes:
 
   --timeout=5m   (default) wait up to 5 minutes
   --timeout=0    poll once and return the current state
-  --timeout=-1   wait forever
-
-When --tag is omitted and multiple deployments share the target name, the
-wait fails with an ambiguity error; pass --tag to pin to a specific
-deployment.`,
-		Example: `  arctl wait deployment my-agent
-  arctl wait deployment my-agent --for=failed
-  arctl wait deployment my-agent --for=delete --timeout=10m
-  arctl wait deployment my-agent --tag 1.0.0`,
+  --timeout=-1   wait forever`,
+		Example: `  arctl wait deployment aws-v1
+  arctl wait deployment aws-v1 --for=failed
+  arctl wait deployment aws-v1 --for=delete --timeout=10m`,
 		Args:         cobra.ExactArgs(2),
 		SilenceUsage: true,
 		RunE:         runDeclarativeWait,
@@ -58,8 +54,6 @@ deployment.`,
 	cmd.Flags().Duration("timeout", cliCommon.DefaultWaitTimeout,
 		"Maximum time to wait. 0 polls once and exits; negative waits forever.")
 	cmd.Flags().Duration("interval", 2*time.Second, "How often to poll the registry")
-	cmd.Flags().String("tag", "",
-		"Restrict the wait to a specific target tag (defaults to any tag of the named target)")
 	return cmd
 }
 
@@ -79,7 +73,6 @@ func runDeclarativeWait(cmd *cobra.Command, args []string) error {
 	forFlag, _ := cmd.Flags().GetString("for")
 	timeout, _ := cmd.Flags().GetDuration("timeout")
 	interval, _ := cmd.Flags().GetDuration("interval")
-	tag, _ := cmd.Flags().GetString("tag")
 
 	opts := cliCommon.WaitOptions{
 		Timeout:      timeout,
@@ -102,7 +95,7 @@ func runDeclarativeWait(cmd *cobra.Command, args []string) error {
 	}
 
 	resolve := func(ctx context.Context) (*cliCommon.DeploymentRecord, error) {
-		return resolveDeploymentForWait(ctx, name, tag)
+		return resolveDeploymentForWait(ctx, name)
 	}
 
 	if err := cliCommon.WaitForDeployment(cmd.Context(), resolve, opts); err != nil {
@@ -117,32 +110,12 @@ func runDeclarativeWait(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func resolveDeploymentForWait(ctx context.Context, name, tag string) (*cliCommon.DeploymentRecord, error) {
-	deployments, err := cliCommon.ListDeployments(ctx, apiClient)
+func resolveDeploymentForWait(ctx context.Context, name string) (*cliCommon.DeploymentRecord, error) {
+	dep, err := client.GetTyped(ctx, apiClient, v1alpha1.KindDeployment,
+		v1alpha1.DefaultNamespace, name, "",
+		func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} })
 	if err != nil {
 		return nil, err
 	}
-	var matches []*cliCommon.DeploymentRecord
-	for _, dep := range deployments {
-		if dep == nil || dep.TargetName != name {
-			continue
-		}
-		if tag != "" && dep.TargetTag != tag {
-			continue
-		}
-		matches = append(matches, dep)
-	}
-	switch len(matches) {
-	case 0:
-		return nil, database.ErrNotFound
-	case 1:
-		return matches[0], nil
-	default:
-		tags := make([]string, 0, len(matches))
-		for _, m := range matches {
-			tags = append(tags, m.TargetTag)
-		}
-		return nil, fmt.Errorf("multiple deployments share target %q (tags: %s); pass --tag to disambiguate",
-			name, strings.Join(tags, ", "))
-	}
+	return cliCommon.DeploymentRecordFromObject(dep), nil
 }
