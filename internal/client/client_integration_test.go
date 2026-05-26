@@ -49,7 +49,7 @@ apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
   namespace: default
-  name: acme/planner
+  name: acme-planner
 spec:
   title: Planner
   description: planning agent
@@ -60,10 +60,10 @@ spec:
 	require.Equal(t, "created", results[0].Status)
 
 	// Get by exact tag.
-	raw, err := c.Get(ctx, v1alpha1.KindAgent, "default", "acme/planner", "latest")
+	raw, err := c.Get(ctx, v1alpha1.KindAgent, "default", "acme-planner", "latest")
 	require.NoError(t, err)
 	require.Equal(t, v1alpha1.KindAgent, raw.Kind)
-	require.Equal(t, "acme/planner", raw.Metadata.Name)
+	require.Equal(t, "acme-planner", raw.Metadata.Name)
 	require.Equal(t, "latest", raw.Metadata.Tag)
 
 	// Unmarshal Spec into the typed Agent.
@@ -72,7 +72,7 @@ spec:
 	require.Equal(t, "Planner", spec.Title)
 
 	// GetLatest returns the same row.
-	latest, err := c.GetLatest(ctx, v1alpha1.KindAgent, "default", "acme/planner")
+	latest, err := c.GetLatest(ctx, v1alpha1.KindAgent, "default", "acme-planner")
 	require.NoError(t, err)
 	require.Equal(t, "latest", latest.Metadata.Tag)
 
@@ -81,7 +81,7 @@ spec:
 	require.NoError(t, err)
 	require.Equal(t, "", next)
 	require.Len(t, items, 1)
-	require.Equal(t, "acme/planner", items[0].Metadata.Name)
+	require.Equal(t, "acme-planner", items[0].Metadata.Name)
 
 	// List (namespaced) returns the same.
 	items, _, err = c.List(ctx, v1alpha1.KindAgent, client.ListOpts{Namespace: "default"})
@@ -91,12 +91,12 @@ spec:
 	// Delete → finalizer-free Agent hard-deletes immediately. Both
 	// GetLatest and the exact-tag Get return ErrNotFound; the row is
 	// gone, not soft-deleted.
-	require.NoError(t, c.Delete(ctx, v1alpha1.KindAgent, "default", "acme/planner", "latest"))
+	require.NoError(t, c.Delete(ctx, v1alpha1.KindAgent, "default", "acme-planner", "latest"))
 
-	_, err = c.Get(ctx, v1alpha1.KindAgent, "default", "acme/planner", "latest")
+	_, err = c.Get(ctx, v1alpha1.KindAgent, "default", "acme-planner", "latest")
 	require.ErrorIs(t, err, client.ErrNotFound)
 
-	_, err = c.GetLatest(ctx, v1alpha1.KindAgent, "default", "acme/planner")
+	_, err = c.GetLatest(ctx, v1alpha1.KindAgent, "default", "acme-planner")
 	require.ErrorIs(t, err, client.ErrNotFound)
 }
 
