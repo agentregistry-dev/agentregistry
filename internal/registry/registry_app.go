@@ -104,7 +104,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	pool := db.Pool()
 	stores := buildStores(pool, options.Auditor)
 	perKindHooks := crudPerKindHooks(options)
-	if _, err := controller.StartDeploymentController(ctx, pool, stores, deploymentAdapters, perKindHooks.InitialFinalizers); err != nil {
+	if _, err := controller.StartDeploymentController(ctx, pool, stores, deploymentAdapters, perKindHooks.InitialFinalizers, controllerRuntimeConfig(cfg)); err != nil {
 		return fmt.Errorf("start deployment controller: %w", err)
 	}
 
@@ -200,6 +200,18 @@ func buildStores(pool *pgxpool.Pool, auditor types.Auditor) map[string]*v1alpha1
 
 	slog.Info("v1alpha1 routes enabled")
 	return stores
+}
+
+func controllerRuntimeConfig(cfg *config.Config) controller.RuntimeConfig {
+	return controller.RuntimeConfig{
+		Retention: controller.RetentionPolicy{
+			ControlPlaneEvents: cfg.ControllerEventRetention,
+			EventKeepAfterRev:  cfg.ControllerEventKeepAfterRevision,
+			ReconcileWork:      cfg.ControllerWorkRetention,
+			ReconcileAttempts:  cfg.ControllerAttemptRetention,
+			BatchLimit:         cfg.ControllerRetentionPruneBatchLimit,
+		},
+	}
 }
 
 func buildRouteOptions(

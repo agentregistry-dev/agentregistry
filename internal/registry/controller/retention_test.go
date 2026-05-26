@@ -77,6 +77,53 @@ func TestRunRetentionPruneReturnsContextualErrors(t *testing.T) {
 	}
 }
 
+func TestRetentionPolicyEnabled(t *testing.T) {
+	tests := []struct {
+		name   string
+		policy RetentionPolicy
+		want   bool
+	}{
+		{name: "empty", policy: RetentionPolicy{}, want: false},
+		{name: "events", policy: RetentionPolicy{ControlPlaneEvents: time.Hour}, want: true},
+		{name: "work", policy: RetentionPolicy{ReconcileWork: time.Hour}, want: true},
+		{name: "attempts", policy: RetentionPolicy{ReconcileAttempts: time.Hour}, want: true},
+		{name: "revision bound alone does not enable age pruning", policy: RetentionPolicy{EventKeepAfterRev: 42}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.policy.Enabled(); got != tt.want {
+				t.Fatalf("Enabled() = %t, want %t", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRetentionPrunerRunOnceUsesPolicy(t *testing.T) {
+	now := time.Date(2026, 5, 26, 9, 30, 0, 0, time.UTC)
+	events := &fakeEventPruner{deleted: 7}
+	pruner := &RetentionPruner{
+		Stores: PruneStores{ControlPlaneEvents: events},
+		Policy: RetentionPolicy{
+			ControlPlaneEvents: time.Hour,
+			EventKeepAfterRev:  11,
+			BatchLimit:         13,
+		},
+		Now: func() time.Time { return now },
+	}
+
+	result, err := pruner.RunOnce(context.Background())
+	if err != nil {
+		t.Fatalf("RunOnce returned error: %v", err)
+	}
+	if result.ControlPlaneEvents != 7 {
+		t.Fatalf("ControlPlaneEvents = %d, want 7", result.ControlPlaneEvents)
+	}
+	if events.before != now.Add(-time.Hour) || events.keepAfterRevision != 11 || events.limit != 13 {
+		t.Fatalf("event prune args = before %s keep %d limit %d", events.before, events.keepAfterRevision, events.limit)
+	}
+}
+
 type fakeEventPruner struct {
 	called            bool
 	before            time.Time

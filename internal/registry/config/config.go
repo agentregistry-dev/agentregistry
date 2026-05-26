@@ -34,8 +34,8 @@ type Config struct {
 	Verbose    bool   `env:"VERBOSE" envDefault:"false"`
 
 	// Controller foundation retention. These settings bound the KRT
-	// controller's durable invalidation/work tables once the controller loop is
-	// wired. A zero duration disables pruning for that table.
+	// controller's durable invalidation/work tables. A zero duration disables
+	// pruning for that table.
 	ControllerEventRetention           time.Duration `env:"CONTROLLER_EVENT_RETENTION" envDefault:"24h"`
 	ControllerEventKeepAfterRevision   int64         `env:"CONTROLLER_EVENT_KEEP_AFTER_REVISION" envDefault:"0"`
 	ControllerWorkRetention            time.Duration `env:"CONTROLLER_WORK_RETENTION" envDefault:"24h"`
