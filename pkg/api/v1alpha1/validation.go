@@ -98,16 +98,16 @@ var labelValueRegex = regexp.MustCompile(`^([a-zA-Z0-9]([-a-zA-Z0-9._]{0,61}[a-z
 
 var tagRegex = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$`)
 
-// DNS-1123 label form: lowercase alphanumeric and hyphens only, must start
-// and end with alphanumeric, 1-63 chars. Length cap is baked into the
-// pattern via the `{0,61}` quantifier so callers don't need a separate
-// len() check.
-const DNSLabelPattern = `^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`
+// DNS-1123 subdomain form: lowercase alphanumeric, hyphens, and dots.
+// Must start and end with alphanumeric. Each dot-separated segment is a
+// DNS-1123 label (1-63 chars). Total length 1-253. Matches the rule
+// Kubernetes uses for most resource `metadata.name` fields.
+const DNSSubdomainPattern = `^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$`
 
-// DNSLabelMaxLen is the upper length bound for DNS-1123 label values.
-const DNSLabelMaxLen = 63
+// DNSSubdomainMaxLen is the upper length bound for DNS-1123 subdomain values.
+const DNSSubdomainMaxLen = 253
 
-var DNSLabelRegex = regexp.MustCompile(DNSLabelPattern)
+var DNSSubdomainRegex = regexp.MustCompile(DNSSubdomainPattern)
 
 // validateNameField is the single source of truth for resource-name validation
 // across the v1alpha1 surface — both metadata.name and ref.name. Every kind
@@ -117,8 +117,11 @@ func validateNameField(name string) error {
 	if name == "" {
 		return fmt.Errorf("%w", ErrRequiredField)
 	}
-	if !DNSLabelRegex.MatchString(name) {
-		return fmt.Errorf("%w: must be DNS-1123 label (lowercase alphanumeric and hyphens; start/end with alphanumeric, max %d chars): %q", ErrInvalidFormat, DNSLabelMaxLen, name)
+	if len(name) > DNSSubdomainMaxLen {
+		return fmt.Errorf("%w: must be DNS-1123 subdomain (max %d chars), got %d", ErrInvalidFormat, DNSSubdomainMaxLen, len(name))
+	}
+	if !DNSSubdomainRegex.MatchString(name) {
+		return fmt.Errorf("%w: must be DNS-1123 subdomain (lowercase alphanumeric, hyphens, and dots; start/end with alphanumeric; each dot-separated segment 1-63 chars): %q", ErrInvalidFormat, name)
 	}
 	return nil
 }

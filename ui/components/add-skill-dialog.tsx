@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { createSkillV0, type SkillJson } from "@/lib/admin-api"
-import { isValidDNSLabel, DNS_LABEL_HELP } from "@/lib/validators"
+import { isValidDNSSubdomain, DNS_SUBDOMAIN_HELP } from "@/lib/validators"
 
 interface AddSkillDialogProps {
   open: boolean
@@ -33,8 +33,8 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
       if (!name.trim()) {
         throw new Error("Skill name is required")
       }
-      if (!isValidDNSLabel(name.trim())) {
-        throw new Error("Skill name must be DNS-1123 label: lowercase alphanumeric and hyphens, max 63 chars, start/end with alphanumeric")
+      if (!isValidDNSSubdomain(name.trim())) {
+        throw new Error("Skill name must be DNS-1123 subdomain: lowercase alphanumeric, hyphens, and dots; max 253 chars; each dot-separated segment must start and end with alphanumeric")
       }
       if (!description.trim()) {
         throw new Error("Description is required")
@@ -110,7 +110,7 @@ export function AddSkillDialog({ open, onOpenChange, onSkillAdded }: AddSkillDia
               disabled={loading}
               required
             />
-            <p className="text-xs text-muted-foreground">{DNS_LABEL_HELP}</p>
+            <p className="text-xs text-muted-foreground">{DNS_SUBDOMAIN_HELP}</p>
           </div>
 
           <div className="space-y-2">

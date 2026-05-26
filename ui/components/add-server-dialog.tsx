@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { createServerV0, type ServerJson } from "@/lib/admin-api"
-import { isValidDNSLabel } from "@/lib/validators"
+import { isValidDNSSubdomain } from "@/lib/validators"
 import { Loader2, AlertCircle, Plus, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -59,8 +59,8 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
       if (!name.trim()) {
         throw new Error("Server name is required")
       }
-      if (!isValidDNSLabel(name.trim())) {
-        throw new Error("Server name must be DNS-1123 label: lowercase alphanumeric and hyphens, max 63 chars, start/end with alphanumeric")
+      if (!isValidDNSSubdomain(name.trim())) {
+        throw new Error("Server name must be DNS-1123 subdomain: lowercase alphanumeric, hyphens, and dots; max 253 chars; each dot-separated segment must start and end with alphanumeric")
       }
       if (!isValidMCPPackageName(pkg?.serverName.trim() || "")) {
         throw new Error("Upstream catalogue name must be unset or in 'domain/name' shape (e.g. 'io.github.user/server')")
@@ -157,11 +157,11 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 disabled={loading}
-                className={name && !isValidDNSLabel(name) ? "border-yellow-500" : ""}
+                className={name && !isValidDNSSubdomain(name) ? "border-yellow-500" : ""}
               />
-              <p className={`text-xs flex items-center gap-1 min-h-[1.25rem] ${name && !isValidDNSLabel(name) ? 'text-yellow-600' : 'invisible'}`}>
+              <p className={`text-xs flex items-center gap-1 min-h-[1.25rem] ${name && !isValidDNSSubdomain(name) ? 'text-yellow-600' : 'invisible'}`}>
                 <AlertCircle className="h-3 w-3" />
-                Lowercase alphanumeric and hyphens only. Max 63 chars. (e.g., my-server)
+                Lowercase alphanumeric, hyphens, and dots. Max 253 chars. (e.g., my-server, io.example.app)
               </p>
             </div>
 

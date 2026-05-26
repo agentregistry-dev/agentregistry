@@ -51,11 +51,19 @@ func TestValidateObjectMeta_RejectsBadNamespace(t *testing.T) {
 	}
 }
 
-func TestValidateObjectMeta_RejectsNonDNSLabelName(t *testing.T) {
-	// metadata.name across every kind must be DNS-1123 label form.
-	for _, bad := range []string{"ai.exa/exa", "UPPER", "has_underscore", "io.example", "name with space", "-leading", "trailing-"} {
+func TestValidateObjectMeta_RejectsNonDNSSubdomainName(t *testing.T) {
+	// metadata.name across every kind must be DNS-1123 subdomain form.
+	for _, bad := range []string{"ai.exa/exa", "UPPER", "has_underscore", "name with space", "-leading", "trailing-", "..double-dot", "trailing-dot."} {
 		errs := ValidateObjectMeta(ObjectMeta{Namespace: "default", Name: bad})
 		require.NotEmpty(t, errs, "name %q should be invalid", bad)
+	}
+}
+
+func TestValidateObjectMeta_AcceptsDottedName(t *testing.T) {
+	// DNS-1123 subdomain allows dot-separated segments (reverse-DNS style).
+	for _, ok := range []string{"a", "foo", "foo-bar", "io.example", "io.example.app", "mcp.fetch.v1"} {
+		errs := ValidateObjectMeta(ObjectMeta{Namespace: "default", Name: ok})
+		require.Empty(t, errs, "name %q should be valid: %v", ok, errs)
 	}
 }
 
@@ -451,26 +459,39 @@ func TestMCPServerValidate_RequiresSourceOrRemote(t *testing.T) {
 }
 
 func TestValidateNameField(t *testing.T) {
-	maxLenName := strings.Repeat("a", 63) // exact max length
-	tooLongName := strings.Repeat("a", 64)
+	maxLabelLen := strings.Repeat("a", 63) // single segment at max label length
+	tooLongSegment := strings.Repeat("a", 64)
+	// 253-char dotted subdomain at the upper bound (4 segments of 63 + 3 dots = 255 → 3 segments of 63 + 1 of 61 + 3 dots = 253)
+	maxSubdomain := strings.Repeat("a", 63) + "." + strings.Repeat("b", 63) + "." + strings.Repeat("c", 63) + "." + strings.Repeat("d", 61)
+	tooLongSubdomain := maxSubdomain + "x"
 
 	testCases := []struct {
 		label     string
 		name      string
 		expectErr bool
 	}{
-		{"at least min length long", "a", false},
+		// positives
+		{"single char", "a", false},
 		{"lowercase only", "myserver", false},
 		{"contains hyphen", "my-server", false},
-		{"max length", maxLenName, false},
+		{"single dot-separated segment at label max", maxLabelLen, false},
+		{"dotted (reverse-DNS)", "io.example", false},
+		{"deeply dotted", "mcp.fetch.v1", false},
+		{"hyphen plus dot", "my-server.io", false},
+		{"max-length subdomain", maxSubdomain, false},
+
+		// negatives
 		{"empty", "", true},
 		{"contains uppercase", "MyServer", true},
 		{"contains underscore", "my_server", true},
 		{"contains slash", "example/server", true},
-		{"contains period", "io.example", true},
-		{"contains leading hyphen", "-server", true},
-		{"contains trailing hyphen", "server-", true},
-		{"longer than max len", tooLongName, true},
+		{"leading hyphen", "-server", true},
+		{"trailing hyphen", "server-", true},
+		{"leading dot", ".server", true},
+		{"trailing dot", "server.", true},
+		{"double dot", "foo..bar", true},
+		{"segment longer than 63 chars", tooLongSegment, true},
+		{"total longer than 253 chars", tooLongSubdomain, true},
 		{"single hyphen", "-", true},
 		{"non-ascii", "café", true},
 		{"contains space", "my server", true},
@@ -492,7 +513,7 @@ func TestValidateNameField_ErrorMessage(t *testing.T) {
 	err := validateNameField("io.example/foo")
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrInvalidFormat)
-	assert.Contains(t, err.Error(), "DNS-1123 label")
+	assert.Contains(t, err.Error(), "DNS-1123 subdomain")
 
 	// Required-field errors should be the standard sentinel.
 	err = validateNameField("")

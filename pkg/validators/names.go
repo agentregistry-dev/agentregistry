@@ -41,15 +41,18 @@ func ValidateProjectName(name string) error {
 	return nil
 }
 
-// validateName applies the v1alpha1 DNS-1123 label rule with a
-// kind-aware error message so CLI users see "agent name must be..." rather
+// validateName applies the v1alpha1 DNS-1123 subdomain rule with a
+// kind-aware error message so CLI users see "skill name must be..." rather
 // than the generic backend error.
 func validateName(kind, name string) error {
 	if name == "" {
 		return fmt.Errorf("%s name cannot be empty", kind)
 	}
-	if !v1alpha1.DNSLabelRegex.MatchString(name) {
-		return fmt.Errorf("%s name %q must be DNS-1123 label: lowercase alphanumeric and hyphens, max %d chars, start/end with alphanumeric", kind, name, v1alpha1.DNSLabelMaxLen)
+	if len(name) > v1alpha1.DNSSubdomainMaxLen {
+		return fmt.Errorf("%s name %q is too long (max %d chars, got %d)", kind, name, v1alpha1.DNSSubdomainMaxLen, len(name))
+	}
+	if !v1alpha1.DNSSubdomainRegex.MatchString(name) {
+		return fmt.Errorf("%s name %q must be DNS-1123 subdomain: lowercase alphanumeric, hyphens, and dots; start/end with alphanumeric; each dot-separated segment 1-63 chars", kind, name)
 	}
 	return nil
 }

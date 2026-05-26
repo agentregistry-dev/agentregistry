@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { createPromptV0, type PromptJson } from "@/lib/admin-api"
-import { isValidDNSLabel, DNS_LABEL_HELP } from "@/lib/validators"
+import { isValidDNSSubdomain, DNS_SUBDOMAIN_HELP } from "@/lib/validators"
 
 interface AddPromptDialogProps {
   open: boolean
@@ -32,8 +32,8 @@ export function AddPromptDialog({ open, onOpenChange, onPromptAdded }: AddPrompt
       if (!name.trim()) {
         throw new Error("Prompt name is required")
       }
-      if (!isValidDNSLabel(name.trim())) {
-        throw new Error("Prompt name must be DNS-1123 label: lowercase alphanumeric and hyphens, max 63 chars, start/end with alphanumeric")
+      if (!isValidDNSSubdomain(name.trim())) {
+        throw new Error("Prompt name must be DNS-1123 subdomain: lowercase alphanumeric, hyphens, and dots; max 253 chars; each dot-separated segment must start and end with alphanumeric")
       }
       if (!tag.trim()) {
         throw new Error("Tag is required")
@@ -99,7 +99,7 @@ export function AddPromptDialog({ open, onOpenChange, onPromptAdded }: AddPrompt
               disabled={loading}
               required
             />
-            <p className="text-xs text-muted-foreground">{DNS_LABEL_HELP}</p>
+            <p className="text-xs text-muted-foreground">{DNS_SUBDOMAIN_HELP}</p>
           </div>
 
           <div className="space-y-2">
