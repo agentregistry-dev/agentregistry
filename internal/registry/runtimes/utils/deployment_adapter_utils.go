@@ -176,13 +176,9 @@ func translateLocalMCPServer(
 		transportType = runtimetypes.TransportTypeStdio
 	default:
 		transportType = runtimetypes.TransportTypeHTTP
-		u, err := parseURL(pkg.Transport.URL)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse transport url: %v", err)
-		}
 		httpTransport = &runtimetypes.HTTPTransport{
-			Port: u.port,
-			Path: u.path,
+			Port: pkg.Transport.Port,
+			Path: pkg.Transport.Path,
 		}
 	}
 
