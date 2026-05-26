@@ -633,20 +633,6 @@ func writeDeclarativeAgentYAML(projectDir, name, image, modelProvider, modelName
 
 // --- init mcp ---
 
-// validateMCPProjectName mirrors the backend MCPServer.metadata.name rule
-// (pkg/api/v1alpha1/validation.go: DNSLabelRegex / DNSLabelMaxLen) so the CLI
-// rejects non-compliant names client-side with the same shape the backend
-// will enforce.
-func validateMCPProjectName(s string) error {
-	if s == "" {
-		return fmt.Errorf("name must not be empty")
-	}
-	if len(s) > v1alpha1.DNSLabelMaxLen || !v1alpha1.DNSLabelRegex.MatchString(s) {
-		return fmt.Errorf("name must be DNS-1123 label: lowercase alphanumeric and hyphens, max %d chars, start/end with alphanumeric (got %q)", v1alpha1.DNSLabelMaxLen, s)
-	}
-	return nil
-}
-
 func newInitMCPCmd() *cobra.Command {
 	var (
 		initDescription string
@@ -674,14 +660,14 @@ Picks a framework + language interactively (or via --framework / --language).`,
 				name = args[0]
 			} else {
 				typed, err := promptText("Project name", "my-mcp",
-					validateMCPProjectName,
+					validators.ValidateMCPServerName,
 					cmd.OutOrStdout(), cmd.InOrStdin())
 				if err != nil {
 					return err
 				}
 				name = typed
 			}
-			if err := validateMCPProjectName(name); err != nil {
+			if err := validators.ValidateMCPServerName(name); err != nil {
 				return err
 			}
 			projectName := name

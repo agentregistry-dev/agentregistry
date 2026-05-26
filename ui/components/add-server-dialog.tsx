@@ -7,19 +7,14 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { createServerV0, type ServerJson } from "@/lib/admin-api"
+import { isValidDNSLabel } from "@/lib/validators"
 import { Loader2, AlertCircle, Plus, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
-// Mirror the backend rules in pkg/api/v1alpha1/validation.go.
-const DNS_LABEL_RE = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/
+// Upstream MCP catalogue name (e.g. "io.github.user/server") — MCPServer-only.
 const UPSTREAM_MCP_PACKAGE_NAME_RE = /^[a-zA-Z0-9.-]+\/[a-zA-Z0-9._-]+$/
 
-// isValidName checks if the resource name is valid for the MCP server (DNS label)
-function isValidName(s: string): boolean {
-  return s.length > 0 && s.length <= 63 && DNS_LABEL_RE.test(s)
-}
-
-// isValidMCPPackageName checks if an optional MCP package's name is valid (NAMESPACE/NAME)
+// isValidMCPPackageName checks if an optional MCP package's mcpName is valid (NAMESPACE/NAME)
 // Note: This NAMESPACE !== the registry resource namespace, and is a naming convention for MCPs
 function isValidMCPPackageName(s: string): boolean {
   return s.length == 0 || (s.length >= 3 && s.length <= 200 && UPSTREAM_MCP_PACKAGE_NAME_RE.test(s))
@@ -64,7 +59,7 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
       if (!name.trim()) {
         throw new Error("Server name is required")
       }
-      if (!isValidName(name.trim())) {
+      if (!isValidDNSLabel(name.trim())) {
         throw new Error("Server name must be DNS-1123 label: lowercase alphanumeric and hyphens, max 63 chars, start/end with alphanumeric")
       }
       if (!isValidMCPPackageName(pkg?.mcpName.trim() || "")) {
@@ -162,9 +157,9 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 disabled={loading}
-                className={name && !isValidName(name) ? "border-yellow-500" : ""}
+                className={name && !isValidDNSLabel(name) ? "border-yellow-500" : ""}
               />
-              <p className={`text-xs flex items-center gap-1 min-h-[1.25rem] ${name && !isValidName(name) ? 'text-yellow-600' : 'invisible'}`}>
+              <p className={`text-xs flex items-center gap-1 min-h-[1.25rem] ${name && !isValidDNSLabel(name) ? 'text-yellow-600' : 'invisible'}`}>
                 <AlertCircle className="h-3 w-3" />
                 Lowercase alphanumeric and hyphens only. Max 63 chars. (e.g., my-server)
               </p>

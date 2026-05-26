@@ -4,15 +4,14 @@ package validators
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
+
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
-// skillNameRegex matches the database constraint for skill names
-// - Can contain alphanumeric, underscores, and hyphens
-var skillNameRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
-
-// Python keywords that cannot be used as agent names
+// Python keywords that cannot be used as agent names — agent names become
+// Python identifiers in generated code, so the CLI layer rejects them in
+// addition to the DNS-1123 form.
 var pythonKeywords = map[string]struct{}{
 	"False": {}, "None": {}, "True": {}, "and": {}, "as": {}, "assert": {},
 	"async": {}, "await": {}, "break": {}, "class": {}, "continue": {}, "def": {},
@@ -23,57 +22,62 @@ var pythonKeywords = map[string]struct{}{
 }
 
 // ValidateProjectName checks if the provided project name is valid for use as a directory name.
-// This is a permissive check for filesystem safety.
+// This is a permissive check for filesystem safety, not a resource-name check.
 func ValidateProjectName(name string) error {
 	if name == "" {
 		return fmt.Errorf("project name cannot be empty")
 	}
-
-	// Check for invalid characters
 	if strings.ContainsAny(name, " \t\n\r/\\:*?\"<>|") {
 		return fmt.Errorf("project name contains invalid characters")
 	}
-
-	// Check if it starts with a dot
 	if strings.HasPrefix(name, ".") {
 		return fmt.Errorf("project name cannot start with a dot")
 	}
-
 	return nil
 }
 
-// agentNameRegex enforces the strictest rule - names that work BOTH as Python identifiers AND as publishable agent names.
-// Must start with a letter, followed by alphanumeric only, minimum 2 characters.
-var agentNameRegex = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9]+$`)
-
-// ValidateAgentName checks if the agent name is valid.
-// Allowed: letters and digits only, must start with a letter, minimum 2 characters.
-// Not allowed: underscores, dots, hyphens, or Python keywords.
-func ValidateAgentName(name string) error {
+// validateDNSLabel applies the v1alpha1 DNS-1123 label rule with a
+// kind-aware error message so CLI users see "agent name must be..." rather
+// than the generic backend error.
+func validateDNSLabel(kind, name string) error {
 	if name == "" {
-		return fmt.Errorf("agent name cannot be empty")
+		return fmt.Errorf("%s name cannot be empty", kind)
 	}
-
-	if !agentNameRegex.MatchString(name) {
-		return fmt.Errorf("agent name must start with a letter and contain only letters and digits (no hyphens, underscores, or dots; minimum 2 characters)")
+	if !v1alpha1.DNSLabelRegex.MatchString(name) {
+		return fmt.Errorf("%s name %q must be DNS-1123 label: lowercase alphanumeric and hyphens, max %d chars, start/end with alphanumeric", kind, name, v1alpha1.DNSLabelMaxLen)
 	}
+	return nil
+}
 
-	// Reject Python keywords to avoid issues in generated code
+// ValidateAgentName enforces DNS-1123 label form and rejects Python keywords.
+// Python keyword rejection is CLI-only — agent names become Python identifiers
+// in generated code, but the registry's API doesn't care.
+func ValidateAgentName(name string) error {
+	if err := validateDNSLabel("agent", name); err != nil {
+		return err
+	}
 	if _, isKeyword := pythonKeywords[name]; isKeyword {
 		return fmt.Errorf("agent name %q is a Python keyword and cannot be used", name)
 	}
-
 	return nil
 }
 
-// ValidateSkillName checks if the skill name matches the required format for registry storage.
-// Skill names can contain alphanumeric characters, underscores, and hyphens.
+// ValidateSkillName enforces DNS-1123 label form.
 func ValidateSkillName(name string) error {
-	if name == "" {
-		return fmt.Errorf("skill name cannot be empty")
-	}
-	if !skillNameRegex.MatchString(name) {
-		return fmt.Errorf("invalid skill name %q: can only contain letters, numbers, underscores (_), and hyphens (-)", name)
-	}
-	return nil
+	return validateDNSLabel("skill", name)
+}
+
+// ValidatePromptName enforces DNS-1123 label form.
+func ValidatePromptName(name string) error {
+	return validateDNSLabel("prompt", name)
+}
+
+// ValidateDeploymentName enforces DNS-1123 label form.
+func ValidateDeploymentName(name string) error {
+	return validateDNSLabel("deployment", name)
+}
+
+// ValidateMCPServerName enforces DNS-1123 label form.
+func ValidateMCPServerName(name string) error {
+	return validateDNSLabel("MCP server", name)
 }

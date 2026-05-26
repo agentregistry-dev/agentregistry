@@ -69,7 +69,7 @@ func TestDecodeBytesSingleDoc(t *testing.T) {
 apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
-  name: acme/bot
+  name: acme-bot
 spec:
   source:
     image: ghcr.io/acme/bot:latest
@@ -84,7 +84,7 @@ spec:
 	require.True(t, ok, "expected *v1alpha1.Agent, got %T", objs[0])
 	assert.Equal(t, "ar.dev/v1alpha1", agent.GetAPIVersion())
 	assert.Equal(t, "Agent", agent.GetKind())
-	assert.Equal(t, "acme/bot", agent.Metadata.Name)
+	assert.Equal(t, "acme-bot", agent.Metadata.Name)
 	assert.Equal(t, "ghcr.io/acme/bot:latest", agent.Spec.Source.Image)
 }
 
@@ -100,7 +100,7 @@ spec:
 apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
-  name: acme/bot
+  name: acme-bot
 spec:
   description: "A bot"
   source:
@@ -138,7 +138,7 @@ func TestDecodeBytesMissingKind(t *testing.T) {
 	input := `
 apiVersion: ar.dev/v1alpha1
 metadata:
-  name: acme/bot
+  name: acme-bot
 spec:
   source:
     image: ghcr.io/acme/bot:latest
@@ -152,7 +152,7 @@ func TestDecodeBytesUnknownKind(t *testing.T) {
 apiVersion: ar.dev/v1alpha1
 kind: BogusKind
 metadata:
-  name: acme/bot
+  name: acme-bot
 spec: {}
 `
 	_, err := scheme.DecodeBytes([]byte(input))
@@ -174,7 +174,7 @@ func TestDecodeBytesDropsIncomingStatus(t *testing.T) {
 apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
-  name: acme/bot
+  name: acme-bot
 spec:
   source:
     image: ghcr.io/acme/bot:latest

@@ -46,29 +46,23 @@ func TestValidateAgentName(t *testing.T) {
 		input   string
 		wantErr bool
 	}{
-		// Valid cases - letters and digits only, starts with letter, min 2 chars
+		// Valid DNS-1123 names
 		{"valid simple", "myagent", false},
 		{"valid alphanumeric", "agent123", false},
-		{"valid mixed case", "MyAgent2", false},
-		{"valid two chars", "ab", false},
+		{"valid single char", "a", false},
+		{"valid with hyphen", "my-agent", false},
 
-		// Invalid - special characters not allowed
-		{"hyphen not allowed", "my-agent", true},
+		// Invalid - violates DNS-1123
+		{"uppercase rejected", "MyAgent2", true},
 		{"dot not allowed", "my.agent", true},
 		{"underscore not allowed", "my_agent", true},
 		{"contains slash", "my/agent", true},
 		{"contains space", "my agent", true},
-
-		// Invalid - must start with letter
-		{"starts with number", "123agent", true},
-		{"starts with dot", ".agent", true},
 		{"starts with hyphen", "-agent", true},
-
-		// Invalid - too short
-		{"single char", "a", true},
+		{"trailing hyphen", "agent-", true},
 		{"empty", "", true},
 
-		// Invalid - Python keywords
+		// CLI-only: Python keywords are rejected even though they're DNS-1123 valid
 		{"python keyword class", "class", true},
 		{"python keyword import", "import", true},
 		{"python keyword return", "return", true},
@@ -85,28 +79,39 @@ func TestValidateAgentName(t *testing.T) {
 	}
 }
 
-func TestValidateSkillName(t *testing.T) {
-	tests := []struct {
-		name    string
-		input   string
-		wantErr bool
-	}{
-		{"valid simple", "my-skill", false},
-		{"valid with underscore", "my_skill", false},
-		{"valid alphanumeric", "skill123", false},
-		{"valid mixed", "my-skill_v1", false},
-		{"empty", "", true},
-		{"contains dot", "my.skill", true},
-		{"contains slash", "my/skill", true},
-		{"contains space", "my skill", true},
-	}
+// dnsLabelCases is the shared positive/negative set every DNS-1123-only kind
+// uses (skill, prompt, deployment, MCP server). Agent has its own set because
+// Python keywords are rejected on top of DNS-1123.
+var dnsLabelCases = []struct {
+	name    string
+	input   string
+	wantErr bool
+}{
+	{"valid simple", "my-thing", false},
+	{"valid alphanumeric", "thing123", false},
+	{"valid single char", "a", false},
+	{"empty", "", true},
+	{"uppercase rejected", "MyThing", true},
+	{"underscore rejected", "my_thing", true},
+	{"contains dot", "my.thing", true},
+	{"contains slash", "my/thing", true},
+	{"contains space", "my thing", true},
+	{"starts with hyphen", "-thing", true},
+	{"trailing hyphen", "thing-", true},
+}
 
-	for _, tt := range tests {
+func TestValidateSkillName(t *testing.T)      { runDNSLabelCases(t, ValidateSkillName) }
+func TestValidatePromptName(t *testing.T)     { runDNSLabelCases(t, ValidatePromptName) }
+func TestValidateDeploymentName(t *testing.T) { runDNSLabelCases(t, ValidateDeploymentName) }
+func TestValidateMCPServerName(t *testing.T)  { runDNSLabelCases(t, ValidateMCPServerName) }
+
+func runDNSLabelCases(t *testing.T, fn func(string) error) {
+	t.Helper()
+	for _, tt := range dnsLabelCases {
 		t.Run(tt.name, func(t *testing.T) {
-			err := ValidateSkillName(tt.input)
+			err := fn(tt.input)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("ValidateSkillName(%q) error = %v, wantErr %v",
-					tt.input, err, tt.wantErr)
+				t.Errorf("validator(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
 			}
 		})
 	}

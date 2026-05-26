@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { createPromptV0, type PromptJson } from "@/lib/admin-api"
+import { isValidDNSLabel, DNS_LABEL_HELP } from "@/lib/validators"
 
 interface AddPromptDialogProps {
   open: boolean
@@ -30,6 +31,9 @@ export function AddPromptDialog({ open, onOpenChange, onPromptAdded }: AddPrompt
     try {
       if (!name.trim()) {
         throw new Error("Prompt name is required")
+      }
+      if (!isValidDNSLabel(name.trim())) {
+        throw new Error("Prompt name must be DNS-1123 label: lowercase alphanumeric and hyphens, max 63 chars, start/end with alphanumeric")
       }
       if (!tag.trim()) {
         throw new Error("Tag is required")
@@ -95,9 +99,7 @@ export function AddPromptDialog({ open, onOpenChange, onPromptAdded }: AddPrompt
               disabled={loading}
               required
             />
-            <p className="text-xs text-muted-foreground">
-              Use lowercase alphanumeric characters, hyphens, and underscores only
-            </p>
+            <p className="text-xs text-muted-foreground">{DNS_LABEL_HELP}</p>
           </div>
 
           <div className="space-y-2">
