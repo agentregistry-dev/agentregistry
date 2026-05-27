@@ -177,7 +177,7 @@ func translateLocalMCPServer(
 	default:
 		transportType = runtimetypes.TransportTypeHTTP
 		httpTransport = &runtimetypes.HTTPTransport{
-			Port: pkg.Transport.Port,
+			Port: uint32(pkg.Transport.Port),
 			Path: pkg.Transport.Path,
 		}
 	}

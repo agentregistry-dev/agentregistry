@@ -819,7 +819,7 @@ func writeDeclarativeMCPYAML(projectDir, name, image, description string, port i
 					Identifier:   image,
 					Transport: v1alpha1.MCPTransport{
 						Type: "http",
-						Port: uint32(port),
+						Port: uint16(port),
 						Path: "/mcp",
 					},
 				},

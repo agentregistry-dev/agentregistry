@@ -56,7 +56,7 @@ type MCPServerSource struct {
 // host is constructed at deploy time. Both are ignored for stdio.
 type MCPTransport struct {
 	Type string `json:"type" yaml:"type"`                     // "http" | "stdio"
-	Port uint32 `json:"port,omitempty" yaml:"port,omitempty"` // http listen port (ignored for stdio)
+	Port uint16 `json:"port,omitempty" yaml:"port,omitempty"` // http listen port 1-65535 (ignored for stdio)
 	Path string `json:"path,omitempty" yaml:"path,omitempty"` // http endpoint path, e.g. "/mcp" (ignored for stdio)
 }
 
