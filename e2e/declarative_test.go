@@ -42,10 +42,9 @@ func writeDeclarativeYAML(t *testing.T, dir, filename, content string) string {
 // Namespace is implicit ("default") and elided from the path post-flatten;
 // callers that target a non-default namespace pass `?namespace=...` directly.
 //
-// Resource names for taggable artifacts other than MCPServer (Agent, Skill,
-// Prompt) may contain "/", which is URL-encoded into a single path segment so
-// Huma's router treats them as one {name} parameter. MCPServer names are
-// DNS-1123 label (no "/") as of migration 008; PathEscape is a no-op for them.
+// All v1alpha1 resource names are DNS-1123 subdomain (no "/"), so PathEscape
+// is a no-op in practice. Kept for safety against any future shape that needs
+// URL-encoding.
 func resourceURL(regURL, resource, name, tag string) string {
 	return fmt.Sprintf("%s/%s/%s/%s",
 		regURL, resource, url.PathEscape(name), tag)
@@ -396,7 +395,7 @@ func TestDeclarativeInit_Agent(t *testing.T) {
 // declarative mcp.yaml (offline, no registry required for generation).
 func TestDeclarativeInit_MCP(t *testing.T) {
 	tmpDir := t.TempDir()
-	// MCP names must be DNS-1123 label.
+	// MCP names must be DNS-1123 subdomain.
 	name := UniqueNameWithPrefix("e2etest-initmcp")
 
 	// init is offline — no registry-url needed.
@@ -550,7 +549,7 @@ func TestDeclarativeBuild_MCP(t *testing.T) {
 	skipIfNoDocker(t)
 	tmpDir := t.TempDir()
 
-	// MCP names must be DNS-1123 label.
+	// MCP names must be DNS-1123 subdomain.
 	name := UniqueNameWithPrefix("e2etest-bldmcp")
 	image := "localhost:5001/" + name + ":latest"
 	CleanupDockerImage(t, image)

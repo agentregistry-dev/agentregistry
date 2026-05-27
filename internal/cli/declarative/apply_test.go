@@ -171,7 +171,7 @@ func TestApplyRejectsUnknownKind(t *testing.T) {
 	badYAML := `apiVersion: ar.dev/v1alpha1
 kind: UnknownKind
 metadata:
-  name: acme/test
+  name: acme-test
 spec:
   description: "test"
 `

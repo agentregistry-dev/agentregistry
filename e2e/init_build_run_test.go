@@ -41,16 +41,16 @@ func TestE2E_InitAgent_CreatesExpectedTree(t *testing.T) {
 	assert.Contains(t, string(agentYAML), "kind: Agent")
 }
 
-func TestE2E_InitMCP_RejectsNonDNSLabelName(t *testing.T) {
+func TestE2E_InitMCP_RejectsNonDNSSubdomainName(t *testing.T) {
 	tmp := t.TempDir()
 	require.NoError(t, os.Chdir(tmp))
 
 	result := RunArctl(t, tmp, "init", "mcp", "acme/my-mcp",
 		"--framework", "fastmcp", "--language", "python")
-	require.NotEqual(t, 0, result.ExitCode, "expected non-zero exit when name is not DNS-1123 label")
+	require.NotEqual(t, 0, result.ExitCode, "expected non-zero exit when name is not DNS-1123 subdomain")
 }
 
-func TestE2E_InitMCP_AcceptsDNSLabelName(t *testing.T) {
+func TestE2E_InitMCP_AcceptsDNSSubdomainName(t *testing.T) {
 	tmp := t.TempDir()
 	require.NoError(t, os.Chdir(tmp))
 
@@ -312,7 +312,7 @@ port: 3000
 apiVersion: ar.dev/v1alpha1
 kind: MCPServer
 metadata:
-  name: acme/remote-only
+  name: acme-remote-only
 spec:
   remote:
     type: streamable-http

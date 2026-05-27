@@ -21,7 +21,7 @@ language: python
 apiVersion: ar.dev/v1alpha1
 kind: MCPServer
 metadata:
-  name: acme/remote-only
+  name: acme-remote-only
 spec:
   remote:
     type: streamable-http

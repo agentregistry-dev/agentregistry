@@ -113,7 +113,7 @@ func TestInitAgent_ModelProviderFlagFlowsToArctlYAML(t *testing.T) {
 
 // ---- init mcp ----
 
-func TestInitMCP_RejectsNonDNSLabelName(t *testing.T) {
+func TestInitMCP_RejectsNonDNSSubdomainName(t *testing.T) {
 	tmp := t.TempDir()
 	origDir, err := os.Getwd()
 	require.NoError(t, err)

@@ -20,8 +20,8 @@ func TestWriteMCPServersConfig_MergesEntries(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, ".env"), []byte("FOO=bar\n"), 0o644))
 
 	entries := []mcpEnvEntry{
-		{Name: "acme/local", Type: "remote", URL: "http://host.docker.internal:3000/mcp"},
-		{Name: "acme/fetch", Type: "remote", URL: "https://mcp.acme.com/mcp"},
+		{Name: "acme-local", Type: "remote", URL: "http://host.docker.internal:3000/mcp"},
+		{Name: "acme-fetch", Type: "remote", URL: "https://mcp.acme.com/mcp"},
 	}
 	require.NoError(t, writeMCPServersConfig(dir, entries))
 
@@ -30,8 +30,8 @@ func TestWriteMCPServersConfig_MergesEntries(t *testing.T) {
 	s := string(got)
 	assert.Contains(t, s, "FOO=bar")
 	assert.Equal(t, 1, strings.Count(s, "MCP_SERVERS_CONFIG="), "expected exactly one MCP_SERVERS_CONFIG line")
-	assert.Contains(t, s, `"name":"acme/local"`)
-	assert.Contains(t, s, `"name":"acme/fetch"`)
+	assert.Contains(t, s, `"name":"acme-local"`)
+	assert.Contains(t, s, `"name":"acme-fetch"`)
 	assert.Contains(t, s, `"url":"https://mcp.acme.com/mcp"`)
 }
 
@@ -45,7 +45,7 @@ func TestWriteMCPServersConfig_ReplacesExisting(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, ".env"), []byte(seed), 0o644))
 
 	require.NoError(t, writeMCPServersConfig(dir, []mcpEnvEntry{
-		{Name: "acme/new", Type: "remote", URL: "https://mcp.acme.com/mcp"},
+		{Name: "acme-new", Type: "remote", URL: "https://mcp.acme.com/mcp"},
 	}))
 
 	got, err := os.ReadFile(filepath.Join(dir, ".env"))
@@ -53,7 +53,7 @@ func TestWriteMCPServersConfig_ReplacesExisting(t *testing.T) {
 	s := string(got)
 	assert.Equal(t, 1, strings.Count(s, "MCP_SERVERS_CONFIG="), "must not duplicate the key")
 	assert.NotContains(t, s, `"name":"old"`, "old entry must be gone")
-	assert.Contains(t, s, `"name":"acme/new"`)
+	assert.Contains(t, s, `"name":"acme-new"`)
 	assert.Contains(t, s, "FOO=bar")
 	// And only one marker comment too — not stacked.
 	assert.Equal(t, 1, strings.Count(s, "# Wired by arctl init"))
@@ -76,8 +76,8 @@ func TestInitAgent_MCP_RemoteRef_WritesEnv(t *testing.T) {
 	dir := t.TempDir()
 	prev := mcpFetcherForTest
 	mcpFetcherForTest = &fakeMCPFetcher{servers: map[string]*v1alpha1.MCPServer{
-		"acme/fetch@latest": {
-			Metadata: v1alpha1.ObjectMeta{Name: "acme/fetch", Tag: "latest"},
+		"acme-fetch@latest": {
+			Metadata: v1alpha1.ObjectMeta{Name: "acme-fetch", Tag: "latest"},
 			Spec: v1alpha1.MCPServerSpec{
 				Remote: &v1alpha1.MCPRemote{Type: "streamable-http", URL: "https://mcp.acme.com/mcp"},
 			},
@@ -86,33 +86,33 @@ func TestInitAgent_MCP_RemoteRef_WritesEnv(t *testing.T) {
 	t.Cleanup(func() { mcpFetcherForTest = prev })
 
 	cmd := NewInitCmd()
-	cmd.SetArgs([]string{"agent", "myagent", "--framework", "adk", "--language", "python", "--mcp", "acme/fetch", "--output-dir", dir})
+	cmd.SetArgs([]string{"agent", "myagent", "--framework", "adk", "--language", "python", "--mcp", "acme-fetch", "--output-dir", dir})
 	require.NoError(t, cmd.Execute())
 
 	pd := filepath.Join(dir, "myagent")
 	env, err := os.ReadFile(filepath.Join(pd, ".env"))
 	require.NoError(t, err)
-	assert.Contains(t, string(env), `"name":"acme/fetch"`)
+	assert.Contains(t, string(env), `"name":"acme-fetch"`)
 	assert.Contains(t, string(env), `"url":"https://mcp.acme.com/mcp"`)
 
 	agentYAML, err := os.ReadFile(filepath.Join(pd, "agent.yaml"))
 	require.NoError(t, err)
-	assert.Contains(t, string(agentYAML), "name: acme/fetch")
+	assert.Contains(t, string(agentYAML), "name: acme-fetch")
 }
 
 func TestInitAgent_MCP_SourceRef_NoEnvWrite(t *testing.T) {
 	dir := t.TempDir()
 	prev := mcpFetcherForTest
 	mcpFetcherForTest = &fakeMCPFetcher{servers: map[string]*v1alpha1.MCPServer{
-		"acme/source@latest": {
-			Metadata: v1alpha1.ObjectMeta{Name: "acme/source", Tag: "latest"},
+		"acme-source@latest": {
+			Metadata: v1alpha1.ObjectMeta{Name: "acme-source", Tag: "latest"},
 			Spec:     v1alpha1.MCPServerSpec{Source: &v1alpha1.MCPServerSource{}},
 		},
 	}}
 	t.Cleanup(func() { mcpFetcherForTest = prev })
 
 	cmd := NewInitCmd()
-	cmd.SetArgs([]string{"agent", "myagent", "--framework", "adk", "--language", "python", "--mcp", "acme/source", "--output-dir", dir})
+	cmd.SetArgs([]string{"agent", "myagent", "--framework", "adk", "--language", "python", "--mcp", "acme-source", "--output-dir", dir})
 	require.NoError(t, cmd.Execute())
 
 	pd := filepath.Join(dir, "myagent")
@@ -121,7 +121,7 @@ func TestInitAgent_MCP_SourceRef_NoEnvWrite(t *testing.T) {
 	assert.NotContains(t, string(env), "MCP_SERVERS_CONFIG", "Source-mode MCP must not populate MCP_SERVERS_CONFIG")
 	agentYAML, err := os.ReadFile(filepath.Join(pd, "agent.yaml"))
 	require.NoError(t, err)
-	assert.Contains(t, string(agentYAML), "name: acme/source")
+	assert.Contains(t, string(agentYAML), "name: acme-source")
 }
 
 func TestInitAgent_MCP_RegistryFailure_NoPartialWrites(t *testing.T) {
@@ -131,7 +131,7 @@ func TestInitAgent_MCP_RegistryFailure_NoPartialWrites(t *testing.T) {
 	t.Cleanup(func() { mcpFetcherForTest = prev })
 
 	cmd := NewInitCmd()
-	cmd.SetArgs([]string{"agent", "myagent", "--framework", "adk", "--language", "python", "--mcp", "acme/missing", "--output-dir", dir})
+	cmd.SetArgs([]string{"agent", "myagent", "--framework", "adk", "--language", "python", "--mcp", "acme-missing", "--output-dir", dir})
 	require.Error(t, cmd.Execute())
 
 	pd := filepath.Join(dir, "myagent")
