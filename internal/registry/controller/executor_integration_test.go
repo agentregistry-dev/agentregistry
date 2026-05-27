@@ -13,6 +13,7 @@ import (
 
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
@@ -125,7 +126,7 @@ func TestDeploymentController_ReappliesWhenMissingTargetAppears(t *testing.T) {
 	require.Equal(t, "blocked", history[1].Outcome)
 }
 
-func TestDeploymentController_DeleteWaitsForRemoveThenClearsFinalizer(t *testing.T) {
+func TestDeploymentController_DeleteWaitsForRemoveThenPurgesFinalizedRow(t *testing.T) {
 	ctx := context.Background()
 	stores, workStore, eventStore := newControllerTestStores(t)
 	seedRuntime(t, stores, "local")
@@ -149,13 +150,16 @@ func TestDeploymentController_DeleteWaitsForRemoveThenClearsFinalizer(t *testing
 	require.Equal(t, 1, processed)
 	require.Equal(t, int32(1), adapter.removeCalls.Load())
 
-	removed := loadDeployment(t, stores, deployment.Metadata.Name)
-	require.NotNil(t, removed.Metadata.DeletionTimestamp)
-	require.NotContains(t, loadDeploymentFinalizers(t, stores, deployment.Metadata.Name), DeploymentControllerFinalizer)
+	requireDeploymentMissing(t, stores, deployment.Metadata.Name)
 
-	purged, err := stores[v1alpha1.KindDeployment].PurgeFinalized(ctx)
-	require.NoError(t, err)
-	require.Equal(t, int64(1), purged)
+	_, err = stores[v1alpha1.KindDeployment].Upsert(ctx, &v1alpha1.Deployment{
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: deployment.Metadata.Name},
+		Spec: v1alpha1.DeploymentSpec{
+			TargetRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Tag: v1alpha1store.DefaultTag()},
+			RuntimeRef: v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "local"},
+		},
+	}, v1alpha1store.UpsertOpts{InitialFinalizers: []string{DeploymentControllerFinalizer}})
+	require.NoError(t, err, "finalized deletes must not block same-name apply")
 }
 
 func TestDeploymentController_RemoveFailureKeepsFinalizerAndRetries(t *testing.T) {
@@ -202,18 +206,94 @@ func TestDeploymentController_RemoveFailureKeepsFinalizerAndRetries(t *testing.T
 	require.Equal(t, 1, processed)
 	require.Equal(t, int32(2), adapter.removeCalls.Load())
 
-	removed := loadDeployment(t, stores, deployment.Metadata.Name)
-	require.NotNil(t, removed.Metadata.DeletionTimestamp)
-	require.NotContains(t, loadDeploymentFinalizers(t, stores, deployment.Metadata.Name), DeploymentControllerFinalizer)
-	purged, err = stores[v1alpha1.KindDeployment].PurgeFinalized(ctx)
-	require.NoError(t, err)
-	require.Equal(t, int64(1), purged)
+	requireDeploymentMissing(t, stores, deployment.Metadata.Name)
 
 	history, err = eventStore.ListByWorkKey(ctx, workKey, 10)
 	require.NoError(t, err)
 	require.Len(t, history, 2)
 	require.Equal(t, "success", history[0].Outcome)
 	require.Equal(t, "error", history[1].Outcome)
+}
+
+func TestDeploymentController_DeleteAbandonsPendingApplyWork(t *testing.T) {
+	ctx := context.Background()
+	stores, workStore, eventStore := newControllerTestStores(t)
+	seedRuntime(t, stores, "local")
+	seedMCPServer(t, stores, "weather")
+	deployment := seedDeployment(t, stores, "delete-with-apply-pending", v1alpha1.DesiredStateDeployed)
+
+	sources := newDeploymentTestSourceIndex(stores)
+	require.NoError(t, sources.Refresh(ctx))
+	deriver := &DeploymentWorkDeriver{Sources: sources, Work: workStore}
+	_, err := deriver.DeriveAll(ctx)
+	require.NoError(t, err)
+
+	require.NoError(t, stores[v1alpha1.KindDeployment].Delete(ctx, "default", deployment.Metadata.Name, ""))
+	require.NoError(t, sources.Refresh(ctx))
+	_, err = deriver.DeriveAll(ctx)
+	require.NoError(t, err)
+
+	adapter := &recordingDeploymentAdapter{}
+	executor := newTestExecutor(stores, workStore, eventStore, adapter)
+	processed, err := executor.RunOnce(ctx, 10)
+	require.NoError(t, err)
+	require.Equal(t, 1, processed)
+	require.Zero(t, adapter.applyCalls.Load(), "pending apply work must not run after delete")
+	require.Equal(t, int32(1), adapter.removeCalls.Load())
+	requireDeploymentMissing(t, stores, deployment.Metadata.Name)
+}
+
+func TestDeploymentController_SkipsClaimedApplyWhenDeploymentIsDeleted(t *testing.T) {
+	ctx := context.Background()
+	stores, workStore, eventStore := newControllerTestStores(t)
+	seedRuntime(t, stores, "local")
+	seedMCPServer(t, stores, "weather")
+	deployment := seedDeployment(t, stores, "delete-with-apply-claimed", v1alpha1.DesiredStateDeployed)
+
+	work, err := DeriveDeploymentWork(deployment)
+	require.NoError(t, err)
+	work.NextAttemptAt = time.Now().Add(-time.Minute)
+	require.NoError(t, workStore.Upsert(ctx, work))
+	claimed, err := workStore.ClaimDue(ctx, "worker-a", time.Now().Add(time.Minute), 1)
+	require.NoError(t, err)
+	require.Len(t, claimed, 1)
+	require.Equal(t, ReconcileActionApply, claimed[0].Action)
+
+	require.NoError(t, stores[v1alpha1.KindDeployment].Delete(ctx, "default", deployment.Metadata.Name, ""))
+
+	adapter := &recordingDeploymentAdapter{}
+	executor := newTestExecutor(stores, workStore, eventStore, adapter)
+	require.NoError(t, executor.executeClaim(ctx, claimed[0]))
+	require.Zero(t, adapter.applyCalls.Load(), "claimed apply work must be stale once the deployment is terminating")
+
+	history, err := eventStore.ListByWorkKey(ctx, work.Key, 10)
+	require.NoError(t, err)
+	require.Len(t, history, 1)
+	require.Equal(t, "stale", history[0].Outcome)
+}
+
+func TestDeploymentController_DeleteFinalizesWhenRuntimeRefMissing(t *testing.T) {
+	ctx := context.Background()
+	stores, workStore, eventStore := newControllerTestStores(t)
+	seedRuntime(t, stores, "local")
+	seedMCPServer(t, stores, "weather")
+	deployment := seedDeployment(t, stores, "delete-missing-runtime", v1alpha1.DesiredStateDeployed)
+	require.NoError(t, stores[v1alpha1.KindRuntime].Delete(ctx, "default", "local", ""))
+	require.NoError(t, stores[v1alpha1.KindDeployment].Delete(ctx, "default", deployment.Metadata.Name, ""))
+
+	sources := newDeploymentTestSourceIndex(stores)
+	require.NoError(t, sources.Refresh(ctx))
+	deriver := &DeploymentWorkDeriver{Sources: sources, Work: workStore}
+	_, err := deriver.DeriveAll(ctx)
+	require.NoError(t, err)
+
+	adapter := &recordingDeploymentAdapter{}
+	executor := newTestExecutor(stores, workStore, eventStore, adapter)
+	processed, err := executor.RunOnce(ctx, 10)
+	require.NoError(t, err)
+	require.Equal(t, 1, processed)
+	require.Zero(t, adapter.removeCalls.Load(), "missing runtime cannot dispatch adapter remove")
+	requireDeploymentMissing(t, stores, deployment.Metadata.Name)
 }
 
 func TestDeploymentController_SkipsStaleGenerationWork(t *testing.T) {
@@ -333,6 +413,12 @@ func loadDeployment(t *testing.T, stores map[string]*v1alpha1store.Store, name s
 	}, raw, v1alpha1.KindDeployment)
 	require.NoError(t, err)
 	return deployment
+}
+
+func requireDeploymentMissing(t *testing.T, stores map[string]*v1alpha1store.Store, name string) {
+	t.Helper()
+	_, err := stores[v1alpha1.KindDeployment].GetLatestIncludingTerminating(context.Background(), "default", name)
+	require.ErrorIs(t, err, pkgdb.ErrNotFound)
 }
 
 func loadDeploymentFinalizers(t *testing.T, stores map[string]*v1alpha1store.Store, name string) []string {

@@ -245,8 +245,10 @@ func (s *ReconcileWorkStore) Backoff(ctx context.Context, key, leaseToken, lastE
 }
 
 // AbandonSuperseded marks older pending/backoff work for the same resource as
-// inert once a newer generation has been derived. Running rows are left alone;
-// stale workers detect UID/generation drift when they execute.
+// inert once a newer generation has been derived. Same-generation work with a
+// different key is also superseded, which covers delete turning an apply into a
+// remove without bumping resource generation. Running rows are left alone; stale
+// workers detect UID/generation/deletion drift when they execute.
 func (s *ReconcileWorkStore) AbandonSuperseded(ctx context.Context, work ReconcileWork) (int64, error) {
 	if s == nil || s.pool == nil {
 		return 0, errors.New("v1alpha1 store: reconcile work store has nil pool")
@@ -270,7 +272,10 @@ func (s *ReconcileWorkStore) AbandonSuperseded(ctx context.Context, work Reconci
 		  AND name=$3
 		  AND tag=$4
 		  AND state IN ('pending', 'backoff')
-		  AND generation < $5
+		  AND (
+		      generation < $5
+		      OR (generation = $5 AND key <> $7)
+		  )
 		  AND (
 		      NULLIF($6, '')::uuid IS NULL
 		      OR uid = NULLIF($6, '')::uuid
@@ -281,6 +286,7 @@ func (s *ReconcileWorkStore) AbandonSuperseded(ctx context.Context, work Reconci
 		work.Resource.Tag,
 		work.Generation,
 		work.UID,
+		work.Key,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("abandon superseded reconcile work: %w", err)

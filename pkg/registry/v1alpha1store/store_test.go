@@ -796,6 +796,37 @@ func TestReconcileWorkStore_AbandonSupersededPendingBackoff(t *testing.T) {
 	require.Equal(t, 2, abandoned)
 }
 
+func TestReconcileWorkStore_AbandonSupersededSameGenerationAction(t *testing.T) {
+	pool := NewTestPool(t)
+	ctx := context.Background()
+	workStore := NewReconcileWorkStore(pool)
+
+	applyWork := ReconcileWork{
+		Key:           "Deployment:default:weather:uid-1:1:apply",
+		Resource:      ResourceKey{Kind: v1alpha1.KindDeployment, Namespace: testNS, Name: "weather"},
+		UID:           "00000000-0000-0000-0000-000000000001",
+		Generation:    1,
+		Action:        "apply",
+		Reason:        "desired-deployed",
+		NextAttemptAt: time.Now().Add(-time.Minute),
+	}
+	require.NoError(t, workStore.Upsert(ctx, applyWork))
+
+	removeWork := applyWork
+	removeWork.Key = "Deployment:default:weather:uid-1:1:remove"
+	removeWork.Action = "remove"
+	removeWork.Reason = "terminating"
+	require.NoError(t, workStore.Upsert(ctx, removeWork))
+	n, err := workStore.AbandonSuperseded(ctx, removeWork)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), n)
+
+	claimed, err := workStore.ClaimDue(ctx, "worker-a", time.Now().Add(time.Minute), 10)
+	require.NoError(t, err)
+	require.Len(t, claimed, 1)
+	require.Equal(t, removeWork.Key, claimed[0].Key)
+}
+
 func TestControlPlaneEventStore_PruneBeforeHonorsKeepAfterRevision(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, testTable)

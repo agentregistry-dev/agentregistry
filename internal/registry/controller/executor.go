@@ -128,6 +128,9 @@ func (e *DeploymentExecutor) reconcile(ctx context.Context, work v1alpha1store.R
 	if deployment.Metadata.UID != work.UID || deployment.Metadata.Generation != work.Generation {
 		return "stale", "deployment uid or generation changed before execution", nil
 	}
+	if work.Action == ReconcileActionApply && deployment.Metadata.DeletionTimestamp != nil {
+		return "stale", "deployment is terminating; skipping apply", nil
+	}
 
 	switch work.Action {
 	case ReconcileActionApply:
@@ -180,10 +183,7 @@ func (e *DeploymentExecutor) apply(ctx context.Context, deployment *v1alpha1.Dep
 func (e *DeploymentExecutor) remove(ctx context.Context, deployment *v1alpha1.Deployment) (string, string, error) {
 	runtime, err := e.resolveRuntime(ctx, deployment)
 	if err != nil {
-		if errors.Is(err, v1alpha1.ErrDanglingRef) {
-			return e.blockReference(ctx, deployment, err)
-		}
-		return "", "", err
+		return e.handleRemoveRuntimeError(ctx, deployment, err)
 	}
 	adapter, err := e.resolveAdapter(runtime.Spec.Type)
 	if err != nil {
@@ -200,11 +200,28 @@ func (e *DeploymentExecutor) remove(ctx context.Context, deployment *v1alpha1.De
 		return "", "", err
 	}
 	if deployment.Metadata.DeletionTimestamp != nil {
-		if err := e.clearControllerFinalizer(ctx, deployment); err != nil {
+		if err := e.finalizeDeletedDeployment(ctx, deployment); err != nil {
 			return "", "", err
 		}
 	}
 	return "success", "deployment removed", nil
+}
+
+func (e *DeploymentExecutor) handleRemoveRuntimeError(
+	ctx context.Context,
+	deployment *v1alpha1.Deployment,
+	cause error,
+) (string, string, error) {
+	if !errors.Is(cause, v1alpha1.ErrDanglingRef) {
+		return "", "", cause
+	}
+	if deployment.Metadata.DeletionTimestamp == nil {
+		return e.blockReference(ctx, deployment, cause)
+	}
+	if err := e.finalizeDeletedDeployment(ctx, deployment); err != nil {
+		return "", "", err
+	}
+	return "success", "deployment finalized without adapter remove because runtimeRef is unavailable", nil
 }
 
 func (e *DeploymentExecutor) blockReference(ctx context.Context, deployment *v1alpha1.Deployment, cause error) (string, string, error) {
@@ -344,10 +361,16 @@ func (e *DeploymentExecutor) persistRemoveResult(ctx context.Context, deployment
 	return nil
 }
 
-func (e *DeploymentExecutor) clearControllerFinalizer(ctx context.Context, deployment *v1alpha1.Deployment) error {
+func (e *DeploymentExecutor) finalizeDeletedDeployment(ctx context.Context, deployment *v1alpha1.Deployment) error {
 	err := e.deploymentStore().PatchFinalizers(ctx, deployment.Metadata.NamespaceOrDefault(), deployment.Metadata.Name, "", removeFinalizer(DeploymentControllerFinalizer))
 	if err != nil {
+		if errors.Is(err, pkgdb.ErrNotFound) {
+			return nil
+		}
 		return fmt.Errorf("clear deployment controller finalizer: %w", err)
+	}
+	if _, err := e.deploymentStore().PurgeFinalized(ctx); err != nil {
+		return fmt.Errorf("purge finalized deployment: %w", err)
 	}
 	return nil
 }
