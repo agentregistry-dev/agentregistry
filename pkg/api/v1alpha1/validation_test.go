@@ -470,7 +470,7 @@ func TestMCPServerValidate_HTTPPortRange(t *testing.T) {
 						RegistryType: "oci",
 						Identifier:   "img:latest",
 						Transport:    MCPTransport{Type: "http", Port: port},
-						ServerName: "x",
+						ServerName:   "x",
 					},
 				},
 			},

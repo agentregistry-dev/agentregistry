@@ -813,7 +813,7 @@ func writeDeclarativeMCPYAML(projectDir, name, image, description string, port i
 						Port: uint16(port),
 						Path: "/mcp",
 					},
-					ServerName:   name,
+					ServerName: name,
 				},
 			},
 		},
