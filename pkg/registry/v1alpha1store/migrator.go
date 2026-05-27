@@ -3,7 +3,7 @@ package v1alpha1store
 import (
 	"context"
 	"embed"
-	"fmt"
+	"io/fs"
 
 	"github.com/golang-migrate/migrate/v4"
 
@@ -13,34 +13,22 @@ import (
 //go:embed migrations/*.sql
 var v1alpha1MigrationFiles embed.FS
 
-// MigrationsTable is the schema_migrations table that holds the OSS
-// migration audit trail. Exported so callers that need to interact
-// with the same table by name (legacy-bootstrap, integration tests)
-// can refer to a single source of truth.
-const MigrationsTable = "schema_migrations"
-
-// migrationsDir is the directory inside the embedded FS holding
-// NNN_name.up.sql / NNN_name.down.sql pairs.
-const migrationsDir = "migrations"
+// MigrationsDir is the directory inside MigrationFiles holding
+// NNN_name.up.sql / NNN_name.down.sql pairs. Exported so the CLI and
+// the orchestrator can pass it alongside MigrationFiles.
+const MigrationsDir = "migrations"
 
 // MigrationFiles is the embedded FS containing every OSS migration.
-// Exported so callers (the CLI, downstream tooling) can compute
-// pending-migration counts without piercing migrate.Migrate's
+// Exported so callers (the CLI, the orchestrator, downstream tooling)
+// can compute pending-migration counts and pass the embed to
+// `golang-migrate`'s iofs source without piercing migrate.Migrate's
 // internals.
-var MigrationFiles = v1alpha1MigrationFiles
+var MigrationFiles fs.FS = v1alpha1MigrationFiles
 
-// NewOSSMigrator constructs a golang-migrate migrator for the OSS
-// schema migrations. Auto-runs the legacy bootstrap (idempotent
-// no-op on fresh installs and already-bridged DBs) before
-// constructing the migrator so existing pre-engine-swap deployments
-// upgrade transparently. The caller owns mg.Close().
-//
-// ctx applies to the bootstrap call — a server-startup deadline or
-// SIGTERM-driven cancel will interrupt a `pg_advisory_xact_lock`
-// wait. go-migrate's own API is synchronous from this point onward.
+// NewOSSMigrator constructs a `*migrate.Migrate` against
+// `database.OSSSchema` for the OSS migration set. The caller owns
+// `mg.Close()`. ctx is accepted for API symmetry with the surrounding
+// startup path.
 func NewOSSMigrator(ctx context.Context, dsn string) (*migrate.Migrate, error) {
-	if err := database.BootstrapLegacyOSSMigrations(ctx, dsn, v1alpha1MigrationFiles, migrationsDir); err != nil {
-		return nil, fmt.Errorf("bootstrap legacy OSS migrations: %w", err)
-	}
-	return database.NewMigrator(ctx, dsn, v1alpha1MigrationFiles, migrationsDir, MigrationsTable)
+	return database.NewMigrator(ctx, dsn, v1alpha1MigrationFiles, MigrationsDir, database.OSSSchema)
 }

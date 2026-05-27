@@ -153,7 +153,7 @@ func init() {
 		Name:        "oss",
 		NewMigrator: v1alpha1store.NewOSSMigrator,
 		Files:       v1alpha1store.MigrationFiles,
-		Dir:         "migrations",
+		Dir:         v1alpha1store.MigrationsDir,
 	})
 }
 

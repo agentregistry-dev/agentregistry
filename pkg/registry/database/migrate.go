@@ -1,6 +1,7 @@
 // Package database wraps golang-migrate/migrate v4 with the patterns
-// the OSS migrator and the arctl db migrate CLI need: a per-source
-// MigrationsTable factory and a dirty-state auto-recovery wrapper.
+// the orchestrator and the arctl db migrate CLI need: a
+// schema-parameterized *migrate.Migrate factory and a dirty-state
+// auto-recovery wrapper.
 package database
 
 import (
@@ -17,21 +18,33 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib" // pgx stdlib driver — required by sql.Open("pgx", ...)
 )
 
-// NewMigrator constructs a *migrate.Migrate for the given source.
-// Each registered source owns its own MigrationsTable (passed as table)
-// so two sources can coexist in the same database without colliding.
+// OSSSchema is the Postgres schema name OSS tables live in. The
+// `golang-migrate` pgx/v5 driver is configured with `SchemaName: OSSSchema`,
+// so `schema_migrations` and every data table land in this schema.
 //
-// The caller owns mg.Close() — it tears down both the iofs source and
-// the underlying *sql.DB. A single dedicated connection (not a pool)
-// is used because go-migrate's advisory lock is session-level and must
-// not be shared.
+// Exposed as a constant for now; future work makes it env-driven so
+// operators can point the binary at an operator-configured schema.
+const OSSSchema = "agentregistry"
+
+// migrationsTable is the table name `golang-migrate` uses for its own
+// bookkeeping. Lives in the source's `SchemaName`, so two sources with
+// different `SchemaName` values share the table name without colliding.
+const migrationsTable = "schema_migrations"
+
+// NewMigrator constructs a *migrate.Migrate against `schema` for the
+// embedded migration set at `migrationsFS`/`dir`. The migrator's
+// `schema_migrations` bookkeeping table is created in `schema` (via
+// `migratepgx.Config{SchemaName: schema}`).
 //
-// NewMigrator takes a context for API symmetry with the surrounding
-// startup code, but ctx is unused inside the function — sql.Open is
-// lazy (never pings), and go-migrate's API is synchronous and doesn't
-// accept a context. The legacy bootstrap is the only ctx-consuming
-// hop in the OSS factory; see NewOSSMigrator.
-func NewMigrator(_ context.Context, dsn string, migrationsFS fs.FS, dir, table string) (*migrate.Migrate, error) {
+// The caller owns `mg.Close()` — it tears down both the iofs source
+// and the underlying *sql.DB. A single dedicated connection (not a
+// pool) is used because go-migrate's advisory lock is session-level
+// and must not be shared.
+//
+// `ctx` is accepted for API symmetry with the surrounding startup
+// code; sql.Open is lazy (never pings) and go-migrate's API is
+// synchronous and doesn't accept a context.
+func NewMigrator(_ context.Context, dsn string, migrationsFS fs.FS, dir, schema string) (*migrate.Migrate, error) {
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
@@ -44,7 +57,8 @@ func NewMigrator(_ context.Context, dsn string, migrationsFS fs.FS, dir, table s
 	}
 
 	driver, err := migratepgx.WithInstance(db, &migratepgx.Config{
-		MigrationsTable: table,
+		SchemaName:      schema,
+		MigrationsTable: migrationsTable,
 	})
 	if err != nil {
 		_ = db.Close()
