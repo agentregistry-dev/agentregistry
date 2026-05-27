@@ -541,7 +541,7 @@ func TestValidateMCPPackageName(t *testing.T) {
 		{"contains multiple special ascii chars", "foo.bar-baz/my_server", false},
 		{"multiple slashes", "a/b/c", false},
 		{"within max len", maxLenStr, false},
-		{"too short", "ab", true},
+		{"single char", "a", false},
 		{"too long", longLenStr, true},
 		{"non-ascii", "café/foo", true},
 		{"contains space", "io.example/my server", true},

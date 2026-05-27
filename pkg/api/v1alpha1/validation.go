@@ -133,7 +133,7 @@ func validateNameField(name string) error {
 const UpstreamMCPPackageNamePattern = `^[a-zA-Z0-9._/-]+$`
 
 const (
-	UpstreamMCPPackageNameMinLen = 3
+	UpstreamMCPPackageNameMinLen = 1
 	UpstreamMCPPackageNameMaxLen = 200
 )
 

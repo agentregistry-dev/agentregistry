@@ -11,13 +11,18 @@ import { isValidDNSSubdomain } from "@/lib/validators"
 import { Loader2, AlertCircle, Plus, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
-// Upstream MCP catalogue name (e.g. "io.github.user/server") — MCPServer-only.
-const UPSTREAM_MCP_PACKAGE_NAME_RE = /^[a-zA-Z0-9.-]+\/[a-zA-Z0-9._-]+$/
+// Upstream MCP catalogue name — alphanumeric plus `.`, `_`, `-`, `/`.
+// Accepts single-segment (`my-mcp`) and namespace/name (`io.example/foo`) forms.
+const UPSTREAM_MCP_PACKAGE_NAME_RE = /^[a-zA-Z0-9._/-]+$/
 
-// isValidMCPPackageName checks if an optional MCP package's serverName is valid (NAMESPACE/NAME)
-// Note: This NAMESPACE !== the registry resource namespace, and is a naming convention for MCPs
+// isValidMCPPackageName checks if the MCP package's serverName is valid.
+//
+// Server-side serverName is optional ONLY when registryType is `mcpb` (which
+// has no ownership check). This dialog's registry-type dropdown does not
+// expose `mcpb`, so every package created through here will be subject to
+// ownership validation and must carry a non-empty serverName.
 function isValidMCPPackageName(s: string): boolean {
-  return s.length == 0 || (s.length >= 3 && s.length <= 200 && UPSTREAM_MCP_PACKAGE_NAME_RE.test(s))
+  return s.length >= 1 && s.length <= 200 && UPSTREAM_MCP_PACKAGE_NAME_RE.test(s)
 }
 
 interface AddServerDialogProps {
@@ -62,8 +67,8 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
       if (!isValidDNSSubdomain(name.trim())) {
         throw new Error("Server name must be DNS-1123 subdomain: lowercase alphanumeric, hyphens, and dots; max 253 chars; each dot-separated segment must start and end with alphanumeric")
       }
-      if (!isValidMCPPackageName(pkg?.serverName.trim() || "")) {
-        throw new Error("Upstream catalogue name must be unset or in 'domain/name' shape (e.g. 'io.github.user/server')")
+      if (pkg && !isValidMCPPackageName(pkg.serverName.trim())) {
+        throw new Error("Upstream catalogue name is required (1-200 chars; alphanumeric plus '.', '_', '-', '/')")
       }
 
       if (!tag.trim()) {
@@ -285,12 +290,14 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
                     </label>
                   ))}
                 </div>
-                {/* Optional upstream catalogue identity. Required only when the package's published
-                    mcpName/mcp-name/OCI label uses the upstream `namespace/name` shape that the
-                    DNS-label Server Name can't represent. */}
+                {/* Required for every registryType except mcpb. The dropdown
+                    above does not expose mcpb, so this is effectively always
+                    required when a package is added. Value must match the
+                    identity the publisher embedded in the upstream artifact
+                    (npm mcpName / PyPI mcp-name / OCI io.modelcontextprotocol.server.name). */}
                 <div className="pl-2">
                   <Label htmlFor="serverName" className="text-sm text-muted-foreground">
-                    Upstream catalogue name (mcpName)
+                    Upstream catalogue name (mcpName) *
                   </Label>
                   <Input
                     id="serverName"
@@ -302,9 +309,9 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
                   />
                   <p className={`text-xs flex items-center gap-1 min-h-[1.25rem] ${!isValidMCPPackageName(pkg.serverName) ? 'text-yellow-600' : 'text-muted-foreground'}`}>
                     {!isValidMCPPackageName(pkg.serverName) ? (
-                      <><AlertCircle className="h-3 w-3" /> Must match `namespace/name` shape.</>
+                      <><AlertCircle className="h-3 w-3" /> 1-200 chars; alphanumeric plus `.`, `_`, `-`, `/`.</>
                     ) : (
-                      <>Optional. Ignored for MCPB packages.</>
+                      <>Must match the identity embedded in the upstream package.</>
                     )}
                   </p>
                 </div>
