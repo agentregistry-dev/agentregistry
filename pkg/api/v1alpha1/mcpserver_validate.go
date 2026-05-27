@@ -83,6 +83,12 @@ func validateMCPServerSource(src *MCPServerSource) FieldErrors {
 	if pkg.Transport.Type == "" {
 		errs.Append("spec.source.package.transport.type", fmt.Errorf("%w", ErrRequiredField))
 	}
+	// MCPB has no ownership concept (the validator ignores serverName), so it's
+	// the only registry type where omitting serverName is allowed.
+	if pkg.RegistryType != "" && pkg.RegistryType != RegistryTypeMCPB && pkg.ServerName == "" {
+		errs.Append("spec.source.package.serverName",
+			fmt.Errorf("%w: required when registryType is %q", ErrRequiredField, pkg.RegistryType))
+	}
 	if err := validateMCPPackageName(pkg.ServerName); err != nil {
 		errs.Append("spec.source.package.serverName", err)
 	}

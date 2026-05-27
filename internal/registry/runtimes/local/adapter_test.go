@@ -40,6 +40,7 @@ func TestV1Alpha1Apply_MCPServerTarget_WritesComposeAndMarksProgressing(t *testi
 					RegistryType: "oci",
 					Identifier:   "ghcr.io/example/weather:v1",
 					Transport:    v1alpha1.MCPTransport{Type: "stdio"},
+					ServerName:   "weather",
 				},
 			},
 		},

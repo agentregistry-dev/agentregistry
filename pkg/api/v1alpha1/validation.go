@@ -126,9 +126,11 @@ func validateNameField(name string) error {
 	return nil
 }
 
-// Upstream MCP-ecosystem catalogue name pattern: `namespace/name` in
-// reverse-DNS form (e.g. `io.github.modelcontextprotocol/server-fetch`).
-const UpstreamMCPPackageNamePattern = `^[a-zA-Z0-9.-]+/[a-zA-Z0-9._-]+$`
+// Upstream MCP-ecosystem catalogue name pattern. Accepts identifier-shaped
+// strings: alphanumeric plus `.`, `_`, `-`, `/`. The slash is optional so
+// single-segment names (e.g. `my-mcp`) and reverse-DNS namespace/name forms
+// (e.g. `io.github.modelcontextprotocol/server-fetch`) both validate.
+const UpstreamMCPPackageNamePattern = `^[a-zA-Z0-9._/-]+$`
 
 const (
 	UpstreamMCPPackageNameMinLen = 3

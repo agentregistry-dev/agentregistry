@@ -66,18 +66,13 @@ func validatePackages(
 	return errs
 }
 
-// ValidateRegistries on *MCPServer converts the bundled MCPPackage
-// entry (includes RegistryBaseURL + FileSHA256). The claim name passed
-// to the per-registry validator is p.ServerName when set, else m.Metadata.Name.
+// ValidateRegistries on *MCPServer dispatches the bundled MCPPackage to the
+// caller-supplied per-registry validator.
 func (m *MCPServer) ValidateRegistries(ctx context.Context, v RegistryValidatorFunc) error {
 	if v == nil || m.Spec.Source == nil || m.Spec.Source.Package == nil {
 		return nil
 	}
 	p := m.Spec.Source.Package
-	claimName := p.ServerName
-	if claimName == "" {
-		claimName = m.Metadata.Name
-	}
 	pkgs := []RegistryPackage{{
 		RegistryType:    p.RegistryType,
 		Identifier:      p.Identifier,
@@ -85,7 +80,7 @@ func (m *MCPServer) ValidateRegistries(ctx context.Context, v RegistryValidatorF
 		RegistryBaseURL: p.RegistryBaseURL,
 		FileSHA256:      p.FileSHA256,
 	}}
-	errs := validatePackages(ctx, v, pkgs, claimName, "spec.source.package")
+	errs := validatePackages(ctx, v, pkgs, p.ServerName, "spec.source.package")
 	if len(errs) == 0 {
 		return nil
 	}

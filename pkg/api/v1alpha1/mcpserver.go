@@ -67,19 +67,15 @@ type MCPPackage struct {
 	Version         string `json:"version,omitempty" yaml:"version,omitempty"`
 
 	// ServerName is the MCP-ecosystem catalogue identity claimed by this
-	// package.
+	// package. The registry's ownership validator compares this value
+	// against the identity the package's publisher embedded in the upstream
+	// artifact (NPM: `mcpName`, PyPI: `mcp-name`,
+	// OCI: `io.modelcontextprotocol.server.name` label).
 	//
-	// Mirrors the upstream `mcpName` in npm package.json, `mcp-name` in PyPI/NuGet READMEs,
-	// and the `io.modelcontextprotocol.server.name` OCI label.
-	//
-	// When set, the registry's ownership validator compares this against
-	// the package's published claim. When unset, the validator compares
-	// against metadata.name.
-	//
-	// Set this when `metadata.name` (DNS-1123 subdomain compliant) cannot
-	// represent an upstream registry's naming shape (e.g. `domain/name`).
-	//
-	// Optional.
+	// Required for every registryType except `mcpb` (which has no ownership
+	// concept). Accepts any identifier-shaped string Both single-segment (`my-mcp`)
+	// and namespace/name (`io.example/foo`) forms validate, so the value can match
+	// whatever the publisher embedded regardless of shape.
 	ServerName string `json:"serverName,omitempty" yaml:"serverName,omitempty"`
 
 	FileSHA256           string             `json:"fileSha256,omitempty" yaml:"fileSha256,omitempty"`

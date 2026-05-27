@@ -22,6 +22,7 @@ spec:
       runtimeHint: docker
       transport:
         type: stdio
+      serverName: acme-fetch
 ---
 apiVersion: ar.dev/v1alpha1
 kind: Skill

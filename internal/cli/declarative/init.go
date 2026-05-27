@@ -801,6 +801,7 @@ func writeDeclarativeMCPYAML(projectDir, name, image, description string) error 
 					RegistryType: "oci",
 					Identifier:   image,
 					Transport:    v1alpha1.MCPTransport{Type: "stdio"},
+					ServerName:   name,
 				},
 			},
 		},

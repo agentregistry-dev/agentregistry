@@ -12,8 +12,7 @@ spec:
       runtimeHint: docker                       # optional: hint for local runtime
       transport:
         type: stdio                             # stdio | sse | streamable-http
-      # serverName declares the upstream MCP-ecosystem catalogue identity
-      # this package claims. Optional. Required only when registering a
-      # public-registry package whose published mcp name label uses the `namespace/name`
-      # shape that metadata.name cannot represent.
-      # serverName: io.example.acme/fetch
+      # Required for every registryType except mcpb. Must match the
+      # identity the publisher embedded into the published artifact
+      # (e.g. the io.modelcontextprotocol.server.name OCI label, npm mcpName).
+      serverName: acme-fetch

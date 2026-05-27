@@ -56,6 +56,7 @@ func TestSpecToPlatformMCPServer_OCIPackage(t *testing.T) {
 				RegistryType: "oci",
 				Identifier:   "ghcr.io/example/mcp:v0.1.0",
 				Transport:    v1alpha1.MCPTransport{Type: "stdio"},
+				ServerName:   "example",
 			},
 		},
 	}
@@ -80,6 +81,7 @@ func TestSpecToPlatformMCPServer_NamespaceOptOverridesMeta(t *testing.T) {
 				RegistryType: "oci",
 				Identifier:   "ghcr.io/example/mcp:v1",
 				Transport:    v1alpha1.MCPTransport{Type: "stdio"},
+				ServerName:   "example",
 			},
 		},
 	}
@@ -107,6 +109,7 @@ func TestSpecToPlatformAgent_ResolvesMCPServerRefs(t *testing.T) {
 					RegistryType: "oci",
 					Identifier:   "ghcr.io/example/tools:v1",
 					Transport:    v1alpha1.MCPTransport{Type: "stdio"},
+					ServerName:   "tools",
 				},
 			},
 		},

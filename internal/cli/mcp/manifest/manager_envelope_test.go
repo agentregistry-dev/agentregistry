@@ -29,6 +29,7 @@ spec:
       runtimeHint: docker
       transport:
         type: stdio
+      serverName: acme-fetch
 `
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "mcp.yaml"), []byte(envelopeYAML), 0o644))
 
