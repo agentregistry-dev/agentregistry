@@ -50,12 +50,14 @@ type MCPServerSource struct {
 	Repository *Repository `json:"repository,omitempty" yaml:"repository,omitempty"`
 }
 
-// MCPTransport describes a transport endpoint — used both inside MCPPackage
-// (to tag a package's preferred transport) and as a top-level remote target.
+// MCPTransport describes how a deployable MCPPackage exposes itself. Used
+// only inside MCPPackage; remotes use MCPRemote, which carries its own URL.
+// For http, the listen Port and endpoint Path are set explicitly because the
+// host is constructed at deploy time. Both are ignored for stdio.
 type MCPTransport struct {
-	Type    string             `json:"type" yaml:"type"`
-	URL     string             `json:"url,omitempty" yaml:"url,omitempty"`
-	Headers []MCPKeyValueInput `json:"headers,omitempty" yaml:"headers,omitempty"`
+	Type string `json:"type" yaml:"type"`                     // "http" | "stdio"
+	Port uint16 `json:"port,omitempty" yaml:"port,omitempty"` // http listen port 1-65535 (ignored for stdio)
+	Path string `json:"path,omitempty" yaml:"path,omitempty"` // http endpoint path, e.g. "/mcp" (ignored for stdio)
 }
 
 // MCPPackage is a runnable distribution of the MCP server (stdio binary,

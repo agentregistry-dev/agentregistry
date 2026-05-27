@@ -247,9 +247,9 @@ export type McpServerSpec = {
 };
 
 export type McpTransport = {
-    headers?: Array<McpKeyValueInput> | null;
+    path?: string;
+    port?: number;
     type: string;
-    url?: string;
 };
 
 export type ObjectMeta = {

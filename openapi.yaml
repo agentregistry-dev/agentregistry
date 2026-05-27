@@ -516,15 +516,13 @@ components:
     MCPTransport:
       additionalProperties: false
       properties:
-        headers:
-          items:
-            $ref: '#/components/schemas/MCPKeyValueInput'
-          type:
-          - array
-          - "null"
-        type:
+        path:
           type: string
-        url:
+        port:
+          format: int32
+          minimum: 0
+          type: integer
+        type:
           type: string
       required:
       - type

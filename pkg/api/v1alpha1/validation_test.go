@@ -460,6 +460,27 @@ func TestMCPServerValidate_RequiresSourceOrRemote(t *testing.T) {
 	require.Contains(t, paths, "spec")
 }
 
+func TestMCPServerValidate_HTTPPortRange(t *testing.T) {
+	mk := func(port uint16) *MCPServer {
+		return &MCPServer{
+			Metadata: ObjectMeta{Name: "x"},
+			Spec: MCPServerSpec{
+				Source: &MCPServerSource{
+					Package: &MCPPackage{
+						RegistryType: "oci",
+						Identifier:   "img:latest",
+						Transport:    MCPTransport{Type: "http", Port: port},
+						ServerName: "x",
+					},
+				},
+			},
+		}
+	}
+	const portPath = "spec.source.package.transport.port"
+	require.Contains(t, failedFields(t, mk(0).Validate()), portPath, "http with port 0 must fail")
+	require.NotContains(t, failedFields(t, mk(8080).Validate()), portPath, "http with a valid port must pass the port check")
+}
+
 func TestValidateNameField(t *testing.T) {
 	maxLabelLen := strings.Repeat("a", 63) // single segment at max label length
 	tooLongSegment := strings.Repeat("a", 64)

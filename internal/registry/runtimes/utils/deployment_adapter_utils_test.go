@@ -73,7 +73,8 @@ func TestTranslateMCPServerLocalIncludesOverridesAndExtraArgs(t *testing.T) {
 					},
 					Transport: v1alpha1.MCPTransport{
 						Type: "http",
-						URL:  "http://localhost:7777/mcp",
+						Port: 7777,
+						Path: "/mcp",
 					},
 				},
 			},

@@ -140,6 +140,16 @@ func TestInitMCP_WritesYAMLAndArctl(t *testing.T) {
 	_, err = os.Stat(filepath.Join(projectDir, "mcp.yaml"))
 	require.NoError(t, err)
 
+	// The generated manifest declares the http transport matching the
+	// scaffolded fastmcp server (default --port 3000, path /mcp) so it's
+	// deployable as-is.
+	mcpSpec := readYAMLFile(t, filepath.Join(projectDir, "mcp.yaml"))["spec"].(map[string]any)
+	pkg := mcpSpec["source"].(map[string]any)["package"].(map[string]any)
+	transport := pkg["transport"].(map[string]any)
+	assert.Equal(t, "http", transport["type"])
+	assert.EqualValues(t, 3000, transport["port"])
+	assert.Equal(t, "/mcp", transport["path"])
+
 	cfg, err := buildconfig.Read(projectDir)
 	require.NoError(t, err)
 	assert.Equal(t, "fastmcp", cfg.Framework)
