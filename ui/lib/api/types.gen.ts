@@ -453,10 +453,6 @@ export type DeleteAgentData = {
          * Namespace (internal; defaults to 'default').
          */
         namespace?: string;
-        /**
-         * Skip provider-specific teardown and only remove the registry record.
-         */
-        force?: boolean;
     };
     url: '/v0/agents/{name}/{tag}';
 };
@@ -668,10 +664,6 @@ export type DeleteDeploymentData = {
          * Namespace (internal; defaults to 'default').
          */
         namespace?: string;
-        /**
-         * Skip provider-specific teardown and only remove the registry record.
-         */
-        force?: boolean;
     };
     url: '/v0/deployments/{name}';
 };
@@ -880,10 +872,6 @@ export type DeleteMcpserverData = {
          * Namespace (internal; defaults to 'default').
          */
         namespace?: string;
-        /**
-         * Skip provider-specific teardown and only remove the registry record.
-         */
-        force?: boolean;
     };
     url: '/v0/mcpservers/{name}/{tag}';
 };
@@ -1093,10 +1081,6 @@ export type DeletePromptData = {
          * Namespace (internal; defaults to 'default').
          */
         namespace?: string;
-        /**
-         * Skip provider-specific teardown and only remove the registry record.
-         */
-        force?: boolean;
     };
     url: '/v0/prompts/{name}/{tag}';
 };
@@ -1248,10 +1232,6 @@ export type DeleteRuntimeData = {
          * Namespace (internal; defaults to 'default').
          */
         namespace?: string;
-        /**
-         * Skip provider-specific teardown and only remove the registry record.
-         */
-        force?: boolean;
     };
     url: '/v0/runtimes/{name}';
 };
@@ -1435,10 +1415,6 @@ export type DeleteSkillData = {
          * Namespace (internal; defaults to 'default').
          */
         namespace?: string;
-        /**
-         * Skip provider-specific teardown and only remove the registry record.
-         */
-        force?: boolean;
     };
     url: '/v0/skills/{name}/{tag}';
 };
