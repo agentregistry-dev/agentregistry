@@ -654,6 +654,9 @@ Picks a framework + language interactively (or via --framework / --language).`,
 		Args:         cobra.MaximumNArgs(1),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if initPort < 1 || initPort > 65535 {
+				return fmt.Errorf("--port must be between 1 and 65535, got %d", initPort)
+			}
 			var full string
 			if len(args) == 1 {
 				full = args[0]

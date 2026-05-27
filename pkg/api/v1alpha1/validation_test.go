@@ -445,3 +445,24 @@ func TestMCPServerValidate_RequiresSourceOrRemote(t *testing.T) {
 	paths := failedFields(t, m.Validate())
 	require.Contains(t, paths, "spec")
 }
+
+func TestMCPServerValidate_HTTPPortRange(t *testing.T) {
+	mk := func(port uint32) *MCPServer {
+		return &MCPServer{
+			Metadata: ObjectMeta{Name: "x"},
+			Spec: MCPServerSpec{
+				Source: &MCPServerSource{
+					Package: &MCPPackage{
+						RegistryType: "oci",
+						Identifier:   "img:latest",
+						Transport:    MCPTransport{Type: "http", Port: port},
+					},
+				},
+			},
+		}
+	}
+	const portPath = "spec.source.package.transport.port"
+	require.Contains(t, failedFields(t, mk(0).Validate()), portPath, "http with port 0 must fail")
+	require.Contains(t, failedFields(t, mk(70000).Validate()), portPath, "http with port >65535 must fail")
+	require.NotContains(t, failedFields(t, mk(8080).Validate()), portPath, "http with a valid port must pass the port check")
+}

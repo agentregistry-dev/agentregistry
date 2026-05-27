@@ -66,8 +66,12 @@ func validateMCPServerSource(src *MCPServerSource) FieldErrors {
 	if pkg.Transport.Type == "" {
 		errs.Append("spec.source.package.transport.type", fmt.Errorf("%w", ErrRequiredField))
 	}
-	if pkg.Transport.Type == "http" && pkg.Transport.Port == 0 {
-		errs.Append("spec.source.package.transport.port", fmt.Errorf("%w: required for http transport", ErrRequiredField))
+	if pkg.Transport.Type == "http" {
+		if pkg.Transport.Port == 0 {
+			errs.Append("spec.source.package.transport.port", fmt.Errorf("%w: required for http transport", ErrRequiredField))
+		} else if pkg.Transport.Port > 65535 {
+			errs.Append("spec.source.package.transport.port", fmt.Errorf("invalid port %d: must be 1-65535", pkg.Transport.Port))
+		}
 	}
 	return errs
 }
