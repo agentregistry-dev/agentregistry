@@ -1901,9 +1901,10 @@ spec:
     package:
       registryType: oci
       identifier: %s
+      serverName: %s
       transport:
         type: stdio
-`, serverName, imageRef)
+`, serverName, imageRef, serverName)
 
 	path := writeDeclarativeYAML(t, tmpDir, "mcp-pkg.yaml", yaml)
 	result := RunArctl(t, tmpDir, "apply", "-f", path, "--registry-url", regURL)
