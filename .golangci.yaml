@@ -99,7 +99,6 @@ issues:
 formatters:
   enable:
     - gofmt
-    - goimports
     - gci
   settings:
     gci:

@@ -89,10 +89,10 @@ make build
 
 ```bash
 # Format code
-gofmt -w .
+make fmt
 
 # Run linter
-golangci-lint run
+make lint
 ```
 
 ### TypeScript/React
@@ -328,4 +328,3 @@ make build-cli
 
 
 Thank you for contributing! 🎉
-
