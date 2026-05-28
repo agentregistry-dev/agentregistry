@@ -10,6 +10,7 @@ import (
 	"database/sql"
 	"fmt"
 	"io/fs"
+	"net/url"
 
 	"github.com/golang-migrate/migrate/v4"
 	migratepgx "github.com/golang-migrate/migrate/v4/database/pgx/v5"
@@ -45,7 +46,22 @@ const migrationsTable = "schema_migrations"
 // code; sql.Open is lazy (never pings) and go-migrate's API is
 // synchronous and doesn't accept a context.
 func NewMigrator(ctx context.Context, dsn string, migrationsFS fs.FS, dir, schema string) (*migrate.Migrate, error) {
-	db, err := sql.Open("pgx", dsn)
+	// migratepgx.WithInstance does NOT set search_path on the connection
+	// it acquires — its `SchemaName` config only controls where
+	// `schema_migrations` lives. Unqualified identifiers in migration
+	// SQL therefore resolve against the connection's default
+	// search_path (`"$user", public`), which lands tables in the wrong
+	// schema when the schema name does not match the connecting user.
+	// Inject `search_path=<schema>` into the DSN so the pgx stdlib
+	// driver passes it as a connection-startup parameter and every
+	// connection migratepgx pulls from the pool sees the right
+	// search_path from the moment it's established.
+	dsnWithSchema, err := withSearchPath(dsn, schema)
+	if err != nil {
+		return nil, fmt.Errorf("inject search_path into DSN: %w", err)
+	}
+
+	db, err := sql.Open("pgx", dsnWithSchema)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
@@ -81,4 +97,20 @@ func NewMigrator(ctx context.Context, dsn string, migrationsFS fs.FS, dir, schem
 		return nil, fmt.Errorf("construct migrator: %w", err)
 	}
 	return mg, nil
+}
+
+// withSearchPath returns dsn with the `search_path` connection-startup
+// parameter set to schema. If dsn already specifies a search_path it
+// is replaced. Used by NewMigrator so unqualified identifiers in
+// migration SQL resolve against the target schema regardless of the
+// connecting user.
+func withSearchPath(dsn, schema string) (string, error) {
+	u, err := url.Parse(dsn)
+	if err != nil {
+		return "", fmt.Errorf("parse DSN: %w", err)
+	}
+	q := u.Query()
+	q.Set("search_path", schema)
+	u.RawQuery = q.Encode()
+	return u.String(), nil
 }
