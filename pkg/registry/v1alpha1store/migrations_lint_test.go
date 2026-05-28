@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"io/fs"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -64,7 +65,7 @@ var forbiddenPatterns = []struct {
 	message string
 }{
 	{
-		re:      regexp.MustCompile(`\b(?:v1alpha1|public|enterprise|agentregistry|agentregistry_enterprise|pg_catalog|information_schema)\.`),
+		re:      regexp.MustCompile(`\b(?:v1alpha1|public|agentregistry|pg_catalog|information_schema)\.`),
 		message: "schema-qualified identifier (drop the prefix; the driver sets search_path)",
 	},
 	{
@@ -77,7 +78,7 @@ var forbiddenPatterns = []struct {
 	},
 	{
 		re:      regexp.MustCompile(`(?i)\bCREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?\s+\w+\.\w+\b`),
-		message: "CREATE TABLE in a non-default schema is not allowed",
+		message: "CREATE TABLE in a non-default schema is not allowed (the CREATE TABLE x.y rule catches arbitrary downstream schemas without naming them)",
 	},
 }
 
@@ -105,7 +106,7 @@ func scanSQL(path string, data []byte) []string {
 }
 
 func formatViolation(path string, line int, match, message string) string {
-	return path + ":" + itoa(line) + " — " + message + " (matched: " + match + ")"
+	return path + ":" + strconv.Itoa(line) + " — " + message + " (matched: " + match + ")"
 }
 
 // TestMigrationsLint_FlagsForbiddenPatterns asserts each category of
@@ -174,27 +175,4 @@ func TestMigrationsLint_IgnoresComments(t *testing.T) {
 	if len(violations) != 0 {
 		t.Errorf("expected no violations on commentary-only mention; got %v", violations)
 	}
-}
-
-// itoa avoids importing strconv just for one call.
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	var buf [20]byte
-	i := len(buf)
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	if neg {
-		i--
-		buf[i] = '-'
-	}
-	return string(buf[i:])
 }

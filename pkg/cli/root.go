@@ -146,9 +146,9 @@ func init() {
 	rootCmd.AddCommand(declarative.WaitCmd)
 	rootCmd.AddCommand(db.NewCommand())
 
-	// Register the OSS migration source. LegacyRun fires once on
-	// upgraded deployments (gated by the orchestrator) to copy
-	// pre-#503 data from v1alpha1.* into agentregistry.*.
+	// Register the OSS migration source. The source's LegacyRun
+	// bridges legacy v1alpha1.* data into the orchestrator-owned
+	// schema; the orchestrator gates the bridge to fresh-upgrade boots.
 	migrate.Register(legacymigrate.OSSSource())
 }
 

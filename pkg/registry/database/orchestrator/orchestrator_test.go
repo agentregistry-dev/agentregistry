@@ -109,9 +109,9 @@ func TestRunUp_Idempotent(t *testing.T) {
 	require.Equal(t, 1, rows, "second RunUp must not add migration rows")
 }
 
-// TestRunUp_LegacyBridge: seed pre-#503 production state and confirm
-// LegacyRun copies data, rows land in agentregistry.*, the rename
-// fires, and the v1alpha1.* tables retain the original rows.
+// TestRunUp_LegacyBridge: seed a pre-engine-swap production state and
+// confirm LegacyRun copies data, rows land in agentregistry.*, the
+// rename fires, and the v1alpha1.* tables retain the original rows.
 func TestRunUp_LegacyBridge(t *testing.T) {
 	dsn := newDB(t)
 	ctx := context.Background()
@@ -228,8 +228,9 @@ func TestRunUp_MultiPodRace(t *testing.T) {
 	require.Equal(t, 1, rows, "exactly one migration row regardless of concurrent runners")
 }
 
-// seedLegacyState plants pre-PR-#503 production state in the DB:
-// legacy public.schema_migrations + v1alpha1.* tables with sample rows.
+// seedLegacyState plants a pre-engine-swap production state in the DB:
+// the prior migrator's public.schema_migrations + v1alpha1.* tables
+// with sample rows.
 func seedLegacyState(t *testing.T, ctx context.Context, db *sql.DB) {
 	t.Helper()
 	stmts := []string{

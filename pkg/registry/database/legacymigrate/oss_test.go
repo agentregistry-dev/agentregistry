@@ -1,6 +1,7 @@
 package legacymigrate
 
 import (
+	"io"
 	"regexp"
 	"slices"
 	"testing"
@@ -18,9 +19,11 @@ func TestOSSTablesMatchInitialSchema(t *testing.T) {
 	}
 	defer func() { _ = body.Close() }()
 
-	data := make([]byte, 64*1024)
-	n, _ := body.Read(data)
-	src := string(data[:n])
+	data, err := io.ReadAll(body)
+	if err != nil {
+		t.Fatalf("read 001_initial_schema.up.sql: %v", err)
+	}
+	src := string(data)
 
 	re := regexp.MustCompile(`(?i)CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+(\w+)`)
 	matches := re.FindAllStringSubmatch(src, -1)

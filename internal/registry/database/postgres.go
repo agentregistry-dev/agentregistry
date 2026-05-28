@@ -78,8 +78,8 @@ func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authori
 	return &PostgreSQL{pool: pool, authz: authz}, nil
 }
 
-// Pool exposes the underlying pgxpool for callers (v1alpha1 Stores,
-// enterprise extensions) that need direct pgx access.
+// Pool exposes the underlying pgxpool for callers that need direct
+// pgx access.
 func (db *PostgreSQL) Pool() *pgxpool.Pool {
 	return db.pool
 }

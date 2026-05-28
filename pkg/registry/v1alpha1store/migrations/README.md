@@ -7,7 +7,7 @@ migrate` CLI. The migrator is `golang-migrate/migrate v4` with the
 `pkg/registry/database/migrate.go`.
 
 The current set is a single consolidated migration
-(`001_initial_schema`) representing the post-#503 baseline schema. Any
+(`001_initial_schema`) representing the current baseline schema. Any
 new schema change is a new `NNN_*.up.sql` / `.down.sql` pair stacked
 on top.
 
