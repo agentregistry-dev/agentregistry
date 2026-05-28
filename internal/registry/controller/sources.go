@@ -76,8 +76,8 @@ type sourceKind struct {
 }
 
 // SourceIndex is the controller-owned KRT read graph for v1alpha1 source
-// objects. The collections stay typed so controllers can build dependency
-// indexes and watch exactly the resource families they depend on.
+// objects. The collections stay typed so derived KRT collections can fetch
+// exactly the resource families they depend on.
 type SourceIndex struct {
 	stores map[string]*v1alpha1store.Store
 	kinds  map[string]sourceKind
@@ -88,10 +88,6 @@ type SourceIndex struct {
 	MCPServers  krt.StaticCollection[MCPServerSource]
 	Skills      krt.StaticCollection[SkillSource]
 	Prompts     krt.StaticCollection[PromptSource]
-
-	DeploymentsByRuntime krt.Index[string, DeploymentSource]
-	DeploymentsByTarget  krt.Index[string, DeploymentSource]
-	AgentsByMCPServer    krt.Index[string, AgentSource]
 }
 
 // SourceIndexOptions configures generic source projection behavior.
@@ -134,40 +130,6 @@ func NewSourceIndex(stores map[string]*v1alpha1store.Store, opts ...SourceIndexO
 		Prompts: krt.NewStaticCollection[PromptSource](nil, nil,
 			krt.WithName("agentregistry/source/prompts")),
 	}
-	s.DeploymentsByRuntime = krt.NewIndex[string, DeploymentSource](
-		s.Deployments,
-		"runtime-ref",
-		func(row DeploymentSource) []string {
-			key, ok := s.runtimeRefKey(row.Deployment)
-			if !ok {
-				return nil
-			}
-			return []string{sourceObjectKey(key)}
-		},
-	)
-	s.DeploymentsByTarget = krt.NewIndex[string, DeploymentSource](
-		s.Deployments,
-		"target-ref",
-		func(row DeploymentSource) []string {
-			key, ok := s.targetRefKey(row.Deployment)
-			if !ok {
-				return nil
-			}
-			return []string{sourceObjectKey(key)}
-		},
-	)
-	s.AgentsByMCPServer = krt.NewIndex[string, AgentSource](
-		s.Agents,
-		"mcpserver-ref",
-		func(row AgentSource) []string {
-			keys := s.agentMCPServerRefKeys(row.Agent)
-			indexKeys := make([]string, 0, len(keys))
-			for _, key := range keys {
-				indexKeys = append(indexKeys, sourceObjectKey(key))
-			}
-			return indexKeys
-		},
-	)
 	return s
 }
 
@@ -257,82 +219,11 @@ func (s *SourceIndex) ApplyEvent(ctx context.Context, event v1alpha1store.Contro
 	}
 }
 
-func (s *SourceIndex) DeploymentList() []DeploymentSource {
-	if s == nil {
-		return nil
-	}
-	return s.Deployments.List()
-}
-
-func (s *SourceIndex) TargetExists(deployment *v1alpha1.Deployment) bool {
-	if s == nil || deployment == nil {
-		return false
-	}
-	key, ok := s.targetRefKey(deployment)
-	if !ok {
-		return false
-	}
-	return s.resourceKeyExists(key)
-}
-
-func (s *SourceIndex) RuntimeExists(deployment *v1alpha1.Deployment) bool {
-	if s == nil || deployment == nil {
-		return false
-	}
-	key, ok := s.runtimeRefKey(deployment)
-	if !ok {
-		return false
-	}
-	return s.resourceKeyExists(key)
-}
-
-func (s *SourceIndex) DeploymentsForRuntime(key v1alpha1store.ResourceKey) []DeploymentSource {
-	if s == nil {
-		return nil
-	}
-	return s.DeploymentsByRuntime.Lookup(sourceObjectKey(key))
-}
-
-func (s *SourceIndex) DeploymentsForTarget(key v1alpha1store.ResourceKey) []DeploymentSource {
-	if s == nil {
-		return nil
-	}
-	return s.DeploymentsByTarget.Lookup(sourceObjectKey(key))
-}
-
-func (s *SourceIndex) AgentsForMCPServer(key v1alpha1store.ResourceKey) []AgentSource {
-	if s == nil {
-		return nil
-	}
-	return s.AgentsByMCPServer.Lookup(sourceObjectKey(key))
-}
-
-func (s *SourceIndex) ListAgents() []AgentSource {
-	if s == nil {
-		return nil
-	}
-	return s.Agents.List()
-}
-
-func (s *SourceIndex) ListMCPServers() []MCPServerSource {
-	if s == nil {
-		return nil
-	}
-	return s.MCPServers.List()
-}
-
 func (s *SourceIndex) ListSkills() []SkillSource {
 	if s == nil {
 		return nil
 	}
 	return s.Skills.List()
-}
-
-func (s *SourceIndex) ListPrompts() []PromptSource {
-	if s == nil {
-		return nil
-	}
-	return s.Prompts.List()
 }
 
 func (s *SourceIndex) ResourceExists(ref v1alpha1.ResourceRef, fallbackNamespace string) bool {
