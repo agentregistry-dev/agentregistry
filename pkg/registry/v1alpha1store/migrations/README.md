@@ -52,10 +52,11 @@ in `BEGIN;` / `COMMIT;`** — go-migrate runs the SQL through `Exec`,
 and Postgres autocommits single-statement DDL. Multi-statement
 migrations are not atomic by default.
 
-The auto-recovery wrapper in `pkg/registry/database/migrate.go`
-clears go-migrate's dirty-state bookkeeping (`Force(current-1)`) so a
-partial-failure Up surfaces as an actionable error instead of `Dirty
-database version N. Fix and force version.`. **This is bookkeeping
+A partially-applied migration leaves go-migrate's `schema_migrations`
+row marked dirty; subsequent `up` invocations refuse to run until the
+marker is cleared. The orchestrator does not auto-recover from the
+dirty state — operators clear it via `arctl db migrate force V`, where
+`V` is the version named in the failure message. **This is bookkeeping
 recovery only — it does not undo any DDL that committed before the
 migration failed.** Author every migration with idempotent DDL so a
 retry of the partially-applied migration is safe:

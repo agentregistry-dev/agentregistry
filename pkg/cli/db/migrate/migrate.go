@@ -335,6 +335,7 @@ the version named in the failure message.`,
 				return err
 			}
 			return withSourceMigrator(cmd.Context(), src, dsn, func(mg *migrate.Migrate) error {
+				preV, _, _ := readVersion(mg)
 				if err := mg.Steps(-n); err != nil {
 					if errors.Is(err, migrate.ErrNoChange) {
 						fmt.Fprintln(cmd.OutOrStdout(), "no migrations to roll back")
@@ -342,7 +343,9 @@ the version named in the failure message.`,
 					}
 					return err
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "rolled back %d migration(s)\n", n)
+				postV, _, _ := readVersion(mg)
+				rolled := countVersionsBetween(src, postV, preV)
+				fmt.Fprintf(cmd.OutOrStdout(), "rolled back %d migration(s)\n", rolled)
 				return nil
 			})
 		},
@@ -679,6 +682,27 @@ at a version the binary cannot apply or roll back to, wedging the DB.`,
 			})
 		},
 	}
+}
+
+// countVersionsBetween returns the count of shipped source migrations
+// in the half-open interval (low, high]. Used by `down N` to report
+// the actual number of migrations rolled back regardless of whether
+// the user-supplied N exceeded the applied count. Returns 0 on a
+// source-enumeration error; the call site already surfaces success/
+// failure via Steps(-N) and the count is operator-facing display only.
+func countVersionsBetween(src Source, low, high uint) int {
+	versions, err := sourceFileVersions(src)
+	if err != nil {
+		return 0
+	}
+	count := 0
+	for _, v := range versions {
+		uv := uint(v)
+		if uv > low && uv <= high {
+			count++
+		}
+	}
+	return count
 }
 
 // formatVersionList renders a small []int as a human-readable list for

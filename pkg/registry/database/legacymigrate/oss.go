@@ -54,9 +54,14 @@ var ossTables = []string{
 // addresses for each table. INSERTing by an explicit column list keeps
 // the copy correct if the source (`v1alpha1.<t>`) and destination
 // (`<OSSSchema>.<t>`) ever diverge in column order or add new columns.
-// Keep this in sync with 001_initial_schema.up.sql when introducing
-// new tables — TestOSSTablesMatchInitialSchema guards table names but
-// not column lists.
+//
+// The schema this list reflects is FROZEN: it captures what
+// `v1alpha1.<t>` looks like for any deployment that lived on the
+// pre-engine-swap migrator. Columns added by 002+ migrations to
+// `<OSSSchema>.<t>` belong here ONLY if a corresponding column was
+// also present in the legacy `v1alpha1.<t>` at the moment of upgrade.
+// In practice that means columns added by 002+ stay out of this map
+// — the legacy schema is closed.
 var ossTableColumns = map[string][]string{
 	"agents": {
 		"namespace", "name", "tag", "uid", "generation",

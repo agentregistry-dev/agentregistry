@@ -85,8 +85,32 @@ var forbiddenPatterns = []struct {
 		message: "ALTER TABLE addressing a non-default schema is not allowed",
 	},
 	{
-		re:      regexp.MustCompile(`(?i)\bCREATE(?:\s+UNIQUE)?\s+INDEX(?:\s+IF\s+NOT\s+EXISTS)?\s+\w+\s+ON\s+\w+\.\w+\b`),
+		re:      regexp.MustCompile(`(?i)\bCREATE(?:\s+UNIQUE)?\s+INDEX(?:\s+CONCURRENTLY)?(?:\s+IF\s+NOT\s+EXISTS)?\s+\w+\s+ON\s+\w+\.\w+\b`),
 		message: "CREATE INDEX targeting a non-default schema is not allowed",
+	},
+	{
+		re:      regexp.MustCompile(`(?i)\bCREATE(?:\s+OR\s+REPLACE)?\s+VIEW(?:\s+IF\s+NOT\s+EXISTS)?\s+\w+\.\w+\b`),
+		message: "CREATE VIEW in a non-default schema is not allowed",
+	},
+	{
+		re:      regexp.MustCompile(`(?i)\bCREATE\s+SEQUENCE(?:\s+IF\s+NOT\s+EXISTS)?\s+\w+\.\w+\b`),
+		message: "CREATE SEQUENCE in a non-default schema is not allowed",
+	},
+	{
+		re:      regexp.MustCompile(`(?i)\bCREATE\s+TYPE\s+\w+\.\w+\b`),
+		message: "CREATE TYPE in a non-default schema is not allowed",
+	},
+	{
+		re:      regexp.MustCompile(`(?i)\bALTER\s+(?:INDEX|SEQUENCE|TYPE|VIEW|FUNCTION)(?:\s+IF\s+EXISTS)?\s+\w+\.\w+\b`),
+		message: "ALTER addressing a non-default schema is not allowed",
+	},
+	{
+		re:      regexp.MustCompile(`(?i)\bCOMMENT\s+ON\s+\w+\s+\w+\.\w+\b`),
+		message: "COMMENT ON targeting a non-default schema is not allowed",
+	},
+	{
+		re:      regexp.MustCompile(`(?i)\b(?:GRANT|REVOKE)\b.*?\bON\s+\w+\.\w+\b`),
+		message: "GRANT/REVOKE targeting a non-default schema is not allowed",
 	},
 	{
 		re:      regexp.MustCompile(`(?i)\bCREATE(?:\s+OR\s+REPLACE)?\s+TRIGGER\s+\w+\s+(?:BEFORE|AFTER|INSTEAD\s+OF)\b.*?\bON\s+\w+\.\w+\b`),
@@ -191,6 +215,41 @@ func TestMigrationsLint_FlagsForbiddenPatterns(t *testing.T) {
 			"DROP non-default schema",
 			"DROP TABLE IF EXISTS other.foo;",
 			"DROP addressing a non-default schema",
+		},
+		{
+			"CREATE INDEX CONCURRENTLY non-default schema",
+			"CREATE INDEX CONCURRENTLY foo_idx ON other.foo (id);",
+			"CREATE INDEX targeting a non-default schema",
+		},
+		{
+			"CREATE VIEW non-default schema",
+			"CREATE VIEW other.foo AS SELECT 1;",
+			"CREATE VIEW in a non-default schema",
+		},
+		{
+			"CREATE SEQUENCE non-default schema",
+			"CREATE SEQUENCE other.foo_seq;",
+			"CREATE SEQUENCE in a non-default schema",
+		},
+		{
+			"CREATE TYPE non-default schema",
+			"CREATE TYPE other.foo_t AS ENUM ('a', 'b');",
+			"CREATE TYPE in a non-default schema",
+		},
+		{
+			"ALTER INDEX non-default schema",
+			"ALTER INDEX other.foo_idx RENAME TO bar_idx;",
+			"ALTER addressing a non-default schema",
+		},
+		{
+			"COMMENT ON non-default schema",
+			"COMMENT ON TABLE other.foo IS 'a foo';",
+			"COMMENT ON targeting a non-default schema",
+		},
+		{
+			"GRANT non-default schema",
+			"GRANT SELECT ON other.foo TO public;",
+			"GRANT/REVOKE targeting a non-default schema",
 		},
 	}
 	for _, tc := range cases {
