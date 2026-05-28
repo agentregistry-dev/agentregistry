@@ -29,6 +29,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
 
 // ---- binary build (lazy, once per `go test` invocation) ----
@@ -339,8 +341,8 @@ func TestE2E_DownErrNotReversible(t *testing.T) {
 
 // TestE2E_ForceWritesRowOnly — `force V` writes the schema_migrations
 // row without running the migration SQL. After `force 1` against a
-// fresh DB, status reports 1 applied; agentregistry.schema_migrations
-// exists but the data tables 001 would have created do not.
+// fresh DB, status reports 1 applied; the OSS schema's schema_migrations
+// table exists but the data tables 001 would have created do not.
 func TestE2E_ForceWritesRowOnly(t *testing.T) {
 	dsn := freshDB(t)
 	env := append(stripARRegistryEnv(), "AGENT_REGISTRY_DATABASE_URL="+dsn)
@@ -374,12 +376,13 @@ func TestE2E_ForceWritesRowOnly(t *testing.T) {
 
 	var extraTables int
 	if err := conn.QueryRow(ctx,
-		"SELECT COUNT(*) FROM pg_tables WHERE schemaname = 'agentregistry' AND tablename != 'schema_migrations'",
+		"SELECT COUNT(*) FROM pg_tables WHERE schemaname = $1 AND tablename != 'schema_migrations'",
+		database.OSSSchema,
 	).Scan(&extraTables); err != nil {
-		t.Fatalf("count agentregistry tables: %v", err)
+		t.Fatalf("count %s tables: %v", database.OSSSchema, err)
 	}
 	if extraTables != 0 {
-		t.Errorf("expected only schema_migrations in agentregistry schema after `force 1`; got %d extra tables", extraTables)
+		t.Errorf("expected only schema_migrations in %s schema after `force 1`; got %d extra tables", database.OSSSchema, extraTables)
 	}
 }
 
@@ -456,3 +459,38 @@ func TestE2E_GotoInferredSource(t *testing.T) {
 		t.Errorf("version should be 1; got %q", r.stdout)
 	}
 }
+
+// TestE2E_ForceVersionOutOfRange — `force V` for V not in the shipped
+// migration set must fail with a message naming the valid versions,
+// preventing operators from wedging the DB by typoing a high integer.
+func TestE2E_ForceVersionOutOfRange(t *testing.T) {
+	dsn := freshDB(t)
+	env := append(stripARRegistryEnv(), "AGENT_REGISTRY_DATABASE_URL="+dsn)
+
+	r := runArctl(t, env, "db", "migrate", "force", "9999")
+	if r.exitCode == 0 {
+		t.Fatalf("force 9999 should fail; got exit 0\nstdout: %s", r.stdout)
+	}
+	if !strings.Contains(r.combined, "not a shipped migration") {
+		t.Errorf("error should reference 'not a shipped migration'; got:\n%s", r.combined)
+	}
+	if !strings.Contains(r.combined, "valid versions") {
+		t.Errorf("error should list valid versions; got:\n%s", r.combined)
+	}
+}
+
+// TestE2E_VersionFreshDBDisambiguated — `version` on an unbridged
+// fresh DB must distinguish "no migrations applied" from a binary error.
+func TestE2E_VersionFreshDBDisambiguated(t *testing.T) {
+	dsn := freshDB(t)
+	env := append(stripARRegistryEnv(), "AGENT_REGISTRY_DATABASE_URL="+dsn)
+
+	r := runArctl(t, env, "db", "migrate", "version")
+	if r.exitCode != 0 {
+		t.Fatalf("version on fresh DB: exit %d\nstderr: %s", r.exitCode, r.stderr)
+	}
+	if !strings.Contains(r.stdout, "no migrations applied") {
+		t.Errorf("version output should disambiguate fresh DB; got: %q", r.stdout)
+	}
+}
+

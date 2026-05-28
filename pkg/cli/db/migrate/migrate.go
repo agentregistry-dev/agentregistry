@@ -97,7 +97,7 @@ func EnableSourceSelection() {
 		return
 	}
 	migrateCmd.PersistentFlags().StringVar(&flags.source, sourceFlag, "",
-		"Migration source name (required for per-source ops when more than one source is registered)")
+		"Migration source name for per-source ops (down/goto/force/version); inferred when only one source is registered. Not applicable to up or status — those aggregate across every registered source.")
 }
 
 func resolveDSN() (string, error) {
@@ -313,7 +313,14 @@ func newDownCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "down N",
 		Short: "Roll back the N most-recent applied migrations for the selected source",
-		Args:  cobra.ExactArgs(1),
+		Long: `Roll back the N most-recent applied migrations for the selected source.
+
+Migrations whose .down.sql raises (up-only / not-reversible migrations)
+will leave the schema_migrations row marked dirty after the failed
+rollback. Subsequent 'up' invocations will refuse to run until the
+dirty marker is cleared with 'arctl db migrate force V', where V is
+the version named in the failure message.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			n, err := strconv.Atoi(args[0])
 			if err != nil || n < 1 {
@@ -513,6 +520,20 @@ func dirtyTag(dirty bool) string {
 	return ""
 }
 
+// versionAnnotation renders the trailing annotation for `version`
+// output. Disambiguates an unapplied-migrations state (v=0, !dirty)
+// from a versioned state by tagging the former; dirty wins over the
+// "no migrations applied" tag because it's the more actionable signal.
+func versionAnnotation(v uint, dirty bool) string {
+	if dirty {
+		return " (dirty)"
+	}
+	if v == 0 {
+		return " (no migrations applied)"
+	}
+	return ""
+}
+
 func newVersionCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
@@ -553,7 +574,7 @@ registered, --source filters to a single track.`,
 					if err != nil {
 						return err
 					}
-					fmt.Fprintf(out, "%d%s\n", v, dirtyTag(dirty))
+					fmt.Fprintf(out, "%d%s\n", v, versionAnnotation(v, dirty))
 					return nil
 				})
 			}
@@ -563,7 +584,7 @@ registered, --source filters to a single track.`,
 					if err != nil {
 						return err
 					}
-					fmt.Fprintf(out, "%s: %d%s\n", src.Name, v, dirtyTag(dirty))
+					fmt.Fprintf(out, "%s: %d%s\n", src.Name, v, versionAnnotation(v, dirty))
 					return nil
 				}); err != nil {
 					return err
@@ -623,7 +644,9 @@ func newForceCmd() *cobra.Command {
 		Short: "Mark version V as applied without running its SQL",
 		Long: `Used to reconcile the selected source's schema_migrations table
 after manual remediation. The version V should come from a prior
-failure message.`,
+failure message and must correspond to a shipped migration file in
+the selected source — otherwise the schema_migrations row would point
+at a version the binary cannot apply or roll back to, wedging the DB.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			v, err := strconv.Atoi(args[0])
@@ -638,6 +661,15 @@ failure message.`,
 			if err != nil {
 				return err
 			}
+			versions, err := sourceFileVersions(src)
+			if err != nil {
+				return err
+			}
+			if !slices.Contains(versions, v) {
+				return fmt.Errorf(
+					"version %d is not a shipped migration for source %q; valid versions are %s",
+					v, src.Name, formatVersionList(versions))
+			}
 			return withSourceMigrator(cmd.Context(), src, dsn, func(mg *migrate.Migrate) error {
 				if err := mg.Force(v); err != nil {
 					return err
@@ -647,4 +679,17 @@ failure message.`,
 			})
 		},
 	}
+}
+
+// formatVersionList renders a small []int as a human-readable list for
+// error messages: "1, 2, 5" or "(none)" if empty.
+func formatVersionList(versions []int) string {
+	if len(versions) == 0 {
+		return "(none)"
+	}
+	parts := make([]string, len(versions))
+	for i, v := range versions {
+		parts[i] = strconv.Itoa(v)
+	}
+	return strings.Join(parts, ", ")
 }

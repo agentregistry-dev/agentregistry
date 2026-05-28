@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang-migrate/migrate/v4"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -130,7 +131,7 @@ func ensureTemplate(ctx context.Context, adminConn *pgx.Conn) error {
 			slog.Warn("error closing template migrator", "source_error", srcErr, "database_error", dbErr)
 		}
 	}()
-	if _, err := pkgdb.RunUpWithRecovery(mg, "v1alpha1-template"); err != nil {
+	if err := mg.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 		return fmt.Errorf("apply v1alpha1 migrations: %w", err)
 	}
 	return nil

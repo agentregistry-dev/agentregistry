@@ -80,6 +80,30 @@ var forbiddenPatterns = []struct {
 		re:      regexp.MustCompile(`(?i)\bCREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?\s+\w+\.\w+\b`),
 		message: "CREATE TABLE in a non-default schema is not allowed (the CREATE TABLE x.y rule catches arbitrary downstream schemas without naming them)",
 	},
+	{
+		re:      regexp.MustCompile(`(?i)\bALTER\s+TABLE(?:\s+IF\s+EXISTS)?\s+(?:ONLY\s+)?\w+\.\w+\b`),
+		message: "ALTER TABLE addressing a non-default schema is not allowed",
+	},
+	{
+		re:      regexp.MustCompile(`(?i)\bCREATE(?:\s+UNIQUE)?\s+INDEX(?:\s+IF\s+NOT\s+EXISTS)?\s+\w+\s+ON\s+\w+\.\w+\b`),
+		message: "CREATE INDEX targeting a non-default schema is not allowed",
+	},
+	{
+		re:      regexp.MustCompile(`(?i)\bCREATE(?:\s+OR\s+REPLACE)?\s+TRIGGER\s+\w+\s+(?:BEFORE|AFTER|INSTEAD\s+OF)\b.*?\bON\s+\w+\.\w+\b`),
+		message: "CREATE TRIGGER targeting a non-default schema is not allowed",
+	},
+	{
+		re:      regexp.MustCompile(`(?i)\bCREATE(?:\s+OR\s+REPLACE)?\s+FUNCTION\s+\w+\.\w+\s*\(`),
+		message: "CREATE FUNCTION in a non-default schema is not allowed",
+	},
+	{
+		re:      regexp.MustCompile(`(?i)\bINSERT\s+INTO\s+\w+\.\w+\b`),
+		message: "INSERT INTO addressing a non-default schema is not allowed",
+	},
+	{
+		re:      regexp.MustCompile(`(?i)\bDROP\s+(?:TABLE|INDEX|TRIGGER|FUNCTION)(?:\s+IF\s+EXISTS)?\s+\w+\.\w+\b`),
+		message: "DROP addressing a non-default schema is not allowed",
+	},
 }
 
 // scanSQL applies the forbidden-pattern catalogue to a single file.
@@ -137,6 +161,36 @@ func TestMigrationsLint_FlagsForbiddenPatterns(t *testing.T) {
 			"CREATE TABLE non-default schema",
 			"CREATE TABLE other.foo (id int);",
 			"CREATE TABLE in a non-default schema",
+		},
+		{
+			"ALTER TABLE non-default schema",
+			"ALTER TABLE other.foo ADD COLUMN bar int;",
+			"ALTER TABLE addressing a non-default schema",
+		},
+		{
+			"CREATE INDEX non-default schema",
+			"CREATE INDEX foo_idx ON other.foo (id);",
+			"CREATE INDEX targeting a non-default schema",
+		},
+		{
+			"CREATE TRIGGER non-default schema",
+			"CREATE TRIGGER foo_trg BEFORE UPDATE ON other.foo FOR EACH ROW EXECUTE FUNCTION noop();",
+			"CREATE TRIGGER targeting a non-default schema",
+		},
+		{
+			"CREATE FUNCTION non-default schema",
+			"CREATE OR REPLACE FUNCTION other.fn() RETURNS void AS $$ BEGIN END; $$;",
+			"CREATE FUNCTION in a non-default schema",
+		},
+		{
+			"INSERT INTO non-default schema",
+			"INSERT INTO other.foo (id) VALUES (1);",
+			"INSERT INTO addressing a non-default schema",
+		},
+		{
+			"DROP non-default schema",
+			"DROP TABLE IF EXISTS other.foo;",
+			"DROP addressing a non-default schema",
 		},
 	}
 	for _, tc := range cases {

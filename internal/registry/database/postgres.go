@@ -47,6 +47,14 @@ func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authori
 	// can refer to tables unqualified — the schema is set by
 	// migratepgx at migration-config time but app queries don't go
 	// through migratepgx.
+	//
+	// Startup-order invariant: the pool below is created BEFORE
+	// orchestrator.RunUp creates the schema. Postgres accepts
+	// `SET search_path TO <nonexistent>` without error; unqualified
+	// queries against the search_path would fail at query-time. The
+	// Ping below runs no queries, so it's safe. Any future startup
+	// code that runs a query between pool.Ping and orchestrator.RunUp
+	// must either qualify identifiers or be moved past RunUp.
 	schemaIdent := pgx.Identifier{database.OSSSchema}.Sanitize()
 	config.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
 		_, err := conn.Exec(ctx, "SET search_path TO "+schemaIdent)

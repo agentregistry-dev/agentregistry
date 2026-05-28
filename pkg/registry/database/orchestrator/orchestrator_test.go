@@ -18,8 +18,10 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/stretchr/testify/require"
 
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database/legacymigrate"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database/orchestrator"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
 const adminURI = "postgres://agentregistry:agentregistry@localhost:5432/postgres?sslmode=disable"
@@ -170,8 +172,9 @@ func TestRunUp_LegacyBridge(t *testing.T) {
 }
 
 // TestRunUp_LegacyBridgeIdempotent: invoke RunUp twice against a
-// seeded-legacy DB; the second invocation is a no-op (LegacyRun
-// doesn't fire because preStepsCount is now 1, not 0).
+// seeded-legacy DB; the second invocation is a no-op because the
+// rename in RunUp #1 moved public.schema_migrations aside, closing
+// the LegacyRun gate on subsequent invocations.
 func TestRunUp_LegacyBridgeIdempotent(t *testing.T) {
 	dsn := newDB(t)
 	ctx := context.Background()
@@ -193,6 +196,49 @@ func TestRunUp_LegacyBridgeIdempotent(t *testing.T) {
 	var agents int
 	require.NoError(t, db.QueryRowContext(ctx, "SELECT count(*) FROM agentregistry.agents").Scan(&agents))
 	require.Equal(t, 1, agents)
+}
+
+// TestRunUp_LegacyBridgeAfterPartialRun simulates a partial prior
+// invocation that committed Steps(1) (creating all destination tables
+// AND incrementing agentregistry.schema_migrations) but died before
+// LegacyRun fired. The bridge gate must still fire LegacyRun on the
+// next invocation as long as public.schema_migrations remains intact.
+// This is the failure mode the gate fix prevents.
+func TestRunUp_LegacyBridgeAfterPartialRun(t *testing.T) {
+	dsn := newDB(t)
+	ctx := context.Background()
+
+	db, err := sql.Open("pgx", dsn)
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+
+	seedLegacyState(t, ctx, db)
+
+	// Reach into the migrator and apply Steps(1) directly, without
+	// the orchestrator's bridge logic. This leaves the system in the
+	// exact post-Steps(1)-pre-LegacyRun state that would result from
+	// a crash between those two points: agentregistry.* tables exist,
+	// agentregistry.schema_migrations has the v1 row, public.schema_migrations
+	// is still intact, but no data has been copied.
+	mg, err := database.NewMigrator(ctx, dsn, v1alpha1store.MigrationFiles, v1alpha1store.MigrationsDir, database.OSSSchema)
+	require.NoError(t, err)
+	require.NoError(t, mg.Steps(1))
+	_, dbErr := mg.Close()
+	require.NoError(t, dbErr)
+
+	require.NoError(t, orchestrator.RunUp(ctx, dsn, []orchestrator.Source{legacymigrate.OSSSource()}))
+
+	// The bridge must have fired despite preStepsCount being 1,
+	// because public.schema_migrations was still present.
+	var agentCount int
+	require.NoError(t, db.QueryRowContext(ctx, "SELECT count(*) FROM agentregistry.agents").Scan(&agentCount))
+	require.GreaterOrEqual(t, agentCount, 1, "LegacyRun must fire when public.schema_migrations is present even if Steps(1) already committed")
+
+	// public.schema_migrations should have been renamed after the bridge.
+	var renameExists bool
+	require.NoError(t, db.QueryRowContext(ctx,
+		"SELECT to_regclass('public.schema_migrations_v0_legacy') IS NOT NULL").Scan(&renameExists))
+	require.True(t, renameExists, "public.schema_migrations_v0_legacy must exist post-bridge")
 }
 
 // TestRunUp_MultiPodRace: launch 5 concurrent RunUp goroutines against

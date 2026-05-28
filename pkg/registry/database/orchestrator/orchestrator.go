@@ -19,10 +19,16 @@
 // tables must either keep those tables in 001 or accept that the
 // destination shape will not have advanced past 001.
 //
-// `LegacyRun` is gated on two signals together: `public.schema_migrations`
-// (the prior custom migrator's bookkeeping table) must exist, AND the
-// source's own `schema_migrations` row count must be zero before
-// `Steps(1)` runs. Fresh installs and re-runs both skip cleanly.
+// `LegacyRun` is gated on `public.schema_migrations` (the prior custom
+// migrator's bookkeeping table) existing. The data-copy must be
+// idempotent under re-invocation (the OSS source uses
+// `INSERT ... ON CONFLICT DO NOTHING`) because after a successful run
+// the orchestrator renames `public.schema_migrations` aside, which
+// closes the gate naturally on subsequent runs. Gating on
+// `public.schema_migrations` alone (rather than also on the source's
+// own `schema_migrations` row count) is what makes the bridge survive
+// a partial run that committed `Steps(1)` and then aborted before
+// `LegacyRun` fired.
 //
 // After every source's per-source sequence completes, if at least one
 // source's `LegacyRun` actually fired this run, the orchestrator renames
@@ -170,7 +176,14 @@ func runSource(ctx context.Context, dsn string, src Source) (legacyRan bool, err
 		}
 	}
 
-	if src.LegacyRun != nil && preStepsCount == 0 {
+	// LegacyRun is gated on the legacy table's existence ALONE, not
+	// on preStepsCount. The data-copy is idempotent (INSERT ... ON
+	// CONFLICT DO NOTHING) and renameLegacyOnce closes the gate on
+	// subsequent runs by moving public.schema_migrations aside. The
+	// alternative (gating on preStepsCount == 0) would permanently
+	// skip the bridge if a prior invocation committed Steps(1) and
+	// then aborted before LegacyRun fired.
+	if src.LegacyRun != nil {
 		legacyExists, err := publicSchemaMigrationsExists(ctx, db)
 		if err != nil {
 			return false, fmt.Errorf("probe public.schema_migrations: %w", err)
