@@ -2,7 +2,7 @@ package legacymigrate
 
 import (
 	"regexp"
-	"sort"
+	"slices"
 	"testing"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
@@ -31,10 +31,10 @@ func TestOSSTablesMatchInitialSchema(t *testing.T) {
 	for _, m := range matches {
 		got = append(got, m[1])
 	}
-	sort.Strings(got)
+	slices.Sort(got)
 
 	want := append([]string(nil), ossTables...)
-	sort.Strings(want)
+	slices.Sort(want)
 
 	if !equalSlices(got, want) {
 		t.Errorf("legacymigrate.ossTables out of sync with 001_initial_schema.up.sql\n  migration tables: %v\n  ossTables:        %v", got, want)
