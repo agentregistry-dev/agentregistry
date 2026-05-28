@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -166,7 +165,7 @@ func TestInitAgent_PlainName_NoSanitizationNotice(t *testing.T) {
 	cmd.SetArgs([]string{"agent", "myagent", "--framework", "adk", "--language", "python"})
 	require.NoError(t, cmd.Execute())
 
-	assert.False(t, strings.Contains(stdout.String(), "Python package will be named"))
+	assert.NotContains(t, stdout.String(), "Python package will be named")
 }
 
 // ---- init mcp ----
