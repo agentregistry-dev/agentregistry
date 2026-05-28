@@ -20,7 +20,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/cli/db"
 	"github.com/agentregistry-dev/agentregistry/pkg/cli/db/migrate"
 	"github.com/agentregistry-dev/agentregistry/pkg/daemon/dockercompose"
-	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/database/legacymigrate"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
@@ -146,15 +146,10 @@ func init() {
 	rootCmd.AddCommand(declarative.WaitCmd)
 	rootCmd.AddCommand(db.NewCommand())
 
-	// Register the OSS migration source. Each source carries its own
-	// embedded FS so the CLI can compute pending-migration counts
-	// without piercing migrate.Migrate's internals.
-	migrate.Register(migrate.Source{
-		Name:        "oss",
-		NewMigrator: v1alpha1store.NewOSSMigrator,
-		Files:       v1alpha1store.MigrationFiles,
-		Dir:         v1alpha1store.MigrationsDir,
-	})
+	// Register the OSS migration source. LegacyRun fires once on
+	// upgraded deployments (gated by the orchestrator) to copy
+	// pre-#503 data from v1alpha1.* into agentregistry.*.
+	migrate.Register(legacymigrate.OSSSource())
 }
 
 // resolveRegistryTarget returns base URL and token from flags and env.

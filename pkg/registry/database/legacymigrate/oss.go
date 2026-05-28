@@ -12,7 +12,26 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/database/orchestrator"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
+
+// OSSSource returns the orchestrator.Source value for the OSS
+// migration set. Used by both the server startup path
+// (`internal/registry/database/postgres.go`) and the CLI's `arctl db
+// migrate up` to register or run the OSS source with identical
+// configuration.
+func OSSSource() orchestrator.Source {
+	return orchestrator.Source{
+		Name:      "oss",
+		Schema:    database.OSSSchema,
+		Files:     v1alpha1store.MigrationFiles,
+		Dir:       v1alpha1store.MigrationsDir,
+		LegacyRun: RunOSS,
+	}
+}
 
 // ossTables is the set of pre-#503 OSS data tables the copy covers,
 // in dependency order (none reference another via FK today, but the

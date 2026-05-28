@@ -15,6 +15,7 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	migratepgx "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
+	"github.com/jackc/pgx/v5"
 	_ "github.com/jackc/pgx/v5/stdlib" // pgx stdlib driver — required by sql.Open("pgx", ...)
 )
 
@@ -44,10 +45,20 @@ const migrationsTable = "schema_migrations"
 // `ctx` is accepted for API symmetry with the surrounding startup
 // code; sql.Open is lazy (never pings) and go-migrate's API is
 // synchronous and doesn't accept a context.
-func NewMigrator(_ context.Context, dsn string, migrationsFS fs.FS, dir, schema string) (*migrate.Migrate, error) {
+func NewMigrator(ctx context.Context, dsn string, migrationsFS fs.FS, dir, schema string) (*migrate.Migrate, error) {
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
+	}
+
+	// migratepgx.WithInstance creates schema_migrations in `schema`
+	// during construction, which fails on a fresh DB where the schema
+	// doesn't yet exist. CREATE SCHEMA IF NOT EXISTS makes the factory
+	// safe to call on both fresh and existing DBs.
+	if _, err := db.ExecContext(ctx,
+		"CREATE SCHEMA IF NOT EXISTS "+pgx.Identifier{schema}.Sanitize()); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("create schema %s: %w", schema, err)
 	}
 
 	src, err := iofs.New(migrationsFS, dir)

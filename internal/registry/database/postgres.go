@@ -9,11 +9,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
-	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
-	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/database/legacymigrate"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/database/orchestrator"
 )
-
-const ossMigratorName = "oss"
 
 // PostgreSQL is the root PostgreSQL-backed store. It owns the connection
 // pool; per-kind v1alpha1 access happens via NewStores against
@@ -57,22 +55,12 @@ func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authori
 		// AGENT_REGISTRY_SKIP_MIGRATIONS, or the bare SKIP_MIGRATIONS
 		// env — phrase neutrally so operators searching for any of
 		// the three see the line.
-		slog.Info("skipping v1alpha1 startup migrations (SkipMigrations enabled) — schema must already be applied")
+		slog.Info("skipping startup migrations (SkipMigrations enabled) — schema must already be applied")
 		return &PostgreSQL{pool: pool, authz: authz}, nil
 	}
 
-	mg, err := v1alpha1store.NewOSSMigrator(ctx, connectionURI)
-	if err != nil {
-		return nil, fmt.Errorf("failed to construct v1alpha1 migrator: %w", err)
-	}
-	defer func() {
-		srcErr, dbErr := mg.Close()
-		if srcErr != nil || dbErr != nil {
-			slog.Warn("error closing v1alpha1 migrator", "source_error", srcErr, "database_error", dbErr)
-		}
-	}()
-	if _, err := database.RunUpWithRecovery(mg, ossMigratorName); err != nil {
-		return nil, fmt.Errorf("failed to run v1alpha1 migrations: %w", err)
+	if err := orchestrator.RunUp(ctx, connectionURI, []orchestrator.Source{legacymigrate.OSSSource()}); err != nil {
+		return nil, fmt.Errorf("failed to run startup migrations: %w", err)
 	}
 
 	return &PostgreSQL{pool: pool, authz: authz}, nil

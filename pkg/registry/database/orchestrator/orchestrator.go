@@ -120,8 +120,14 @@ func runSource(ctx context.Context, dsn string, src Source) error {
 		}
 	}()
 
-	if err := mg.Steps(1); err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		return fmt.Errorf("apply first migration: %w", err)
+	// Steps(1) only fires on first apply (preStepsCount == 0). On
+	// re-runs we already have a row and Steps(1) would either
+	// advance to a non-existent v2 or fail; in both cases the work
+	// it represents is already done.
+	if preStepsCount == 0 {
+		if err := mg.Steps(1); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+			return fmt.Errorf("apply first migration: %w", err)
+		}
 	}
 
 	if src.LegacyRun != nil && preStepsCount == 0 {

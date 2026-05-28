@@ -3,63 +3,32 @@
 // migration sources behind a single CLI. Downstream distributions
 // register additional sources alongside the OSS one via Register.
 //
-// Each source owns its own schema_migrations_<name> table (via
-// golang-migrate's per-instance MigrationsTable), so adding a source
-// never moves the OSS source's integer counter — the addressing
-// footgun documented in the upstream ADR is structurally gone.
+// Each source owns its own Postgres schema (set via
+// `golang-migrate`'s `migratepgx.Config{SchemaName: ...}`), so adding a
+// source never moves the OSS source's integer counter — the
+// addressing footgun from the prior shared-table design is gone.
 package migrate
 
 import (
-	"context"
 	"fmt"
-	"io/fs"
 	"regexp"
 	"sync"
 
-	"github.com/golang-migrate/migrate/v4"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/database/orchestrator"
 )
 
 // sourceNameRE constrains Source.Name to Postgres-identifier-friendly
-// characters. Name flows into the per-source schema_migrations_<name>
-// table that go-migrate's MigrationsTable points at, so it must be a
-// valid SQL identifier; we tighten further to lowercase + digits +
-// underscore to keep operator-facing strings predictable.
-//
-// Pattern differs intentionally from
-// pkg/registry/database.identifierRE (`^[a-z_][a-z0-9_]*$`, allowing
-// a leading underscore for already-fully-formed table names like
-// `_legacy_table`). Source.Name is a suffix that gets concatenated
-// onto `schema_migrations_`, so requiring a leading letter here
-// keeps the resulting table name from looking like
-// `schema_migrations__foo` (double underscore is legal Postgres but
-// reads as a typo to operators).
+// characters. Name flows into the source's advisory-lock key
+// derivation, into `--source <name>` output, and (lightly) into
+// log lines; the regex keeps operator-facing strings predictable.
 var sourceNameRE = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 
-// Source describes one set of migrations registered with the CLI.
-type Source struct {
-	// Name is the operator-visible label (e.g. "oss"). Surfaced by
-	// `--source <name>` and by the per-source breakdown printed by
-	// `status` and `version` when more than one source is registered.
-	Name string
-
-	// NewMigrator constructs a fresh *migrate.Migrate bound to dsn.
-	// The CLI is responsible for calling mg.Close() after each call;
-	// each invocation gets its own dedicated DB connection because
-	// go-migrate's advisory lock is session-level. ctx applies to
-	// any setup work (legacy bootstrap, advisory-lock acquisition);
-	// go-migrate's own API is synchronous from the returned handle
-	// onward.
-	NewMigrator func(ctx context.Context, dsn string) (*migrate.Migrate, error)
-
-	// Files is the embedded migration set. Exposed so the CLI can
-	// walk it for pending-count math without pgring at the *migrate.Migrate
-	// internals.
-	Files fs.FS
-
-	// Dir is the directory inside Files holding NNN_name.up.sql /
-	// NNN_name.down.sql pairs.
-	Dir string
-}
+// Source aliases orchestrator.Source so a single struct value
+// satisfies both the CLI registry (per-source operations) and the
+// orchestrator's RunUp input (cross-source up). Fields are documented
+// on orchestrator.Source; the alias keeps consumers from needing to
+// import both packages.
+type Source = orchestrator.Source
 
 var (
 	sourcesMu sync.RWMutex
@@ -69,33 +38,22 @@ var (
 // Register adds a migration source to the package registry. Intended
 // to be called from init() in the binary's root command package.
 //
-// Validates Name against ^[a-z][a-z0-9_]*$ — Name flows into the
-// schema_migrations_<name> bookkeeping table that go-migrate's
-// MigrationsTable points at, so it must be a valid SQL identifier.
-// Lowercase + digits + underscore keeps operator-facing strings
-// predictable across `--source` output and the breakdown lines that
-// `status` / `version` print.
+// Validates Name against ^[a-z][a-z0-9_]*$. Both panics (invalid
+// charset, duplicate Name) fire at process start because Register is
+// expected from init() — failing fast surfaces misconfiguration.
 //
-// Panics on duplicate Name: each source's Name maps 1:1 to its
-// per-source schema_migrations_<name> table, so a duplicate would
-// collide at the bookkeeping layer.
-//
-// Both checks panic rather than return an error because Register is
-// expected to fire from init() — failing fast at process start makes
-// the misconfiguration obvious.
-//
-// The mutex is defense-in-depth so a contract-violating caller
-// running Register outside init() doesn't trigger a silent data race
-// against Sources().
+// The mutex is defense-in-depth so a contract-violating caller running
+// Register outside init() doesn't trigger a silent data race against
+// Sources().
 func Register(s Source) {
 	if !sourceNameRE.MatchString(s.Name) {
-		panic(fmt.Sprintf("migrate.Register: source Name=%q must match %s (Name embeds into the schema_migrations_<name> bookkeeping table and must be a valid SQL identifier)", s.Name, sourceNameRE.String()))
+		panic(fmt.Sprintf("migrate.Register: source Name=%q must match %s", s.Name, sourceNameRE.String()))
 	}
 	sourcesMu.Lock()
 	defer sourcesMu.Unlock()
 	for _, existing := range sources {
 		if existing.Name == s.Name {
-			panic(fmt.Sprintf("migrate.Register: source %q already registered; each source must have a unique Name (maps to a distinct schema_migrations_<name> table)", s.Name))
+			panic(fmt.Sprintf("migrate.Register: source %q already registered; each source must have a unique Name", s.Name))
 		}
 	}
 	sources = append(sources, s)

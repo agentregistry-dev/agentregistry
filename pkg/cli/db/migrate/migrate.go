@@ -17,6 +17,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/pkg/cli/annotations"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/database/orchestrator"
 )
 
 const (
@@ -145,7 +146,7 @@ func sourceNames(srcs []Source) string {
 }
 
 func withSourceMigrator(ctx context.Context, src Source, dsn string, fn func(mg *migrate.Migrate) error) error {
-	mg, err := src.NewMigrator(ctx, dsn)
+	mg, err := database.NewMigrator(ctx, dsn, src.Files, src.Dir, src.Schema)
 	if err != nil {
 		return fmt.Errorf("construct %s migrator: %w", src.Name, err)
 	}
@@ -225,42 +226,19 @@ type lineRow struct {
 	dirty      bool // mid-failed-migration; surfaced as a (dirty) annotation
 }
 
-// upSnapshot tracks (src, mg, preVersion) for cross-track rollback.
-// The migrator is held open until the loop finishes so a rollback
-// after a later-track failure can call RollbackToVersion on a still-
-// initialized handle.
-type upSnapshot struct {
-	src        Source
-	mg         *migrate.Migrate
-	preVersion uint
-}
-
-// closeUpSnapshots closes every snapshot's migrator. Best-effort; any
-// close errors are logged via stderr but don't bubble up because the
-// op succeeded or failed already.
-func closeUpSnapshots(snaps []upSnapshot) {
-	for _, s := range snaps {
-		srcErr, dbErr := s.mg.Close()
-		if srcErr != nil {
-			fmt.Fprintf(os.Stderr, "warning: closing %s migrator source: %v\n", s.src.Name, srcErr)
-		}
-		if dbErr != nil {
-			fmt.Fprintf(os.Stderr, "warning: closing %s migrator db: %v\n", s.src.Name, dbErr)
-		}
-	}
-}
-
 func newUpCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "up",
 		Short: "Apply all pending migrations across every registered source",
-		Args:  cobra.NoArgs,
+		Long: `Applies pending migrations for every registered source in
+registration order. Per source, the orchestrator acquires a
+pg_advisory_lock so concurrent pods serialize, then runs
+Steps(1) → LegacyRun (if defined) → Up().
+
+The --source flag is intentionally not applicable to up; pass it only
+on the per-source subcommands (down/goto/force).`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			// The --source flag is only registered when a downstream
-			// binary calls EnableSourceSelection; in OSS-only builds
-			// flags.source is always "" and this check is dead. Keep
-			// it so the rejection fires correctly in multi-source
-			// binaries.
 			if flags.source != "" {
 				return errors.New("up aggregates across all registered sources; --source is not applicable")
 			}
@@ -273,89 +251,62 @@ func newUpCmd() *cobra.Command {
 				return errors.New("no migration sources registered")
 			}
 
-			// Snapshot pre-versions across all sources; iterate in
-			// registration order. On failure of source N — whether
-			// at NewMigrator, readVersion, or RunUpWithRecovery — roll
-			// sources 0..N-1 back to their pre-versions so the whole
-			// `up` is best-effort atomic across tracks.
-			snaps := make([]upSnapshot, 0, len(srcs))
-			defer func() { closeUpSnapshots(snaps) }()
-
-			rollbackPriors := func(priors []upSnapshot) {
-				// Best-effort cross-track rollback. Sources whose
-				// migrations have reversible .down.sql files (e.g.
-				// downstream extensions with real downs) will roll
-				// back; sources whose .down.sql files raise-exception
-				// (the OSS source's up-only pattern) will fail to
-				// roll back and the warning directs the operator to
-				// inspect that track. The caller is left with a
-				// non-atomic state across tracks in that case —
-				// surface explicitly rather than silently swallow.
-				for i := len(priors) - 1; i >= 0; i-- {
-					prior := priors[i]
-					if rbErr := database.RollbackToVersion(prior.mg, prior.src.Name, prior.preVersion); rbErr != nil {
-						fmt.Fprintf(os.Stderr,
-							"warning: rolling %s back to its pre-up version failed (up-only migrations, transient DB error, or similar); %s is left at its post-up state and may need manual reconciliation: %v\n",
-							prior.src.Name, prior.src.Name, rbErr)
-					}
-				}
-			}
-
 			ctx := cmd.Context()
+			// Pre-snapshot pending counts across all sources so we
+			// can report "applied N migration(s)" after orchestrator
+			// success. The snapshot reads version + counts files;
+			// gaps in the file sequence (e.g. a deleted v5) are
+			// handled by the same `sourceFileVersions` primitive used
+			// by `status`.
+			prePending := 0
 			for _, src := range srcs {
-				mg, err := src.NewMigrator(ctx, dsn)
+				p, err := pendingCount(ctx, src, dsn)
 				if err != nil {
-					rollbackPriors(snaps)
-					return fmt.Errorf("construct %s migrator: %w", src.Name, err)
+					return err
 				}
-				// RunUpWithRecovery reads pre-version internally and
-				// returns it; reuse that value as our snapshot source
-				// of truth (no duplicate Version() call). We always
-				// append to snaps so closeUpSnapshots tears mg down
-				// even on the failing source — snaps[:len-1] is what
-				// gates which sources get rolled back.
-				preVersion, runErr := database.RunUpWithRecovery(mg, src.Name)
-				snaps = append(snaps, upSnapshot{src: src, mg: mg, preVersion: preVersion})
-				if runErr != nil {
-					// The failing source's auto-recovery wrapper has
-					// already attempted to restore it to its
-					// pre-Up state; roll back the prior (succeeded)
-					// sources here.
-					rollbackPriors(snaps[:len(snaps)-1])
-					return runErr
-				}
+				prePending += p
 			}
 
-			// Aggregate applied count via file versions: counting
-			// `postVersion - preVersion` as an integer delta overcounts
-			// across gaps in the migration sequence (e.g. a deleted v5
-			// makes 4→8 look like 4 migrations when only 3 ran). The
-			// same primitive used by `status` keeps the two paths
-			// from drifting.
-			totalApplied := 0
-			for _, s := range snaps {
-				versions, err := sourceFileVersions(s.src)
-				if err != nil {
-					return err
-				}
-				postVersion, _, err := readVersion(s.mg)
-				if err != nil {
-					return err
-				}
-				for _, fv := range versions {
-					if uint(fv) > s.preVersion && uint(fv) <= postVersion {
-						totalApplied++
-					}
-				}
+			if err := orchestrator.RunUp(ctx, dsn, srcs); err != nil {
+				return err
 			}
-			if totalApplied == 0 {
+
+			if prePending == 0 {
 				fmt.Fprintln(cmd.OutOrStdout(), "no pending migrations; schema is up to date")
 				return nil
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "applied %d migration(s); schema is up to date\n", totalApplied)
+			fmt.Fprintf(cmd.OutOrStdout(), "applied %d migration(s); schema is up to date\n", prePending)
 			return nil
 		},
 	}
+}
+
+// pendingCount counts NNN_*.up.sql files whose version is greater
+// than the source's current applied version. Uses the same
+// `sourceFileVersions` primitive as `status` so the two paths can't
+// drift.
+func pendingCount(ctx context.Context, src Source, dsn string) (int, error) {
+	versions, err := sourceFileVersions(src)
+	if err != nil {
+		return 0, err
+	}
+	var pending int
+	err = withSourceMigrator(ctx, src, dsn, func(mg *migrate.Migrate) error {
+		v, _, verr := readVersion(mg)
+		if verr != nil {
+			return verr
+		}
+		for _, fv := range versions {
+			if uint(fv) > v {
+				pending++
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return pending, nil
 }
 
 func newDownCmd() *cobra.Command {
