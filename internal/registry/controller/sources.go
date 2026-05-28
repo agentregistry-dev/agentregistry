@@ -75,12 +75,47 @@ type sourceKind struct {
 	IncludeTerminating bool
 }
 
+type sourceSyncer struct {
+	synced chan struct{}
+}
+
+func newSourceSyncer() *sourceSyncer {
+	return &sourceSyncer{synced: make(chan struct{})}
+}
+
+func (s *sourceSyncer) WaitUntilSynced(stop <-chan struct{}) bool {
+	select {
+	case <-s.synced:
+		return true
+	case <-stop:
+		return false
+	}
+}
+
+func (s *sourceSyncer) HasSynced() bool {
+	select {
+	case <-s.synced:
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *sourceSyncer) markSynced() {
+	select {
+	case <-s.synced:
+	default:
+		close(s.synced)
+	}
+}
+
 // SourceIndex is the controller-owned KRT read graph for v1alpha1 source
 // objects. The collections stay typed so derived KRT collections can fetch
 // exactly the resource families they depend on.
 type SourceIndex struct {
 	stores map[string]*v1alpha1store.Store
 	kinds  map[string]sourceKind
+	syncer *sourceSyncer
 
 	Deployments krt.StaticCollection[DeploymentSource]
 	Runtimes    krt.StaticCollection[RuntimeSource]
@@ -114,20 +149,22 @@ func NewSourceIndex(stores map[string]*v1alpha1store.Store, opts ...SourceIndexO
 			IncludeTerminating: hasInitialFinalizer(kind, options.InitialFinalizers),
 		}
 	}
+	syncer := newSourceSyncer()
 	s := &SourceIndex{
 		stores: stores,
 		kinds:  kinds,
-		Deployments: krt.NewStaticCollection[DeploymentSource](nil, nil,
+		syncer: syncer,
+		Deployments: krt.NewStaticCollection[DeploymentSource](syncer, nil,
 			krt.WithName("agentregistry/source/deployments")),
-		Runtimes: krt.NewStaticCollection[RuntimeSource](nil, nil,
+		Runtimes: krt.NewStaticCollection[RuntimeSource](syncer, nil,
 			krt.WithName("agentregistry/source/runtimes")),
-		Agents: krt.NewStaticCollection[AgentSource](nil, nil,
+		Agents: krt.NewStaticCollection[AgentSource](syncer, nil,
 			krt.WithName("agentregistry/source/agents")),
-		MCPServers: krt.NewStaticCollection[MCPServerSource](nil, nil,
+		MCPServers: krt.NewStaticCollection[MCPServerSource](syncer, nil,
 			krt.WithName("agentregistry/source/mcpservers")),
-		Skills: krt.NewStaticCollection[SkillSource](nil, nil,
+		Skills: krt.NewStaticCollection[SkillSource](syncer, nil,
 			krt.WithName("agentregistry/source/skills")),
-		Prompts: krt.NewStaticCollection[PromptSource](nil, nil,
+		Prompts: krt.NewStaticCollection[PromptSource](syncer, nil,
 			krt.WithName("agentregistry/source/prompts")),
 	}
 	return s
@@ -147,7 +184,14 @@ func (s *SourceIndex) Refresh(ctx context.Context) error {
 			return err
 		}
 	}
+	s.markSynced()
 	return nil
+}
+
+func (s *SourceIndex) markSynced() {
+	if s != nil && s.syncer != nil {
+		s.syncer.markSynced()
+	}
 }
 
 func (s *SourceIndex) refreshKind(ctx context.Context, kind sourceKind) error {

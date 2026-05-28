@@ -113,12 +113,14 @@ func TestDeploymentWorkIntentSyncsExistingSourceState(t *testing.T) {
 }
 
 func newWorkGraphSourceIndex() *SourceIndex {
-	return NewSourceIndex(map[string]*v1alpha1store.Store{
+	sources := NewSourceIndex(map[string]*v1alpha1store.Store{
 		v1alpha1.KindDeployment: nil,
 		v1alpha1.KindRuntime:    nil,
 		v1alpha1.KindAgent:      nil,
 		v1alpha1.KindMCPServer:  nil,
 	})
+	sources.markSynced()
+	return sources
 }
 
 func waitForDeploymentWorkIntent(

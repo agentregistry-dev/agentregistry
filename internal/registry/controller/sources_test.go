@@ -1,7 +1,9 @@
 package controller
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -26,4 +28,18 @@ func TestSourceIndexIncludesTerminatingRowsForFinalizedKinds(t *testing.T) {
 	})
 	require.True(t, sources.kinds[v1alpha1.KindRuntime].IncludeTerminating)
 	require.False(t, sources.kinds[v1alpha1.KindDeployment].IncludeTerminating)
+}
+
+func TestSourceIndexSourcesStartUnsyncedUntilMarked(t *testing.T) {
+	stores := map[string]*v1alpha1store.Store{
+		v1alpha1.KindDeployment: nil,
+	}
+	sources := NewSourceIndex(stores)
+	require.False(t, sources.Deployments.HasSynced())
+
+	sources.markSynced()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	require.True(t, sources.Deployments.WaitUntilSynced(ctx.Done()))
+	require.True(t, sources.Deployments.HasSynced())
 }
