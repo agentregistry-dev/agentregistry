@@ -493,4 +493,3 @@ func TestE2E_VersionFreshDBDisambiguated(t *testing.T) {
 		t.Errorf("version output should disambiguate fresh DB; got: %q", r.stdout)
 	}
 }
-
