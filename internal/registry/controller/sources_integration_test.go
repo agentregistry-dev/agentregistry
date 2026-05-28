@@ -12,7 +12,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
-func TestSourceIndexProjectsRegisteredKindsWithoutPerKindBoilerplate(t *testing.T) {
+func TestSourceIndexProjectsTypedBuiltInCollections(t *testing.T) {
 	ctx := context.Background()
 	stores, _, _ := newControllerTestStores(t)
 
@@ -25,11 +25,9 @@ func TestSourceIndexProjectsRegisteredKindsWithoutPerKindBoilerplate(t *testing.
 	sources := NewSourceIndex(stores)
 	require.NoError(t, sources.Refresh(ctx))
 
-	rows := sources.ListKind(v1alpha1.KindSkill)
+	rows := sources.ListSkills()
 	require.Len(t, rows, 1)
-	skill, ok := rows[0].Object.(*v1alpha1.Skill)
-	require.True(t, ok)
-	require.Equal(t, "first", skill.Spec.Title)
+	require.Equal(t, "first", rows[0].Skill.Spec.Title)
 	require.True(t, sources.ResourceExists(v1alpha1.ResourceRef{
 		Kind: v1alpha1.KindSkill,
 		Name: "tooling",
@@ -50,9 +48,7 @@ func TestSourceIndexProjectsRegisteredKindsWithoutPerKindBoilerplate(t *testing.
 		Operation: "update",
 	}))
 
-	rows = sources.ListKind(v1alpha1.KindSkill)
+	rows = sources.ListSkills()
 	require.Len(t, rows, 1)
-	skill, ok = rows[0].Object.(*v1alpha1.Skill)
-	require.True(t, ok)
-	require.Equal(t, "second", skill.Spec.Title)
+	require.Equal(t, "second", rows[0].Skill.Spec.Title)
 }

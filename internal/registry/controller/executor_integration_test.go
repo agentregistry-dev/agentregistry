@@ -28,6 +28,7 @@ func TestDeploymentController_DerivesAndExecutesApply(t *testing.T) {
 	sources := newDeploymentTestSourceIndex(stores)
 	require.NoError(t, sources.Refresh(ctx))
 	deriver := &DeploymentWorkDeriver{Sources: sources, Work: workStore}
+	registerKRTDeriverHandlers(t, ctx, deriver)
 	_, err := deriver.DeriveAll(ctx)
 	require.NoError(t, err)
 	_, err = deriver.DeriveAll(ctx)
@@ -63,6 +64,7 @@ func TestDeploymentController_BlocksMissingTargetWithoutAdapterCall(t *testing.T
 	sources := newDeploymentTestSourceIndex(stores)
 	require.NoError(t, sources.Refresh(ctx))
 	deriver := &DeploymentWorkDeriver{Sources: sources, Work: workStore}
+	registerKRTDeriverHandlers(t, ctx, deriver)
 	_, err := deriver.DeriveAll(ctx)
 	require.NoError(t, err)
 
@@ -89,6 +91,7 @@ func TestDeploymentController_ReappliesWhenMissingTargetAppears(t *testing.T) {
 	sources := newDeploymentTestSourceIndex(stores)
 	require.NoError(t, sources.Refresh(ctx))
 	deriver := &DeploymentWorkDeriver{Sources: sources, Work: workStore}
+	registerKRTDeriverHandlers(t, ctx, deriver)
 	_, err := deriver.DeriveAll(ctx)
 	require.NoError(t, err)
 
@@ -109,11 +112,11 @@ func TestDeploymentController_ReappliesWhenMissingTargetAppears(t *testing.T) {
 		},
 		Operation: "update",
 	}))
-	_, err = deriver.DeriveAll(ctx)
-	require.NoError(t, err)
 
-	processed, err = executor.RunOnce(ctx, 10)
-	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		processed, err = executor.RunOnce(ctx, 10)
+		return err == nil && adapter.applyCalls.Load() == 1
+	}, time.Second, 10*time.Millisecond)
 	require.Equal(t, 1, processed)
 	require.Equal(t, int32(1), adapter.applyCalls.Load())
 
@@ -124,6 +127,53 @@ func TestDeploymentController_ReappliesWhenMissingTargetAppears(t *testing.T) {
 	require.Len(t, history, 2)
 	require.Equal(t, "success", history[0].Outcome)
 	require.Equal(t, "blocked", history[1].Outcome)
+}
+
+func TestDeploymentController_ReappliesAgentDeploymentWhenReferencedMCPServerChanges(t *testing.T) {
+	ctx := context.Background()
+	stores, workStore, eventStore := newControllerTestStores(t)
+	seedRuntime(t, stores, "local")
+	seedAgent(t, stores, "assistant", []v1alpha1.ResourceRef{{Name: "weather"}})
+	deployment := seedAgentDeployment(t, stores, "assistant-deploy", "assistant", v1alpha1.DesiredStateDeployed)
+
+	sources := newDeploymentTestSourceIndex(stores)
+	require.NoError(t, sources.Refresh(ctx))
+	deriver := &DeploymentWorkDeriver{Sources: sources, Work: workStore}
+	registerKRTDeriverHandlers(t, ctx, deriver)
+	_, err := deriver.DeriveAll(ctx)
+	require.NoError(t, err)
+
+	adapter := &recordingDeploymentAdapter{}
+	executor := newTestExecutor(stores, workStore, eventStore, adapter)
+	processed, err := executor.RunOnce(ctx, 10)
+	require.NoError(t, err)
+	require.Equal(t, 1, processed)
+	require.Equal(t, int32(1), adapter.applyCalls.Load())
+
+	seedMCPServer(t, stores, "weather")
+	require.NoError(t, sources.ApplyEvent(ctx, v1alpha1store.ControlPlaneEvent{
+		Key: v1alpha1store.ResourceKey{
+			Kind:      v1alpha1.KindMCPServer,
+			Namespace: "default",
+			Name:      "weather",
+			Tag:       v1alpha1store.DefaultTag(),
+		},
+		Operation: "insert",
+	}))
+
+	require.Eventually(t, func() bool {
+		processed, err = executor.RunOnce(ctx, 10)
+		return err == nil && adapter.applyCalls.Load() == 2
+	}, time.Second, 10*time.Millisecond)
+	require.Equal(t, 1, processed)
+
+	history, err := eventStore.ListByWorkKey(ctx, deploymentWorkKey(
+		v1alpha1store.ResourceKey{Kind: v1alpha1.KindDeployment, Namespace: "default", Name: deployment.Metadata.Name},
+		deployment.Metadata.UID, deployment.Metadata.Generation, ReconcileActionApply), 10)
+	require.NoError(t, err)
+	require.Len(t, history, 2)
+	require.Equal(t, "success", history[0].Outcome)
+	require.Equal(t, "success", history[1].Outcome)
 }
 
 func TestDeploymentController_DeleteWaitsForRemoveThenPurgesFinalizedRow(t *testing.T) {
@@ -342,6 +392,14 @@ func newDeploymentTestSourceIndex(stores map[string]*v1alpha1store.Store) *Sourc
 	})
 }
 
+func registerKRTDeriverHandlers(t *testing.T, ctx context.Context, deriver *DeploymentWorkDeriver) {
+	t.Helper()
+	for _, reg := range deriver.RegisterKRTHandlers(ctx) {
+		reg := reg
+		t.Cleanup(reg.UnregisterHandler)
+	}
+}
+
 func newTestExecutor(
 	stores map[string]*v1alpha1store.Store,
 	workStore *v1alpha1store.ReconcileWorkStore,
@@ -387,12 +445,41 @@ func seedMCPServer(t *testing.T, stores map[string]*v1alpha1store.Store, name st
 	require.NoError(t, err)
 }
 
+func seedAgent(t *testing.T, stores map[string]*v1alpha1store.Store, name string, mcpServers []v1alpha1.ResourceRef) {
+	t.Helper()
+	_, err := stores[v1alpha1.KindAgent].Upsert(context.Background(), &v1alpha1.Agent{
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: name},
+		Spec: v1alpha1.AgentSpec{
+			Title:      "test agent",
+			MCPServers: mcpServers,
+		},
+	})
+	require.NoError(t, err)
+}
+
 func seedDeployment(t *testing.T, stores map[string]*v1alpha1store.Store, name, desiredState string) *v1alpha1.Deployment {
 	t.Helper()
 	deployment := &v1alpha1.Deployment{
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: name},
 		Spec: v1alpha1.DeploymentSpec{
 			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Tag: v1alpha1store.DefaultTag()},
+			RuntimeRef:   v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "local"},
+			DesiredState: desiredState,
+		},
+	}
+	_, err := stores[v1alpha1.KindDeployment].Upsert(context.Background(), deployment, v1alpha1store.UpsertOpts{
+		InitialFinalizers: []string{DeploymentControllerFinalizer},
+	})
+	require.NoError(t, err)
+	return loadDeployment(t, stores, name)
+}
+
+func seedAgentDeployment(t *testing.T, stores map[string]*v1alpha1store.Store, name, agentName, desiredState string) *v1alpha1.Deployment {
+	t.Helper()
+	deployment := &v1alpha1.Deployment{
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: name},
+		Spec: v1alpha1.DeploymentSpec{
+			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindAgent, Name: agentName, Tag: v1alpha1store.DefaultTag()},
 			RuntimeRef:   v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "local"},
 			DesiredState: desiredState,
 		},

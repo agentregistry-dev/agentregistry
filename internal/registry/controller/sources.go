@@ -15,16 +15,58 @@ import (
 
 const listAllPageSize = 500
 
-// SourceRow is a KRT source row keyed by v1alpha1 resource identity. The
-// Object stays generic because projection only maintains the read model;
-// derivers own any feature-specific type assertions.
-type SourceRow struct {
-	Key    v1alpha1store.ResourceKey
-	Object v1alpha1.Object
+// DeploymentSource is the typed KRT source row for Deployment intent.
+type DeploymentSource struct {
+	Key        v1alpha1store.ResourceKey
+	Deployment *v1alpha1.Deployment
 }
 
-// ResourceName implements krt.ResourceNamer.
-func (r SourceRow) ResourceName() string {
+func (r DeploymentSource) ResourceName() string {
+	return sourceObjectKey(r.Key)
+}
+
+type RuntimeSource struct {
+	Key     v1alpha1store.ResourceKey
+	Runtime *v1alpha1.Runtime
+}
+
+func (r RuntimeSource) ResourceName() string {
+	return sourceObjectKey(r.Key)
+}
+
+type AgentSource struct {
+	Key   v1alpha1store.ResourceKey
+	Agent *v1alpha1.Agent
+}
+
+func (r AgentSource) ResourceName() string {
+	return sourceObjectKey(r.Key)
+}
+
+type MCPServerSource struct {
+	Key       v1alpha1store.ResourceKey
+	MCPServer *v1alpha1.MCPServer
+}
+
+func (r MCPServerSource) ResourceName() string {
+	return sourceObjectKey(r.Key)
+}
+
+type SkillSource struct {
+	Key   v1alpha1store.ResourceKey
+	Skill *v1alpha1.Skill
+}
+
+func (r SkillSource) ResourceName() string {
+	return sourceObjectKey(r.Key)
+}
+
+type PromptSource struct {
+	Key    v1alpha1store.ResourceKey
+	Prompt *v1alpha1.Prompt
+}
+
+func (r PromptSource) ResourceName() string {
 	return sourceObjectKey(r.Key)
 }
 
@@ -33,15 +75,23 @@ type sourceKind struct {
 	IncludeTerminating bool
 }
 
-// SourceIndex is the controller-owned read model for v1alpha1 source objects.
-// It projects every globally registered kind that also has a Store, so adding
-// a new kind only requires registering that kind with the API scheme/store
-// setup instead of adding controller switch cases.
+// SourceIndex is the controller-owned KRT read graph for v1alpha1 source
+// objects. The collections stay typed so controllers can build dependency
+// indexes and watch exactly the resource families they depend on.
 type SourceIndex struct {
 	stores map[string]*v1alpha1store.Store
 	kinds  map[string]sourceKind
 
-	items krt.StaticCollection[SourceRow]
+	Deployments krt.StaticCollection[DeploymentSource]
+	Runtimes    krt.StaticCollection[RuntimeSource]
+	Agents      krt.StaticCollection[AgentSource]
+	MCPServers  krt.StaticCollection[MCPServerSource]
+	Skills      krt.StaticCollection[SkillSource]
+	Prompts     krt.StaticCollection[PromptSource]
+
+	DeploymentsByRuntime krt.Index[string, DeploymentSource]
+	DeploymentsByTarget  krt.Index[string, DeploymentSource]
+	AgentsByMCPServer    krt.Index[string, AgentSource]
 }
 
 // SourceIndexOptions configures generic source projection behavior.
@@ -49,7 +99,10 @@ type SourceIndexOptions struct {
 	InitialFinalizers map[string]func(v1alpha1.Object) []string
 }
 
-// NewSourceIndex creates a KRT source read model for registered v1alpha1 stores.
+// NewSourceIndex creates a typed KRT source read model for registered v1alpha1
+// stores. Enterprise extensions can add more collections on top of this OSS
+// graph, but the built-in Deployment controller no longer relies on a generic
+// all-kinds bag.
 func NewSourceIndex(stores map[string]*v1alpha1store.Store, opts ...SourceIndexOptions) *SourceIndex {
 	var options SourceIndexOptions
 	if len(opts) > 0 {
@@ -65,11 +118,57 @@ func NewSourceIndex(stores map[string]*v1alpha1store.Store, opts ...SourceIndexO
 			IncludeTerminating: hasInitialFinalizer(kind, options.InitialFinalizers),
 		}
 	}
-	return &SourceIndex{
+	s := &SourceIndex{
 		stores: stores,
 		kinds:  kinds,
-		items:  krt.NewStaticCollection[SourceRow](nil, nil, krt.WithName("agentregistry-sources")),
+		Deployments: krt.NewStaticCollection[DeploymentSource](nil, nil,
+			krt.WithName("agentregistry/source/deployments")),
+		Runtimes: krt.NewStaticCollection[RuntimeSource](nil, nil,
+			krt.WithName("agentregistry/source/runtimes")),
+		Agents: krt.NewStaticCollection[AgentSource](nil, nil,
+			krt.WithName("agentregistry/source/agents")),
+		MCPServers: krt.NewStaticCollection[MCPServerSource](nil, nil,
+			krt.WithName("agentregistry/source/mcpservers")),
+		Skills: krt.NewStaticCollection[SkillSource](nil, nil,
+			krt.WithName("agentregistry/source/skills")),
+		Prompts: krt.NewStaticCollection[PromptSource](nil, nil,
+			krt.WithName("agentregistry/source/prompts")),
 	}
+	s.DeploymentsByRuntime = krt.NewIndex[string, DeploymentSource](
+		s.Deployments,
+		"runtime-ref",
+		func(row DeploymentSource) []string {
+			key, ok := s.runtimeRefKey(row.Deployment)
+			if !ok {
+				return nil
+			}
+			return []string{sourceObjectKey(key)}
+		},
+	)
+	s.DeploymentsByTarget = krt.NewIndex[string, DeploymentSource](
+		s.Deployments,
+		"target-ref",
+		func(row DeploymentSource) []string {
+			key, ok := s.targetRefKey(row.Deployment)
+			if !ok {
+				return nil
+			}
+			return []string{sourceObjectKey(key)}
+		},
+	)
+	s.AgentsByMCPServer = krt.NewIndex[string, AgentSource](
+		s.Agents,
+		"mcpserver-ref",
+		func(row AgentSource) []string {
+			keys := s.agentMCPServerRefKeys(row.Agent)
+			indexKeys := make([]string, 0, len(keys))
+			for _, key := range keys {
+				indexKeys = append(indexKeys, sourceObjectKey(key))
+			}
+			return indexKeys
+		},
+	)
+	return s
 }
 
 func hasInitialFinalizer(kind string, finalizers map[string]func(v1alpha1.Object) []string) bool {
@@ -81,15 +180,53 @@ func (s *SourceIndex) Refresh(ctx context.Context) error {
 	if s == nil {
 		return errors.New("controller sources: sources are required")
 	}
-	var rows []SourceRow
 	for _, kind := range s.orderedKinds() {
-		kindRows, err := s.listAll(ctx, s.kinds[kind])
+		if err := s.refreshKind(ctx, s.kinds[kind]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *SourceIndex) refreshKind(ctx context.Context, kind sourceKind) error {
+	switch kind.Kind {
+	case v1alpha1.KindDeployment:
+		rows, err := s.listDeployments(ctx, kind)
 		if err != nil {
 			return err
 		}
-		rows = append(rows, kindRows...)
+		s.Deployments.Reset(rows)
+	case v1alpha1.KindRuntime:
+		rows, err := s.listRuntimes(ctx, kind)
+		if err != nil {
+			return err
+		}
+		s.Runtimes.Reset(rows)
+	case v1alpha1.KindAgent:
+		rows, err := s.listAgents(ctx, kind)
+		if err != nil {
+			return err
+		}
+		s.Agents.Reset(rows)
+	case v1alpha1.KindMCPServer:
+		rows, err := s.listMCPServers(ctx, kind)
+		if err != nil {
+			return err
+		}
+		s.MCPServers.Reset(rows)
+	case v1alpha1.KindSkill:
+		rows, err := s.listSkills(ctx, kind)
+		if err != nil {
+			return err
+		}
+		s.Skills.Reset(rows)
+	case v1alpha1.KindPrompt:
+		rows, err := s.listPrompts(ctx, kind)
+		if err != nil {
+			return err
+		}
+		s.Prompts.Reset(rows)
 	}
-	s.items.Reset(rows)
 	return nil
 }
 
@@ -102,44 +239,100 @@ func (s *SourceIndex) ApplyEvent(ctx context.Context, event v1alpha1store.Contro
 	if !ok {
 		return nil
 	}
-	return s.applySourceEvent(ctx, kind, event)
+	switch kind.Kind {
+	case v1alpha1.KindDeployment:
+		return s.applyDeploymentEvent(ctx, kind, event)
+	case v1alpha1.KindRuntime:
+		return s.applyRuntimeEvent(ctx, kind, event)
+	case v1alpha1.KindAgent:
+		return s.applyAgentEvent(ctx, kind, event)
+	case v1alpha1.KindMCPServer:
+		return s.applyMCPServerEvent(ctx, kind, event)
+	case v1alpha1.KindSkill:
+		return s.applySkillEvent(ctx, kind, event)
+	case v1alpha1.KindPrompt:
+		return s.applyPromptEvent(ctx, kind, event)
+	default:
+		return nil
+	}
 }
 
-func (s *SourceIndex) DeploymentList() []SourceRow {
+func (s *SourceIndex) DeploymentList() []DeploymentSource {
 	if s == nil {
 		return nil
 	}
-	return s.ListKind(v1alpha1.KindDeployment)
+	return s.Deployments.List()
 }
 
 func (s *SourceIndex) TargetExists(deployment *v1alpha1.Deployment) bool {
 	if s == nil || deployment == nil {
 		return false
 	}
-	return s.ResourceExists(deployment.Spec.TargetRef, deployment.Metadata.NamespaceOrDefault())
+	key, ok := s.targetRefKey(deployment)
+	if !ok {
+		return false
+	}
+	return s.resourceKeyExists(key)
 }
 
 func (s *SourceIndex) RuntimeExists(deployment *v1alpha1.Deployment) bool {
 	if s == nil || deployment == nil {
 		return false
 	}
-	ref := deployment.Spec.RuntimeRef
-	ref.Kind = v1alpha1.KindRuntime
-	return s.ResourceExists(ref, deployment.Metadata.NamespaceOrDefault())
+	key, ok := s.runtimeRefKey(deployment)
+	if !ok {
+		return false
+	}
+	return s.resourceKeyExists(key)
 }
 
-func (s *SourceIndex) ListKind(kind string) []SourceRow {
+func (s *SourceIndex) DeploymentsForRuntime(key v1alpha1store.ResourceKey) []DeploymentSource {
 	if s == nil {
 		return nil
 	}
-	rows := s.items.List()
-	out := make([]SourceRow, 0, len(rows))
-	for _, row := range rows {
-		if row.Key.Kind == kind {
-			out = append(out, row)
-		}
+	return s.DeploymentsByRuntime.Lookup(sourceObjectKey(key))
+}
+
+func (s *SourceIndex) DeploymentsForTarget(key v1alpha1store.ResourceKey) []DeploymentSource {
+	if s == nil {
+		return nil
 	}
-	return out
+	return s.DeploymentsByTarget.Lookup(sourceObjectKey(key))
+}
+
+func (s *SourceIndex) AgentsForMCPServer(key v1alpha1store.ResourceKey) []AgentSource {
+	if s == nil {
+		return nil
+	}
+	return s.AgentsByMCPServer.Lookup(sourceObjectKey(key))
+}
+
+func (s *SourceIndex) ListAgents() []AgentSource {
+	if s == nil {
+		return nil
+	}
+	return s.Agents.List()
+}
+
+func (s *SourceIndex) ListMCPServers() []MCPServerSource {
+	if s == nil {
+		return nil
+	}
+	return s.MCPServers.List()
+}
+
+func (s *SourceIndex) ListSkills() []SkillSource {
+	if s == nil {
+		return nil
+	}
+	return s.Skills.List()
+}
+
+func (s *SourceIndex) ListPrompts() []PromptSource {
+	if s == nil {
+		return nil
+	}
+	return s.Prompts.List()
 }
 
 func (s *SourceIndex) ResourceExists(ref v1alpha1.ResourceRef, fallbackNamespace string) bool {
@@ -150,7 +343,26 @@ func (s *SourceIndex) ResourceExists(ref v1alpha1.ResourceRef, fallbackNamespace
 	if !ok {
 		return false
 	}
-	return s.items.GetKey(sourceObjectKey(key)) != nil
+	return s.resourceKeyExists(key)
+}
+
+func (s *SourceIndex) resourceKeyExists(key v1alpha1store.ResourceKey) bool {
+	switch key.Kind {
+	case v1alpha1.KindDeployment:
+		return s.Deployments.GetKey(sourceObjectKey(key)) != nil
+	case v1alpha1.KindRuntime:
+		return s.Runtimes.GetKey(sourceObjectKey(key)) != nil
+	case v1alpha1.KindAgent:
+		return s.Agents.GetKey(sourceObjectKey(key)) != nil
+	case v1alpha1.KindMCPServer:
+		return s.MCPServers.GetKey(sourceObjectKey(key)) != nil
+	case v1alpha1.KindSkill:
+		return s.Skills.GetKey(sourceObjectKey(key)) != nil
+	case v1alpha1.KindPrompt:
+		return s.Prompts.GetKey(sourceObjectKey(key)) != nil
+	default:
+		return false
+	}
 }
 
 func (s *SourceIndex) store(kind string) *v1alpha1store.Store {
@@ -160,12 +372,54 @@ func (s *SourceIndex) store(kind string) *v1alpha1store.Store {
 	return s.stores[kind]
 }
 
-func (s *SourceIndex) listAll(ctx context.Context, kind sourceKind) ([]SourceRow, error) {
+func (s *SourceIndex) listDeployments(ctx context.Context, kind sourceKind) ([]DeploymentSource, error) {
+	return listTyped(ctx, s, kind, func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} }, func(key v1alpha1store.ResourceKey, obj *v1alpha1.Deployment) DeploymentSource {
+		return DeploymentSource{Key: key, Deployment: obj}
+	})
+}
+
+func (s *SourceIndex) listRuntimes(ctx context.Context, kind sourceKind) ([]RuntimeSource, error) {
+	return listTyped(ctx, s, kind, func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} }, func(key v1alpha1store.ResourceKey, obj *v1alpha1.Runtime) RuntimeSource {
+		return RuntimeSource{Key: key, Runtime: obj}
+	})
+}
+
+func (s *SourceIndex) listAgents(ctx context.Context, kind sourceKind) ([]AgentSource, error) {
+	return listTyped(ctx, s, kind, func() *v1alpha1.Agent { return &v1alpha1.Agent{} }, func(key v1alpha1store.ResourceKey, obj *v1alpha1.Agent) AgentSource {
+		return AgentSource{Key: key, Agent: obj}
+	})
+}
+
+func (s *SourceIndex) listMCPServers(ctx context.Context, kind sourceKind) ([]MCPServerSource, error) {
+	return listTyped(ctx, s, kind, func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} }, func(key v1alpha1store.ResourceKey, obj *v1alpha1.MCPServer) MCPServerSource {
+		return MCPServerSource{Key: key, MCPServer: obj}
+	})
+}
+
+func (s *SourceIndex) listSkills(ctx context.Context, kind sourceKind) ([]SkillSource, error) {
+	return listTyped(ctx, s, kind, func() *v1alpha1.Skill { return &v1alpha1.Skill{} }, func(key v1alpha1store.ResourceKey, obj *v1alpha1.Skill) SkillSource {
+		return SkillSource{Key: key, Skill: obj}
+	})
+}
+
+func (s *SourceIndex) listPrompts(ctx context.Context, kind sourceKind) ([]PromptSource, error) {
+	return listTyped(ctx, s, kind, func() *v1alpha1.Prompt { return &v1alpha1.Prompt{} }, func(key v1alpha1store.ResourceKey, obj *v1alpha1.Prompt) PromptSource {
+		return PromptSource{Key: key, Prompt: obj}
+	})
+}
+
+func listTyped[T v1alpha1.Object, R any](
+	ctx context.Context,
+	s *SourceIndex,
+	kind sourceKind,
+	newObj func() T,
+	wrap func(v1alpha1store.ResourceKey, T) R,
+) ([]R, error) {
 	store := s.store(kind.Kind)
 	if store == nil {
 		return nil, fmt.Errorf("controller sources: no %s store registered", kind.Kind)
 	}
-	var out []SourceRow
+	var out []R
 	opts := v1alpha1store.ListOpts{Limit: listAllPageSize, IncludeTerminating: kind.IncludeTerminating}
 	for {
 		rows, cursor, err := store.List(ctx, opts)
@@ -173,11 +427,11 @@ func (s *SourceIndex) listAll(ctx context.Context, kind sourceKind) ([]SourceRow
 			return nil, fmt.Errorf("controller sources: list %s: %w", kind.Kind, err)
 		}
 		for _, raw := range rows {
-			obj, err := envelopeFromRegisteredRaw(raw, kind.Kind)
+			obj, err := v1alpha1.EnvelopeFromRaw(newObj, raw, kind.Kind)
 			if err != nil {
 				return nil, fmt.Errorf("controller sources: decode %s: %w", kind.Kind, err)
 			}
-			out = append(out, SourceRow{Key: resourceKeyForObject(kind.Kind, obj), Object: obj})
+			out = append(out, wrap(resourceKeyForObject(kind.Kind, obj), obj))
 		}
 		if cursor == "" {
 			return out, nil
@@ -186,13 +440,57 @@ func (s *SourceIndex) listAll(ctx context.Context, kind sourceKind) ([]SourceRow
 	}
 }
 
-func (s *SourceIndex) applySourceEvent(ctx context.Context, kind sourceKind, event v1alpha1store.ControlPlaneEvent) error {
+func (s *SourceIndex) applyDeploymentEvent(ctx context.Context, kind sourceKind, event v1alpha1store.ControlPlaneEvent) error {
+	return applyTypedEvent(ctx, s, kind, event, s.Deployments, func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} }, func(key v1alpha1store.ResourceKey, obj *v1alpha1.Deployment) DeploymentSource {
+		return DeploymentSource{Key: key, Deployment: obj}
+	})
+}
+
+func (s *SourceIndex) applyRuntimeEvent(ctx context.Context, kind sourceKind, event v1alpha1store.ControlPlaneEvent) error {
+	return applyTypedEvent(ctx, s, kind, event, s.Runtimes, func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} }, func(key v1alpha1store.ResourceKey, obj *v1alpha1.Runtime) RuntimeSource {
+		return RuntimeSource{Key: key, Runtime: obj}
+	})
+}
+
+func (s *SourceIndex) applyAgentEvent(ctx context.Context, kind sourceKind, event v1alpha1store.ControlPlaneEvent) error {
+	return applyTypedEvent(ctx, s, kind, event, s.Agents, func() *v1alpha1.Agent { return &v1alpha1.Agent{} }, func(key v1alpha1store.ResourceKey, obj *v1alpha1.Agent) AgentSource {
+		return AgentSource{Key: key, Agent: obj}
+	})
+}
+
+func (s *SourceIndex) applyMCPServerEvent(ctx context.Context, kind sourceKind, event v1alpha1store.ControlPlaneEvent) error {
+	return applyTypedEvent(ctx, s, kind, event, s.MCPServers, func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} }, func(key v1alpha1store.ResourceKey, obj *v1alpha1.MCPServer) MCPServerSource {
+		return MCPServerSource{Key: key, MCPServer: obj}
+	})
+}
+
+func (s *SourceIndex) applySkillEvent(ctx context.Context, kind sourceKind, event v1alpha1store.ControlPlaneEvent) error {
+	return applyTypedEvent(ctx, s, kind, event, s.Skills, func() *v1alpha1.Skill { return &v1alpha1.Skill{} }, func(key v1alpha1store.ResourceKey, obj *v1alpha1.Skill) SkillSource {
+		return SkillSource{Key: key, Skill: obj}
+	})
+}
+
+func (s *SourceIndex) applyPromptEvent(ctx context.Context, kind sourceKind, event v1alpha1store.ControlPlaneEvent) error {
+	return applyTypedEvent(ctx, s, kind, event, s.Prompts, func() *v1alpha1.Prompt { return &v1alpha1.Prompt{} }, func(key v1alpha1store.ResourceKey, obj *v1alpha1.Prompt) PromptSource {
+		return PromptSource{Key: key, Prompt: obj}
+	})
+}
+
+func applyTypedEvent[T v1alpha1.Object, R interface{ ResourceName() string }](
+	ctx context.Context,
+	s *SourceIndex,
+	kind sourceKind,
+	event v1alpha1store.ControlPlaneEvent,
+	collection krt.StaticCollection[R],
+	newObj func() T,
+	wrap func(v1alpha1store.ResourceKey, T) R,
+) error {
 	store := s.store(kind.Kind)
 	if store == nil {
 		return fmt.Errorf("controller sources: no %s store registered", kind.Kind)
 	}
 	if event.Operation == "delete" {
-		s.items.DeleteObject(sourceObjectKey(event.Key))
+		collection.DeleteObject(sourceObjectKey(event.Key))
 		return nil
 	}
 
@@ -213,17 +511,50 @@ func (s *SourceIndex) applySourceEvent(ctx context.Context, kind sourceKind, eve
 	}
 	if err != nil {
 		if errors.Is(err, pkgdb.ErrNotFound) {
-			s.items.DeleteObject(sourceObjectKey(event.Key))
+			collection.DeleteObject(sourceObjectKey(event.Key))
 			return nil
 		}
 		return fmt.Errorf("controller sources: load %s %s/%s: %w", kind.Kind, event.Key.Namespace, event.Key.Name, err)
 	}
-	obj, err := envelopeFromRegisteredRaw(raw, kind.Kind)
+	obj, err := v1alpha1.EnvelopeFromRaw(newObj, raw, kind.Kind)
 	if err != nil {
 		return fmt.Errorf("controller sources: decode %s: %w", kind.Kind, err)
 	}
-	s.items.UpdateObject(SourceRow{Key: resourceKeyForObject(kind.Kind, obj), Object: obj})
+	collection.ConditionalUpdateObject(wrap(resourceKeyForObject(kind.Kind, obj), obj))
 	return nil
+}
+
+func (s *SourceIndex) runtimeRefKey(deployment *v1alpha1.Deployment) (v1alpha1store.ResourceKey, bool) {
+	if deployment == nil {
+		return v1alpha1store.ResourceKey{}, false
+	}
+	ref := deployment.Spec.RuntimeRef
+	ref.Kind = v1alpha1.KindRuntime
+	return s.refKey(ref, deployment.Metadata.NamespaceOrDefault())
+}
+
+func (s *SourceIndex) targetRefKey(deployment *v1alpha1.Deployment) (v1alpha1store.ResourceKey, bool) {
+	if deployment == nil {
+		return v1alpha1store.ResourceKey{}, false
+	}
+	return s.refKey(deployment.Spec.TargetRef, deployment.Metadata.NamespaceOrDefault())
+}
+
+func (s *SourceIndex) agentMCPServerRefKeys(agent *v1alpha1.Agent) []v1alpha1store.ResourceKey {
+	if agent == nil {
+		return nil
+	}
+	keys := make([]v1alpha1store.ResourceKey, 0, len(agent.Spec.MCPServers))
+	for _, ref := range agent.Spec.MCPServers {
+		if ref.Kind == "" {
+			ref.Kind = v1alpha1.KindMCPServer
+		}
+		key, ok := s.refKey(ref, agent.Metadata.NamespaceOrDefault())
+		if ok {
+			keys = append(keys, key)
+		}
+	}
+	return keys
 }
 
 func (s *SourceIndex) refKey(ref v1alpha1.ResourceRef, fallbackNamespace string) (v1alpha1store.ResourceKey, bool) {
@@ -265,16 +596,6 @@ func resourceKeyForObject(kind string, obj v1alpha1.Object) v1alpha1store.Resour
 		Name:      meta.Name,
 		Tag:       meta.Tag,
 	}
-}
-
-func envelopeFromRegisteredRaw(raw *v1alpha1.RawObject, kind string) (v1alpha1.Object, error) {
-	if _, ok := newRegisteredObject(kind); !ok {
-		return nil, fmt.Errorf("no v1alpha1 object registered for kind %s", kind)
-	}
-	return v1alpha1.EnvelopeFromRaw(func() v1alpha1.Object {
-		obj, _ := newRegisteredObject(kind)
-		return obj
-	}, raw, kind)
 }
 
 func newRegisteredObject(kind string) (v1alpha1.Object, bool) {
