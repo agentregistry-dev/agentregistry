@@ -28,6 +28,23 @@ through `search_path`. Authors:
 on every `go test ./...` and rejects any of those patterns with a
 `filename:line` pointer.
 
+### Invariant: unqualified DDL ↔ `search_path` set on the connection
+
+`migratepgx.Config{SchemaName: ...}` only controls where the
+`schema_migrations` bookkeeping table lives — it does NOT set
+`search_path` on the connection. Unqualified DDL in migrations
+therefore depends on `search_path` being set elsewhere, or it falls
+through to the connecting user's default (`"$user", public`) and
+lands tables in the wrong schema. `database.NewMigrator` injects
+`search_path=<schema>` into the DSN as a connection-startup parameter
+so every migratepgx-acquired connection sees the right value from the
+moment it's established. **Any factory that bypasses `NewMigrator`
+and opens its own `*sql.DB` for a `*migrate.Migrate` must replicate
+the same DSN injection** (or set `search_path` explicitly per
+connection) or migrations will silently land in the wrong schema
+whenever the connecting user's name doesn't match the target schema.
+Regression test: `pkg/registry/database/migrate_searchpath_test.go`.
+
 ## File-naming convention
 
 ```
