@@ -25,13 +25,16 @@ func TestSourceIndexProjectsTypedBuiltInCollections(t *testing.T) {
 	sources := NewSourceIndex(stores)
 	require.NoError(t, sources.Refresh(ctx))
 
-	rows := sources.ListSkills()
+	rows := sources.Skills.List()
 	require.Len(t, rows, 1)
 	require.Equal(t, "first", rows[0].Skill.Spec.Title)
-	require.True(t, sources.ResourceExists(v1alpha1.ResourceRef{
-		Kind: v1alpha1.KindSkill,
-		Name: "tooling",
-	}, "default"))
+	skillKey := v1alpha1store.ResourceKey{
+		Kind:      v1alpha1.KindSkill,
+		Namespace: "default",
+		Name:      "tooling",
+		Tag:       v1alpha1store.DefaultTag(),
+	}
+	require.NotNil(t, sources.Skills.GetKey(sourceObjectKey(skillKey)))
 
 	_, err = stores[v1alpha1.KindSkill].Upsert(ctx, &v1alpha1.Skill{
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "tooling"},
@@ -48,7 +51,7 @@ func TestSourceIndexProjectsTypedBuiltInCollections(t *testing.T) {
 		Operation: "update",
 	}))
 
-	rows = sources.ListSkills()
+	rows = sources.Skills.List()
 	require.Len(t, rows, 1)
 	require.Equal(t, "second", rows[0].Skill.Spec.Title)
 }

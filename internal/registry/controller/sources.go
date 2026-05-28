@@ -219,43 +219,6 @@ func (s *SourceIndex) ApplyEvent(ctx context.Context, event v1alpha1store.Contro
 	}
 }
 
-func (s *SourceIndex) ListSkills() []SkillSource {
-	if s == nil {
-		return nil
-	}
-	return s.Skills.List()
-}
-
-func (s *SourceIndex) ResourceExists(ref v1alpha1.ResourceRef, fallbackNamespace string) bool {
-	if s == nil {
-		return false
-	}
-	key, ok := s.refKey(ref, fallbackNamespace)
-	if !ok {
-		return false
-	}
-	return s.resourceKeyExists(key)
-}
-
-func (s *SourceIndex) resourceKeyExists(key v1alpha1store.ResourceKey) bool {
-	switch key.Kind {
-	case v1alpha1.KindDeployment:
-		return s.Deployments.GetKey(sourceObjectKey(key)) != nil
-	case v1alpha1.KindRuntime:
-		return s.Runtimes.GetKey(sourceObjectKey(key)) != nil
-	case v1alpha1.KindAgent:
-		return s.Agents.GetKey(sourceObjectKey(key)) != nil
-	case v1alpha1.KindMCPServer:
-		return s.MCPServers.GetKey(sourceObjectKey(key)) != nil
-	case v1alpha1.KindSkill:
-		return s.Skills.GetKey(sourceObjectKey(key)) != nil
-	case v1alpha1.KindPrompt:
-		return s.Prompts.GetKey(sourceObjectKey(key)) != nil
-	default:
-		return false
-	}
-}
-
 func (s *SourceIndex) store(kind string) *v1alpha1store.Store {
 	if s == nil || s.stores == nil {
 		return nil
