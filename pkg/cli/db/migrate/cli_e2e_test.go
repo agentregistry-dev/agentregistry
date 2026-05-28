@@ -245,10 +245,6 @@ func TestE2E_ArgValidation(t *testing.T) {
 	}{
 		{"down with non-integer", []string{"db", "migrate", "down", "abc"}, "positive integer"},
 		{"down with zero", []string{"db", "migrate", "down", "0"}, "positive integer"},
-		// goto's negative-int case is unreachable through the CLI —
-		// cobra eats `-5` as an unknown shorthand flag before our
-		// RunE arg validation runs. The non-integer case exercises
-		// the same strconv.Atoi error path.
 		{"goto with non-integer", []string{"db", "migrate", "goto", "abc"}, "non-negative integer"},
 		{"force with zero", []string{"db", "migrate", "force", "0"}, "positive integer"},
 	}
@@ -271,7 +267,7 @@ func TestE2E_ArgValidation(t *testing.T) {
 
 // TestE2E_HappyPath — `up` → `status` → `version` against a fresh
 // Postgres. Asserts exit 0 on each step, the operator-facing stdout
-// shape, and the post-Up version (8 — the highest OSS migration).
+// shape, and the post-Up version (1 — the single collapsed migration).
 func TestE2E_HappyPath(t *testing.T) {
 	dsn := freshDB(t)
 	env := append(stripARRegistryEnv(), "AGENT_REGISTRY_DATABASE_URL="+dsn)
@@ -288,8 +284,8 @@ func TestE2E_HappyPath(t *testing.T) {
 	if r.exitCode != 0 {
 		t.Fatalf("status: exit %d\nstderr: %s", r.exitCode, r.stderr)
 	}
-	if !strings.Contains(r.stdout, "7 migration(s) applied (at v8), 0 pending") {
-		t.Errorf("status should show 7 applied (at v8), 0 pending; got: %q", r.stdout)
+	if !strings.Contains(r.stdout, "1 migration(s) applied (at v1), 0 pending") {
+		t.Errorf("status should show 1 applied (at v1), 0 pending; got: %q", r.stdout)
 	}
 
 	r = runArctl(t, env, "db", "migrate", "version")
@@ -297,15 +293,33 @@ func TestE2E_HappyPath(t *testing.T) {
 		t.Fatalf("version: exit %d\nstderr: %s", r.exitCode, r.stderr)
 	}
 	v := strings.TrimSpace(r.stdout)
-	if v != "8" {
-		t.Errorf("version should be 8 (highest OSS migration); got %q", v)
+	if v != "1" {
+		t.Errorf("version should be 1; got %q", v)
 	}
 }
 
-// TestE2E_DownErrNotReversible — every OSS migration ships an
-// up-only .down.sql that RAISES EXCEPTION. `down 1` after a
-// successful `up` must fail and the error must mention
-// "not reversible" so operators see why.
+// TestE2E_UpIsIdempotent — `up` followed by another `up` is a no-op;
+// the second invocation reports "no pending migrations".
+func TestE2E_UpIsIdempotent(t *testing.T) {
+	dsn := freshDB(t)
+	env := append(stripARRegistryEnv(), "AGENT_REGISTRY_DATABASE_URL="+dsn)
+
+	if r := runArctl(t, env, "db", "migrate", "up"); r.exitCode != 0 {
+		t.Fatalf("first up: exit %d\nstderr: %s", r.exitCode, r.stderr)
+	}
+	r := runArctl(t, env, "db", "migrate", "up")
+	if r.exitCode != 0 {
+		t.Fatalf("second up: exit %d\nstderr: %s", r.exitCode, r.stderr)
+	}
+	if !strings.Contains(r.stdout, "no pending migrations") {
+		t.Errorf("second up should report 'no pending migrations'; got: %q", r.stdout)
+	}
+}
+
+// TestE2E_DownErrNotReversible — 001_initial_schema ships an up-only
+// .down.sql that RAISES EXCEPTION. `down 1` after a successful `up`
+// must fail and the error must mention "not reversible" so operators
+// see why.
 func TestE2E_DownErrNotReversible(t *testing.T) {
 	dsn := freshDB(t)
 	env := append(stripARRegistryEnv(), "AGENT_REGISTRY_DATABASE_URL="+dsn)
@@ -325,9 +339,8 @@ func TestE2E_DownErrNotReversible(t *testing.T) {
 
 // TestE2E_ForceWritesRowOnly — `force V` writes the schema_migrations
 // row without running the migration SQL. After `force 1` against a
-// fresh DB, status reports 1 applied and no public tables besides
-// schema_migrations itself exist (force did NOT run 001's CREATE
-// TABLE statements).
+// fresh DB, status reports 1 applied; agentregistry.schema_migrations
+// exists but the data tables 001 would have created do not.
 func TestE2E_ForceWritesRowOnly(t *testing.T) {
 	dsn := freshDB(t)
 	env := append(stripARRegistryEnv(), "AGENT_REGISTRY_DATABASE_URL="+dsn)
@@ -348,10 +361,9 @@ func TestE2E_ForceWritesRowOnly(t *testing.T) {
 		t.Errorf("status should show 1 applied; got %q", r.stdout)
 	}
 
-	// Verify force did NOT run 001's CREATE SCHEMA / CREATE TABLE
-	// statements. The only public table should be schema_migrations
-	// (created by go-migrate's pgx/v5 driver on first use); no v1alpha1
-	// schema should exist.
+	// Verify force did NOT run 001's CREATE TABLE statements. The
+	// only table in agentregistry should be schema_migrations
+	// (created by migratepgx); no data tables.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	conn, err := pgx.Connect(ctx, dsn)
@@ -362,22 +374,12 @@ func TestE2E_ForceWritesRowOnly(t *testing.T) {
 
 	var extraTables int
 	if err := conn.QueryRow(ctx,
-		"SELECT COUNT(*) FROM pg_tables WHERE schemaname = 'public' AND tablename != 'schema_migrations'",
+		"SELECT COUNT(*) FROM pg_tables WHERE schemaname = 'agentregistry' AND tablename != 'schema_migrations'",
 	).Scan(&extraTables); err != nil {
-		t.Fatalf("count public tables: %v", err)
+		t.Fatalf("count agentregistry tables: %v", err)
 	}
 	if extraTables != 0 {
-		t.Errorf("expected only schema_migrations in public schema after `force 1`; got %d extra tables", extraTables)
-	}
-
-	var v1alpha1Exists bool
-	if err := conn.QueryRow(ctx,
-		"SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'v1alpha1')",
-	).Scan(&v1alpha1Exists); err != nil {
-		t.Fatalf("probe v1alpha1 schema: %v", err)
-	}
-	if v1alpha1Exists {
-		t.Errorf("v1alpha1 schema must NOT exist after `force 1` (migration SQL did not run)")
+		t.Errorf("expected only schema_migrations in agentregistry schema after `force 1`; got %d extra tables", extraTables)
 	}
 }
 
@@ -410,15 +412,15 @@ func TestE2E_StatusJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(r.stdout), &payload); err != nil {
 		t.Fatalf("status -o json output not parseable: %v\nstdout: %s", err, r.stdout)
 	}
-	if payload.Applied != 7 || payload.Pending != 0 {
-		t.Errorf("aggregate counts: got applied=%d pending=%d; want 7/0", payload.Applied, payload.Pending)
+	if payload.Applied != 1 || payload.Pending != 0 {
+		t.Errorf("aggregate counts: got applied=%d pending=%d; want 1/0", payload.Applied, payload.Pending)
 	}
 	if len(payload.Sources) != 1 {
 		t.Fatalf("expected 1 source in JSON; got %d", len(payload.Sources))
 	}
 	s := payload.Sources[0]
-	if s.Name != "oss" || s.Applied != 7 || s.Pending != 0 || s.Version != 8 || s.Downgraded {
-		t.Errorf("source[0]: got %+v; want {oss 7 0 8 false}", s)
+	if s.Name != "oss" || s.Applied != 1 || s.Pending != 0 || s.Version != 1 || s.Downgraded {
+		t.Errorf("source[0]: got %+v; want {oss 1 0 1 false}", s)
 	}
 
 	// Invalid --output rejected with a useful message.
@@ -432,26 +434,25 @@ func TestE2E_StatusJSON(t *testing.T) {
 }
 
 // TestE2E_GotoInferredSource — single-source binaries accept
-// per-source ops without --source. Asserts `goto 2` against a fresh
-// DB advances the schema to version 2 and the version subcommand
-// confirms it.
+// per-source ops without --source. Asserts `goto 1` against a fresh
+// DB advances the schema to version 1 (forward) and version confirms it.
 func TestE2E_GotoInferredSource(t *testing.T) {
 	dsn := freshDB(t)
 	env := append(stripARRegistryEnv(), "AGENT_REGISTRY_DATABASE_URL="+dsn)
 
-	r := runArctl(t, env, "db", "migrate", "goto", "2")
+	r := runArctl(t, env, "db", "migrate", "goto", "1")
 	if r.exitCode != 0 {
-		t.Fatalf("goto 2: exit %d\nstderr: %s", r.exitCode, r.stderr)
+		t.Fatalf("goto 1: exit %d\nstderr: %s", r.exitCode, r.stderr)
 	}
-	if !strings.Contains(r.stdout, "schema is at version 2") {
-		t.Errorf("goto 2 stdout unexpected: %q", r.stdout)
+	if !strings.Contains(r.stdout, "schema is at version 1") {
+		t.Errorf("goto 1 stdout unexpected: %q", r.stdout)
 	}
 
 	r = runArctl(t, env, "db", "migrate", "version")
 	if r.exitCode != 0 {
 		t.Fatalf("version: exit %d\nstderr: %s", r.exitCode, r.stderr)
 	}
-	if strings.TrimSpace(r.stdout) != "2" {
-		t.Errorf("version should be 2; got %q", r.stdout)
+	if strings.TrimSpace(r.stdout) != "1" {
+		t.Errorf("version should be 1; got %q", r.stdout)
 	}
 }
