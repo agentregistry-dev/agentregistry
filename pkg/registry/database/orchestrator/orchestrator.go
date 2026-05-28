@@ -270,3 +270,37 @@ func advisoryLockKey(name string) int64 {
 	_, _ = h.Write([]byte(name))
 	return int64(h.Sum64() & 0x7fffffffffffffff)
 }
+
+// WithSourceLock opens a dedicated single-connection database handle,
+// acquires the orchestrator's per-source `pg_advisory_lock`, runs fn,
+// then releases the lock and closes the connection. Exposed so CLI
+// per-source operations (down / goto / force) can serialize against
+// orchestrator-driven `up` and against each other — without it, two
+// CLI invocations would only share go-migrate's internal lock on
+// schema_migrations, leaving the LegacyRun window unguarded.
+//
+// fn receives the underlying *sql.DB so callers that need to issue
+// auxiliary queries (e.g. probing schema state) can share the locked
+// session.
+func WithSourceLock(ctx context.Context, dsn, sourceName string, fn func(db *sql.DB) error) error {
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		return fmt.Errorf("open database for advisory lock: %w", err)
+	}
+	db.SetMaxOpenConns(1)
+	defer func() { _ = db.Close() }()
+
+	lockKey := advisoryLockKey(sourceName)
+	if _, err := db.ExecContext(ctx, "SELECT pg_advisory_lock($1)", lockKey); err != nil {
+		return fmt.Errorf("acquire advisory lock for source %s: %w", sourceName, err)
+	}
+	defer func() {
+		if _, err := db.ExecContext(ctx, "SELECT pg_advisory_unlock($1)", lockKey); err != nil {
+			slog.Default().Warn("release advisory lock",
+				"component", "database.orchestrator",
+				"source", sourceName,
+				"error", err)
+		}
+	}()
+	return fn(db)
+}

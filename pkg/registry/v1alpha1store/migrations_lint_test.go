@@ -57,6 +57,12 @@ func lintMigrations(t *testing.T, files fs.FS, dir string) []string {
 	return violations
 }
 
+// qualifiedIdent matches a schema-qualified identifier in either bare
+// or double-quoted form: word.word, "word".word, word."word", or
+// "word"."word". Spaces around the dot are tolerated (Postgres accepts
+// them).
+const qualifiedIdent = `(?:\w+|"[^"]+")\s*\.\s*(?:\w+|"[^"]+")`
+
 // forbiddenPatterns is the catalogue of rejected substrings. Each
 // entry pairs a regex with a human-readable explanation surfaced when
 // a migration trips the lint.
@@ -65,7 +71,9 @@ var forbiddenPatterns = []struct {
 	message string
 }{
 	{
-		re:      regexp.MustCompile(`\b(?:v1alpha1|public|agentregistry|pg_catalog|information_schema)\.`),
+		// Match either bare `v1alpha1.` or quoted `"v1alpha1".` and
+		// the same for the other named schemas.
+		re:      regexp.MustCompile(`(?:\b(?:v1alpha1|public|agentregistry|pg_catalog|information_schema)\b|"(?:v1alpha1|public|agentregistry|pg_catalog|information_schema)")\s*\.`),
 		message: "schema-qualified identifier (drop the prefix; the driver sets search_path)",
 	},
 	{
@@ -77,55 +85,55 @@ var forbiddenPatterns = []struct {
 		message: "SET search_path is not allowed in migrations (the driver sets it)",
 	},
 	{
-		re:      regexp.MustCompile(`(?i)\bCREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?\s+\w+\.\w+\b`),
+		re:      regexp.MustCompile(`(?i)\bCREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?\s+` + qualifiedIdent),
 		message: "CREATE TABLE in a non-default schema is not allowed (the CREATE TABLE x.y rule catches arbitrary downstream schemas without naming them)",
 	},
 	{
-		re:      regexp.MustCompile(`(?i)\bALTER\s+TABLE(?:\s+IF\s+EXISTS)?\s+(?:ONLY\s+)?\w+\.\w+\b`),
+		re:      regexp.MustCompile(`(?i)\bALTER\s+TABLE(?:\s+IF\s+EXISTS)?\s+(?:ONLY\s+)?` + qualifiedIdent),
 		message: "ALTER TABLE addressing a non-default schema is not allowed",
 	},
 	{
-		re:      regexp.MustCompile(`(?i)\bCREATE(?:\s+UNIQUE)?\s+INDEX(?:\s+CONCURRENTLY)?(?:\s+IF\s+NOT\s+EXISTS)?\s+\w+\s+ON\s+\w+\.\w+\b`),
+		re:      regexp.MustCompile(`(?i)\bCREATE(?:\s+UNIQUE)?\s+INDEX(?:\s+CONCURRENTLY)?(?:\s+IF\s+NOT\s+EXISTS)?\s+(?:\w+|"[^"]+")\s+ON\s+` + qualifiedIdent),
 		message: "CREATE INDEX targeting a non-default schema is not allowed",
 	},
 	{
-		re:      regexp.MustCompile(`(?i)\bCREATE(?:\s+OR\s+REPLACE)?\s+VIEW(?:\s+IF\s+NOT\s+EXISTS)?\s+\w+\.\w+\b`),
+		re:      regexp.MustCompile(`(?i)\bCREATE(?:\s+OR\s+REPLACE)?\s+VIEW(?:\s+IF\s+NOT\s+EXISTS)?\s+` + qualifiedIdent),
 		message: "CREATE VIEW in a non-default schema is not allowed",
 	},
 	{
-		re:      regexp.MustCompile(`(?i)\bCREATE\s+SEQUENCE(?:\s+IF\s+NOT\s+EXISTS)?\s+\w+\.\w+\b`),
+		re:      regexp.MustCompile(`(?i)\bCREATE\s+SEQUENCE(?:\s+IF\s+NOT\s+EXISTS)?\s+` + qualifiedIdent),
 		message: "CREATE SEQUENCE in a non-default schema is not allowed",
 	},
 	{
-		re:      regexp.MustCompile(`(?i)\bCREATE\s+TYPE\s+\w+\.\w+\b`),
+		re:      regexp.MustCompile(`(?i)\bCREATE\s+TYPE\s+` + qualifiedIdent),
 		message: "CREATE TYPE in a non-default schema is not allowed",
 	},
 	{
-		re:      regexp.MustCompile(`(?i)\bALTER\s+(?:INDEX|SEQUENCE|TYPE|VIEW|FUNCTION)(?:\s+IF\s+EXISTS)?\s+\w+\.\w+\b`),
+		re:      regexp.MustCompile(`(?i)\bALTER\s+(?:INDEX|SEQUENCE|TYPE|VIEW|FUNCTION)(?:\s+IF\s+EXISTS)?\s+` + qualifiedIdent),
 		message: "ALTER addressing a non-default schema is not allowed",
 	},
 	{
-		re:      regexp.MustCompile(`(?i)\bCOMMENT\s+ON\s+\w+\s+\w+\.\w+\b`),
+		re:      regexp.MustCompile(`(?i)\bCOMMENT\s+ON\s+\w+\s+` + qualifiedIdent),
 		message: "COMMENT ON targeting a non-default schema is not allowed",
 	},
 	{
-		re:      regexp.MustCompile(`(?i)\b(?:GRANT|REVOKE)\b.*?\bON\s+\w+\.\w+\b`),
+		re:      regexp.MustCompile(`(?i)\b(?:GRANT|REVOKE)\b.*?\bON\s+` + qualifiedIdent),
 		message: "GRANT/REVOKE targeting a non-default schema is not allowed",
 	},
 	{
-		re:      regexp.MustCompile(`(?i)\bCREATE(?:\s+OR\s+REPLACE)?\s+TRIGGER\s+\w+\s+(?:BEFORE|AFTER|INSTEAD\s+OF)\b.*?\bON\s+\w+\.\w+\b`),
+		re:      regexp.MustCompile(`(?i)\bCREATE(?:\s+OR\s+REPLACE)?\s+TRIGGER\s+(?:\w+|"[^"]+")\s+(?:BEFORE|AFTER|INSTEAD\s+OF)\b.*?\bON\s+` + qualifiedIdent),
 		message: "CREATE TRIGGER targeting a non-default schema is not allowed",
 	},
 	{
-		re:      regexp.MustCompile(`(?i)\bCREATE(?:\s+OR\s+REPLACE)?\s+FUNCTION\s+\w+\.\w+\s*\(`),
+		re:      regexp.MustCompile(`(?i)\bCREATE(?:\s+OR\s+REPLACE)?\s+FUNCTION\s+` + qualifiedIdent + `\s*\(`),
 		message: "CREATE FUNCTION in a non-default schema is not allowed",
 	},
 	{
-		re:      regexp.MustCompile(`(?i)\bINSERT\s+INTO\s+\w+\.\w+\b`),
+		re:      regexp.MustCompile(`(?i)\bINSERT\s+INTO\s+` + qualifiedIdent),
 		message: "INSERT INTO addressing a non-default schema is not allowed",
 	},
 	{
-		re:      regexp.MustCompile(`(?i)\bDROP\s+(?:TABLE|INDEX|TRIGGER|FUNCTION)(?:\s+IF\s+EXISTS)?\s+\w+\.\w+\b`),
+		re:      regexp.MustCompile(`(?i)\bDROP\s+(?:TABLE|INDEX|TRIGGER|FUNCTION)(?:\s+IF\s+EXISTS)?\s+` + qualifiedIdent),
 		message: "DROP addressing a non-default schema is not allowed",
 	},
 }
@@ -250,6 +258,16 @@ func TestMigrationsLint_FlagsForbiddenPatterns(t *testing.T) {
 			"GRANT non-default schema",
 			"GRANT SELECT ON other.foo TO public;",
 			"GRANT/REVOKE targeting a non-default schema",
+		},
+		{
+			"CREATE TABLE quoted identifiers",
+			`CREATE TABLE "other"."foo" (id int);`,
+			"CREATE TABLE in a non-default schema",
+		},
+		{
+			"INSERT INTO quoted identifiers",
+			`INSERT INTO "other"."foo" (id) VALUES (1);`,
+			"INSERT INTO addressing a non-default schema",
 		},
 	}
 	for _, tc := range cases {

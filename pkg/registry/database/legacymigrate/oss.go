@@ -104,6 +104,9 @@ var ossTableColumns = map[string][]string{
 // Defensive: if `v1alpha1.agents` doesn't exist, returns nil without
 // touching the database (the orchestrator already gates on
 // `public.schema_migrations` existing, so this is belt-and-suspenders).
+// Within the copy loop, each table is probed individually with
+// `to_regclass` and skipped if missing so an operator who manually
+// dropped one of the legacy tables doesn't fault the entire bridge.
 //
 // Partial failure rolls back the whole copy; the orchestrator's
 // advisory lock + re-run guard cover the retry.
@@ -132,6 +135,16 @@ func RunOSS(ctx context.Context, db *sql.DB) error {
 		if !ok {
 			return fmt.Errorf("copy v1alpha1.%s: no column list registered", table)
 		}
+		// Skip tables an operator may have manually dropped — the
+		// gate's `legacy_agents` proxy doesn't catch per-table
+		// absence, so probe within the loop.
+		tableExists, err := legacyTableExists(ctx, tx, table)
+		if err != nil {
+			return fmt.Errorf("probe v1alpha1.%s: %w", table, err)
+		}
+		if !tableExists {
+			continue
+		}
 		quotedTable := pgx.Identifier{table}.Sanitize()
 		colList := quotedColumnList(cols)
 		q := fmt.Sprintf(
@@ -147,6 +160,18 @@ func RunOSS(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("commit legacy-copy tx: %w", err)
 	}
 	return nil
+}
+
+// legacyTableExists reports whether `v1alpha1.<table>` is present.
+// Probed inside the bridge transaction so a missing table can be
+// silently skipped without faulting the whole copy.
+func legacyTableExists(ctx context.Context, tx *sql.Tx, table string) (bool, error) {
+	var oid sql.NullString
+	if err := tx.QueryRowContext(ctx,
+		"SELECT to_regclass($1)::text", "v1alpha1."+table).Scan(&oid); err != nil {
+		return false, err
+	}
+	return oid.Valid, nil
 }
 
 // quotedColumnList joins an explicit column list with each identifier

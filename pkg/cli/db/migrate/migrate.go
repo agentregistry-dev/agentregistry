@@ -2,6 +2,7 @@ package migrate
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -145,21 +146,31 @@ func sourceNames(srcs []Source) string {
 	return strings.Join(names, ", ")
 }
 
+// withSourceMigrator constructs a *migrate.Migrate for src under the
+// orchestrator's per-source advisory lock and runs fn against it. The
+// lock keeps per-source CLI ops (down / goto / force / status / version)
+// serialized against orchestrator-driven `up` and against each other —
+// without it, two CLI invocations would only share go-migrate's
+// internal lock on schema_migrations, which is released between
+// individual Steps/Up/Down calls and leaves the legacy-bridge window
+// unguarded.
 func withSourceMigrator(ctx context.Context, src Source, dsn string, fn func(mg *migrate.Migrate) error) error {
-	mg, err := database.NewMigrator(ctx, dsn, src.Files, src.Dir, src.Schema)
-	if err != nil {
-		return fmt.Errorf("construct %s migrator: %w", src.Name, err)
-	}
-	defer func() {
-		srcErr, dbErr := mg.Close()
-		if srcErr != nil {
-			fmt.Fprintf(os.Stderr, "warning: closing %s migrator source: %v\n", src.Name, srcErr)
+	return orchestrator.WithSourceLock(ctx, dsn, src.Name, func(_ *sql.DB) error {
+		mg, err := database.NewMigrator(ctx, dsn, src.Files, src.Dir, src.Schema)
+		if err != nil {
+			return fmt.Errorf("construct %s migrator: %w", src.Name, err)
 		}
-		if dbErr != nil {
-			fmt.Fprintf(os.Stderr, "warning: closing %s migrator db: %v\n", src.Name, dbErr)
-		}
-	}()
-	return fn(mg)
+		defer func() {
+			srcErr, dbErr := mg.Close()
+			if srcErr != nil {
+				fmt.Fprintf(os.Stderr, "warning: closing %s migrator source: %v\n", src.Name, srcErr)
+			}
+			if dbErr != nil {
+				fmt.Fprintf(os.Stderr, "warning: closing %s migrator db: %v\n", src.Name, dbErr)
+			}
+		}()
+		return fn(mg)
+	})
 }
 
 // readVersion returns the highest applied version for mg and whether
@@ -335,6 +346,13 @@ the version named in the failure message.`,
 				return err
 			}
 			return withSourceMigrator(cmd.Context(), src, dsn, func(mg *migrate.Migrate) error {
+				// Pre-read is defensive: if it fails (preV=0), the
+				// post-rollback math still works because
+				// countVersionsBetween treats the case as
+				// "from 0 to postV" — i.e. nothing rolled back from
+				// preV's perspective. The post-read error MUST surface
+				// or a transient DB failure would corrupt the count
+				// display.
 				preV, _, _ := readVersion(mg)
 				if err := mg.Steps(-n); err != nil {
 					if errors.Is(err, migrate.ErrNoChange) {
@@ -343,7 +361,10 @@ the version named in the failure message.`,
 					}
 					return err
 				}
-				postV, _, _ := readVersion(mg)
+				postV, _, verr := readVersion(mg)
+				if verr != nil {
+					return fmt.Errorf("read version after rollback: %w", verr)
+				}
 				rolled := countVersionsBetween(src, postV, preV)
 				fmt.Fprintf(cmd.OutOrStdout(), "rolled back %d migration(s)\n", rolled)
 				return nil
@@ -476,13 +497,18 @@ func newStatusCmd() *cobra.Command {
 
 // statusJSON is the wire format for `arctl db migrate status -o json`.
 // Stable contract — operators may consume it from CI/CD shell scripts
-// via `jq`.
+// via `jq`. Field names and types are part of the CLI's documented
+// surface; do not rename or retype (e.g. int → int64, string → number)
+// without a CLI major version bump and a deprecation cycle.
 type statusJSON struct {
 	Applied int                `json:"applied"`
 	Pending int                `json:"pending"`
 	Sources []statusSourceJSON `json:"sources"`
 }
 
+// statusSourceJSON is the per-source object inside statusJSON. Same
+// stability contract as statusJSON — field names and types are
+// frozen at the current CLI major version.
 type statusSourceJSON struct {
 	Name       string `json:"name"`
 	Applied    int    `json:"applied"`
@@ -630,11 +656,11 @@ the source is rolled back.`,
 				if err := mg.Migrate(uint(v)); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 					return err
 				}
-				actual, _, aerr := readVersion(mg)
+				actual, dirty, aerr := readVersion(mg)
 				if aerr != nil {
 					return aerr
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "schema is at version %d\n", actual)
+				fmt.Fprintf(cmd.OutOrStdout(), "schema is at version %d%s\n", actual, versionAnnotation(actual, dirty))
 				return nil
 			})
 		},
