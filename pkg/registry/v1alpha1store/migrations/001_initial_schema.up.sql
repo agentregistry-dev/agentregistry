@@ -203,3 +203,11 @@ CREATE OR REPLACE TRIGGER runtimes_notify_status     AFTER  INSERT OR UPDATE OR 
 
 CREATE OR REPLACE TRIGGER deployments_set_updated_at BEFORE UPDATE                          ON deployments FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE OR REPLACE TRIGGER deployments_notify_status  AFTER  INSERT OR UPDATE OR DELETE      ON deployments FOR EACH ROW EXECUTE FUNCTION notify_status_change('deployments_status');
+
+-- Seed default runtimes so deployments can reference them out-of-the-box.
+-- ON CONFLICT DO NOTHING keeps re-applies idempotent.
+INSERT INTO runtimes (namespace, name, spec)
+VALUES
+    ('default', 'local',              '{"type":"Local"}'::jsonb),
+    ('default', 'kubernetes-default', '{"type":"Kubernetes"}'::jsonb)
+ON CONFLICT (namespace, name) DO NOTHING;

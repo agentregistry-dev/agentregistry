@@ -50,7 +50,7 @@ func (e *extensionApplyObject) UnmarshalStatus(data json.RawMessage) error {
 func TestBuildStores_ExtensionKindAppliesThroughBatchEndpoint(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
 	stores := buildStores(pool, map[string]string{
-		extensionApplyKind: "v1alpha1.agents",
+		extensionApplyKind: "agents",
 	}, nil, nil)
 	extensionStore := stores[extensionApplyKind]
 	require.NotNil(t, extensionStore)

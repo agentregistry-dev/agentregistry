@@ -6,9 +6,11 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database/legacymigrate"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database/orchestrator"
 )
@@ -40,6 +42,16 @@ func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authori
 	config.MinConns = 5
 	config.MaxConnIdleTime = 30 * time.Minute
 	config.MaxConnLifetime = 2 * time.Hour
+
+	// Set search_path on every new connection so the v1alpha1 stores
+	// can refer to tables unqualified — the schema is set by
+	// migratepgx at migration-config time but app queries don't go
+	// through migratepgx.
+	schemaIdent := pgx.Identifier{database.OSSSchema}.Sanitize()
+	config.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		_, err := conn.Exec(ctx, "SET search_path TO "+schemaIdent)
+		return err
+	}
 
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {

@@ -15,7 +15,7 @@ import (
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
 
-const testTable = "v1alpha1.agents"
+const testTable = "agents"
 const testNS = "default"
 
 // upsertAgent is a small helper that builds an Agent envelope from
@@ -123,7 +123,7 @@ func TestStore_GetByRefResolvesBlankTagToLatest(t *testing.T) {
 
 func TestStore_GetByRefMutableRejectsTag(t *testing.T) {
 	pool := NewTestPool(t)
-	runtimes := NewMutableObjectStore(pool, "v1alpha1.runtimes")
+	runtimes := NewMutableObjectStore(pool, "runtimes")
 	ctx := context.Background()
 
 	local, err := runtimes.GetByRef(ctx, testNS, "local", "")
@@ -155,7 +155,7 @@ func TestStore_DeleteByRefTaggedBlankDeletesAllTags(t *testing.T) {
 
 func TestStore_DeleteByRefMutableDeletesByName(t *testing.T) {
 	pool := NewTestPool(t)
-	runtimes := NewMutableObjectStore(pool, "v1alpha1.runtimes")
+	runtimes := NewMutableObjectStore(pool, "runtimes")
 	ctx := context.Background()
 
 	require.NoError(t, runtimes.DeleteByRef(ctx, testNS, "local", ""))
@@ -472,7 +472,7 @@ func TestStore_PatchAnnotationsPreservesExistingKeys(t *testing.T) {
 
 func TestStore_FindReferrers(t *testing.T) {
 	pool := NewTestPool(t)
-	agents := NewStore(pool, "v1alpha1.agents")
+	agents := NewStore(pool, "agents")
 	ctx := context.Background()
 
 	_, err := agents.Upsert(ctx, &v1alpha1.Agent{
@@ -505,7 +505,7 @@ func TestStore_FindReferrers(t *testing.T) {
 func TestStore_SeededRuntimes(t *testing.T) {
 	pool := NewTestPool(t)
 	// Runtime is a mutable object keyed by namespace/name.
-	runtimes := NewMutableObjectStore(pool, "v1alpha1.runtimes")
+	runtimes := NewMutableObjectStore(pool, "runtimes")
 	ctx := context.Background()
 
 	local, err := runtimes.GetLatest(ctx, "default", "local")
@@ -532,7 +532,7 @@ func TestStore_NotifyPayloadDiscreteFields(t *testing.T) {
 	conn, err := pool.Acquire(ctx)
 	require.NoError(t, err)
 	defer conn.Release()
-	_, err = conn.Exec(ctx, "LISTEN v1alpha1_agents_status")
+	_, err = conn.Exec(ctx, "LISTEN agents_status")
 	require.NoError(t, err)
 
 	// Name with `/` keeps the discrete-fields wire format intact.
@@ -547,7 +547,7 @@ func TestStore_NotifyPayloadDiscreteFields(t *testing.T) {
 	defer cancel()
 	notif, err := conn.Conn().WaitForNotification(waitCtx)
 	require.NoError(t, err, "expected a pg_notify from the INSERT")
-	require.Equal(t, "v1alpha1_agents_status", notif.Channel)
+	require.Equal(t, "agents_status", notif.Channel)
 
 	var payload struct {
 		Op        string `json:"op"`

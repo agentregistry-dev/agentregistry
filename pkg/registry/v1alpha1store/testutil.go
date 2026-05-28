@@ -68,7 +68,17 @@ func NewTestPool(t *testing.T) *pgxpool.Pool {
 	})
 
 	testURI := fmt.Sprintf("postgres://agentregistry:agentregistry@localhost:5432/%s?sslmode=disable", dbName)
-	pool, err := pgxpool.New(ctx, testURI)
+	cfg, err := pgxpool.ParseConfig(testURI)
+	require.NoError(t, err)
+	// Mirror the production pool's AfterConnect: tests query
+	// unqualified table names and rely on search_path to resolve them
+	// to the OSS schema.
+	schemaIdent := pgx.Identifier{pkgdb.OSSSchema}.Sanitize()
+	cfg.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		_, err := conn.Exec(ctx, "SET search_path TO "+schemaIdent)
+		return err
+	}
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	require.NoError(t, err)
 	t.Cleanup(func() { pool.Close() })
 	return pool

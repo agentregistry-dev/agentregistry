@@ -96,8 +96,9 @@ func WithKind(kind string) StoreOption {
 }
 
 // NewStore constructs a tagged-artifact Store bound to a single table
-// (e.g. "v1alpha1.agents"). The table must exist in the schema; NewStore
-// does not validate it.
+// (e.g. "agents"). The table must exist in the schema; NewStore does
+// not validate it. Names should be unqualified — the pgx pool's
+// AfterConnect hook sets search_path so they resolve to the OSS schema.
 //
 // For mutable object tables, use NewMutableObjectStore.
 func NewStore(pool *pgxpool.Pool, table string, opts ...StoreOption) *Store {

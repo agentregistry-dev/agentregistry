@@ -6,22 +6,23 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
-// TableFor is the canonical mapping from v1alpha1 Kind name to
-// its backing table in the dedicated `v1alpha1.*` PostgreSQL schema.
-// Callers that need a *Store should prefer NewStores below
-// rather than constructing one per kind.
+// TableFor is the canonical mapping from v1alpha1 Kind name to its
+// backing table. The table names are unqualified — the pgx pool's
+// AfterConnect hook sets `search_path` to the OSS schema, so every
+// query resolves to the correct schema without baking the name into
+// the SQL.
 //
 // Downstream builds that register additional kinds via
 // v1alpha1.Scheme.Register should extend their own copy of this map
 // rather than mutating this one; the OSS side treats it as effectively
 // const after init.
 var TableFor = map[string]string{
-	v1alpha1.KindAgent:      "v1alpha1.agents",
-	v1alpha1.KindMCPServer:  "v1alpha1.mcp_servers",
-	v1alpha1.KindSkill:      "v1alpha1.skills",
-	v1alpha1.KindPrompt:     "v1alpha1.prompts",
-	v1alpha1.KindRuntime:    "v1alpha1.runtimes",
-	v1alpha1.KindDeployment: "v1alpha1.deployments",
+	v1alpha1.KindAgent:      "agents",
+	v1alpha1.KindMCPServer:  "mcp_servers",
+	v1alpha1.KindSkill:      "skills",
+	v1alpha1.KindPrompt:     "prompts",
+	v1alpha1.KindRuntime:    "runtimes",
+	v1alpha1.KindDeployment: "deployments",
 }
 
 // NewStores builds one *Store per built-in v1alpha1 Kind, bound
