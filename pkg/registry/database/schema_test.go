@@ -12,6 +12,8 @@ func TestNewSchema(t *testing.T) {
 		{"underscore", "agentregistry_enterprise", false},
 		{"leading underscore", "_internal", false},
 		{"empty", "", true},
+		{"mixed case rejected", "MySchema", true},
+		{"uppercase rejected", "AGENTREGISTRY", true},
 		{"leading digit", "1schema", true},
 		{"dash", "agent-registry", true},
 		{"dot", "a.b", true},

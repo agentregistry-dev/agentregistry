@@ -13,11 +13,21 @@ import (
 // without importing each other.
 const OSSSourceName = "oss"
 
-// schemaNameRE constrains a schema name to a plain unquoted Postgres
-// identifier. Schema.Quoted always quotes the name, so this is fail-fast
-// validation against typos/garbage at construction, not the safety
-// barrier itself.
-var schemaNameRE = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+// schemaNameRE constrains a schema name to a lowercase, unquoted-safe
+// Postgres identifier. Lowercase-only is deliberate: the schema name is
+// used both quoted (CREATE SCHEMA, qualified queries) and unquoted (the
+// search_path startup parameter, the to_regclass existence probes), and
+// Postgres case-folds unquoted identifiers. Allowing mixed case would
+// make those two forms refer to different schemas (`"MySchema"` vs the
+// folded `myschema`), so the existence probe would never match the
+// created schema. Restricting to lowercase keeps the two forms identical
+// under case-folding. (It does not reconcile a lowercase *reserved word*
+// like `user`, which parses as a keyword unquoted but an identifier
+// quoted — avoiding reserved words is the schema author's responsibility,
+// and matters once the schema name becomes operator input. Quoted() still
+// quotes the name, so this is also fail-fast validation against
+// typos/garbage, not the injection barrier itself.)
+var schemaNameRE = regexp.MustCompile(`^[a-z_][a-z0-9_]*$`)
 
 // Schema is a validated Postgres schema name with its quoted identifier
 // precomputed once. Pass a Schema where schema-qualified SQL or a
