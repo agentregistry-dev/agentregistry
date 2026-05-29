@@ -71,18 +71,34 @@ func NewTestPool(t *testing.T) *pgxpool.Pool {
 	testURI := fmt.Sprintf("postgres://agentregistry:agentregistry@localhost:5432/%s?sslmode=disable", dbName)
 	cfg, err := pgxpool.ParseConfig(testURI)
 	require.NoError(t, err)
-	// Mirror the production pool's AfterConnect: tests query
-	// unqualified table names and rely on search_path to resolve them
-	// to the OSS schema.
-	schemaIdent := pgx.Identifier{pkgdb.OSSSchema}.Sanitize()
+	// Mirror the production pool's AfterConnect default. Stores qualify
+	// their tables explicitly, so this only covers any unqualified query
+	// not routed through a Store.
 	cfg.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
-		_, err := conn.Exec(ctx, "SET search_path TO "+schemaIdent)
+		_, err := conn.Exec(ctx, "SET search_path TO "+TestSchema().Quoted())
 		return err
 	}
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	require.NoError(t, err)
 	t.Cleanup(func() { pool.Close() })
 	return pool
+}
+
+// TestSchema resolves the OSS schema for tests that construct a Store
+// directly. Panics on the (impossible) invalid-identifier path so call
+// sites stay one-liners.
+func TestSchema() pkgdb.Schema {
+	s, err := pkgdb.NewSchema(pkgdb.OSSSchema)
+	if err != nil {
+		panic(err)
+	}
+	return s
+}
+
+// TestSchemaRegistry returns the OSS schema registry for tests that
+// construct the full Store set via NewStores.
+func TestSchemaRegistry() *pkgdb.SchemaRegistry {
+	return pkgdb.OSSSchemaRegistry()
 }
 
 const v1alpha1TemplateDBName = "agent_registry_v1alpha1_template"

@@ -9,6 +9,36 @@
 // migrate up` both invoke `RunUp` so the same legacy-bridging logic
 // fires on every up path.
 //
+// # Schema is a resolved value (extension authors)
+//
+// A source's schema is a database.Schema, not a string: it is resolved
+// (validated + its quoted identifier precomputed) once when the Source
+// is built, and that value is threaded everywhere the schema is needed —
+// nothing re-derives it per operation. An extension registering its own
+// source builds the value once at init:
+//
+//	orchestrator.Source{
+//	    Name:      "ent",
+//	    Schema:    database.MustNewSchema("agentregistry_enterprise"),
+//	    Files:     entMigrations,
+//	    Dir:       "migrations",
+//	    LegacyRun: ent.RunBridge, // func(ctx, *sql.DB, database.Schema) error
+//	}
+//
+// Use database.NewSchema(name) (returns an error) when the name is
+// operator/runtime input; database.MustNewSchema(name) (panics) for a
+// const or an init-time registration value. A LegacyRun callback
+// receives the source's Schema so it can address its destination tables
+// via schema.Qualify("table") without re-resolving it.
+//
+// For a query that spans schemas (e.g. an extension joining its table
+// against an OSS table), build a database.SchemaRegistry at the
+// composition root, register each source's schema, and inject it; then
+// reg.Get("oss").Qualify("agents") yields a safe, schema-qualified
+// reference. App queries that stay within one schema don't need the
+// registry — they go through a v1alpha1store.Store, which already holds
+// its resolved schema and qualifies for them.
+//
 // # LegacyRun ordering for Source authors
 //
 // Sources that supply a `LegacyRun` callback can rely on the following
@@ -49,7 +79,6 @@ import (
 
 	"github.com/golang-migrate/migrate/v4"
 	migratedb "github.com/golang-migrate/migrate/v4/database"
-	"github.com/jackc/pgx/v5"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
@@ -63,11 +92,16 @@ type Source struct {
 	// unique-per-source token; keep it short and lowercase for readability.
 	Name string
 
-	// Schema is the Postgres schema this source's tables live in
-	// (e.g. "agentregistry"). `golang-migrate`'s pgx/v5 driver is
-	// configured with `SchemaName: Schema`; the source's
-	// `schema_migrations` table is created in that schema.
-	Schema string
+	// Schema is the Postgres schema this source's tables live in,
+	// resolved once (its quoted identifier is precomputed). Build it with
+	// database.NewSchema(name) — or database.MustNewSchema(name) at
+	// init/registration where the name is a known-valid const. The
+	// orchestrator threads this value everywhere it needs the schema
+	// (migrator construction, the schema_migrations probes); nothing
+	// re-derives it from a string. `golang-migrate`'s pgx/v5 driver is
+	// configured with Schema.Name(); the source's `schema_migrations`
+	// table is created in that schema.
+	Schema database.Schema
 
 	// Files is the embedded filesystem holding NNN_name.up.sql /
 	// NNN_name.down.sql pairs.
@@ -78,14 +112,17 @@ type Source struct {
 	Dir string
 
 	// LegacyRun, when non-nil, is invoked between `mg.Steps(1)` and
-	// `mg.Up()` whenever `public.schema_migrations` exists. The
-	// callback must be idempotent under re-invocation: on a successful
-	// run the orchestrator renames `public.schema_migrations` aside,
-	// which closes the gate naturally on subsequent runs, but the
-	// gate also fires on the recovery path after a partial run that
-	// committed `Steps(1)` and aborted before this callback ran. Fresh
-	// installs (no `public.schema_migrations` ever) skip cleanly.
-	LegacyRun func(ctx context.Context, db *sql.DB) error
+	// `mg.Up()` whenever `public.schema_migrations` exists. It receives
+	// the source's resolved Schema so the bridge can address the
+	// destination tables (e.g. schema.Qualify("agents")) without
+	// re-resolving it. The callback must be idempotent under
+	// re-invocation: on a successful run the orchestrator renames
+	// `public.schema_migrations` aside, which closes the gate naturally
+	// on subsequent runs, but the gate also fires on the recovery path
+	// after a partial run that committed `Steps(1)` and aborted before
+	// this callback ran. Fresh installs (no `public.schema_migrations`
+	// ever) skip cleanly.
+	LegacyRun func(ctx context.Context, db *sql.DB, schema database.Schema) error
 }
 
 // orchestratorGlobalLockKey is the advisory-lock key held for the whole
@@ -305,7 +342,7 @@ func restoreSource(ctx context.Context, dsn string, a appliedSource) error {
 // whether that row is marked dirty, and whether any version is applied at
 // all. A missing table or empty bookkeeping means the source is being
 // first-installed (present == false).
-func preRunVersion(ctx context.Context, dsn, schema string) (version uint, dirty, present bool, err error) {
+func preRunVersion(ctx context.Context, dsn string, schema database.Schema) (version uint, dirty, present bool, err error) {
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		return 0, false, false, fmt.Errorf("open database: %w", err)
@@ -314,8 +351,8 @@ func preRunVersion(ctx context.Context, dsn, schema string) (version uint, dirty
 
 	var oid sql.NullString
 	if err := db.QueryRowContext(ctx,
-		"SELECT to_regclass($1)::text", schema+".schema_migrations").Scan(&oid); err != nil {
-		return 0, false, false, fmt.Errorf("probe %s.schema_migrations: %w", schema, err)
+		"SELECT to_regclass($1)::text", schema.Name()+".schema_migrations").Scan(&oid); err != nil {
+		return 0, false, false, fmt.Errorf("probe %s.schema_migrations: %w", schema.Name(), err)
 	}
 	if !oid.Valid {
 		return 0, false, false, nil
@@ -326,11 +363,11 @@ func preRunVersion(ctx context.Context, dsn, schema string) (version uint, dirty
 	)
 	// go-migrate keeps a single bookkeeping row (version, dirty).
 	switch err := db.QueryRowContext(ctx,
-		fmt.Sprintf("SELECT version, dirty FROM %s.schema_migrations LIMIT 1", pgx.Identifier{schema}.Sanitize())).Scan(&v, &d); {
+		fmt.Sprintf("SELECT version, dirty FROM %s.schema_migrations LIMIT 1", schema.Quoted())).Scan(&v, &d); {
 	case errors.Is(err, sql.ErrNoRows):
 		return 0, false, false, nil
 	case err != nil:
-		return 0, false, false, fmt.Errorf("read %s.schema_migrations version: %w", schema, err)
+		return 0, false, false, fmt.Errorf("read %s.schema_migrations version: %w", schema.Name(), err)
 	}
 	return uint(v), d, true, nil
 }
@@ -418,7 +455,7 @@ func runSource(ctx context.Context, dsn string, src Source) (legacyRan bool, err
 		}
 		if legacyExists {
 			logger.Info("running legacy data bridge")
-			if err := src.LegacyRun(ctx, db); err != nil {
+			if err := src.LegacyRun(ctx, db, src.Schema); err != nil {
 				return false, fmt.Errorf("legacy bridge: %w", err)
 			}
 			legacyRan = true
@@ -461,17 +498,17 @@ func renameLegacyOnce(ctx context.Context, dsn string) error {
 
 // schemaMigrationsRowCount returns the count of rows in
 // `<schema>.schema_migrations`, or 0 if the table doesn't exist.
-func schemaMigrationsRowCount(ctx context.Context, db *sql.DB, schema string) (int, error) {
+func schemaMigrationsRowCount(ctx context.Context, db *sql.DB, schema database.Schema) (int, error) {
 	var oid sql.NullString
 	if err := db.QueryRowContext(ctx,
-		"SELECT to_regclass($1)::text", schema+".schema_migrations").Scan(&oid); err != nil {
+		"SELECT to_regclass($1)::text", schema.Name()+".schema_migrations").Scan(&oid); err != nil {
 		return 0, fmt.Errorf("regclass probe: %w", err)
 	}
 	if !oid.Valid {
 		return 0, nil
 	}
 	var count int
-	q := fmt.Sprintf("SELECT count(*) FROM %s.schema_migrations", pgx.Identifier{schema}.Sanitize())
+	q := fmt.Sprintf("SELECT count(*) FROM %s.schema_migrations", schema.Quoted())
 	if err := db.QueryRowContext(ctx, q).Scan(&count); err != nil {
 		return 0, fmt.Errorf("count schema_migrations rows: %w", err)
 	}

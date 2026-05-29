@@ -43,10 +43,10 @@ func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authori
 	config.MaxConnIdleTime = 30 * time.Minute
 	config.MaxConnLifetime = 2 * time.Hour
 
-	// Set search_path on every new connection so the v1alpha1 stores
-	// can refer to tables unqualified — the schema is set by
-	// migratepgx at migration-config time but app queries don't go
-	// through migratepgx.
+	// Set search_path on every new connection as a sane default for the
+	// OSS schema. The v1alpha1 stores qualify their tables explicitly
+	// (so they're correct regardless of search_path); this SET only
+	// covers any unqualified query that isn't routed through a Store.
 	//
 	// Startup-order invariant: the pool below is created BEFORE
 	// orchestrator.RunUp creates the schema. Postgres accepts
@@ -55,9 +55,9 @@ func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authori
 	// Ping below runs no queries, so it's safe. Any future startup
 	// code that runs a query between pool.Ping and orchestrator.RunUp
 	// must either qualify identifiers or be moved past RunUp.
-	schemaIdent := pgx.Identifier{database.OSSSchema}.Sanitize()
+	ossSchema := database.MustNewSchema(database.OSSSchema)
 	config.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
-		_, err := conn.Exec(ctx, "SET search_path TO "+schemaIdent)
+		_, err := conn.Exec(ctx, "SET search_path TO "+ossSchema.Quoted())
 		return err
 	}
 

@@ -221,7 +221,7 @@ func TestRunUp_LegacyBridgeAfterPartialRun(t *testing.T) {
 	// a crash between those two points: agentregistry.* tables exist,
 	// agentregistry.schema_migrations has the v1 row, public.schema_migrations
 	// is still intact, but no data has been copied.
-	mg, err := database.NewMigrator(ctx, dsn, v1alpha1store.MigrationFiles, v1alpha1store.MigrationsDir, database.OSSSchema)
+	mg, err := database.NewMigrator(ctx, dsn, v1alpha1store.MigrationFiles, v1alpha1store.MigrationsDir, database.MustNewSchema(database.OSSSchema))
 	require.NoError(t, err)
 	require.NoError(t, mg.Steps(1))
 	_, dbErr := mg.Close()
@@ -376,9 +376,9 @@ func TestRunUp_RollsBackPriorSourcesOnLaterFailure(t *testing.T) {
 		"m/001_init.down.sql": {Data: upOnlyDown},
 	}
 
-	srcA001 := orchestrator.Source{Name: "track_a", Schema: "track_a", Files: a001, Dir: "m"}
-	srcAFull := orchestrator.Source{Name: "track_a", Schema: "track_a", Files: aFull, Dir: "m"}
-	srcB := orchestrator.Source{Name: "track_b", Schema: "track_b", Files: bFail, Dir: "m"}
+	srcA001 := orchestrator.Source{Name: "track_a", Schema: database.MustNewSchema("track_a"), Files: a001, Dir: "m"}
+	srcAFull := orchestrator.Source{Name: "track_a", Schema: database.MustNewSchema("track_a"), Files: aFull, Dir: "m"}
+	srcB := orchestrator.Source{Name: "track_b", Schema: database.MustNewSchema("track_b"), Files: bFail, Dir: "m"}
 
 	// Bring track_a to v1 — an existing source that the next run upgrades.
 	require.NoError(t, orchestrator.RunUp(ctx, dsn, []orchestrator.Source{srcA001}))
@@ -443,10 +443,10 @@ func TestRunUp_RestoresUpgradedFailingSourceToEntry(t *testing.T) {
 	}
 
 	require.NoError(t, orchestrator.RunUp(ctx, dsn,
-		[]orchestrator.Source{{Name: "track_c", Schema: "track_c", Files: v1, Dir: "m"}}))
+		[]orchestrator.Source{{Name: "track_c", Schema: database.MustNewSchema("track_c"), Files: v1, Dir: "m"}}))
 
 	err := orchestrator.RunUp(ctx, dsn,
-		[]orchestrator.Source{{Name: "track_c", Schema: "track_c", Files: v3Fail, Dir: "m"}})
+		[]orchestrator.Source{{Name: "track_c", Schema: database.MustNewSchema("track_c"), Files: v3Fail, Dir: "m"}})
 	require.Error(t, err)
 
 	db, e := sql.Open("pgx", dsn)
@@ -493,7 +493,7 @@ func TestRunUp_RestoresFreshInstallWithIntermediateCommit(t *testing.T) {
 		// committed — a harmless no-op here, which is why it's `SELECT 1;`.
 		"m/003_bad.down.sql": {Data: []byte("SELECT 1;")},
 	}
-	src := orchestrator.Source{Name: "track_e", Schema: "track_e", Files: files, Dir: "m"}
+	src := orchestrator.Source{Name: "track_e", Schema: database.MustNewSchema("track_e"), Files: files, Dir: "m"}
 
 	err := orchestrator.RunUp(ctx, dsn, []orchestrator.Source{src})
 	require.Error(t, err)
@@ -526,7 +526,7 @@ func TestRunUp_RestoresFreshInstallWithIntermediateCommit(t *testing.T) {
 		"m/003_ok.down.sql":   {Data: []byte("DROP TABLE IF EXISTS e_t3;")},
 	}
 	require.NoError(t, orchestrator.RunUp(ctx, dsn,
-		[]orchestrator.Source{{Name: "track_e", Schema: "track_e", Files: fixed, Dir: "m"}}))
+		[]orchestrator.Source{{Name: "track_e", Schema: database.MustNewSchema("track_e"), Files: fixed, Dir: "m"}}))
 
 	var version int
 	require.NoError(t, db.QueryRowContext(ctx,
@@ -545,7 +545,7 @@ func TestRunUp_RefusesSourceAlreadyDirty(t *testing.T) {
 		"m/001_init.up.sql":   {Data: []byte("CREATE TABLE IF NOT EXISTS d_t (id int);")},
 		"m/001_init.down.sql": {Data: []byte("DROP TABLE IF EXISTS d_t;")},
 	}
-	src := orchestrator.Source{Name: "track_d", Schema: "track_d", Files: v1, Dir: "m"}
+	src := orchestrator.Source{Name: "track_d", Schema: database.MustNewSchema("track_d"), Files: v1, Dir: "m"}
 	require.NoError(t, orchestrator.RunUp(ctx, dsn, []orchestrator.Source{src}))
 
 	// Manually mark the source dirty, simulating a prior crashed run.

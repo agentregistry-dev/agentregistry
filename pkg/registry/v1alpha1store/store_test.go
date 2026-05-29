@@ -33,7 +33,7 @@ func upsertAgent(t *testing.T, store *Store, name string, spec v1alpha1.AgentSpe
 
 func TestStore_UpsertCreatesRow(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, testTable)
+	store := NewStore(pool, TestSchema(), testTable)
 	ctx := context.Background()
 
 	res, err := store.Upsert(ctx, &v1alpha1.Agent{
@@ -56,7 +56,7 @@ func TestStore_UpsertCreatesRow(t *testing.T) {
 // semantics: same spec_hash + same labels/annotations is a no-op.
 func TestStore_UpsertNoOpOnIdenticalSpec(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, testTable)
+	store := NewStore(pool, TestSchema(), testTable)
 
 	upsertAgent(t, store, "foo", v1alpha1.AgentSpec{Title: "alpha"}, nil)
 	res := upsertAgent(t, store, "foo", v1alpha1.AgentSpec{Title: "alpha"}, nil)
@@ -68,7 +68,7 @@ func TestStore_UpsertNoOpOnIdenticalSpec(t *testing.T) {
 // for the same default tag atomically replaces the previous latest row.
 func TestStore_UpsertReplacesLatestOnSpecChange(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, testTable)
+	store := NewStore(pool, TestSchema(), testTable)
 
 	upsertAgent(t, store, "foo", v1alpha1.AgentSpec{Title: "first"}, nil)
 	res := upsertAgent(t, store, "foo", v1alpha1.AgentSpec{Title: "second"}, nil)
@@ -84,7 +84,7 @@ func TestStore_UpsertReplacesLatestOnSpecChange(t *testing.T) {
 // row tagged "latest", not the newest or lexicographically highest tag.
 func TestStore_GetLatestReadsLiteralLatestTag(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, testTable)
+	store := NewStore(pool, TestSchema(), testTable)
 
 	for _, tag := range []string{"stable", "candidate"} {
 		_, err := store.Upsert(context.Background(), &v1alpha1.Agent{
@@ -102,7 +102,7 @@ func TestStore_GetLatestReadsLiteralLatestTag(t *testing.T) {
 
 func TestStore_GetByRefResolvesBlankTagToLatest(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, testTable)
+	store := NewStore(pool, TestSchema(), testTable)
 	ctx := context.Background()
 
 	_, err := store.Upsert(ctx, &v1alpha1.Agent{
@@ -123,7 +123,7 @@ func TestStore_GetByRefResolvesBlankTagToLatest(t *testing.T) {
 
 func TestStore_GetByRefMutableRejectsTag(t *testing.T) {
 	pool := NewTestPool(t)
-	runtimes := NewMutableObjectStore(pool, "runtimes")
+	runtimes := NewMutableObjectStore(pool, TestSchema(), "runtimes")
 	ctx := context.Background()
 
 	local, err := runtimes.GetByRef(ctx, testNS, "local", "")
@@ -136,7 +136,7 @@ func TestStore_GetByRefMutableRejectsTag(t *testing.T) {
 
 func TestStore_DeleteByRefTaggedBlankDeletesAllTags(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, testTable)
+	store := NewStore(pool, TestSchema(), testTable)
 	ctx := context.Background()
 
 	_, err := store.Upsert(ctx, &v1alpha1.Agent{
@@ -155,7 +155,7 @@ func TestStore_DeleteByRefTaggedBlankDeletesAllTags(t *testing.T) {
 
 func TestStore_DeleteByRefMutableDeletesByName(t *testing.T) {
 	pool := NewTestPool(t)
-	runtimes := NewMutableObjectStore(pool, "runtimes")
+	runtimes := NewMutableObjectStore(pool, TestSchema(), "runtimes")
 	ctx := context.Background()
 
 	require.NoError(t, runtimes.DeleteByRef(ctx, testNS, "local", ""))
@@ -168,7 +168,7 @@ func TestStore_DeleteByRefMutableDeletesByName(t *testing.T) {
 
 func TestStore_PatchStatusDisjointFromSpec(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, testTable)
+	store := NewStore(pool, TestSchema(), testTable)
 	ctx := context.Background()
 
 	upsertAgent(t, store, "foo", v1alpha1.AgentSpec{Title: "alpha"}, nil)
@@ -191,7 +191,7 @@ func TestStore_PatchStatusDisjointFromSpec(t *testing.T) {
 
 func TestStore_PatchStatusNotFound(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, testTable)
+	store := NewStore(pool, TestSchema(), testTable)
 	ctx := context.Background()
 
 	err := store.PatchStatus(ctx, testNS, "nope", "1", v1alpha1.StatusPatcher(func(*v1alpha1.Status) {}))
@@ -200,7 +200,7 @@ func TestStore_PatchStatusNotFound(t *testing.T) {
 
 func TestStore_GetNotFound(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, testTable)
+	store := NewStore(pool, TestSchema(), testTable)
 	ctx := context.Background()
 
 	_, err := store.Get(ctx, testNS, "nope", "1")
@@ -216,7 +216,7 @@ func TestStore_GetNotFound(t *testing.T) {
 // background GC pass.
 func TestStore_DeleteHardDeletesTaggedRow(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, testTable)
+	store := NewStore(pool, TestSchema(), testTable)
 	ctx := context.Background()
 
 	_, err := store.Upsert(ctx, &v1alpha1.Agent{
@@ -252,7 +252,7 @@ func TestStore_DeleteHardDeletesTaggedRow(t *testing.T) {
 
 func TestStore_List(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, testTable)
+	store := NewStore(pool, TestSchema(), testTable)
 	ctx := context.Background()
 
 	_, err := store.Upsert(ctx, &v1alpha1.Agent{
@@ -296,7 +296,7 @@ func TestStore_List(t *testing.T) {
 
 func TestStore_ListExtraWhereRebasesPlaceholders(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, testTable)
+	store := NewStore(pool, TestSchema(), testTable)
 	ctx := context.Background()
 
 	for _, name := range []string{"a", "b", "c"} {
@@ -338,7 +338,7 @@ func TestStore_ListExtraWhereRebasesPlaceholders(t *testing.T) {
 // wrong query.
 func TestStore_ListExtraWhereRejectsMismatch(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, testTable)
+	store := NewStore(pool, TestSchema(), testTable)
 	ctx := context.Background()
 
 	cases := []struct {
@@ -372,7 +372,7 @@ func TestStore_ListExtraWhereRejectsMismatch(t *testing.T) {
 
 func TestStore_ListCursorPagination(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, testTable)
+	store := NewStore(pool, TestSchema(), testTable)
 	ctx := context.Background()
 
 	for _, name := range []string{"first", "second", "third"} {
@@ -399,7 +399,7 @@ func TestStore_ListCursorPagination(t *testing.T) {
 
 func TestStore_ListRejectsInvalidCursor(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, testTable)
+	store := NewStore(pool, TestSchema(), testTable)
 
 	_, _, err := store.List(context.Background(), ListOpts{Cursor: "not-a-valid-cursor"})
 	require.ErrorIs(t, err, ErrInvalidCursor)
@@ -411,7 +411,7 @@ func TestStore_ListRejectsInvalidCursor(t *testing.T) {
 // concurrent PatchStatus must not jump pages or get returned twice.
 func TestStore_ListCursorStableUnderStatusChurn(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, testTable)
+	store := NewStore(pool, TestSchema(), testTable)
 	ctx := context.Background()
 
 	names := []string{"alpha", "beta", "gamma", "delta"} // lexical order: alpha, beta, delta, gamma
@@ -447,7 +447,7 @@ func TestStore_ListCursorStableUnderStatusChurn(t *testing.T) {
 
 func TestStore_PatchAnnotationsPreservesExistingKeys(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, testTable)
+	store := NewStore(pool, TestSchema(), testTable)
 	ctx := context.Background()
 
 	_, err := store.Upsert(ctx, &v1alpha1.Agent{
@@ -472,7 +472,7 @@ func TestStore_PatchAnnotationsPreservesExistingKeys(t *testing.T) {
 
 func TestStore_FindReferrers(t *testing.T) {
 	pool := NewTestPool(t)
-	agents := NewStore(pool, "agents")
+	agents := NewStore(pool, TestSchema(), "agents")
 	ctx := context.Background()
 
 	_, err := agents.Upsert(ctx, &v1alpha1.Agent{
@@ -505,7 +505,7 @@ func TestStore_FindReferrers(t *testing.T) {
 func TestStore_SeededRuntimes(t *testing.T) {
 	pool := NewTestPool(t)
 	// Runtime is a mutable object keyed by namespace/name.
-	runtimes := NewMutableObjectStore(pool, "runtimes")
+	runtimes := NewMutableObjectStore(pool, TestSchema(), "runtimes")
 	ctx := context.Background()
 
 	local, err := runtimes.GetLatest(ctx, "default", "local")
@@ -526,7 +526,7 @@ func TestStore_SeededRuntimes(t *testing.T) {
 // discrete JSON fields instead of a concatenated "ns/name/tag" string.
 func TestStore_NotifyPayloadDiscreteFields(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, testTable)
+	store := NewStore(pool, TestSchema(), testTable)
 	ctx := context.Background()
 
 	conn, err := pool.Acquire(ctx)

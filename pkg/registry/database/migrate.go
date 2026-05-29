@@ -15,7 +15,6 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	migratepgx "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
-	"github.com/jackc/pgx/v5"
 	_ "github.com/jackc/pgx/v5/stdlib" // pgx stdlib driver — required by sql.Open("pgx", ...)
 )
 
@@ -45,7 +44,7 @@ const migrationsTable = "schema_migrations"
 // `ctx` is accepted for API symmetry with the surrounding startup
 // code; sql.Open is lazy (never pings) and go-migrate's API is
 // synchronous and doesn't accept a context.
-func NewMigrator(ctx context.Context, dsn string, migrationsFS fs.FS, dir, schema string) (*migrate.Migrate, error) {
+func NewMigrator(ctx context.Context, dsn string, migrationsFS fs.FS, dir string, schema Schema) (*migrate.Migrate, error) {
 	// migratepgx.WithInstance does NOT set search_path on the connection
 	// it acquires — its `SchemaName` config only controls where
 	// `schema_migrations` lives. Unqualified identifiers in migration
@@ -56,7 +55,7 @@ func NewMigrator(ctx context.Context, dsn string, migrationsFS fs.FS, dir, schem
 	// driver passes it as a connection-startup parameter and every
 	// connection migratepgx pulls from the pool sees the right
 	// search_path from the moment it's established.
-	dsnWithSchema, err := withSearchPath(dsn, schema)
+	dsnWithSchema, err := withSearchPath(dsn, schema.Name())
 	if err != nil {
 		return nil, fmt.Errorf("inject search_path into DSN: %w", err)
 	}
@@ -71,9 +70,9 @@ func NewMigrator(ctx context.Context, dsn string, migrationsFS fs.FS, dir, schem
 	// doesn't yet exist. CREATE SCHEMA IF NOT EXISTS makes the factory
 	// safe to call on both fresh and existing DBs.
 	if _, err := db.ExecContext(ctx,
-		"CREATE SCHEMA IF NOT EXISTS "+pgx.Identifier{schema}.Sanitize()); err != nil {
+		"CREATE SCHEMA IF NOT EXISTS "+schema.Quoted()); err != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("create schema %s: %w", schema, err)
+		return nil, fmt.Errorf("create schema %s: %w", schema.Name(), err)
 	}
 
 	src, err := iofs.New(migrationsFS, dir)
@@ -83,7 +82,7 @@ func NewMigrator(ctx context.Context, dsn string, migrationsFS fs.FS, dir, schem
 	}
 
 	driver, err := migratepgx.WithInstance(db, &migratepgx.Config{
-		SchemaName:      schema,
+		SchemaName:      schema.Name(),
 		MigrationsTable: migrationsTable,
 	})
 	if err != nil {

@@ -29,8 +29,8 @@ import (
 // configuration.
 func OSSSource() orchestrator.Source {
 	return orchestrator.Source{
-		Name:      "oss",
-		Schema:    database.OSSSchema,
+		Name:      database.OSSSourceName,
+		Schema:    database.MustNewSchema(database.OSSSchema),
 		Files:     v1alpha1store.MigrationFiles,
 		Dir:       v1alpha1store.MigrationsDir,
 		LegacyRun: RunOSS,
@@ -97,10 +97,12 @@ var ossTableColumns = map[string][]string{
 	},
 }
 
-// RunOSS copies each `v1alpha1.<t>` row into `<OSSSchema>.<t>` via
-// `INSERT (cols) ... SELECT cols ... ON CONFLICT DO NOTHING` inside a
-// single transaction. Columns are addressed explicitly so the copy stays
-// correct if source and destination column orders ever diverge.
+// RunOSS copies each `v1alpha1.<t>` row into the destination `schema`'s
+// `<t>` (the OSS schema in practice) via `INSERT (cols) ... SELECT cols
+// ... ON CONFLICT DO NOTHING` inside a single transaction. schema is the
+// orchestrator-resolved Source.Schema, passed in rather than re-derived.
+// Columns are addressed explicitly so the copy stays correct if source
+// and destination column orders ever diverge.
 // Defensive: if `v1alpha1.agents` doesn't exist, returns nil without
 // touching the database (the orchestrator already gates on
 // `public.schema_migrations` existing, so this is belt-and-suspenders).
@@ -113,7 +115,7 @@ var ossTableColumns = map[string][]string{
 //
 // Legacy `v1alpha1.*` tables are not dropped — a follow-up regular
 // go-migrate migration handles that.
-func RunOSS(ctx context.Context, db *sql.DB) error {
+func RunOSS(ctx context.Context, db *sql.DB, schema database.Schema) error {
 	exists, err := legacyAgentsExists(ctx, db)
 	if err != nil {
 		return fmt.Errorf("probe v1alpha1.agents: %w", err)
@@ -122,7 +124,7 @@ func RunOSS(ctx context.Context, db *sql.DB) error {
 		return nil
 	}
 
-	destSchema := pgx.Identifier{database.OSSSchema}.Sanitize()
+	destSchema := schema.Quoted()
 
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {

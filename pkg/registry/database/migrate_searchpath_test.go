@@ -87,7 +87,7 @@ func TestNewMigrator_LandsTablesInTargetSchema(t *testing.T) {
 		"migrations/001_init.down.sql": {Data: []byte("DROP TABLE demo_tbl;")},
 	}
 
-	mg, err := database.NewMigrator(ctx, dsn, mfs, "migrations", targetSchema)
+	mg, err := database.NewMigrator(ctx, dsn, mfs, "migrations", database.MustNewSchema(targetSchema))
 	require.NoError(t, err)
 	defer func() { _, _ = mg.Close() }()
 
@@ -129,12 +129,12 @@ func TestNewMigrator_ReturnsErrNoChangeOnReRun(t *testing.T) {
 		"migrations/001_init.down.sql": {Data: []byte("DROP TABLE rerun_tbl;")},
 	}
 
-	first, err := database.NewMigrator(ctx, dsn, mfs, "migrations", "downstream_rerun_schema")
+	first, err := database.NewMigrator(ctx, dsn, mfs, "migrations", database.MustNewSchema("downstream_rerun_schema"))
 	require.NoError(t, err)
 	require.NoError(t, first.Up())
 	_, _ = first.Close()
 
-	second, err := database.NewMigrator(ctx, dsn, mfs, "migrations", "downstream_rerun_schema")
+	second, err := database.NewMigrator(ctx, dsn, mfs, "migrations", database.MustNewSchema("downstream_rerun_schema"))
 	require.NoError(t, err)
 	require.True(t, errors.Is(second.Up(), migrate.ErrNoChange))
 	_, _ = second.Close()

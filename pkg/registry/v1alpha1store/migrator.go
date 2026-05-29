@@ -30,5 +30,5 @@ var MigrationFiles fs.FS = v1alpha1MigrationFiles
 // `mg.Close()`. ctx is accepted for API symmetry with the surrounding
 // startup path.
 func NewOSSMigrator(ctx context.Context, dsn string) (*migrate.Migrate, error) {
-	return database.NewMigrator(ctx, dsn, v1alpha1MigrationFiles, MigrationsDir, database.OSSSchema)
+	return database.NewMigrator(ctx, dsn, v1alpha1MigrationFiles, MigrationsDir, database.MustNewSchema(database.OSSSchema))
 }

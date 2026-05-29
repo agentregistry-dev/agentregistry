@@ -4,13 +4,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
 
 // TableFor is the canonical mapping from v1alpha1 Kind name to its
-// backing table. The table names are unqualified — the pgx pool's
-// AfterConnect hook sets `search_path` to the OSS schema, so every
-// query resolves to the correct schema without baking the name into
-// the SQL.
+// backing table. The names are unqualified here; NewStores qualifies
+// each with the OSS schema (from the injected registry) so queries name
+// the schema explicitly rather than relying on the connection's
+// search_path.
 //
 // Downstream builds that register additional kinds via
 // v1alpha1.Scheme.Register should extend their own copy of this map
@@ -39,7 +40,12 @@ var TableFor = map[string]string{
 // The variadic opts are applied to every Store produced. Downstream
 // callers pass WithAuditor(...) here to plumb a single audit sink
 // across all kinds in one call.
-func NewStores(pool *pgxpool.Pool, opts ...StoreOption) map[string]*Store {
+func NewStores(pool *pgxpool.Pool, schemas *pkgdb.SchemaRegistry, opts ...StoreOption) map[string]*Store {
+	// The OSS source's schema is statically known to be registered by the
+	// composition root before stores are built; a missing entry is a
+	// wiring bug, so MustGet panics rather than returning a nil schema
+	// that would surface as a malformed query later.
+	ossSchema := schemas.MustGet(pkgdb.OSSSourceName)
 	out := make(map[string]*Store, len(v1alpha1.BuiltinKinds))
 	for _, kind := range v1alpha1.BuiltinKinds {
 		table, ok := TableFor[kind]
@@ -54,14 +60,14 @@ func NewStores(pool *pgxpool.Pool, opts ...StoreOption) map[string]*Store {
 		// option chain).
 		kindOpts := append([]StoreOption{WithKind(kind)}, opts...)
 		if kind == v1alpha1.KindRuntime {
-			out[kind] = NewMutableObjectStore(pool, table, kindOpts...)
+			out[kind] = NewMutableObjectStore(pool, ossSchema, table, kindOpts...)
 			continue
 		}
 		if kind == v1alpha1.KindDeployment {
-			out[kind] = NewMutableObjectStore(pool, table, kindOpts...)
+			out[kind] = NewMutableObjectStore(pool, ossSchema, table, kindOpts...)
 			continue
 		}
-		out[kind] = NewStore(pool, table, kindOpts...)
+		out[kind] = NewStore(pool, ossSchema, table, kindOpts...)
 	}
 	return out
 }
