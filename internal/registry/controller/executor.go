@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -16,13 +17,21 @@ import (
 
 const (
 	DeploymentControllerFinalizer = "agentregistry.dev/deployment-controller"
+	DeploymentForceAnnotation     = "reconcile.agentregistry.dev/force"
 
 	defaultExecutorOwner = "deployment-controller"
 	// Keep the default lease long enough for external adapter calls; without
 	// lease renewal, an expired claim may be retried by another worker.
 	defaultExecutorLeaseDuration = 5 * time.Minute
 	defaultExecutorBackoff       = 30 * time.Second
+
+	deploymentControllerDetailsKey = "deploymentController"
 )
+
+type deploymentControllerDetails struct {
+	LastAppliedFingerprint string `json:"lastAppliedFingerprint,omitempty"`
+	LastForceToken         string `json:"lastForceToken,omitempty"`
+}
 
 // DeploymentExecutor owns Deployment adapter side effects. It only acts after
 // durable reconcile_work has been claimed with a lease token.
@@ -165,16 +174,33 @@ func (e *DeploymentExecutor) apply(ctx context.Context, deployment *v1alpha1.Dep
 		return "", "", fmt.Errorf("%w: adapter %q does not support target kind %q",
 			pkgdb.ErrInvalidInput, adapter.Type(), target.GetKind())
 	}
-	result, err := adapter.Apply(ctx, types.ApplyInput{
+	input := types.ApplyInput{
 		Deployment: deployment,
 		Target:     target,
 		Runtime:    runtime,
 		Getter:     e.Getter,
-	})
+	}
+	fingerprint, err := desiredApplyFingerprint(ctx, adapter, input)
 	if err != nil {
+		if errors.Is(err, v1alpha1.ErrDanglingRef) {
+			return e.blockReference(ctx, deployment, err)
+		}
+		return "", "", err
+	}
+	forceToken := deploymentForceToken(deployment)
+	if skip, err := shouldSkipApply(deployment, fingerprint, forceToken); err != nil {
+		return "", "", err
+	} else if skip {
+		return "unchanged", "deployment desired input unchanged", nil
+	}
+	result, err := adapter.Apply(ctx, input)
+	if err != nil {
+		if errors.Is(err, v1alpha1.ErrDanglingRef) {
+			return e.blockReference(ctx, deployment, err)
+		}
 		return "", "", fmt.Errorf("adapter %q apply: %w", adapter.Type(), err)
 	}
-	if err := e.persistApplyResult(ctx, deployment, result); err != nil {
+	if err := e.persistApplyResult(ctx, deployment, result, fingerprint, forceToken); err != nil {
 		return "", "", err
 	}
 	return "success", "deployment applied", nil
@@ -237,7 +263,7 @@ func (e *DeploymentExecutor) blockReference(ctx context.Context, deployment *v1a
 			Message:            message,
 			ObservedGeneration: deployment.Metadata.Generation,
 		}},
-	}); err != nil {
+	}, "", ""); err != nil {
 		return "", "", err
 	}
 	return "blocked", message, nil
@@ -303,28 +329,27 @@ func (e *DeploymentExecutor) resolveAdapter(runtimeType string) (types.Deploymen
 	return adapter, nil
 }
 
-func (e *DeploymentExecutor) persistApplyResult(ctx context.Context, deployment *v1alpha1.Deployment, result *types.ApplyResult) error {
+func (e *DeploymentExecutor) persistApplyResult(
+	ctx context.Context,
+	deployment *v1alpha1.Deployment,
+	result *types.ApplyResult,
+	fingerprint string,
+	forceToken string,
+) error {
 	patch := v1alpha1store.PatchOpts{
 		Finalizers: ensureFinalizer(DeploymentControllerFinalizer),
 	}
 	if result == nil {
+		if fingerprint != "" {
+			patch.Status = deploymentControllerStatusPatch(deployment, nil, fingerprint, forceToken)
+		}
 		if err := e.deploymentStore().ApplyPatch(ctx, deployment.Metadata.NamespaceOrDefault(), deployment.Metadata.Name, "", patch); err != nil {
 			return fmt.Errorf("persist apply result: %w", err)
 		}
 		return nil
 	}
-	if len(result.Conditions) > 0 || len(result.Details) > 0 {
-		patch.Status = v1alpha1.StatusPatcher(func(s *v1alpha1.Status) {
-			if s.ObservedGeneration < deployment.Metadata.Generation {
-				s.ObservedGeneration = deployment.Metadata.Generation
-			}
-			for _, cond := range result.Conditions {
-				s.SetCondition(cond)
-			}
-			for key, encoded := range result.Details {
-				_ = s.SetDetailsKeyJSON(key, encoded)
-			}
-		})
+	if len(result.Conditions) > 0 || len(result.Details) > 0 || fingerprint != "" {
+		patch.Status = deploymentControllerStatusPatch(deployment, result, fingerprint, forceToken)
 	}
 	if len(result.RuntimeMetadata) > 0 {
 		patch.Annotations = func(annotations map[string]string) map[string]string {
@@ -339,6 +364,33 @@ func (e *DeploymentExecutor) persistApplyResult(ctx context.Context, deployment 
 		return fmt.Errorf("persist apply result: %w", err)
 	}
 	return nil
+}
+
+func deploymentControllerStatusPatch(
+	deployment *v1alpha1.Deployment,
+	result *types.ApplyResult,
+	fingerprint string,
+	forceToken string,
+) func(current json.RawMessage) (json.RawMessage, error) {
+	return v1alpha1.StatusPatcher(func(s *v1alpha1.Status) {
+		if s.ObservedGeneration < deployment.Metadata.Generation {
+			s.ObservedGeneration = deployment.Metadata.Generation
+		}
+		if result != nil {
+			for _, cond := range result.Conditions {
+				s.SetCondition(cond)
+			}
+			for key, encoded := range result.Details {
+				_ = s.SetDetailsKeyJSON(key, encoded)
+			}
+		}
+		if fingerprint != "" {
+			_ = s.SetDetailsKey(deploymentControllerDetailsKey, deploymentControllerDetails{
+				LastAppliedFingerprint: fingerprint,
+				LastForceToken:         forceToken,
+			})
+		}
+	})
 }
 
 func (e *DeploymentExecutor) persistRemoveResult(ctx context.Context, deployment *v1alpha1.Deployment, result *types.RemoveResult) error {
@@ -445,4 +497,37 @@ func removeFinalizer(finalizer string) func([]string) []string {
 
 func adapterSupportsKind(adapter types.DeploymentAdapter, kind string) bool {
 	return adapter != nil && slices.Contains(adapter.SupportedTargetKinds(), kind)
+}
+
+func desiredApplyFingerprint(ctx context.Context, adapter types.DeploymentAdapter, input types.ApplyInput) (string, error) {
+	if fingerprinter, ok := adapter.(types.DeploymentDesiredFingerprinter); ok {
+		return fingerprinter.DesiredFingerprint(ctx, input)
+	}
+	adapterType := ""
+	if adapter != nil {
+		adapterType = adapter.Type()
+	}
+	return types.DefaultApplyFingerprint(ctx, input, types.ApplyFingerprintOptions{AdapterType: adapterType})
+}
+
+func shouldSkipApply(deployment *v1alpha1.Deployment, fingerprint string, forceToken string) (bool, error) {
+	if deployment == nil || fingerprint == "" {
+		return false, nil
+	}
+	var details deploymentControllerDetails
+	ok, err := deployment.Status.GetDetailsKey(deploymentControllerDetailsKey, &details)
+	if err != nil {
+		return false, err
+	}
+	if !ok || details.LastAppliedFingerprint != fingerprint {
+		return false, nil
+	}
+	return forceToken == "" || details.LastForceToken == forceToken, nil
+}
+
+func deploymentForceToken(deployment *v1alpha1.Deployment) string {
+	if deployment == nil || deployment.Metadata.Annotations == nil {
+		return ""
+	}
+	return deployment.Metadata.Annotations[DeploymentForceAnnotation]
 }

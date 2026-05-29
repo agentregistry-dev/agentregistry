@@ -52,6 +52,91 @@ func TestDeploymentController_DerivesAndExecutesApply(t *testing.T) {
 	require.Equal(t, "success", history[0].Outcome)
 }
 
+func TestDeploymentController_SkipsUnchangedApplyAfterRepairReconcile(t *testing.T) {
+	ctx := context.Background()
+	stores, workStore, eventStore := newControllerTestStores(t)
+	seedRuntime(t, stores, "local")
+	seedMCPServer(t, stores, "weather")
+	deployment := seedDeployment(t, stores, "weather-stable", v1alpha1.DesiredStateDeployed)
+
+	controller := newDeploymentTestController(stores, workStore)
+	_, err := controller.FullReconcile(ctx)
+	require.NoError(t, err)
+
+	adapter := &recordingDeploymentAdapter{}
+	executor := newTestExecutor(stores, workStore, eventStore, adapter)
+	processed, err := executor.RunOnce(ctx, 10)
+	require.NoError(t, err)
+	require.Equal(t, 1, processed)
+	require.Equal(t, int32(1), adapter.applyCalls.Load())
+
+	applied := loadDeployment(t, stores, deployment.Metadata.Name)
+	var details deploymentControllerDetails
+	ok, err := applied.Status.GetDetailsKey(deploymentControllerDetailsKey, &details)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.NotEmpty(t, details.LastAppliedFingerprint)
+
+	_, err = controller.FullReconcile(ctx)
+	require.NoError(t, err)
+	processed, err = executor.RunOnce(ctx, 10)
+	require.NoError(t, err)
+	require.Equal(t, 1, processed)
+	require.Equal(t, int32(1), adapter.applyCalls.Load(), "unchanged desired input must not call the adapter again")
+
+	history, err := eventStore.ListByWorkKey(ctx, deploymentWorkKey(
+		v1alpha1store.ResourceKey{Kind: v1alpha1.KindDeployment, Namespace: "default", Name: deployment.Metadata.Name},
+		deployment.Metadata.UID, deployment.Metadata.Generation, ReconcileActionApply), 10)
+	require.NoError(t, err)
+	require.Len(t, history, 2)
+	require.Equal(t, "unchanged", history[0].Outcome)
+	require.Equal(t, "success", history[1].Outcome)
+}
+
+func TestDeploymentController_ForceAnnotationBypassesUnchangedApplyOnce(t *testing.T) {
+	ctx := context.Background()
+	stores, workStore, eventStore := newControllerTestStores(t)
+	seedRuntime(t, stores, "local")
+	seedMCPServer(t, stores, "weather")
+	deployment := seedDeployment(t, stores, "weather-force", v1alpha1.DesiredStateDeployed)
+
+	controller := newDeploymentTestController(stores, workStore)
+	_, err := controller.FullReconcile(ctx)
+	require.NoError(t, err)
+
+	adapter := &recordingDeploymentAdapter{}
+	executor := newTestExecutor(stores, workStore, eventStore, adapter)
+	processed, err := executor.RunOnce(ctx, 10)
+	require.NoError(t, err)
+	require.Equal(t, 1, processed)
+	require.Equal(t, int32(1), adapter.applyCalls.Load())
+
+	require.NoError(t, stores[v1alpha1.KindDeployment].PatchAnnotations(ctx, "default", deployment.Metadata.Name, "", func(current map[string]string) map[string]string {
+		current[DeploymentForceAnnotation] = "manual-1"
+		return current
+	}))
+	_, err = controller.FullReconcile(ctx)
+	require.NoError(t, err)
+	processed, err = executor.RunOnce(ctx, 10)
+	require.NoError(t, err)
+	require.Equal(t, 1, processed)
+	require.Equal(t, int32(2), adapter.applyCalls.Load())
+
+	_, err = controller.FullReconcile(ctx)
+	require.NoError(t, err)
+	processed, err = executor.RunOnce(ctx, 10)
+	require.NoError(t, err)
+	require.Equal(t, 1, processed)
+	require.Equal(t, int32(2), adapter.applyCalls.Load(), "the same force token must not force every resync forever")
+
+	got := loadDeployment(t, stores, deployment.Metadata.Name)
+	var details deploymentControllerDetails
+	ok, err := got.Status.GetDetailsKey(deploymentControllerDetailsKey, &details)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, "manual-1", details.LastForceToken)
+}
+
 func TestDeploymentController_BlocksMissingTargetWithoutAdapterCall(t *testing.T) {
 	ctx := context.Background()
 	stores, workStore, eventStore := newControllerTestStores(t)
@@ -125,6 +210,7 @@ func TestDeploymentController_ReappliesAgentDeploymentWhenReferencedMCPServerCha
 	ctx := context.Background()
 	stores, workStore, eventStore := newControllerTestStores(t)
 	seedRuntime(t, stores, "local")
+	seedMCPServerWithIdentifier(t, stores, "weather", "ghcr.io/example/weather:1.0.0")
 	seedAgent(t, stores, "assistant", []v1alpha1.ResourceRef{{Name: "weather"}})
 	deployment := seedAgentDeployment(t, stores, "assistant-deploy", "assistant", v1alpha1.DesiredStateDeployed)
 
@@ -139,7 +225,7 @@ func TestDeploymentController_ReappliesAgentDeploymentWhenReferencedMCPServerCha
 	require.Equal(t, 1, processed)
 	require.Equal(t, int32(1), adapter.applyCalls.Load())
 
-	seedMCPServer(t, stores, "weather")
+	seedMCPServerWithIdentifier(t, stores, "weather", "ghcr.io/example/weather:2.0.0")
 	_, err = controller.HandleEvent(ctx, v1alpha1store.ControlPlaneEvent{
 		Key: v1alpha1store.ResourceKey{
 			Kind:      v1alpha1.KindMCPServer,
@@ -399,6 +485,11 @@ func seedRuntime(t *testing.T, stores map[string]*v1alpha1store.Store, name stri
 
 func seedMCPServer(t *testing.T, stores map[string]*v1alpha1store.Store, name string) {
 	t.Helper()
+	seedMCPServerWithIdentifier(t, stores, name, "ghcr.io/example/weather:1.0.0")
+}
+
+func seedMCPServerWithIdentifier(t *testing.T, stores map[string]*v1alpha1store.Store, name, identifier string) {
+	t.Helper()
 	_, err := stores[v1alpha1.KindMCPServer].Upsert(context.Background(), &v1alpha1.MCPServer{
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: name},
 		Spec: v1alpha1.MCPServerSpec{
@@ -406,7 +497,7 @@ func seedMCPServer(t *testing.T, stores map[string]*v1alpha1store.Store, name st
 			Source: &v1alpha1.MCPServerSource{
 				Package: &v1alpha1.MCPPackage{
 					RegistryType: v1alpha1.RegistryTypeOCI,
-					Identifier:   "ghcr.io/example/weather:1.0.0",
+					Identifier:   identifier,
 					Transport:    v1alpha1.MCPTransport{Type: "stdio"},
 				},
 			},
