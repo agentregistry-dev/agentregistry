@@ -28,7 +28,11 @@ type ApplyFingerprintOptions struct {
 
 // DefaultApplyFingerprint returns a deterministic fingerprint of the resolved
 // desired apply input. It intentionally excludes status, labels, annotations,
-// finalizers, timestamps, and other controller bookkeeping.
+// finalizers, timestamps, and other controller bookkeeping. The fingerprint is
+// based on declared intent, not remote drift; for example, a Deployment that
+// names a git branch without a commit SHA keeps the same fingerprint as that
+// branch's HEAD moves, and operators should change the spec or use the
+// controller force token when they want a rebuild from the new HEAD.
 func DefaultApplyFingerprint(ctx context.Context, in ApplyInput, opts ApplyFingerprintOptions) (string, error) {
 	if in.Deployment == nil {
 		return "", fmt.Errorf("fingerprint: deployment is required")

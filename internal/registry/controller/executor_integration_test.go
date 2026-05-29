@@ -93,6 +93,56 @@ func TestDeploymentController_SkipsUnchangedApplyAfterRepairReconcile(t *testing
 	require.Equal(t, "success", history[1].Outcome)
 }
 
+func TestDeploymentController_RepairResyncsDoNotReplayUnchangedApply(t *testing.T) {
+	ctx := context.Background()
+	stores, workStore, eventStore := newControllerTestStores(t)
+	seedRuntime(t, stores, "local")
+	seedMCPServer(t, stores, "weather")
+	deployment := seedDeployment(t, stores, "weather-no-storm", v1alpha1.DesiredStateDeployed)
+
+	controller := newDeploymentTestController(stores, workStore)
+	controller.Events = fakeEventReader{}
+	_, err := controller.Refresh(ctx)
+	require.NoError(t, err)
+
+	adapter := &recordingDeploymentAdapter{}
+	executor := newTestExecutor(stores, workStore, eventStore, adapter)
+	processed, err := executor.RunOnce(ctx, 10)
+	require.NoError(t, err)
+	require.Equal(t, 1, processed)
+	require.Equal(t, int32(1), adapter.applyCalls.Load())
+
+	const repairTicks = 5
+	for range repairTicks {
+		result, err := controller.Refresh(ctx)
+		require.NoError(t, err)
+		require.True(t, result.FullResynced)
+
+		processed, err = executor.RunOnce(ctx, 10)
+		require.NoError(t, err)
+		require.Equal(t, 1, processed)
+		require.Equal(t, int32(1), adapter.applyCalls.Load(), "repair resync must complete work without calling adapter.Apply again")
+	}
+
+	history, err := eventStore.ListByWorkKey(ctx, deploymentWorkKey(
+		v1alpha1store.ResourceKey{Kind: v1alpha1.KindDeployment, Namespace: "default", Name: deployment.Metadata.Name},
+		deployment.Metadata.UID, deployment.Metadata.Generation, ReconcileActionApply), 10)
+	require.NoError(t, err)
+	require.Len(t, history, repairTicks+1)
+	successes := 0
+	unchanged := 0
+	for _, event := range history {
+		switch event.Outcome {
+		case "success":
+			successes++
+		case "unchanged":
+			unchanged++
+		}
+	}
+	require.Equal(t, 1, successes)
+	require.Equal(t, repairTicks, unchanged)
+}
+
 func TestDeploymentController_ForceAnnotationBypassesUnchangedApplyOnce(t *testing.T) {
 	ctx := context.Background()
 	stores, workStore, eventStore := newControllerTestStores(t)
