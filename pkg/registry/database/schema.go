@@ -13,30 +13,21 @@ import (
 // without importing each other.
 const OSSSourceName = "oss"
 
-// schemaNameRE constrains a schema name to a lowercase, unquoted-safe
-// Postgres identifier. Lowercase-only is deliberate: the schema name is
-// used both quoted (CREATE SCHEMA, qualified queries) and unquoted (the
-// search_path startup parameter, the to_regclass existence probes), and
-// Postgres case-folds unquoted identifiers. Allowing mixed case would
-// make those two forms refer to different schemas (`"MySchema"` vs the
-// folded `myschema`), so the existence probe would never match the
-// created schema. Restricting to lowercase keeps the two forms identical
-// under case-folding. (It does not reconcile a lowercase *reserved word*
-// like `user`, which parses as a keyword unquoted but an identifier
-// quoted — avoiding reserved words is the schema author's responsibility,
-// and matters once the schema name becomes operator input. Quoted() still
-// quotes the name, so this is also fail-fast validation against
-// typos/garbage, not the injection barrier itself.)
+// schemaNameRE constrains a schema name to a lowercase identifier. The
+// name is used both quoted (CREATE SCHEMA, qualified queries) and
+// unquoted (search_path, to_regclass probes); Postgres case-folds the
+// unquoted form, so a mixed-case name would create `"MySchema"` but probe
+// for the folded `myschema` and never match. Lowercase keeps the two
+// forms identical. (A lowercase reserved word like `user` is still the
+// author's responsibility; Quoted() is the injection barrier, this is
+// just fail-fast validation.)
 var schemaNameRE = regexp.MustCompile(`^[a-z_][a-z0-9_]*$`)
 
 // Schema is a validated Postgres schema name with its quoted identifier
 // precomputed once. Pass a Schema where schema-qualified SQL or a
 // search_path is built, so the raw-vs-quoted distinction lives in one
-// place and Sanitize runs at construction rather than per query.
-//
-// Use Name for the raw value (search_path DSN startup parameter,
-// to_regclass text argument, log fields) and Quoted / Qualify wherever
-// the schema is interpolated into a SQL statement.
+// place (see Name vs Quoted/Qualify) and Sanitize runs at construction
+// rather than per query.
 type Schema struct {
 	name   string
 	quoted string
