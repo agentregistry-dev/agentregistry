@@ -178,7 +178,10 @@ startupProbe:
 
 # @section Extensibility
 
-# -- Array of extra environment variables for the Agent Registry container
+# -- Array of extra environment variables for the Agent Registry container.
+# Additive only — cannot override env vars the chart already renders.
+# For credentialed fields use the dedicated knobs (e.g.
+# `database.postgres.secretRef`).
 extraEnvVars: []
 
 # @section Scheduling
