@@ -104,7 +104,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	pool := db.Pool()
 	stores := buildStores(pool, options.Auditor)
 	perKindHooks := crudPerKindHooks(options)
-	if _, err := controller.StartDeploymentController(ctx, pool, stores, deploymentAdapters, perKindHooks.InitialFinalizers, controllerRuntimeConfig(cfg)); err != nil {
+	if _, err := controller.StartDeploymentController(ctx, pool, stores, deploymentAdapters, deploymentControllerConfig(cfg)); err != nil {
 		return fmt.Errorf("start deployment controller: %w", err)
 	}
 
@@ -202,8 +202,8 @@ func buildStores(pool *pgxpool.Pool, auditor types.Auditor) map[string]*v1alpha1
 	return stores
 }
 
-func controllerRuntimeConfig(cfg *config.Config) controller.RuntimeConfig {
-	return controller.RuntimeConfig{
+func deploymentControllerConfig(cfg *config.Config) controller.ControllerConfig {
+	return controller.ControllerConfig{
 		Retention: controller.RetentionPolicy{
 			ControlPlaneEvents: cfg.ControllerEventRetention,
 			EventKeepAfterRev:  cfg.ControllerEventKeepAfterRevision,

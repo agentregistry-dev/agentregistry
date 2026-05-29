@@ -115,8 +115,8 @@ func (p *RetentionPruner) runOnceLogged(ctx context.Context) {
 
 // RunRetentionPrune applies a RetentionPolicy to the controller foundation
 // tables. It is intentionally side-effect-only on bookkeeping tables:
-// canonical resource tables remain the source of truth, so projectors can full
-// resync if their checkpoint falls behind the retained event range.
+// canonical resource tables remain the source of truth, so controllers can
+// full-reconcile if their checkpoint falls behind the retained event range.
 func RunRetentionPrune(ctx context.Context, stores PruneStores, policy RetentionPolicy, now time.Time) (RetentionPruneResult, error) {
 	if now.IsZero() {
 		now = time.Now().UTC()

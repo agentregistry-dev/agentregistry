@@ -53,7 +53,7 @@ func (a *localDeploymentAdapter) SupportedTargetKinds() []string {
 // runtime. Apply is async in the v1alpha1 contract: the returned
 // Progressing condition captures that the compose stack was asked to
 // converge; downstream convergence tracking (Ready=True) arrives via the
-// reconciler's watch loop (Phase 2 / KRT), not this method.
+// reconciler's watch loop, not this method.
 func (a *localDeploymentAdapter) Apply(ctx context.Context, in types.ApplyInput) (*types.ApplyResult, error) {
 	if in.Deployment == nil {
 		return nil, fmt.Errorf("apply: deployment is required")

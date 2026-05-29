@@ -1,10 +1,10 @@
--- Controller foundations for the KRT-backed reconciliation model.
+-- Controller foundations for the Deployment reconciliation model.
 --
 -- `control_plane_events` is a durable invalidation cursor, not audit history.
 -- Source-row writes append compact identity events and emit one coarse wakeup
--- notification. Projectors replay events by revision and re-read canonical
+-- notification. Controllers replay events by revision and re-read canonical
 -- source tables; if retained events no longer cover a checkpoint, they must
--- full-resync from canonical tables.
+-- full-reconcile from canonical tables.
 
 CREATE TABLE IF NOT EXISTS v1alpha1.control_plane_events (
     revision     BIGSERIAL    PRIMARY KEY,
@@ -33,7 +33,7 @@ DECLARE
 BEGIN
     IF TG_OP = 'UPDATE' THEN
         -- Status-only writes already have their own public watch channel. They
-        -- do not invalidate source collections and must not wake KRT projectors.
+        -- do not change desired source state and must not wake controllers.
         IF NEW.spec IS NOT DISTINCT FROM OLD.spec
            AND NEW.labels IS NOT DISTINCT FROM OLD.labels
            AND NEW.annotations IS NOT DISTINCT FROM OLD.annotations
@@ -82,11 +82,10 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- TODO(krt): this explicit trigger roster is scoped to the OSS
--- Deployment-first controller slice. Before additional downstream or
--- controller-owned resource tables depend on event replay, replace this with
--- a DB-side resource-table registration helper so each resource-table
--- migration installs its own control-plane trigger.
+-- This explicit trigger roster is scoped to the OSS Deployment-first
+-- controller slice. Skill and Prompt events are retained for future
+-- dependency-aware controllers, but the Deployment controller ignores them
+-- today.
 CREATE OR REPLACE TRIGGER agents_control_plane_event
     AFTER INSERT OR UPDATE OR DELETE ON v1alpha1.agents
     FOR EACH ROW EXECUTE FUNCTION v1alpha1.record_control_plane_event('Agent');

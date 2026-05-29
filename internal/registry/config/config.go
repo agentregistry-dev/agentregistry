@@ -33,7 +33,7 @@ type Config struct {
 	RuntimeDir string `env:"RUNTIME_DIR" envDefault:"/tmp/arctl-runtime"`
 	Verbose    bool   `env:"VERBOSE" envDefault:"false"`
 
-	// Controller foundation retention. These settings bound the KRT
+	// Controller foundation retention. These settings bound the Deployment
 	// controller's durable invalidation/work tables. A zero duration disables
 	// pruning for that table.
 	ControllerEventRetention           time.Duration `env:"CONTROLLER_EVENT_RETENTION" envDefault:"24h"`

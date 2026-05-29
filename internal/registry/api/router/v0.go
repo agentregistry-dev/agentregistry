@@ -72,24 +72,24 @@ type RouteOptions struct {
 
 	// Admission optionally owns the final apply write. Nil preserves OSS
 	// production writes through resource.ProductionAdmission.
-	// TODO(krt): temporary synchronous-handler bridge; remove when KRT owns
-	// admission/staging.
+	// TODO(controller): temporary synchronous-handler bridge; remove when
+	// reconciler-owned admission/staging exists.
 	Admission types.Admission
 
 	// DeleteAdmission optionally owns the final delete. Nil preserves OSS
 	// production deletes through resource.ProductionDeleteAdmission.
-	// TODO(krt): temporary synchronous-handler bridge; remove when KRT owns
-	// admission/staging.
+	// TODO(controller): temporary synchronous-handler bridge; remove when
+	// reconciler-owned admission/staging exists.
 	DeleteAdmission types.DeleteAdmission
 
 	// ResolverWrapper decorates the shared ResourceRef resolver before
 	// resource and apply routes are registered.
-	// TODO(krt): temporary bridge for pending staged refs during HTTP apply.
+	// TODO(controller): temporary bridge for pending staged refs during HTTP apply.
 	ResolverWrapper func(v1alpha1.ResolverFunc) v1alpha1.ResolverFunc
 
 	// ExtraResourceRoutes registers adjacent routes with access to the same
 	// v1alpha1 stores and hooks used by /v0/apply.
-	// TODO(krt): temporary bridge for downstream synchronous approval routes.
+	// TODO(controller): temporary bridge for downstream synchronous approval routes.
 	ExtraResourceRoutes func(api huma.API, pathPrefix string, ctx types.ResourceRouteContext)
 }
 

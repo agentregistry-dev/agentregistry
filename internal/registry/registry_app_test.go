@@ -9,7 +9,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 )
 
-func TestControllerRuntimeConfigMapsRetentionSettings(t *testing.T) {
+func TestDeploymentControllerConfigMapsRetentionSettings(t *testing.T) {
 	cfg := &config.Config{
 		ControllerEventRetention:           2 * time.Hour,
 		ControllerEventKeepAfterRevision:   42,
@@ -18,7 +18,7 @@ func TestControllerRuntimeConfigMapsRetentionSettings(t *testing.T) {
 		ControllerRetentionPruneBatchLimit: 17,
 	}
 
-	got := controllerRuntimeConfig(cfg)
+	got := deploymentControllerConfig(cfg)
 
 	require.Equal(t, 2*time.Hour, got.Retention.ControlPlaneEvents)
 	require.Equal(t, int64(42), got.Retention.EventKeepAfterRev)

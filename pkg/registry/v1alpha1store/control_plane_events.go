@@ -11,8 +11,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// ControlPlaneNotifyChannel is the single coarse wakeup channel for controller
-// projectors. The payload is only a hint; projectors must replay
+// ControlPlaneNotifyChannel is the single coarse wakeup channel for
+// controllers. The payload is only a hint; controllers must replay
 // control_plane_events and re-read canonical source rows.
 const ControlPlaneNotifyChannel = "v1alpha1_control_plane_changed"
 
@@ -39,7 +39,7 @@ type ControlPlaneEvent struct {
 }
 
 // ControlPlaneEventStore reads and prunes the durable invalidation cursor used
-// by KRT projectors.
+// by controllers.
 type ControlPlaneEventStore struct {
 	pool *pgxpool.Pool
 }
@@ -112,7 +112,7 @@ func (s *ControlPlaneEventStore) CurrentRevision(ctx context.Context) (int64, er
 }
 
 // PruneBefore deletes retained events in bounded batches. At least one of
-// before or keepAfterRevision must be set. Projectors must use gap detection
+// before or keepAfterRevision must be set. Controllers must use gap detection
 // before relying on pruning in production.
 func (s *ControlPlaneEventStore) PruneBefore(ctx context.Context, before time.Time, keepAfterRevision int64, limit int) (int64, error) {
 	if s == nil || s.pool == nil {

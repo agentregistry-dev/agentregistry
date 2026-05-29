@@ -38,8 +38,8 @@ func (a *kubernetesDeploymentAdapter) SupportedTargetKinds() []string {
 }
 
 // Apply translates + applies kagent/kmcp CRDs onto the runtime's cluster.
-// Returns Progressing=True immediately; the reconciler's (Phase 2 KRT) watch
-// loop is responsible for flipping Ready=True once the rollout converges.
+// Returns Progressing=True immediately; the reconciler's watch loop is
+// responsible for flipping Ready=True once the rollout converges.
 // Adapters MAY produce a Degraded condition on permanent translation or
 // apply errors; transient failures bubble up as a returned error.
 func (a *kubernetesDeploymentAdapter) Apply(ctx context.Context, in types.ApplyInput) (*types.ApplyResult, error) {

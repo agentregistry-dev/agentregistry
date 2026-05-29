@@ -7,7 +7,7 @@
 -- Motivation: resource names may contain `/` (the nameRegex explicitly
 -- supports DNS-subdomain-style names like `ai.exa/exa`), which makes the
 -- old concatenated id payload ambiguous to any strings.Split consumer.
--- No consumer parses the payload yet — Phase 2 KRT is still pending —
+-- No consumer parses the payload yet — controller eventing is still pending —
 -- so fix the wire now while the cost is a trigger swap and nothing
 -- downstream needs migrating.
 --

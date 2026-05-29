@@ -8,46 +8,41 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"istio.io/istio/pkg/kube/krt"
 
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
-	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
 const (
-	defaultProjectorResyncInterval = time.Minute
-	defaultExecutorInterval        = time.Second
-	defaultExecutorBatchLimit      = 10
-	defaultWakeupReconnectDelay    = 5 * time.Second
+	defaultControllerResyncInterval = time.Minute
+	defaultExecutorInterval         = time.Second
+	defaultExecutorBatchLimit       = 10
+	defaultWakeupReconnectDelay     = 5 * time.Second
 )
 
-// Runtime owns the always-on Deployment controller loops.
-type Runtime struct {
-	Projector *Projector
-	Sources   *SourceIndex
-	Executor  *DeploymentExecutor
-	Retention *RetentionPruner
-	Handlers  []krt.HandlerRegistration
+// ControllerHandle owns the always-on Deployment controller loops.
+type ControllerHandle struct {
+	Controller *DeploymentController
+	Executor   *DeploymentExecutor
+	Retention  *RetentionPruner
 }
 
-// RuntimeConfig controls optional controller maintenance loops.
-type RuntimeConfig struct {
+// ControllerConfig controls optional controller maintenance loops.
+type ControllerConfig struct {
 	Retention RetentionPolicy
 }
 
-// StartDeploymentController constructs the source projector, runs the initial
-// refresh synchronously, and starts projection/execution loops in the
-// background. The returned Runtime is useful in tests and future health wiring.
+// StartDeploymentController constructs the Deployment controller, runs the
+// initial refresh synchronously, and starts reconcile/execution loops in the
+// background. The returned handle is useful in tests and future health wiring.
 func StartDeploymentController(
 	ctx context.Context,
 	pool *pgxpool.Pool,
 	stores map[string]*v1alpha1store.Store,
 	adapters map[string]types.DeploymentAdapter,
-	initialFinalizers map[string]func(v1alpha1.Object) []string,
-	config RuntimeConfig,
-) (*Runtime, error) {
+	config ControllerConfig,
+) (*ControllerHandle, error) {
 	if pool == nil {
 		return nil, nil
 	}
@@ -58,26 +53,15 @@ func StartDeploymentController(
 	workStore := v1alpha1store.NewReconcileWorkStore(pool)
 	reconcileEventStore := v1alpha1store.NewReconcileEventStore(pool)
 	controlPlaneEventStore := v1alpha1store.NewControlPlaneEventStore(pool)
-	sources := NewSourceIndex(stores, SourceIndexOptions{InitialFinalizers: initialFinalizers})
-	deriver := &DeploymentWorkDeriver{Sources: sources, Work: workStore}
-	projector := &Projector{
+	controller := &DeploymentController{
+		Stores: stores,
+		Work:   workStore,
 		Events: controlPlaneEventStore,
-		FullResync: func(ctx context.Context) error {
-			if err := sources.Refresh(ctx); err != nil {
-				return err
-			}
-			_, err := deriver.DeriveAll(ctx)
-			return err
-		},
-		ApplyEvent: func(ctx context.Context, event v1alpha1store.ControlPlaneEvent) error {
-			return sources.ApplyEvent(ctx, event)
-		},
 	}
-	if _, err := projector.Refresh(ctx); err != nil {
+	if _, err := controller.Refresh(ctx); err != nil {
 		return nil, fmt.Errorf("deployment controller initial refresh: %w", err)
 	}
-	projector.Wakeups = controlPlaneWakeups(ctx, pool)
-	handlers := deriver.RegisterKRTHandlers(ctx)
+	controller.Wakeups = controlPlaneWakeups(ctx, pool)
 
 	executor := &DeploymentExecutor{
 		Stores:   stores,
@@ -94,11 +78,11 @@ func StartDeploymentController(
 		},
 		Policy: config.Retention,
 	}
-	runtime := &Runtime{Projector: projector, Sources: sources, Executor: executor, Retention: retention, Handlers: handlers}
+	handle := &ControllerHandle{Controller: controller, Executor: executor, Retention: retention}
 
 	go func() {
-		if err := projector.Run(ctx, defaultProjectorResyncInterval); err != nil && !errors.Is(err, context.Canceled) {
-			slog.Error("deployment controller projector stopped", "error", err)
+		if err := controller.Run(ctx, defaultControllerResyncInterval); err != nil && !errors.Is(err, context.Canceled) {
+			slog.Error("deployment controller stopped", "error", err)
 		}
 	}()
 	go func() {
@@ -113,7 +97,7 @@ func StartDeploymentController(
 			}
 		}()
 	}
-	return runtime, nil
+	return handle, nil
 }
 
 func controlPlaneWakeups(ctx context.Context, pool *pgxpool.Pool) <-chan struct{} {

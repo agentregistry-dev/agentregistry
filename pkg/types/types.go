@@ -79,9 +79,9 @@ const (
 // default writes to production; downstream integrations can wrap that behavior
 // to stage, reject, or otherwise route the write.
 //
-// TODO(krt): this belongs to the synchronous handler architecture. Prefer a
-// reconciler-owned admission/staging model when KRT becomes the write path, and
-// delete this bridge once no downstream route depends on it.
+// TODO(controller): this belongs to the synchronous handler architecture.
+// Prefer a reconciler-owned admission/staging model and delete this bridge once
+// no downstream route depends on it.
 type Admission func(ctx context.Context, in AdmissionInput) (AdmissionResult, error)
 
 type AdmissionInput struct {
@@ -108,8 +108,8 @@ type AdmissionResult struct {
 // OSS default deletes from production; downstream integrations can stage,
 // reject, or otherwise route the delete before production storage is touched.
 //
-// TODO(krt): temporary synchronous-handler bridge; remove with reconciler
-// admission/staging.
+// TODO(controller): temporary synchronous-handler bridge; remove with
+// reconciler admission/staging.
 type DeleteAdmission func(ctx context.Context, in DeleteAdmissionInput) (DeleteAdmissionResult, error)
 
 type DeleteAdmissionInput struct {
@@ -134,9 +134,9 @@ type DeleteAdmissionResult struct {
 // downstream integrations that need adjacent routes against the same stores
 // and hooks as /v0/apply.
 //
-// TODO(krt): this is a temporary way for downstream synchronous routes to reuse
-// production apply wiring. KRT should make this unnecessary by owning the
-// staging-to-production transition outside HTTP route callbacks.
+// TODO(controller): this is a temporary way for downstream synchronous routes
+// to reuse production apply wiring. Reconciler-owned staging should make this
+// unnecessary outside HTTP route callbacks.
 type ResourceRouteContext struct {
 	Stores            map[string]any
 	Resolver          v1alpha1.ResolverFunc
@@ -233,19 +233,19 @@ type AppOptions struct {
 
 	// Admission optionally accepts a validated write before the row reaches
 	// production storage. Nil preserves normal direct writes.
-	// TODO(krt): temporary synchronous-handler bridge; remove with reconciler
-	// admission/staging.
+	// TODO(controller): temporary synchronous-handler bridge; remove with
+	// reconciler admission/staging.
 	Admission Admission
 
 	// DeleteAdmission optionally accepts an authorized delete before the row is
 	// removed from production storage. Nil preserves normal direct deletes.
-	// TODO(krt): temporary synchronous-handler bridge; remove with reconciler
-	// admission/staging.
+	// TODO(controller): temporary synchronous-handler bridge; remove with
+	// reconciler admission/staging.
 	DeleteAdmission DeleteAdmission
 
 	// ResolverWrapper decorates the shared ResourceRef resolver before route
 	// registration. Nil preserves the default store-backed resolver.
-	// TODO(krt): temporary bridge for pending staged refs in HTTP apply.
+	// TODO(controller): temporary bridge for pending staged refs in HTTP apply.
 	ResolverWrapper func(v1alpha1.ResolverFunc) v1alpha1.ResolverFunc
 
 	// RegistryValidator overrides the per-package registry
@@ -283,7 +283,7 @@ type AppOptions struct {
 
 	// ExtraResourceRoutes is like ExtraRoutes, but runs after the v1alpha1
 	// resource route context has been finalized.
-	// TODO(krt): temporary bridge for downstream synchronous approval routes.
+	// TODO(controller): temporary bridge for downstream synchronous approval routes.
 	ExtraResourceRoutes func(api huma.API, pathPrefix string, ctx ResourceRouteContext)
 
 	// HTTPServerFactory is an optional function to create a server that

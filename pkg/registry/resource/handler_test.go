@@ -669,7 +669,7 @@ spec:
 }
 
 // TestResourceRegister_PostUpsertFailureLeavesPersistedRow pins the
-// documented (pre-Phase-2-KRT) contract: when PostUpsert returns an
+// documented controller-foundation contract: when PostUpsert returns an
 // error, Store.Upsert has already committed and the row is persisted;
 // the caller sees a failed result, but a follow-up GetLatest still
 // returns the row with whatever Status the previous reconcile (or

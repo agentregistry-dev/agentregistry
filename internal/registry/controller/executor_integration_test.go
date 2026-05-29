@@ -25,13 +25,10 @@ func TestDeploymentController_DerivesAndExecutesApply(t *testing.T) {
 	seedMCPServer(t, stores, "weather")
 	deployment := seedDeployment(t, stores, "weather-deploy", v1alpha1.DesiredStateDeployed)
 
-	sources := newDeploymentTestSourceIndex(stores)
-	require.NoError(t, sources.Refresh(ctx))
-	deriver := &DeploymentWorkDeriver{Sources: sources, Work: workStore}
-	registerKRTDeriverHandlers(t, ctx, deriver)
-	_, err := deriver.DeriveAll(ctx)
+	controller := newDeploymentTestController(stores, workStore)
+	_, err := controller.FullReconcile(ctx)
 	require.NoError(t, err)
-	_, err = deriver.DeriveAll(ctx)
+	_, err = controller.FullReconcile(ctx)
 	require.NoError(t, err, "duplicate derivation should coalesce by work key")
 
 	adapter := &recordingDeploymentAdapter{}
@@ -61,11 +58,8 @@ func TestDeploymentController_BlocksMissingTargetWithoutAdapterCall(t *testing.T
 	seedRuntime(t, stores, "local")
 	seedDeployment(t, stores, "missing-target", v1alpha1.DesiredStateDeployed)
 
-	sources := newDeploymentTestSourceIndex(stores)
-	require.NoError(t, sources.Refresh(ctx))
-	deriver := &DeploymentWorkDeriver{Sources: sources, Work: workStore}
-	registerKRTDeriverHandlers(t, ctx, deriver)
-	_, err := deriver.DeriveAll(ctx)
+	controller := newDeploymentTestController(stores, workStore)
+	_, err := controller.FullReconcile(ctx)
 	require.NoError(t, err)
 
 	adapter := &recordingDeploymentAdapter{}
@@ -88,11 +82,8 @@ func TestDeploymentController_ReappliesWhenMissingTargetAppears(t *testing.T) {
 	seedRuntime(t, stores, "local")
 	deployment := seedDeployment(t, stores, "target-later", v1alpha1.DesiredStateDeployed)
 
-	sources := newDeploymentTestSourceIndex(stores)
-	require.NoError(t, sources.Refresh(ctx))
-	deriver := &DeploymentWorkDeriver{Sources: sources, Work: workStore}
-	registerKRTDeriverHandlers(t, ctx, deriver)
-	_, err := deriver.DeriveAll(ctx)
+	controller := newDeploymentTestController(stores, workStore)
+	_, err := controller.FullReconcile(ctx)
 	require.NoError(t, err)
 
 	adapter := &recordingDeploymentAdapter{}
@@ -103,7 +94,7 @@ func TestDeploymentController_ReappliesWhenMissingTargetAppears(t *testing.T) {
 	require.Zero(t, adapter.applyCalls.Load())
 
 	seedMCPServer(t, stores, "weather")
-	require.NoError(t, sources.ApplyEvent(ctx, v1alpha1store.ControlPlaneEvent{
+	_, err = controller.HandleEvent(ctx, v1alpha1store.ControlPlaneEvent{
 		Key: v1alpha1store.ResourceKey{
 			Kind:      v1alpha1.KindMCPServer,
 			Namespace: "default",
@@ -111,7 +102,8 @@ func TestDeploymentController_ReappliesWhenMissingTargetAppears(t *testing.T) {
 			Tag:       v1alpha1store.DefaultTag(),
 		},
 		Operation: "update",
-	}))
+	})
+	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
 		processed, err = executor.RunOnce(ctx, 10)
@@ -136,11 +128,8 @@ func TestDeploymentController_ReappliesAgentDeploymentWhenReferencedMCPServerCha
 	seedAgent(t, stores, "assistant", []v1alpha1.ResourceRef{{Name: "weather"}})
 	deployment := seedAgentDeployment(t, stores, "assistant-deploy", "assistant", v1alpha1.DesiredStateDeployed)
 
-	sources := newDeploymentTestSourceIndex(stores)
-	require.NoError(t, sources.Refresh(ctx))
-	deriver := &DeploymentWorkDeriver{Sources: sources, Work: workStore}
-	registerKRTDeriverHandlers(t, ctx, deriver)
-	_, err := deriver.DeriveAll(ctx)
+	controller := newDeploymentTestController(stores, workStore)
+	_, err := controller.FullReconcile(ctx)
 	require.NoError(t, err)
 
 	adapter := &recordingDeploymentAdapter{}
@@ -151,7 +140,7 @@ func TestDeploymentController_ReappliesAgentDeploymentWhenReferencedMCPServerCha
 	require.Equal(t, int32(1), adapter.applyCalls.Load())
 
 	seedMCPServer(t, stores, "weather")
-	require.NoError(t, sources.ApplyEvent(ctx, v1alpha1store.ControlPlaneEvent{
+	_, err = controller.HandleEvent(ctx, v1alpha1store.ControlPlaneEvent{
 		Key: v1alpha1store.ResourceKey{
 			Kind:      v1alpha1.KindMCPServer,
 			Namespace: "default",
@@ -159,7 +148,8 @@ func TestDeploymentController_ReappliesAgentDeploymentWhenReferencedMCPServerCha
 			Tag:       v1alpha1store.DefaultTag(),
 		},
 		Operation: "insert",
-	}))
+	})
+	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
 		processed, err = executor.RunOnce(ctx, 10)
@@ -187,10 +177,8 @@ func TestDeploymentController_DeleteWaitsForRemoveThenPurgesFinalizedRow(t *test
 	terminating := loadDeployment(t, stores, deployment.Metadata.Name)
 	require.NotNil(t, terminating.Metadata.DeletionTimestamp)
 
-	sources := newDeploymentTestSourceIndex(stores)
-	require.NoError(t, sources.Refresh(ctx))
-	deriver := &DeploymentWorkDeriver{Sources: sources, Work: workStore}
-	_, err := deriver.DeriveAll(ctx)
+	controller := newDeploymentTestController(stores, workStore)
+	_, err := controller.FullReconcile(ctx)
 	require.NoError(t, err)
 
 	adapter := &recordingDeploymentAdapter{}
@@ -220,10 +208,8 @@ func TestDeploymentController_RemoveFailureKeepsFinalizerAndRetries(t *testing.T
 	deployment := seedDeployment(t, stores, "remove-retry", v1alpha1.DesiredStateDeployed)
 
 	require.NoError(t, stores[v1alpha1.KindDeployment].Delete(ctx, "default", deployment.Metadata.Name, ""))
-	sources := newDeploymentTestSourceIndex(stores)
-	require.NoError(t, sources.Refresh(ctx))
-	deriver := &DeploymentWorkDeriver{Sources: sources, Work: workStore}
-	_, err := deriver.DeriveAll(ctx)
+	controller := newDeploymentTestController(stores, workStore)
+	_, err := controller.FullReconcile(ctx)
 	require.NoError(t, err)
 
 	adapter := &recordingDeploymentAdapter{removeErr: errors.New("temporary remove failure")}
@@ -272,15 +258,12 @@ func TestDeploymentController_DeleteAbandonsPendingApplyWork(t *testing.T) {
 	seedMCPServer(t, stores, "weather")
 	deployment := seedDeployment(t, stores, "delete-with-apply-pending", v1alpha1.DesiredStateDeployed)
 
-	sources := newDeploymentTestSourceIndex(stores)
-	require.NoError(t, sources.Refresh(ctx))
-	deriver := &DeploymentWorkDeriver{Sources: sources, Work: workStore}
-	_, err := deriver.DeriveAll(ctx)
+	controller := newDeploymentTestController(stores, workStore)
+	_, err := controller.FullReconcile(ctx)
 	require.NoError(t, err)
 
 	require.NoError(t, stores[v1alpha1.KindDeployment].Delete(ctx, "default", deployment.Metadata.Name, ""))
-	require.NoError(t, sources.Refresh(ctx))
-	_, err = deriver.DeriveAll(ctx)
+	_, err = controller.FullReconcile(ctx)
 	require.NoError(t, err)
 
 	adapter := &recordingDeploymentAdapter{}
@@ -331,10 +314,8 @@ func TestDeploymentController_DeleteFinalizesWhenRuntimeRefMissing(t *testing.T)
 	require.NoError(t, stores[v1alpha1.KindRuntime].Delete(ctx, "default", "local", ""))
 	require.NoError(t, stores[v1alpha1.KindDeployment].Delete(ctx, "default", deployment.Metadata.Name, ""))
 
-	sources := newDeploymentTestSourceIndex(stores)
-	require.NoError(t, sources.Refresh(ctx))
-	deriver := &DeploymentWorkDeriver{Sources: sources, Work: workStore}
-	_, err := deriver.DeriveAll(ctx)
+	controller := newDeploymentTestController(stores, workStore)
+	_, err := controller.FullReconcile(ctx)
 	require.NoError(t, err)
 
 	adapter := &recordingDeploymentAdapter{}
@@ -382,22 +363,11 @@ func newControllerTestStores(t *testing.T) (map[string]*v1alpha1store.Store, *v1
 	return stores, v1alpha1store.NewReconcileWorkStore(pool), v1alpha1store.NewReconcileEventStore(pool)
 }
 
-func newDeploymentTestSourceIndex(stores map[string]*v1alpha1store.Store) *SourceIndex {
-	return NewSourceIndex(stores, SourceIndexOptions{
-		InitialFinalizers: map[string]func(v1alpha1.Object) []string{
-			v1alpha1.KindDeployment: func(v1alpha1.Object) []string {
-				return []string{DeploymentControllerFinalizer}
-			},
-		},
-	})
-}
-
-func registerKRTDeriverHandlers(t *testing.T, ctx context.Context, deriver *DeploymentWorkDeriver) {
-	t.Helper()
-	for _, reg := range deriver.RegisterKRTHandlers(ctx) {
-		reg := reg
-		t.Cleanup(reg.UnregisterHandler)
-	}
+func newDeploymentTestController(
+	stores map[string]*v1alpha1store.Store,
+	workStore *v1alpha1store.ReconcileWorkStore,
+) *DeploymentController {
+	return &DeploymentController{Stores: stores, Work: workStore}
 }
 
 func newTestExecutor(
