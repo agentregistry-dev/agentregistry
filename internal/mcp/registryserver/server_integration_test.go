@@ -47,8 +47,16 @@ func TestMCPListServers_HappyPath(t *testing.T) {
 
 	serverSession, err := server.Connect(ctx, serverTransport, nil)
 	require.NoError(t, err, "connect MCP server")
+	// Tear the server down with an explicit graceful Close rather than Wait.
+	// Wait blocks for the client to disconnect and surfaces the read/write
+	// error that ended the connection, which races with clientSession.Close:
+	// if the client closes between the server's last write and its read loop
+	// noticing, Wait returns a non-nil "server is closing: EOF" error instead
+	// of nil. Close shuts the server's side of the in-memory transport down
+	// directly and only reports the transport close error (always nil for the
+	// net.Pipe backing NewInMemoryTransports), so teardown is deterministic.
 	defer func() {
-		require.NoError(t, serverSession.Wait())
+		require.NoError(t, serverSession.Close())
 	}()
 
 	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)
