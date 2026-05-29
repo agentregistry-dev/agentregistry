@@ -49,10 +49,10 @@ RUN apt-get update && apt-get install -y \
 
 # Install Docker CLI and Compose plugin for the target architecture
 ARG TARGETARCH
-RUN DOCKER_ARCH=$(case ${TARGETARCH} in \
-        "amd64") echo "x86_64" ;; \
-        "arm64") echo "aarch64" ;; \
-        *) echo "x86_64" ;; \
+RUN DOCKER_ARCH=$(case "${TARGETARCH:-}" in \
+        (amd64) echo "x86_64" ;; \
+        (arm64) echo "aarch64" ;; \
+        (*) echo "x86_64" ;; \
     esac) && \
     wget https://download.docker.com/linux/static/stable/${DOCKER_ARCH}/docker-28.5.1.tgz && \
     tar -xvf docker-28.5.1.tgz && \
@@ -61,15 +61,31 @@ RUN DOCKER_ARCH=$(case ${TARGETARCH} in \
 
 # Install Docker Compose plugin
 ARG TARGETARCH
-RUN DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker} && \
-    COMPOSE_ARCH=$(case ${TARGETARCH} in \
-        "amd64") echo "x86_64" ;; \
-        "arm64") echo "aarch64" ;; \
-        *) echo "x86_64" ;; \
-    esac) && \
-    mkdir -p $DOCKER_CONFIG/cli-plugins && \
-    curl -SL https://github.com/docker/compose/releases/download/v2.40.3/docker-compose-linux-${COMPOSE_ARCH} -o $DOCKER_CONFIG/cli-plugins/docker-compose && \
-    chmod +x $DOCKER_CONFIG/cli-plugins/docker-compose && \
+RUN set -eux; \
+    COMPOSE_ARCH=$(case "${TARGETARCH:-}" in \
+        (amd64) echo "x86_64" ;; \
+        (arm64) echo "aarch64" ;; \
+        (*) echo "x86_64" ;; \
+    esac); \
+    COMPOSE_NAME=docker-compose-linux-${COMPOSE_ARCH}; \
+    COMPOSE_URL=https://github.com/docker/compose/releases/download/v2.40.3; \
+    COMPOSE_DIR=/tmp/docker-compose-download; \
+    for attempt in 1 2 3 4 5; do \
+        rm -rf ${COMPOSE_DIR}; \
+        mkdir -p ${COMPOSE_DIR}; \
+        if curl -fL --retry 3 --retry-delay 2 --retry-all-errors ${COMPOSE_URL}/${COMPOSE_NAME} -o ${COMPOSE_DIR}/${COMPOSE_NAME} && \
+            curl -fL --retry 3 --retry-delay 2 --retry-all-errors ${COMPOSE_URL}/${COMPOSE_NAME}.sha256 -o ${COMPOSE_DIR}/${COMPOSE_NAME}.sha256 && \
+            (cd ${COMPOSE_DIR} && sha256sum -c ${COMPOSE_NAME}.sha256); then \
+            break; \
+        fi; \
+        if [ "$attempt" = "5" ]; then \
+            exit 1; \
+        fi; \
+        sleep 2; \
+    done; \
+    install -d /usr/local/lib/docker/cli-plugins; \
+    install -m 0755 ${COMPOSE_DIR}/${COMPOSE_NAME} /usr/local/lib/docker/cli-plugins/docker-compose; \
+    rm -rf ${COMPOSE_DIR}; \
     docker compose version
 
 COPY --from=builder /app/bin/arctl-server /app/bin/arctl-server
