@@ -319,9 +319,15 @@ Called from templates/validate.yaml so it fires during helm template/install.
 {{- else if and (not .Values.config.existingSecret) (not (regexMatch "^[0-9a-fA-F]+$" .Values.config.jwtPrivateKey)) }}
 {{- $errors = append $errors "config.jwtPrivateKey must be a valid hex string (e.g. generated with: openssl rand -hex 32)." }}
 {{- end }}
+{{- if and .Values.database.postgres.url .Values.database.postgres.secretRef.name }}
+{{- $errors = append $errors "database.postgres.url and database.postgres.secretRef.name are mutually exclusive: set one, not both." }}
+{{- end }}
+{{- if and .Values.database.postgres.bundled.enabled .Values.database.postgres.secretRef.name }}
+{{- $errors = append $errors "database.postgres.secretRef.name is mutually exclusive with database.postgres.bundled.enabled=true: set bundled.enabled=false when sourcing the URL from an external Secret." }}
+{{- end }}
 {{- if not .Values.database.postgres.bundled.enabled }}
-{{- if not .Values.database.postgres.url }}
-{{- $errors = append $errors "database.postgres.url must be set when database.postgres.bundled.enabled=false." }}
+{{- if and (not .Values.database.postgres.url) (not .Values.database.postgres.secretRef.name) }}
+{{- $errors = append $errors "Either database.postgres.url or database.postgres.secretRef.name must be set when database.postgres.bundled.enabled=false." }}
 {{- end }}
 {{- end }}
 {{- range $errors }}

@@ -72,3 +72,31 @@ tests:
       - hasDocuments:
           count: 0
 
+  # ── secretRef-backed external Postgres ────────────────────────────────────
+
+  - it: renders nothing when database.postgres.secretRef.name is set (bundled disabled)
+    set:
+      config.jwtPrivateKey: deadbeef1234567890abcdef
+      database.postgres.bundled.enabled: false
+      database.postgres.secretRef.name: my-postgres-secret
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: fails when database.postgres.url and database.postgres.secretRef.name are both set
+    set:
+      config.jwtPrivateKey: deadbeef1234567890abcdef
+      database.postgres.bundled.enabled: false
+      database.postgres.url: "postgres://user:pass@host:5432/db"
+      database.postgres.secretRef.name: my-postgres-secret
+    asserts:
+      - failedTemplate:
+          errorPattern: "mutually exclusive"
+
+  - it: fails when database.postgres.bundled.enabled=true and database.postgres.secretRef.name is set
+    set:
+      config.jwtPrivateKey: deadbeef1234567890abcdef
+      database.postgres.secretRef.name: my-postgres-secret
+    asserts:
+      - failedTemplate:
+          errorPattern: "mutually exclusive"
