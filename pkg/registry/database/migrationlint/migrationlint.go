@@ -1,6 +1,6 @@
 // Package migrationlint enforces the SQL conventions every migration
-// source must follow, so the OSS set and any downstream (e.g. enterprise)
-// set are held to the same contract. Two rule families:
+// source must follow, so the OSS set and any downstream set are held to
+// the same contract. Two rule families:
 //
 //   - Schema-agnostic: no schema-qualified identifiers, no CREATE SCHEMA,
 //     no SET search_path. The runtime schema is set via the migrator's
@@ -157,6 +157,39 @@ var forbiddenPatterns = []struct {
 	{
 		re:      regexp.MustCompile(`(?i)\bDROP\s+(?:TABLE|INDEX|TRIGGER|FUNCTION)(?:\s+IF\s+EXISTS)?\s+` + qualifiedIdent),
 		message: "DROP addressing a non-default schema is not allowed",
+	},
+	{
+		// Inline foreign-key target — `REFERENCES <schema>.<table>` in a
+		// column or table constraint. No leading statement keyword
+		// introduces these the way CREATE/INSERT/DROP do, so a qualified
+		// FK target has no dedicated rule above and would otherwise slip
+		// through. Matches any schema via qualifiedIdent, so it needs no
+		// schema-name list. An unqualified `REFERENCES bar(id)` has no dot
+		// and does not match.
+		re:      regexp.MustCompile(`(?i)\bREFERENCES\s+` + qualifiedIdent),
+		message: "REFERENCES targeting a non-default schema is not allowed",
+	},
+	{
+		// Qualified table in a FROM/JOIN — a trigger/function body or a
+		// backfill SELECT reaching into another schema. Like REFERENCES,
+		// this is a context no DDL rule above covers. `FROM <table>` /
+		// `JOIN <table>` unqualified has no dot and does not match.
+		re:      regexp.MustCompile(`(?i)\b(?:FROM|JOIN)\s+` + qualifiedIdent),
+		message: "FROM/JOIN targeting a non-default schema is not allowed",
+	},
+	{
+		// `UPDATE <schema>.<table>` — a backfill or in-place data fix
+		// reaching into another schema. Its own keyword, no rule above.
+		// `UPDATE <table>` unqualified has no dot and does not match.
+		re:      regexp.MustCompile(`(?i)\bUPDATE\s+` + qualifiedIdent),
+		message: "UPDATE targeting a non-default schema is not allowed",
+	},
+	{
+		// `TRUNCATE [TABLE] <schema>.<table>`. TRUNCATE accepts an
+		// optional TABLE keyword before the target, so allow it between.
+		// `TRUNCATE <table>` unqualified has no dot and does not match.
+		re:      regexp.MustCompile(`(?i)\bTRUNCATE\s+(?:TABLE\s+)?` + qualifiedIdent),
+		message: "TRUNCATE targeting a non-default schema is not allowed",
 	},
 	{
 		// CONCURRENTLY (CREATE/DROP INDEX, REINDEX) cannot run inside a

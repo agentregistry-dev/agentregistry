@@ -72,9 +72,9 @@ func freshDB(t *testing.T) string {
 // connecting user (e.g. user "agentregistry" → default search_path
 // "$user, public" → schema "agentregistry"), unqualified DDL
 // coincidentally lands in the right place. When the schema name
-// differs (e.g. "agentregistry_enterprise" connecting as
-// "agentregistry"), DDL falls through to "public". NewMigrator
-// works around this by injecting `search_path=<schema>` into the DSN.
+// differs (e.g. a downstream schema like "agentregistry_ext" connecting
+// as "agentregistry"), DDL falls through to "public". NewMigrator works
+// around this by injecting `search_path=<schema>` into the DSN.
 func TestNewMigrator_LandsTablesInTargetSchema(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()

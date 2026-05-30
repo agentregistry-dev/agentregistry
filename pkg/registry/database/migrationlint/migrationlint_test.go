@@ -86,6 +86,44 @@ func TestCheck_FlagsForbiddenPatterns(t *testing.T) {
 			"DROP addressing a non-default schema",
 		},
 		{
+			// Inline FK into another schema — the context that has no
+			// leading-keyword rule of its own.
+			"REFERENCES non-default schema",
+			"CREATE TABLE foo (bar_id int REFERENCES other.bar(id));",
+			"REFERENCES targeting a non-default schema",
+		},
+		{
+			"REFERENCES quoted identifiers",
+			`CREATE TABLE foo (bar_id int REFERENCES "other"."bar"(id));`,
+			"REFERENCES targeting a non-default schema",
+		},
+		{
+			// Qualified table reached through FROM, not a DDL target.
+			"FROM non-default schema",
+			"INSERT INTO foo SELECT id FROM other.bar;",
+			"FROM/JOIN targeting a non-default schema",
+		},
+		{
+			"JOIN non-default schema",
+			"CREATE VIEW v AS SELECT a.id FROM a JOIN other.bar b ON b.id = a.id;",
+			"FROM/JOIN targeting a non-default schema",
+		},
+		{
+			"UPDATE non-default schema",
+			"UPDATE other.foo SET x = 1;",
+			"UPDATE targeting a non-default schema",
+		},
+		{
+			"TRUNCATE non-default schema",
+			"TRUNCATE other.foo;",
+			"TRUNCATE targeting a non-default schema",
+		},
+		{
+			"TRUNCATE TABLE non-default schema",
+			"TRUNCATE TABLE other.foo;",
+			"TRUNCATE targeting a non-default schema",
+		},
+		{
 			"CREATE INDEX CONCURRENTLY non-default schema",
 			"CREATE INDEX CONCURRENTLY foo_idx ON other.foo (id);",
 			"CREATE INDEX targeting a non-default schema",
@@ -198,6 +236,13 @@ func TestCheck_AllowsPlpgsqlBlocks(t *testing.T) {
 		"DO $$ BEGIN\n  IF NOT EXISTS (SELECT 1) THEN\n    NULL;\n  END IF;\nEND $$;",
 		"INSERT INTO audit (action) VALUES ('commit');",
 		"CREATE TABLE foo (commit_sha text);",
+		// Unqualified FK/FROM/UPDATE/TRUNCATE must stay clean — these rules
+		// only fire on a schema-qualified target.
+		"CREATE TABLE foo (bar_id int REFERENCES bar(id));",
+		"INSERT INTO foo SELECT id FROM bar;",
+		"CREATE VIEW v AS SELECT a.id FROM a JOIN b ON b.id = a.id;",
+		"UPDATE foo SET x = 1;",
+		"TRUNCATE TABLE foo;",
 	}
 	for _, body := range bodies {
 		if violations := checkBody(t, body); len(violations) != 0 {

@@ -9,7 +9,7 @@ func TestNewSchema(t *testing.T) {
 		wantErr bool
 	}{
 		{"simple", "agentregistry", false},
-		{"underscore", "agentregistry_enterprise", false},
+		{"underscore", "agentregistry_ext", false},
 		{"leading underscore", "_internal", false},
 		{"empty", "", true},
 		{"mixed case rejected", "MySchema", true},

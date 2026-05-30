@@ -18,11 +18,11 @@
 // source builds the value once at init:
 //
 //	orchestrator.Source{
-//	    Name:      "ent",
-//	    Schema:    database.MustNewSchema("agentregistry_enterprise"),
-//	    Files:     entMigrations,
+//	    Name:      "ext",
+//	    Schema:    database.MustNewSchema("agentregistry_ext"),
+//	    Files:     extMigrations,
 //	    Dir:       "migrations",
-//	    LegacyRun: ent.RunBridge, // func(ctx, *sql.DB, database.Schema) error
+//	    LegacyRun: ext.RunBridge, // func(ctx, *sql.DB, database.Schema) error
 //	}
 //
 // Use database.NewSchema(name) (returns an error) when the name is
