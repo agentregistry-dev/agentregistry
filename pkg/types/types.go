@@ -194,8 +194,7 @@ type AppOptions struct {
 	// migrations should consult this same flag (e.g. via closure
 	// capture from AppOptions construction) to honor the operator's
 	// intent. Wins over the AGENT_REGISTRY_SKIP_MIGRATIONS /
-	// SKIP_MIGRATIONS env fallback when set true. Does not affect
-	// ClickHouse.
+	// SKIP_MIGRATIONS env fallback when set true.
 	SkipMigrations bool
 
 	// RuntimeAdapters registers per-type PostUpsert/PostDelete

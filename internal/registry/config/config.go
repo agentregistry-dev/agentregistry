@@ -38,8 +38,8 @@ type Config struct {
 	// `arctl db migrate up` from CI/CD ahead of the rollout).
 	// Populated from AGENT_REGISTRY_SKIP_MIGRATIONS or the unprefixed
 	// SKIP_MIGRATIONS as a fallback (prefixed wins; see NewConfig).
-	// ClickHouse is not affected. AppOptions.SkipMigrations wins over
-	// this env value when set programmatically.
+	// AppOptions.SkipMigrations wins over this env value when set
+	// programmatically.
 	SkipMigrations bool `env:"SKIP_MIGRATIONS" envDefault:"false"`
 }
 
