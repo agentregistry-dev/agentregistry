@@ -215,6 +215,7 @@ export type McpPackage = {
     registryType: string;
     runtimeArguments?: Array<McpArgument> | null;
     runtimeHint?: string;
+    serverName?: string;
     transport: McpTransport;
     version?: string;
 };

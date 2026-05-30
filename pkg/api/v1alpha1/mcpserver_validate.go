@@ -13,6 +13,23 @@ func (m *MCPServer) Validate() error {
 	return errs
 }
 
+// validateMCPPackageName enforces the upstream MCP-ecosystem catalogue name format
+// for the optional MCPPackage.ServerName field (e.g. "io.github.user/server").
+// Matches the upstream modelcontextprotocol/registry server.json schema for
+// the `name` field.
+func validateMCPPackageName(s string) error {
+	if s == "" {
+		return nil // optional field
+	}
+	if l := len(s); l < UpstreamMCPPackageNameMinLen || l > UpstreamMCPPackageNameMaxLen {
+		return fmt.Errorf("%w: serverName length must be %d-%d chars, got %d", ErrInvalidFormat, UpstreamMCPPackageNameMinLen, UpstreamMCPPackageNameMaxLen, l)
+	}
+	if !UpstreamMCPPackageNameRegex.MatchString(s) {
+		return fmt.Errorf("%w: serverName must match upstream pattern `namespace/name` (e.g. \"io.github.user/server\"): %q", ErrInvalidFormat, s)
+	}
+	return nil
+}
+
 func validateMCPServerSpec(s *MCPServerSpec) FieldErrors {
 	var errs FieldErrors
 	errs.Append("spec.title", validateTitle(s.Title))
@@ -68,6 +85,15 @@ func validateMCPServerSource(src *MCPServerSource) FieldErrors {
 	}
 	if pkg.Transport.Type == "http" && pkg.Transport.Port == 0 {
 		errs.Append("spec.source.package.transport.port", fmt.Errorf("%w: required for http transport", ErrRequiredField))
+	}
+	// MCPB has no ownership concept (the validator ignores serverName), so it's
+	// the only registry type where omitting serverName is allowed.
+	if pkg.RegistryType != "" && pkg.RegistryType != RegistryTypeMCPB && pkg.ServerName == "" {
+		errs.Append("spec.source.package.serverName",
+			fmt.Errorf("%w: required when registryType is %q", ErrRequiredField, pkg.RegistryType))
+	}
+	if err := validateMCPPackageName(pkg.ServerName); err != nil {
+		errs.Append("spec.source.package.serverName", err)
 	}
 	return errs
 }

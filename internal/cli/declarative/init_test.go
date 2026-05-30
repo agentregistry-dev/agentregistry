@@ -113,7 +113,7 @@ func TestInitAgent_ModelProviderFlagFlowsToArctlYAML(t *testing.T) {
 
 // ---- init mcp ----
 
-func TestInitMCP_RequiresNamespaceSlashName(t *testing.T) {
+func TestInitMCP_RejectsNonDNSSubdomainName(t *testing.T) {
 	tmp := t.TempDir()
 	origDir, err := os.Getwd()
 	require.NoError(t, err)
@@ -121,7 +121,7 @@ func TestInitMCP_RequiresNamespaceSlashName(t *testing.T) {
 	defer func() { _ = os.Chdir(origDir) }()
 
 	cmd := declarative.NewInitCmd()
-	cmd.SetArgs([]string{"mcp", "noslash", "--framework", "fastmcp", "--language", "python"})
+	cmd.SetArgs([]string{"mcp", "acme/my-mcp", "--framework", "fastmcp", "--language", "python"})
 	require.Error(t, cmd.Execute())
 }
 
@@ -133,10 +133,10 @@ func TestInitMCP_WritesYAMLAndArctl(t *testing.T) {
 	defer func() { _ = os.Chdir(origDir) }()
 
 	cmd := declarative.NewInitCmd()
-	cmd.SetArgs([]string{"mcp", "acme/my-mcp", "--framework", "fastmcp", "--language", "python"})
+	cmd.SetArgs([]string{"mcp", "my-mcp", "--framework", "fastmcp", "--language", "python"})
 	require.NoError(t, cmd.Execute())
 
-	projectDir := filepath.Join(tmp, "my-mcp") // basename is project dir
+	projectDir := filepath.Join(tmp, "my-mcp")
 	_, err = os.Stat(filepath.Join(projectDir, "mcp.yaml"))
 	require.NoError(t, err)
 

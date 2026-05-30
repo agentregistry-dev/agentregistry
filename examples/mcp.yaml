@@ -1,7 +1,7 @@
 apiVersion: ar.dev/v1alpha1
 kind: MCPServer
 metadata:
-  name: acme/fetch
+  name: acme-fetch
 spec:
   title: Fetch Server
   description: "Fetches and extracts content from URLs"
@@ -12,3 +12,7 @@ spec:
       runtimeHint: docker                       # optional: hint for local runtime
       transport:
         type: stdio                             # stdio | sse | streamable-http
+      # Required for every registryType except mcpb. Must match the
+      # identity the publisher embedded into the published artifact
+      # (e.g. the io.modelcontextprotocol.server.name OCI label, npm mcpName).
+      serverName: acme-fetch

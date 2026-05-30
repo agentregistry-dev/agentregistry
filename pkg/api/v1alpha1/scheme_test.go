@@ -89,6 +89,7 @@ spec:
       version: "0.2"
       transport:
         type: stdio
+      serverName: github-tools
 `)
 	obj, err := Default.Decode(doc)
 	if err != nil {

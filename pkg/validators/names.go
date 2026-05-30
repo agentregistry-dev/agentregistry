@@ -6,28 +6,17 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
-// Name validation patterns
-var (
-	// namespaceRegex validates the namespace part of a server name
-	// - Must start and end with alphanumeric
-	// - Can contain dots and hyphens in the middle
-	// - Minimum 2 characters
-	namespaceRegex = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9]$`)
+// agentNameRegex enforces the strictest rule - names that work BOTH as Python identifiers AND as publishable agent names.
+// Must start with a lowercase letter, followed by lowercase alphanumeric only, minimum 2 characters.
+var agentNameRegex = regexp.MustCompile(`^[a-z][a-z0-9]+$`)
 
-	// serverNamePartRegex validates the name part of a server name
-	// - Must start and end with alphanumeric
-	// - Can contain dots, underscores, and hyphens in the middle
-	// - Minimum 2 characters
-	serverNamePartRegex = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]$`)
-
-	// skillNameRegex matches the database constraint for skill names
-	// - Can contain alphanumeric, underscores, and hyphens
-	skillNameRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
-)
-
-// Python keywords that cannot be used as agent names
+// Python keywords that cannot be used as agent names — agent names become
+// Python identifiers in generated code, so the CLI layer rejects them in
+// addition to the DNS-1123 form.
 var pythonKeywords = map[string]struct{}{
 	"False": {}, "None": {}, "True": {}, "and": {}, "as": {}, "assert": {},
 	"async": {}, "await": {}, "break": {}, "class": {}, "continue": {}, "def": {},
@@ -38,39 +27,46 @@ var pythonKeywords = map[string]struct{}{
 }
 
 // ValidateProjectName checks if the provided project name is valid for use as a directory name.
-// This is a permissive check for filesystem safety.
+// This is a permissive check for filesystem safety, not a resource-name check.
 func ValidateProjectName(name string) error {
 	if name == "" {
 		return fmt.Errorf("project name cannot be empty")
 	}
-
-	// Check for invalid characters
 	if strings.ContainsAny(name, " \t\n\r/\\:*?\"<>|") {
 		return fmt.Errorf("project name contains invalid characters")
 	}
-
-	// Check if it starts with a dot
 	if strings.HasPrefix(name, ".") {
 		return fmt.Errorf("project name cannot start with a dot")
 	}
-
 	return nil
 }
 
-// agentNameRegex enforces the strictest rule - names that work BOTH as Python identifiers AND as publishable agent names.
-// Must start with a letter, followed by alphanumeric only, minimum 2 characters.
-var agentNameRegex = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9]+$`)
+// validateName applies the v1alpha1 DNS-1123 subdomain rule with a
+// kind-aware error message so CLI users see "skill name must be..." rather
+// than the generic backend error.
+func validateName(kind, name string) error {
+	if name == "" {
+		return fmt.Errorf("%s name cannot be empty", kind)
+	}
+	if len(name) > v1alpha1.DNSSubdomainMaxLen {
+		return fmt.Errorf("%s name %q is too long (max %d chars, got %d)", kind, name, v1alpha1.DNSSubdomainMaxLen, len(name))
+	}
+	if !v1alpha1.DNSSubdomainRegex.MatchString(name) {
+		return fmt.Errorf("%s name %q must be DNS-1123 subdomain: lowercase alphanumeric, hyphens, and dots; start/end with alphanumeric; each dot-separated segment 1-63 chars", kind, name)
+	}
+	return nil
+}
 
 // ValidateAgentName checks if the agent name is valid.
-// Allowed: letters and digits only, must start with a letter, minimum 2 characters.
-// Not allowed: underscores, dots, hyphens, or Python keywords.
+// Allowed: lowercase letters and digits only, must start with a letter, minimum 2 characters.
+// Not allowed: uppercase, underscores, dots, hyphens, or Python keywords.
 func ValidateAgentName(name string) error {
 	if name == "" {
 		return fmt.Errorf("agent name cannot be empty")
 	}
 
 	if !agentNameRegex.MatchString(name) {
-		return fmt.Errorf("agent name must start with a letter and contain only letters and digits (no hyphens, underscores, or dots; minimum 2 characters)")
+		return fmt.Errorf("agent name must start with a lowercase letter and contain only lowercase letters and digits (no hyphens, underscores, or dots; minimum 2 characters)")
 	}
 
 	// Reject Python keywords to avoid issues in generated code
@@ -81,48 +77,17 @@ func ValidateAgentName(name string) error {
 	return nil
 }
 
-// ValidateMCPServerName checks if the MCP server name matches the required format.
-// Server name must be in format "namespace/name" where:
-// - namespace: starts/ends with alphanumeric, can contain dots and hyphens, min 2 chars
-// - name: starts/ends with alphanumeric, can contain dots, underscores, and hyphens, min 2 chars
-func ValidateMCPServerName(name string) error {
-	if name == "" {
-		return fmt.Errorf("server name cannot be empty")
-	}
-
-	parts := strings.SplitN(name, "/", 2)
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return fmt.Errorf("server name must be in format 'namespace/name'")
-	}
-
-	namespace, serverName := parts[0], parts[1]
-
-	if len(namespace) < 2 {
-		return fmt.Errorf("namespace must be at least 2 characters")
-	}
-	if len(serverName) < 2 {
-		return fmt.Errorf("server name part must be at least 2 characters")
-	}
-
-	if !namespaceRegex.MatchString(namespace) {
-		return fmt.Errorf("invalid namespace %q: must start and end with alphanumeric, can contain letters, numbers, dots (.), and hyphens (-)", namespace)
-	}
-
-	if !serverNamePartRegex.MatchString(serverName) {
-		return fmt.Errorf("invalid server name %q: must start and end with alphanumeric, can contain letters, numbers, dots (.), underscores (_), and hyphens (-)", serverName)
-	}
-
-	return nil
+// ValidateSkillName enforces DNS-1123 subdomain form.
+func ValidateSkillName(name string) error {
+	return validateName("skill", name)
 }
 
-// ValidateSkillName checks if the skill name matches the required format for registry storage.
-// Skill names can contain alphanumeric characters, underscores, and hyphens.
-func ValidateSkillName(name string) error {
-	if name == "" {
-		return fmt.Errorf("skill name cannot be empty")
-	}
-	if !skillNameRegex.MatchString(name) {
-		return fmt.Errorf("invalid skill name %q: can only contain letters, numbers, underscores (_), and hyphens (-)", name)
-	}
-	return nil
+// ValidatePromptName enforces DNS-1123 subdomain form.
+func ValidatePromptName(name string) error {
+	return validateName("prompt", name)
+}
+
+// ValidateMCPServerName enforces DNS-1123 subdomain form.
+func ValidateMCPServerName(name string) error {
+	return validateName("MCP server", name)
 }

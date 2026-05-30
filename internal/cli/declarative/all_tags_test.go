@@ -64,8 +64,8 @@ func tagsListServer(t *testing.T, rows []v1alpha1.Agent) (*httptest.Server, *[]s
 // returned by the server.
 func TestGet_AllTags_Agent_PrintsAllRows(t *testing.T) {
 	rows := []v1alpha1.Agent{
-		agentTagFixture("acme/bot", "2"),
-		agentTagFixture("acme/bot", "1"),
+		agentTagFixture("acme-bot", "2"),
+		agentTagFixture("acme-bot", "1"),
 	}
 	srv, _ := tagsListServer(t, rows)
 	setupClientForServer(t, srv)
@@ -74,7 +74,7 @@ func TestGet_AllTags_Agent_PrintsAllRows(t *testing.T) {
 	cmd := declarative.NewGetCmd()
 	cmd.SetOut(out)
 	cmd.SetErr(out)
-	cmd.SetArgs([]string{"agent", "acme/bot", "--all-tags"})
+	cmd.SetArgs([]string{"agent", "acme-bot", "--all-tags"})
 	require.NoError(t, cmd.Execute())
 
 	got := out.String()
@@ -82,8 +82,8 @@ func TestGet_AllTags_Agent_PrintsAllRows(t *testing.T) {
 	// each tag. Counting occurrences of the name pins
 	// "two rows printed" rather than "two tags appeared anywhere
 	// in any column".
-	assert.Equal(t, 2, strings.Count(got, "acme/bot"), "expected two rows in:\n%s", got)
-	for _, line := range []string{"acme/bot   2", "acme/bot   1"} {
+	assert.Equal(t, 2, strings.Count(got, "acme-bot"), "expected two rows in:\n%s", got)
+	for _, line := range []string{"acme-bot   2", "acme-bot   1"} {
 		assert.Contains(t, got, line, "expected %q in output:\n%s", line, got)
 	}
 }
@@ -92,8 +92,8 @@ func TestGet_AllTags_Agent_PrintsAllRows(t *testing.T) {
 // envelopes — verifies the multi-row YAML/JSON path also works.
 func TestGet_AllTags_Agent_JSONOutput(t *testing.T) {
 	rows := []v1alpha1.Agent{
-		agentTagFixture("acme/bot", "2"),
-		agentTagFixture("acme/bot", "1"),
+		agentTagFixture("acme-bot", "2"),
+		agentTagFixture("acme-bot", "1"),
 	}
 	srv, _ := tagsListServer(t, rows)
 	setupClientForServer(t, srv)
@@ -102,7 +102,7 @@ func TestGet_AllTags_Agent_JSONOutput(t *testing.T) {
 	cmd := declarative.NewGetCmd()
 	cmd.SetOut(out)
 	cmd.SetErr(out)
-	cmd.SetArgs([]string{"agent", "acme/bot", "--all-tags", "-o", "json"})
+	cmd.SetArgs([]string{"agent", "acme-bot", "--all-tags", "-o", "json"})
 	require.NoError(t, cmd.Execute())
 
 	var got []v1alpha1.Agent
@@ -199,8 +199,8 @@ func deleteAllTagsServer(t *testing.T, rows []v1alpha1.Agent, failTag string) (*
 // exact tag so omitted-tag declarative delete can continue to mean "latest".
 func TestDelete_AllTags_Agent_DeletesEveryListedTag(t *testing.T) {
 	rows := []v1alpha1.Agent{
-		agentTagFixture("acme/bot", "stable"),
-		agentTagFixture("acme/bot", "latest"),
+		agentTagFixture("acme-bot", "stable"),
+		agentTagFixture("acme-bot", "latest"),
 	}
 	srv, paths := deleteAllTagsServer(t, rows, "")
 	setupClientForServer(t, srv)
@@ -209,12 +209,12 @@ func TestDelete_AllTags_Agent_DeletesEveryListedTag(t *testing.T) {
 	cmd := declarative.NewDeleteCmd()
 	cmd.SetOut(out)
 	cmd.SetErr(out)
-	cmd.SetArgs([]string{"agent", "acme/bot", "--all-tags"})
+	cmd.SetArgs([]string{"agent", "acme-bot", "--all-tags"})
 	require.NoError(t, cmd.Execute())
 
-	require.Contains(t, *paths, "GET /v0/agents/acme/bot/tags")
-	require.Contains(t, *paths, "DELETE /v0/agents/acme/bot/stable")
-	require.Contains(t, *paths, "DELETE /v0/agents/acme/bot/latest")
+	require.Contains(t, *paths, "GET /v0/agents/acme-bot/tags")
+	require.Contains(t, *paths, "DELETE /v0/agents/acme-bot/stable")
+	require.Contains(t, *paths, "DELETE /v0/agents/acme-bot/latest")
 	assert.Contains(t, out.String(), "all tags")
 }
 
@@ -247,7 +247,7 @@ func TestDelete_AllTags_ProviderRejected(t *testing.T) {
 // exact-tag and all-tags modes are mutually exclusive.
 func TestDelete_AllTags_AndTagMutuallyExclusive(t *testing.T) {
 	cmd := declarative.NewDeleteCmd()
-	cmd.SetArgs([]string{"agent", "acme/bot", "--all-tags", "--tag", "1"})
+	cmd.SetArgs([]string{"agent", "acme-bot", "--all-tags", "--tag", "1"})
 	err := cmd.Execute()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "mutually exclusive")
@@ -255,12 +255,12 @@ func TestDelete_AllTags_AndTagMutuallyExclusive(t *testing.T) {
 
 // (9) An exact-tag delete failure is surfaced by the CLI.
 func TestDelete_AllTags_PropagatesServerFailure(t *testing.T) {
-	rows := []v1alpha1.Agent{agentTagFixture("acme/bot", "stable")}
+	rows := []v1alpha1.Agent{agentTagFixture("acme-bot", "stable")}
 	srv, _ := deleteAllTagsServer(t, rows, "stable")
 	setupClientForServer(t, srv)
 
 	cmd := declarative.NewDeleteCmd()
-	cmd.SetArgs([]string{"agent", "acme/bot", "--all-tags"})
+	cmd.SetArgs([]string{"agent", "acme-bot", "--all-tags"})
 	err := cmd.Execute()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "boom")

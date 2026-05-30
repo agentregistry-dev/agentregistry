@@ -47,7 +47,7 @@ func setupDeleteClient(t *testing.T, srv *httptest.Server) {
 // TestDeleteFileModeUsesDeleteApplyEndpoint verifies that -f sends DELETE to /v0/apply.
 func TestDeleteFileModeUsesDeleteApplyEndpoint(t *testing.T) {
 	results := []arv0.ApplyResult{
-		{Kind: "agent", Name: "acme/bot", Tag: "1.0.0", Status: arv0.ApplyStatusDeleted},
+		{Kind: "agent", Name: "acme-bot", Tag: "1.0.0", Status: arv0.ApplyStatusDeleted},
 	}
 	srv, captured := newDeleteTestServer(t, results)
 	setupDeleteClient(t, srv)
@@ -66,7 +66,7 @@ func TestDeleteFileModeUsesDeleteApplyEndpoint(t *testing.T) {
 // TestDeleteFileModeReportsResults verifies that per-resource results are printed.
 func TestDeleteFileModeReportsResults(t *testing.T) {
 	results := []arv0.ApplyResult{
-		{Kind: "agent", Name: "acme/bot", Tag: "1.0.0", Status: arv0.ApplyStatusDeleted},
+		{Kind: "agent", Name: "acme-bot", Tag: "1.0.0", Status: arv0.ApplyStatusDeleted},
 	}
 	srv, _ := newDeleteTestServer(t, results)
 	setupDeleteClient(t, srv)
@@ -78,13 +78,13 @@ func TestDeleteFileModeReportsResults(t *testing.T) {
 	cmd.SetArgs([]string{"-f", writeTempYAML(t, agentYAML)})
 	require.NoError(t, cmd.Execute())
 
-	assert.Contains(t, out.String(), "agent/acme/bot")
+	assert.Contains(t, out.String(), "agent/acme-bot")
 }
 
 // TestDeleteFileModeFailedResultsReturnError verifies that a failed result causes non-zero exit.
 func TestDeleteFileModeFailedResultsReturnError(t *testing.T) {
 	results := []arv0.ApplyResult{
-		{Kind: "agent", Name: "acme/bot", Status: arv0.ApplyStatusFailed, Error: "not found"},
+		{Kind: "agent", Name: "acme-bot", Status: arv0.ApplyStatusFailed, Error: "not found"},
 	}
 	srv, _ := newDeleteTestServer(t, results)
 	setupDeleteClient(t, srv)
@@ -104,7 +104,7 @@ func TestDeleteFileModeRejectsUnknownKind(t *testing.T) {
 	badYAML := `apiVersion: ar.dev/v1alpha1
 kind: UnknownKind
 metadata:
-  name: acme/test
+  name: acme-test
 spec:
   description: "test"
 `

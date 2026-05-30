@@ -68,6 +68,12 @@ type PostUpsert func(ctx context.Context, obj v1alpha1.Object) error
 // batch's per-doc delete hook.
 type PostDelete func(ctx context.Context, obj v1alpha1.Object) error
 
+// Prepare runs after validation and before Store.Upsert on a
+// v1alpha1 resource. Wired into resource.Config.Prepare + the apply
+// batch's per-doc prepare hook. Used to mutate the decoded object
+// before persistence (e.g. strip sensitive spec fields).
+type Prepare func(ctx context.Context, obj v1alpha1.Object) error
+
 const (
 	AdmissionSourceApply  = "apply"
 	AdmissionSourceDelete = "delete"
@@ -242,6 +248,13 @@ type AppOptions struct {
 
 	// PostDeletes mirror PostUpserts on the delete path.
 	PostDeletes map[string]PostDelete
+
+	// Prepares run per-kind after validation and before Store.Upsert on
+	// both the dedicated PUT route and the batch /v0/apply path. Keyed by
+	// canonical Kind. Used to mutate the decoded object before persistence
+	// (e.g. strip sensitive spec fields). Missing keys = no prepare
+	// hook for that kind.
+	Prepares map[string]Prepare
 
 	// Admission optionally accepts a validated write before the row reaches
 	// production storage. Nil preserves normal direct writes.

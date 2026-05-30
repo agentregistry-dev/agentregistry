@@ -446,6 +446,8 @@ components:
           - "null"
         runtimeHint:
           type: string
+        serverName:
+          type: string
         transport:
           $ref: '#/components/schemas/MCPTransport'
         version:

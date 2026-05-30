@@ -113,6 +113,14 @@ type Config struct {
 	// and writes the terminal Removed condition.
 	PostDelete func(ctx context.Context, obj v1alpha1.Object) error
 
+	// Prepare is optional; when set, the apply handler invokes it after
+	// validation (refs/registries) and before admission/Store.Upsert, so
+	// the kind can mutate the decoded object before it is persisted (e.g.
+	// strip sensitive spec fields). Runs on both the dedicated PUT
+	// route and the batch /v0/apply path. Hook errors short-circuit the
+	// write and surface to the caller.
+	Prepare func(ctx context.Context, obj v1alpha1.Object) error
+
 	// DeleteAdmission optionally owns the final delete after authz. Nil uses
 	// ProductionDeleteAdmission, which deletes from the configured Store and
 	// runs PostDelete.
@@ -498,6 +506,7 @@ func registerApplyMutable[T v1alpha1.Object](api huma.API, cfg Config, newObj fu
 			RegistryValidator: cfg.RegistryValidator,
 			PostUpsert:        cfg.PostUpsert,
 			InitialFinalizers: cfg.InitialFinalizers,
+			Prepare:           cfg.Prepare,
 		}, false); ae != nil {
 			return nil, mapApplyErrorToHuma(ae, kind, ns, name, "")
 		}

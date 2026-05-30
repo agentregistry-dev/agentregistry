@@ -37,10 +37,10 @@ Examples:
   arctl get agents --tag stable          # list rows with a specific tag
   arctl get agents --latest              # list rows pinned to the "latest" tag
   arctl get mcps
-  arctl get agent acme/summarizer
-  arctl get agent acme/summarizer -o yaml
-  arctl get agent acme/summarizer --tag stable
-  arctl get agent acme/summarizer --all-tags
+  arctl get agent acme-summarizer
+  arctl get agent acme-summarizer -o yaml
+  arctl get agent acme-summarizer --tag stable
+  arctl get agent acme-summarizer --all-tags
   arctl get skills -o json`,
 		Args:         cobra.RangeArgs(1, 2),
 		SilenceUsage: true,

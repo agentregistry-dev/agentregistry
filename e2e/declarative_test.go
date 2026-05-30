@@ -42,11 +42,9 @@ func writeDeclarativeYAML(t *testing.T, dir, filename, content string) string {
 // Namespace is implicit ("default") and elided from the path post-flatten;
 // callers that target a non-default namespace pass `?namespace=...` directly.
 //
-// Resource names that contain "/" (common for MCPServer identifiers like
-// "e2e-test/decl-mcp-123") are URL-encoded into a single path segment so
-// Huma's router treats them as one {name} parameter. Apply stores these
-// names literally under the default namespace; the CLI itself uses
-// url.PathEscape on delete/get, so the HTTP client must match.
+// All v1alpha1 resource names are DNS-1123 subdomain (no "/"), so PathEscape
+// is a no-op in practice. Kept for safety against any future shape that needs
+// URL-encoding.
 func resourceURL(regURL, resource, name, tag string) string {
 	return fmt.Sprintf("%s/%s/%s/%s",
 		regURL, resource, url.PathEscape(name), tag)
@@ -217,7 +215,7 @@ func TestDeclarativeApply_MCPServer(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 
-	serverName := "e2e-test/" + UniqueNameWithPrefix("decl-mcp")
+	serverName := "e2etest-" + UniqueNameWithPrefix("decl-mcp")
 	tag := defaultArtifactTag
 
 	// Clean up any stale entry.
@@ -255,7 +253,7 @@ func TestDeclarativeApply_MultiDoc(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 
-	serverName := "e2e-test/" + UniqueNameWithPrefix("decl-multi-mcp")
+	serverName := "e2etest-" + UniqueNameWithPrefix("decl-multi-mcp")
 	agentName := UniqueAgentName("declmultiagent")
 	tag := defaultArtifactTag
 
@@ -397,17 +395,15 @@ func TestDeclarativeInit_Agent(t *testing.T) {
 // declarative mcp.yaml (offline, no registry required for generation).
 func TestDeclarativeInit_MCP(t *testing.T) {
 	tmpDir := t.TempDir()
-	// MCP names must be namespace/name format.
-	dirName := UniqueNameWithPrefix("initmcp")
-	fullName := "e2e-test/" + dirName
+	// MCP names must be DNS-1123 subdomain.
+	name := UniqueNameWithPrefix("e2etest-initmcp")
 
 	// init is offline — no registry-url needed.
-	result := RunArctl(t, tmpDir, "init", "mcp", fullName, "--framework", "fastmcp", "--language", "python")
+	result := RunArctl(t, tmpDir, "init", "mcp", name, "--framework", "fastmcp", "--language", "python")
 	RequireSuccess(t, result)
 	RequireOutputContains(t, result, "✓ Created MCP server:")
 
-	// Directory uses just the name part after "/".
-	mcpYAMLPath := filepath.Join(tmpDir, dirName, "mcp.yaml")
+	mcpYAMLPath := filepath.Join(tmpDir, name, "mcp.yaml")
 	RequireFileExists(t, mcpYAMLPath)
 
 	m := parseDeclarativeYAML(t, mcpYAMLPath)
@@ -418,8 +414,8 @@ func TestDeclarativeInit_MCP(t *testing.T) {
 		t.Errorf("expected kind MCPServer, got %v", m["kind"])
 	}
 	metadata, _ := m["metadata"].(map[string]any)
-	if metadata["name"] != fullName {
-		t.Errorf("expected metadata.name %q, got %v", fullName, metadata["name"])
+	if metadata["name"] != name {
+		t.Errorf("expected metadata.name %q, got %v", name, metadata["name"])
 	}
 	spec, _ := m["spec"].(map[string]any)
 	source, ok := spec["source"].(map[string]any)
@@ -553,17 +549,16 @@ func TestDeclarativeBuild_MCP(t *testing.T) {
 	skipIfNoDocker(t)
 	tmpDir := t.TempDir()
 
-	// MCP names must be namespace/name format; directory uses just the name part.
-	dirName := UniqueNameWithPrefix("bldmcp")
-	fullName := "e2e-test/" + dirName
-	image := "localhost:5001/" + dirName + ":latest"
+	// MCP names must be DNS-1123 subdomain.
+	name := UniqueNameWithPrefix("e2etest-bldmcp")
+	image := "localhost:5001/" + name + ":latest"
 	CleanupDockerImage(t, image)
 
 	// Step 1: init the project.
-	result := RunArctl(t, tmpDir, "init", "mcp", fullName, "--framework", "fastmcp", "--language", "python")
+	result := RunArctl(t, tmpDir, "init", "mcp", name, "--framework", "fastmcp", "--language", "python")
 	RequireSuccess(t, result)
 
-	projectDir := filepath.Join(tmpDir, dirName)
+	projectDir := filepath.Join(tmpDir, name)
 	RequireDirExists(t, projectDir)
 
 	// Step 2: build the Docker image.
@@ -627,7 +622,7 @@ func TestDeclarativeInit_InvalidArgs(t *testing.T) {
 		},
 		{
 			name:        "mcp unsupported framework",
-			args:        []string{"init", "mcp", "acme/myserver", "--framework", "typescript", "--language", "python"},
+			args:        []string{"init", "mcp", "myserver", "--framework", "typescript", "--language", "python"},
 			errContains: "no mcp framework",
 		},
 	}
@@ -792,7 +787,7 @@ func TestDeclarativeApply_MCPServer_Idempotent(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 
-	serverName := "e2e-test/" + UniqueNameWithPrefix("decl-mcp-idemp")
+	serverName := "e2etest-" + UniqueNameWithPrefix("decl-mcp-idemp")
 	tag := defaultArtifactTag
 
 	RunArctl(t, tmpDir, "delete", "mcp", serverName, "--tag", tag, "--registry-url", regURL)
@@ -1320,7 +1315,7 @@ func TestDeclarative_MCPRoundTrip(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 
-	serverName := "e2e-test/" + UniqueNameWithPrefix("mcp-rt")
+	serverName := "e2etest-" + UniqueNameWithPrefix("mcp-rt")
 	tag := defaultArtifactTag
 
 	RunArctl(t, tmpDir, "delete", "mcp", serverName, "--tag", tag, "--registry-url", regURL)
@@ -1543,7 +1538,7 @@ func TestDeclarative_DeleteFileMultiKind(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	agentName := UniqueAgentName("delmulti")
-	mcpName := "e2e-test/" + UniqueNameWithPrefix("delmulti-mcp")
+	mcpName := "e2etest-" + UniqueNameWithPrefix("delmulti-mcp")
 	skillName := UniqueNameWithPrefix("delmulti-skill")
 	promptName := UniqueNameWithPrefix("delmulti-prompt")
 	tag := defaultArtifactTag
@@ -1677,15 +1672,14 @@ func TestMCPBuild_EnvelopeManifest(t *testing.T) {
 	skipIfNoDocker(t)
 	tmpDir := t.TempDir()
 
-	dirName := UniqueNameWithPrefix("envmcp")
-	fullName := "e2e-test/" + dirName
-	image := "localhost:5001/" + dirName + ":latest"
+	name := UniqueNameWithPrefix("e2etest-envmcp")
+	image := "localhost:5001/" + name + ":latest"
 	CleanupDockerImage(t, image)
 
-	result := RunArctl(t, tmpDir, "init", "mcp", fullName, "--framework", "fastmcp", "--language", "python")
+	result := RunArctl(t, tmpDir, "init", "mcp", name, "--framework", "fastmcp", "--language", "python")
 	RequireSuccess(t, result)
 
-	projectDir := filepath.Join(tmpDir, dirName)
+	projectDir := filepath.Join(tmpDir, name)
 	RequireDirExists(t, projectDir)
 
 	RequireFileContains(t, filepath.Join(projectDir, "mcp.yaml"), "apiVersion: ar.dev/v1alpha1")
@@ -1723,7 +1717,7 @@ func TestDeclarativeApply_InvalidKind(t *testing.T) {
 	invalidYAML := `apiVersion: ar.dev/v1alpha1
 kind: NotARealKind
 metadata:
-  name: e2e-test/invalid-kind
+  name: e2etest-invalid-kind
 spec:
   description: "bogus kind for client-side rejection test"
 `
@@ -1882,7 +1876,7 @@ spec:
 func TestMCPServer_PackagesShape(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
-	serverName := "user/" + UniqueNameWithPrefix("e2epkg")
+	serverName := UniqueNameWithPrefix("e2etest-pkg")
 	tag := defaultArtifactTag
 
 	t.Cleanup(func() {
@@ -1907,9 +1901,10 @@ spec:
     package:
       registryType: oci
       identifier: %s
+      serverName: %s
       transport:
         type: stdio
-`, serverName, imageRef)
+`, serverName, imageRef, serverName)
 
 	path := writeDeclarativeYAML(t, tmpDir, "mcp-pkg.yaml", yaml)
 	result := RunArctl(t, tmpDir, "apply", "-f", path, "--registry-url", regURL)
@@ -1935,10 +1930,7 @@ spec:
 func TestMCPServer_RemoteShape(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
-	// The server's MCP validator requires the namespace of metadata.name to
-	// be the reverse-DNS of the remote URL host. URL below is
-	// https://mcp.example.com/mcp → host mcp.example.com → namespace com.example.mcp.
-	serverName := "com.example.mcp/" + UniqueNameWithPrefix("e2erem")
+	serverName := UniqueNameWithPrefix("e2etest-rem")
 	tag := defaultArtifactTag
 
 	t.Cleanup(func() {
@@ -1980,7 +1972,7 @@ spec:
 func TestMCPServer_RepositoryShape(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
-	serverName := "repo/" + UniqueNameWithPrefix("e2erepo")
+	serverName := UniqueNameWithPrefix("e2etest-repo")
 	tag := defaultArtifactTag
 
 	t.Cleanup(func() {

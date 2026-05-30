@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
@@ -107,29 +108,12 @@ func tagGetServer(t *testing.T, latest, specific v1alpha1.Agent) (*httptest.Serv
 		}
 		// /v0/agents/{name-escaped}/{tag} → specific
 		// /v0/agents/{name-escaped}       → latest
-		// Path comes in already URL-decoded for matching.
 		w.Header().Set("Content-Type", "application/json")
-		// Distinguish by the trailing path segment count.
-		// Strip "/v0/agents/" prefix.
-		if len(r.URL.Path) > len("/v0/agents/") {
-			rest := r.URL.Path[len("/v0/agents/"):]
-			// rest is e.g. "acme%2Fbot" (latest) or "acme%2Fbot/1" (specific).
-			// Stdlib net/http decodes %2F back to "/" in r.URL.Path, so a name
-			// "acme/bot" appears as literal slashes. We match on whether
-			// there's an extra trailing segment beyond the name.
-			// Easiest: count slashes in rest minus the name's slashes.
-			// In our fixtures the agent name is "acme/bot" (one slash);
-			// specific paths have two slashes.
-			slashes := 0
-			for i := 0; i < len(rest); i++ {
-				if rest[i] == '/' {
-					slashes++
-				}
-			}
-			if slashes >= 2 {
-				_ = json.NewEncoder(w).Encode(specific)
-				return
-			}
+		// /v0/agents/<name>       → latest
+		// /v0/agents/<name>/<tag> → specific
+		if strings.Count(r.URL.Path[len("/v0/agents/"):], "/") >= 1 {
+			_ = json.NewEncoder(w).Encode(specific)
+			return
 		}
 		_ = json.NewEncoder(w).Encode(latest)
 	}))
@@ -140,8 +124,8 @@ func tagGetServer(t *testing.T, latest, specific v1alpha1.Agent) (*httptest.Serv
 // TestGet_Tag_FetchesSpecificTag verifies the --tag flag fetches the exact
 // tag endpoint and renders that tag's envelope.
 func TestGet_Tag_FetchesSpecificTag(t *testing.T) {
-	v1 := agentTagFixture("acme/bot", "1")
-	v2 := agentTagFixture("acme/bot", "2")
+	v1 := agentTagFixture("acme-bot", "1")
+	v2 := agentTagFixture("acme-bot", "2")
 	srv, captured := tagGetServer(t, v2, v1)
 	setupClientForServer(t, srv)
 
@@ -149,7 +133,7 @@ func TestGet_Tag_FetchesSpecificTag(t *testing.T) {
 	cmd := declarative.NewGetCmd()
 	cmd.SetOut(out)
 	cmd.SetErr(out)
-	cmd.SetArgs([]string{"agent", "acme/bot", "--tag", "1", "-o", "json"})
+	cmd.SetArgs([]string{"agent", "acme-bot", "--tag", "1", "-o", "json"})
 	require.NoError(t, cmd.Execute())
 
 	var got v1alpha1.Agent
@@ -161,8 +145,8 @@ func TestGet_Tag_FetchesSpecificTag(t *testing.T) {
 	require.NotEmpty(t, *captured)
 	hitSpecific := false
 	for _, p := range *captured {
-		// "GET /v0/agents/acme/bot/1" → 3 slashes after "/v0/agents/".
-		if p == "GET /v0/agents/acme/bot/1" {
+		// "GET /v0/agents/acme-bot/1" → 3 slashes after "/v0/agents/".
+		if p == "GET /v0/agents/acme-bot/1" {
 			hitSpecific = true
 		}
 	}
@@ -172,8 +156,8 @@ func TestGet_Tag_FetchesSpecificTag(t *testing.T) {
 // TestGet_Tag_DefaultsToLatest verifies that omitting --tag still
 // hits the latest endpoint (no regression from --tag wiring).
 func TestGet_Tag_DefaultsToLatest(t *testing.T) {
-	v1 := agentTagFixture("acme/bot", "1")
-	v2 := agentTagFixture("acme/bot", "2")
+	v1 := agentTagFixture("acme-bot", "1")
+	v2 := agentTagFixture("acme-bot", "2")
 	srv, captured := tagGetServer(t, v2, v1)
 	setupClientForServer(t, srv)
 
@@ -181,7 +165,7 @@ func TestGet_Tag_DefaultsToLatest(t *testing.T) {
 	cmd := declarative.NewGetCmd()
 	cmd.SetOut(out)
 	cmd.SetErr(out)
-	cmd.SetArgs([]string{"agent", "acme/bot", "-o", "json"})
+	cmd.SetArgs([]string{"agent", "acme-bot", "-o", "json"})
 	require.NoError(t, cmd.Execute())
 
 	var got v1alpha1.Agent
@@ -190,7 +174,7 @@ func TestGet_Tag_DefaultsToLatest(t *testing.T) {
 
 	// All served calls should be the latest path (no tag segment).
 	for _, p := range *captured {
-		assert.Equal(t, "GET /v0/agents/acme/bot", p,
+		assert.Equal(t, "GET /v0/agents/acme-bot", p,
 			"expected only latest-path GETs, got %v", *captured)
 	}
 }
@@ -202,7 +186,7 @@ func TestGet_Tag_MutuallyExclusiveWithAllTags(t *testing.T) {
 	t.Cleanup(func() { declarative.SetAPIClient(nil) })
 
 	cmd := declarative.NewGetCmd()
-	cmd.SetArgs([]string{"agent", "acme/bot", "--tag", "1", "--all-tags"})
+	cmd.SetArgs([]string{"agent", "acme-bot", "--tag", "1", "--all-tags"})
 	err := cmd.Execute()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "mutually exclusive")

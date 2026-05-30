@@ -240,15 +240,6 @@ interface LegacyCreateOpts<Body> {
   body: Body
 }
 
-// splitName turns the legacy "namespace/name" identifier into
-// the (namespace, name) pair the envelope expects. Names without a
-// namespace fall back to "default".
-function splitName(fullName: string): { namespace: string; name: string } {
-  const idx = fullName.indexOf("/")
-  if (idx < 0) return { namespace: "default", name: fullName }
-  return { namespace: fullName.slice(0, idx), name: fullName.slice(idx + 1) }
-}
-
 function stripLegacy<T extends { name: string; tag: string }>(body: T): object {
   const { name: _n, tag: _t, ...rest } = body as T & { $schema?: string }
   delete (rest as { $schema?: string }).$schema
@@ -277,12 +268,13 @@ async function applySingleDoc<T>(envelope: T & { kind?: string; metadata: { name
 export async function createServerV0(opts: LegacyCreateOpts<ServerJson>): Promise<{
   data: ServerResponse
 }> {
-  const { namespace, name } = splitName(opts.body.name)
+  // MCPServer.metadata.name is DNS-1123 subdomain; do not split on "/".
+  // The name does NOT represent a "NAMESPACE/NAME" format.
   const spec = stripLegacy(opts.body) as McpServerSpec
   const envelope: McpServer = {
     apiVersion: "ar.dev/v1alpha1",
     kind: "MCPServer",
-    metadata: { namespace, name, tag: opts.body.tag },
+    metadata: { namespace: "default", name: opts.body.name, tag: opts.body.tag },
     spec,
   }
   await applySingleDoc(envelope)
@@ -292,12 +284,12 @@ export async function createServerV0(opts: LegacyCreateOpts<ServerJson>): Promis
 export async function createSkillV0(opts: LegacyCreateOpts<SkillJson>): Promise<{
   data: SkillResponse
 }> {
-  const { namespace, name } = splitName(opts.body.name)
+  // Skill.metadata.name is DNS-1123 subdomain; no slash to split.
   const spec = stripLegacy(opts.body) as SkillSpec
   const envelope: Skill = {
     apiVersion: "ar.dev/v1alpha1",
     kind: "Skill",
-    metadata: { namespace, name, tag: opts.body.tag },
+    metadata: { namespace: "default", name: opts.body.name, tag: opts.body.tag },
     spec,
   }
   await applySingleDoc(envelope)
@@ -307,12 +299,12 @@ export async function createSkillV0(opts: LegacyCreateOpts<SkillJson>): Promise<
 export async function createPromptV0(opts: LegacyCreateOpts<PromptJson>): Promise<{
   data: PromptResponse
 }> {
-  const { namespace, name } = splitName(opts.body.name)
+  // Prompt.metadata.name is DNS-1123 subdomain; no slash to split.
   const spec = stripLegacy(opts.body) as PromptSpec
   const envelope: Prompt = {
     apiVersion: "ar.dev/v1alpha1",
     kind: "Prompt",
-    metadata: { namespace, name, tag: opts.body.tag },
+    metadata: { namespace: "default", name: opts.body.name, tag: opts.body.tag },
     spec,
   }
   await applySingleDoc(envelope)
@@ -349,7 +341,9 @@ function resourceTypeToKind(rt?: string): string {
 export async function deployServer(opts: { throwOnError?: true; body: DeployServerBody }): Promise<{
   data: Deployment
 }> {
-  const { namespace, name } = splitName(opts.body.serverName)
+  // serverName is a DNS-1123 subdomain; no slash to split.
+  const namespace = "default"
+  const name = opts.body.serverName
   const kind = resourceTypeToKind(opts.body.resourceType)
   // Deployment name is derived from the (kind, target name) pair so that
   // multiple deployments of different resource types can coexist in a

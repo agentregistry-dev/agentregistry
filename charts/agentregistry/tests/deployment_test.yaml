@@ -243,3 +243,68 @@ tests:
     asserts:
       - isNull:
           path: spec.template.spec.initContainers
+
+  # ── secretRef-backed external Postgres ──────────────────────────────────────
+
+  - it: sets AGENT_REGISTRY_DATABASE_URL via valueFrom.secretKeyRef when database.postgres.secretRef.name is set
+    template: deployment.yaml
+    set:
+      database.postgres.bundled.enabled: false
+      database.postgres.secretRef.name: my-postgres-secret
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AGENT_REGISTRY_DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: my-postgres-secret
+                key: AGENT_REGISTRY_DATABASE_URL
+
+  - it: uses custom secret key when database.postgres.secretRef.key is set
+    template: deployment.yaml
+    set:
+      database.postgres.bundled.enabled: false
+      database.postgres.secretRef.name: my-postgres-secret
+      database.postgres.secretRef.key: DB_URL
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AGENT_REGISTRY_DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: my-postgres-secret
+                key: DB_URL
+
+  - it: does not inject POSTGRES_PASSWORD when database.postgres.secretRef.name is set
+    template: deployment.yaml
+    set:
+      database.postgres.bundled.enabled: false
+      database.postgres.secretRef.name: my-postgres-secret
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POSTGRES_PASSWORD
+
+  - it: does not render a plain value entry for AGENT_REGISTRY_DATABASE_URL when secretRef.name is set
+    template: deployment.yaml
+    set:
+      database.postgres.bundled.enabled: false
+      database.postgres.secretRef.name: my-postgres-secret
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AGENT_REGISTRY_DATABASE_URL
+            value: ""
+
+  - it: does not include wait-for-postgres init container when database.postgres.secretRef.name is set
+    template: deployment.yaml
+    set:
+      database.postgres.bundled.enabled: false
+      database.postgres.secretRef.name: my-postgres-secret
+    asserts:
+      - isNull:
+          path: spec.template.spec.initContainers

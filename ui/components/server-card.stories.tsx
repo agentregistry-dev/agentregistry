@@ -5,7 +5,7 @@ import type { ServerResponse } from "@/lib/admin-api"
 const mockServer: ServerResponse = {
   server: {
     $schema: "https://modelcontextprotocol.io/schemas/server.json",
-    name: "acme/database-server",
+    name: "acme-database-server",
     title: "Database Server",
     description:
       "A production-ready MCP server that provides read and write access to PostgreSQL databases with connection pooling and query optimization.",
@@ -34,7 +34,7 @@ const mockServer: ServerResponse = {
 const minimalServer: ServerResponse = {
   server: {
     $schema: "https://modelcontextprotocol.io/schemas/server.json",
-    name: "test/minimal-server",
+    name: "test-minimal-server",
     description: "A bare-bones server with no extras.",
     tag: "0.0.1",
   },

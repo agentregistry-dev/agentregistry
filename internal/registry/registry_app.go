@@ -293,6 +293,12 @@ func crudPerKindHooks(options types.AppOptions) crud.PerKindHooks {
 			hooks.PostDeletes[kind] = fn
 		}
 	}
+	if len(options.Prepares) > 0 {
+		hooks.Prepares = make(map[string]func(ctx context.Context, obj v1alpha1.Object) error, len(options.Prepares))
+		for kind, fn := range options.Prepares {
+			hooks.Prepares[kind] = fn
+		}
+	}
 	if len(options.InitialFinalizers) > 0 {
 		hooks.InitialFinalizers = make(map[string]func(obj v1alpha1.Object) []string, len(options.InitialFinalizers))
 		maps.Copy(hooks.InitialFinalizers, options.InitialFinalizers)

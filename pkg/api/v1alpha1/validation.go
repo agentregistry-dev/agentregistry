@@ -91,17 +91,53 @@ type GetterFunc func(ctx context.Context, ref ResourceRef) (Object, error)
 // Kubernetes namespace naming conventions.
 var namespaceRegex = regexp.MustCompile(`^[a-z0-9]([-a-z0-9.]{0,61}[a-z0-9])?$`)
 
-// nameRegex: resource name. More permissive than namespace — allows
-// uppercase, underscores, slashes (to support DNS-subdomain-style names
-// like "ai.exa/exa"). 1-255 chars. Must start and end with alphanumeric.
-var nameRegex = regexp.MustCompile(`^[a-zA-Z0-9]([-a-zA-Z0-9._/]{0,253}[a-zA-Z0-9])?$`)
-
 // labelKeyRegex: Kubernetes label key format (prefix/name, prefix optional).
 // Values up to 63 chars with the same character rules.
 var labelKeyRegex = regexp.MustCompile(`^([a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?/)?[a-zA-Z0-9]([-a-zA-Z0-9._]{0,61}[a-zA-Z0-9])?$`)
 var labelValueRegex = regexp.MustCompile(`^([a-zA-Z0-9]([-a-zA-Z0-9._]{0,61}[a-zA-Z0-9])?)?$`)
 
 var tagRegex = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$`)
+
+// DNS-1123 subdomain form: lowercase alphanumeric, hyphens, and dots.
+// Must start and end with alphanumeric. Each dot-separated segment is a
+// DNS-1123 label (1-63 chars). Total length 1-253. Matches the rule
+// Kubernetes uses for most resource `metadata.name` fields.
+const DNSSubdomainPattern = `^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$`
+
+// DNSSubdomainMaxLen is the upper length bound for DNS-1123 subdomain values.
+const DNSSubdomainMaxLen = 253
+
+var DNSSubdomainRegex = regexp.MustCompile(DNSSubdomainPattern)
+
+// validateNameField is the single source of truth for resource-name validation
+// across the v1alpha1 surface — both metadata.name and ref.name. Every kind
+// (Agent, Skill, Prompt, Deployment, MCPServer) and every cross-resource
+// reference funnels through here.
+func validateNameField(name string) error {
+	if name == "" {
+		return fmt.Errorf("%w", ErrRequiredField)
+	}
+	if len(name) > DNSSubdomainMaxLen {
+		return fmt.Errorf("%w: must be DNS-1123 subdomain (max %d chars), got %d", ErrInvalidFormat, DNSSubdomainMaxLen, len(name))
+	}
+	if !DNSSubdomainRegex.MatchString(name) {
+		return fmt.Errorf("%w: must be DNS-1123 subdomain (lowercase alphanumeric, hyphens, and dots; start/end with alphanumeric; each dot-separated segment 1-63 chars): %q", ErrInvalidFormat, name)
+	}
+	return nil
+}
+
+// Upstream MCP-ecosystem catalogue name pattern. Accepts identifier-shaped
+// strings: alphanumeric plus `.`, `_`, `-`, `/`. The slash is optional so
+// single-segment names (e.g. `my-mcp`) and reverse-DNS namespace/name forms
+// (e.g. `io.github.modelcontextprotocol/server-fetch`) both validate.
+const UpstreamMCPPackageNamePattern = `^[a-zA-Z0-9._/-]+$`
+
+const (
+	UpstreamMCPPackageNameMinLen = 1
+	UpstreamMCPPackageNameMaxLen = 200
+)
+
+var UpstreamMCPPackageNameRegex = regexp.MustCompile(UpstreamMCPPackageNamePattern)
 
 // -----------------------------------------------------------------------------
 // ObjectMeta validation — shared across every kind.
@@ -124,11 +160,8 @@ func ValidateObjectMeta(m ObjectMeta) FieldErrors {
 		errs.Append("metadata.namespace", fmt.Errorf("%w: %q", ErrInvalidFormat, m.Namespace))
 	}
 
-	switch {
-	case m.Name == "":
-		errs.Append("metadata.name", fmt.Errorf("%w", ErrRequiredField))
-	case !nameRegex.MatchString(m.Name):
-		errs.Append("metadata.name", fmt.Errorf("%w: %q", ErrInvalidFormat, m.Name))
+	if err := validateNameField(m.Name); err != nil {
+		errs.Append("metadata.name", err)
 	}
 
 	for key, val := range m.Labels {
@@ -219,10 +252,8 @@ func validateRef(r ResourceRef, allowedKinds ...string) FieldErrors {
 	if r.Namespace != "" && !namespaceRegex.MatchString(r.Namespace) {
 		errs.Append("namespace", fmt.Errorf("%w: %q", ErrInvalidFormat, r.Namespace))
 	}
-	if r.Name == "" {
-		errs.Append("name", fmt.Errorf("%w", ErrRequiredField))
-	} else if !nameRegex.MatchString(r.Name) {
-		errs.Append("name", fmt.Errorf("%w: %q", ErrInvalidFormat, r.Name))
+	if err := validateNameField(r.Name); err != nil {
+		errs.Append("name", err)
 	}
 	// Tag is optional on content refs — blank means "resolve to latest".
 	if r.Tag != "" {

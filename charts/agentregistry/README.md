@@ -168,10 +168,13 @@ This creates a `Role`/`RoleBinding` in each listed namespace (plus the installat
 | database.postgres.bundled.image.tag | string | `"18"` | Bundled PostgreSQL image tag |
 | database.postgres.bundled.resources | object | `{"limits":{"cpu":"1","memory":"1Gi"},"requests":{"cpu":"250m","memory":"256Mi"}}` | Resource requests/limits for the bundled PostgreSQL container |
 | database.postgres.bundled.storage | string | `"5Gi"` | PersistentVolumeClaim size for the bundled PostgreSQL data directory |
-| database.postgres.url | string | `""` | When set, Agent Registry connects here instead of the bundled instance. The bundled pod (if enabled) still deploys but is unused; the init container is skipped. |
+| database.postgres.secretRef | object | `{"key":"AGENT_REGISTRY_DATABASE_URL","name":""}` | Source the PostgreSQL connection URL from an existing Secret instead of inlining it. Use this when credentials are managed by an external secret store (e.g. AWS Secrets Manager via External Secrets Operator) and synced into the cluster as a Secret. The chart does not create or manage this Secret. Mutually exclusive with `url` and with `bundled.enabled=true`. On credential rotation, Kubernetes does NOT auto-restart the pod — pair with a controller such as stakater/Reloader if you need automatic restarts on Secret content changes. |
+| database.postgres.secretRef.key | string | `"AGENT_REGISTRY_DATABASE_URL"` | Key within the Secret that holds the connection URL. |
+| database.postgres.secretRef.name | string | `""` | Name of an existing Secret in the release namespace. Leave empty to disable. |
+| database.postgres.url | string | `""` | When set, Agent Registry connects here instead of the bundled instance. The bundled pod (if enabled) still deploys but is unused; the init container is skipped. Mutually exclusive with `secretRef.name`. |
 | dnsConfig | object | `{}` | DNS configuration for the pod |
 | dnsPolicy | string | `""` | DNS policy for the pod |
-| extraEnvVars | list | `[]` | Array of extra environment variables for the Agent Registry container |
+| extraEnvVars | list | `[]` | Array of extra environment variables for the Agent Registry container. Additive only — cannot override env vars the chart already renders. For credentialed fields use the dedicated knobs (e.g. `database.postgres.secretRef`). |
 | fullnameOverride | string | `""` | Override the full name of the chart |
 | global.imagePullSecrets | list | `[]` | Global Docker registry secret names |
 | global.imageRegistry | string | `""` | Global container image registry override |

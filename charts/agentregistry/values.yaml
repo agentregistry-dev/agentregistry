@@ -178,7 +178,10 @@ startupProbe:
 
 # @section Extensibility
 
-# -- Array of extra environment variables for the Agent Registry container
+# -- Array of extra environment variables for the Agent Registry container.
+# Additive only — cannot override env vars the chart already renders.
+# For credentialed fields use the dedicated knobs (e.g.
+# `database.postgres.secretRef`).
 extraEnvVars: []
 
 # @section Scheduling
@@ -271,8 +274,19 @@ rbac:
 database:
   postgres:
     # -- External PostgreSQL connection string.
-    # -- When set, Agent Registry connects here instead of the bundled instance. The bundled pod (if enabled) still deploys but is unused; the init container is skipped.
+    # -- When set, Agent Registry connects here instead of the bundled instance. The bundled pod (if enabled) still deploys but is unused; the init container is skipped. Mutually exclusive with `secretRef.name`.
     url: ""
+    # -- Source the PostgreSQL connection URL from an existing Secret instead of inlining it.
+    # Use this when credentials are managed by an external secret store (e.g. AWS Secrets Manager
+    # via External Secrets Operator) and synced into the cluster as a Secret. The chart does not
+    # create or manage this Secret. Mutually exclusive with `url` and with `bundled.enabled=true`.
+    # On credential rotation, Kubernetes does NOT auto-restart the pod — pair with a controller
+    # such as stakater/Reloader if you need automatic restarts on Secret content changes.
+    secretRef:
+      # -- Name of an existing Secret in the release namespace. Leave empty to disable.
+      name: ""
+      # -- Key within the Secret that holds the connection URL.
+      key: AGENT_REGISTRY_DATABASE_URL
     # -- Bundled PostgreSQL — dev/eval only.
     bundled:
       # -- Deploy a PostgreSQL instance alongside Agent Registry

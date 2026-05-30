@@ -63,10 +63,23 @@ type MCPTransport struct {
 // MCPPackage is a runnable distribution of the MCP server (stdio binary,
 // container image, npm package, etc.).
 type MCPPackage struct {
-	RegistryType         string             `json:"registryType" yaml:"registryType"`
-	RegistryBaseURL      string             `json:"registryBaseUrl,omitempty" yaml:"registryBaseUrl,omitempty"`
-	Identifier           string             `json:"identifier" yaml:"identifier"`
-	Version              string             `json:"version,omitempty" yaml:"version,omitempty"`
+	RegistryType    string `json:"registryType" yaml:"registryType"`
+	RegistryBaseURL string `json:"registryBaseUrl,omitempty" yaml:"registryBaseUrl,omitempty"`
+	Identifier      string `json:"identifier" yaml:"identifier"`
+	Version         string `json:"version,omitempty" yaml:"version,omitempty"`
+
+	// ServerName is the MCP-ecosystem catalogue identity claimed by this
+	// package. The registry's ownership validator compares this value
+	// against the identity the package's publisher embedded in the upstream
+	// artifact (NPM: `mcpName`, PyPI: `mcp-name`,
+	// OCI: `io.modelcontextprotocol.server.name` label).
+	//
+	// Required for every registryType except `mcpb` (which has no ownership
+	// concept). Accepts any identifier-shaped string Both single-segment (`my-mcp`)
+	// and namespace/name (`io.example/foo`) forms validate, so the value can match
+	// whatever the publisher embedded regardless of shape.
+	ServerName string `json:"serverName,omitempty" yaml:"serverName,omitempty"`
+
 	FileSHA256           string             `json:"fileSha256,omitempty" yaml:"fileSha256,omitempty"`
 	RuntimeHint          string             `json:"runtimeHint,omitempty" yaml:"runtimeHint,omitempty"`
 	Transport            MCPTransport       `json:"transport" yaml:"transport"`

@@ -109,10 +109,10 @@ func TestRun_InspectorDryRunNarratesURL(t *testing.T) {
 
 	require.NoError(t, os.Chdir(tmp))
 	initCmd := declarative.NewInitCmd()
-	initCmd.SetArgs([]string{"mcp", "acme/inspmcp", "--framework", "fastmcp", "--language", "python"})
+	initCmd.SetArgs([]string{"mcp", "acme-inspmcp", "--framework", "fastmcp", "--language", "python"})
 	require.NoError(t, initCmd.Execute())
 
-	require.NoError(t, os.Chdir(filepath.Join(tmp, "inspmcp")))
+	require.NoError(t, os.Chdir(filepath.Join(tmp, "acme-inspmcp")))
 	cmd := declarative.NewRunCmd()
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
@@ -136,10 +136,10 @@ func TestRun_NoChatOnMCPErrors(t *testing.T) {
 
 	require.NoError(t, os.Chdir(tmp))
 	initCmd := declarative.NewInitCmd()
-	initCmd.SetArgs([]string{"mcp", "acme/mcpproj", "--framework", "fastmcp", "--language", "python"})
+	initCmd.SetArgs([]string{"mcp", "acme-mcpproj", "--framework", "fastmcp", "--language", "python"})
 	require.NoError(t, initCmd.Execute())
 
-	require.NoError(t, os.Chdir(filepath.Join(tmp, "mcpproj")))
+	require.NoError(t, os.Chdir(filepath.Join(tmp, "acme-mcpproj")))
 	cmd := declarative.NewRunCmd()
 	cmd.SetArgs([]string{"--no-chat", "--dry-run"})
 	err = cmd.Execute()

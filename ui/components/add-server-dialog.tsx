@@ -7,8 +7,23 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { createServerV0, type ServerJson } from "@/lib/admin-api"
+import { isValidDNSSubdomain } from "@/lib/validators"
 import { Loader2, AlertCircle, Plus, Trash2 } from "lucide-react"
 import { toast } from "sonner"
+
+// Upstream MCP catalogue name — alphanumeric plus `.`, `_`, `-`, `/`.
+// Accepts single-segment (`my-mcp`) and namespace/name (`io.example/foo`) forms.
+const UPSTREAM_MCP_PACKAGE_NAME_RE = /^[a-zA-Z0-9._/-]+$/
+
+// isValidMCPPackageName checks if the MCP package's serverName is valid.
+//
+// Server-side serverName is optional ONLY when registryType is `mcpb` (which
+// has no ownership check). This dialog's registry-type dropdown does not
+// expose `mcpb`, so every package created through here will be subject to
+// ownership validation and must carry a non-empty serverName.
+function isValidMCPPackageName(s: string): boolean {
+  return s.length >= 1 && s.length <= 200 && UPSTREAM_MCP_PACKAGE_NAME_RE.test(s)
+}
 
 interface AddServerDialogProps {
   open: boolean
@@ -28,7 +43,7 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
   const [repositoryUrl, setRepositoryUrl] = useState("")
 
   // Schema collapsed to a single package per server.
-  type PackageDraft = { identifier: string; version: string; registryType: string; transport: string }
+  type PackageDraft = { identifier: string; version: string; registryType: string; transport: string; serverName: string }
   const [pkg, setPkg] = useState<PackageDraft | null>(null)
 
   const resetForm = () => {
@@ -49,13 +64,13 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
       if (!name.trim()) {
         throw new Error("Server name is required")
       }
-      
-      // Validate name format (namespace/name)
-      const namePattern = /^[a-zA-Z0-9.-]+\/[a-zA-Z0-9._-]+$/
-      if (!namePattern.test(name.trim())) {
-        throw new Error("Server name must be in format 'namespace/name' (e.g., 'io.example/my-server')")
+      if (!isValidDNSSubdomain(name.trim())) {
+        throw new Error("Server name must be DNS-1123 subdomain: lowercase alphanumeric, hyphens, and dots; max 253 chars; each dot-separated segment must start and end with alphanumeric")
       }
-      
+      if (pkg && !isValidMCPPackageName(pkg.serverName.trim())) {
+        throw new Error("Upstream catalogue name is required (1-200 chars; alphanumeric plus '.', '_', '-', '/')")
+      }
+
       if (!tag.trim()) {
         throw new Error("Tag is required")
       }
@@ -88,6 +103,9 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
           registryType: pkg.registryType as 'npm' | 'pypi' | 'docker',
           transport: { type: pkg.transport || 'stdio' },
         }
+        if (pkg.serverName.trim()) {
+          source.package.serverName = pkg.serverName.trim()
+        }
       }
       if (source.repository || source.package) {
         server.source = source
@@ -112,7 +130,7 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
   }
 
   const addPackage = () => {
-    setPkg({ identifier: "", version: "", registryType: "npm", transport: "stdio" })
+    setPkg({ identifier: "", version: "", registryType: "npm", transport: "stdio", serverName: "" })
   }
 
   const removePackage = () => {
@@ -140,15 +158,15 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
               <Label htmlFor="name">Server Name *</Label>
               <Input
                 id="name"
-                placeholder="io.example/my-server"
+                placeholder="my-server"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 disabled={loading}
-                className={name && !/^[a-zA-Z0-9.-]+\/[a-zA-Z0-9._-]+$/.test(name) ? "border-yellow-500" : ""}
+                className={name && !isValidDNSSubdomain(name) ? "border-yellow-500" : ""}
               />
-              <p className={`text-xs flex items-center gap-1 min-h-[1.25rem] ${name && !/^[a-zA-Z0-9.-]+\/[a-zA-Z0-9._-]+$/.test(name) ? 'text-yellow-600' : 'invisible'}`}>
+              <p className={`text-xs flex items-center gap-1 min-h-[1.25rem] ${name && !isValidDNSSubdomain(name) ? 'text-yellow-600' : 'invisible'}`}>
                 <AlertCircle className="h-3 w-3" />
-                Must be in format namespace/name (e.g., io.example/my-server)
+                Lowercase alphanumeric, hyphens, and dots. Max 253 chars. (e.g., my-server, io.example.app)
               </p>
             </div>
 
@@ -271,6 +289,31 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
                       <span className="text-sm">{transport}</span>
                     </label>
                   ))}
+                </div>
+                {/* Required for every registryType except mcpb. The dropdown
+                    above does not expose mcpb, so this is effectively always
+                    required when a package is added. Value must match the
+                    identity the publisher embedded in the upstream artifact
+                    (npm mcpName / PyPI mcp-name / OCI io.modelcontextprotocol.server.name). */}
+                <div className="pl-2">
+                  <Label htmlFor="serverName" className="text-sm text-muted-foreground">
+                    Upstream catalogue name (mcpName) *
+                  </Label>
+                  <Input
+                    id="serverName"
+                    placeholder="io.github.user/server"
+                    value={pkg.serverName}
+                    onChange={(e) => updatePackage("serverName", e.target.value)}
+                    disabled={loading}
+                    className={!isValidMCPPackageName(pkg.serverName) ? "border-yellow-500" : ""}
+                  />
+                  <p className={`text-xs flex items-center gap-1 min-h-[1.25rem] ${!isValidMCPPackageName(pkg.serverName) ? 'text-yellow-600' : 'text-muted-foreground'}`}>
+                    {!isValidMCPPackageName(pkg.serverName) ? (
+                      <><AlertCircle className="h-3 w-3" /> 1-200 chars; alphanumeric plus `.`, `_`, `-`, `/`.</>
+                    ) : (
+                      <>Must match the identity embedded in the upstream package.</>
+                    )}
+                  </p>
                 </div>
               </div>
             ) : (

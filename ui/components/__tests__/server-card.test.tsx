@@ -7,7 +7,7 @@ import type { ServerResponse } from "@/lib/admin-api"
 const mockServer: ServerResponse = {
   server: {
     $schema: "https://modelcontextprotocol.io/schemas/server.json",
-    name: "acme/database-server",
+    name: "acme-database-server",
     title: "Database Server",
     description: "MCP server for PostgreSQL with connection pooling.",
     tag: "3.2.1",
@@ -56,7 +56,7 @@ describe("ServerCard", () => {
       _meta: {},
     }
     render(<ServerCard server={noTitle} />)
-    expect(screen.getByText("acme/database-server")).toBeInTheDocument()
+    expect(screen.getByText("acme-database-server")).toBeInTheDocument()
   })
 
   it("shows tag count when provided", () => {
@@ -114,7 +114,7 @@ describe("ServerCard", () => {
     const minimal: ServerResponse = {
       server: {
         $schema: "https://modelcontextprotocol.io/schemas/server.json",
-        name: "test/minimal",
+        name: "test-minimal",
         description: "Bare minimum.",
         tag: "0.0.1",
       },

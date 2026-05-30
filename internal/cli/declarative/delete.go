@@ -38,9 +38,9 @@ TYPE must be one of: agent, mcp, skill, prompt, deployment
 (plural and uppercase forms also accepted)`,
 		Example: `  arctl delete -f my-agent/agent.yaml
   arctl delete -f my-server/mcp.yaml
-  arctl delete agent acme/summarizer --tag stable
-  arctl delete agent acme/summarizer --all-tags
-  arctl delete mcp acme/fetch --tag stable
+  arctl delete agent acme-summarizer --tag stable
+  arctl delete agent acme-summarizer --all-tags
+  arctl delete mcp acme-fetch --tag stable
   arctl delete deployment my-agent --force`,
 		SilenceUsage: true,
 		RunE:         runDeclarativeDelete,

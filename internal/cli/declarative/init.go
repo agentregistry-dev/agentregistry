@@ -86,15 +86,15 @@ declarative format and can be applied directly with 'arctl apply'.
 
 Supported types:
   agent NAME              # picker selects framework + language
-  mcp NAMESPACE/NAME      # picker selects framework + language
+  mcp NAME                # picker selects framework + language
   skill NAME
   prompt NAME
 
 Examples:
   arctl init agent myagent
   arctl init agent myagent --framework adk --language python
-  arctl init mcp acme/my-server
-  arctl init mcp acme/my-server --framework fastmcp --language python
+  arctl init mcp my-server
+  arctl init mcp my-server --framework fastmcp --language python
   arctl init skill my-skill
   arctl init prompt my-prompt
   arctl init                                    # interactive: picker for kind`,
@@ -643,43 +643,37 @@ func newInitMCPCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "mcp NAMESPACE/NAME",
+		Use:   "mcp NAME",
 		Short: "Scaffold a new MCP server project",
 		Long: `Scaffold a new MCP server project.
 
-NAME must be in namespace/name format (registry requirement).
+NAME must be DNS-1123 subdomain: lowercase alphanumeric, hyphens, and dots; max 253 chars;
+each dot-separated segment must start and end with alphanumeric (max 63 chars per segment).
 Picks a framework + language interactively (or via --framework / --language).`,
-		Example: `  arctl init mcp acme/my-mcp
-  arctl init mcp acme/my-mcp --framework fastmcp --language python`,
+		Example: `  arctl init mcp my-mcp
+  arctl init mcp my-mcp --framework fastmcp --language python`,
 		Args:         cobra.MaximumNArgs(1),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if initPort < 1 || initPort > 65535 {
 				return fmt.Errorf("--port must be between 1 and 65535, got %d", initPort)
 			}
-			var full string
+			var name string
 			if len(args) == 1 {
-				full = args[0]
+				name = args[0]
 			} else {
-				typed, err := promptText("Project name", "myorg/mymcp",
-					func(s string) error {
-						parts := strings.SplitN(s, "/", 2)
-						if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-							return fmt.Errorf("name must be in namespace/name format")
-						}
-						return nil
-					},
+				typed, err := promptText("Project name", "my-mcp",
+					validators.ValidateMCPServerName,
 					cmd.OutOrStdout(), cmd.InOrStdin())
 				if err != nil {
 					return err
 				}
-				full = typed
+				name = typed
 			}
-			parts := strings.SplitN(full, "/", 2)
-			if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-				return fmt.Errorf("name must be in namespace/name format (got %q)", full)
+			if err := validators.ValidateMCPServerName(name); err != nil {
+				return err
 			}
-			projectName := parts[1]
+			projectName := name
 
 			projectDir, err := resolveInitProjectPath(cmd, projectName)
 			if err != nil {
@@ -715,7 +709,7 @@ Picks a framework + language interactively (or via --framework / --language).`,
 				image = fmt.Sprintf("%s/%s:latest", registry, projectName)
 			}
 
-			vars := mcpTemplateVars(full, projectName, initDescription, image, framework.SourceDir, projectDir)
+			vars := mcpTemplateVars(name, projectName, initDescription, image, framework.SourceDir, projectDir)
 			if err := frameworks.RenderTemplates(framework, projectDir, vars); err != nil {
 				return err
 			}
@@ -734,12 +728,12 @@ Picks a framework + language interactively (or via --framework / --language).`,
 					return fmt.Errorf("update .gitignore: %w", err)
 				}
 			}
-			if err := writeDeclarativeMCPYAML(projectDir, full, image, initDescription, initPort); err != nil {
+			if err := writeDeclarativeMCPYAML(projectDir, name, image, initDescription, initPort); err != nil {
 				return err
 			}
 
 			disp := displayPath(projectDir)
-			fmt.Fprintf(cmd.OutOrStdout(), "✓ Created MCP server: %s (framework: %s, language: %s, port: %d)\n", full, framework.Framework, framework.Language, initPort)
+			fmt.Fprintf(cmd.OutOrStdout(), "✓ Created MCP server: %s (framework: %s, language: %s, port: %d)\n", name, framework.Framework, framework.Language, initPort)
 			fmt.Fprintf(cmd.OutOrStdout(), "\n🚀 Next steps:\n")
 			fmt.Fprintf(cmd.OutOrStdout(), "  1. Run locally (optional):\n")
 			fmt.Fprintf(cmd.OutOrStdout(), "     arctl run %s\n", disp)
@@ -789,12 +783,9 @@ func mcpTemplateVars(name, baseName, description, image, frameworkDir, projectDi
 }
 
 func writeDeclarativeMCPYAML(projectDir, name, image, description string, port int) error {
-	nameParts := strings.SplitN(name, "/", 2)
-	shortName := nameParts[len(nameParts)-1]
-
 	desc := description
 	if desc == "" {
-		desc = fmt.Sprintf("%s MCP server", shortName)
+		desc = fmt.Sprintf("%s MCP server", name)
 	}
 
 	// Declare the transport that matches the scaffolded server: arctl init's
@@ -811,7 +802,7 @@ func writeDeclarativeMCPYAML(projectDir, name, image, description string, port i
 			Name: name,
 		},
 		Spec: v1alpha1.MCPServerSpec{
-			Title:       shortName,
+			Title:       name,
 			Description: desc,
 			Source: &v1alpha1.MCPServerSource{
 				Package: &v1alpha1.MCPPackage{
@@ -822,6 +813,7 @@ func writeDeclarativeMCPYAML(projectDir, name, image, description string, port i
 						Port: uint16(port),
 						Path: "/mcp",
 					},
+					ServerName: name,
 				},
 			},
 		},
@@ -965,7 +957,7 @@ The generated file can be applied directly:
 				name = args[0]
 			} else {
 				typed, err := promptText("Project name", "myprompt",
-					func(s string) error { return validators.ValidateSkillName(s) },
+					func(s string) error { return validators.ValidatePromptName(s) },
 					cmd.OutOrStdout(), cmd.InOrStdin())
 				if err != nil {
 					return err
@@ -973,8 +965,7 @@ The generated file can be applied directly:
 				name = typed
 			}
 
-			// Prompt names follow the same DB constraint as skill names (^[a-zA-Z0-9_-]+$).
-			if err := validators.ValidateSkillName(name); err != nil {
+			if err := validators.ValidatePromptName(name); err != nil {
 				return fmt.Errorf("invalid prompt name: %w", err)
 			}
 

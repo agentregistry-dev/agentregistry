@@ -2,8 +2,10 @@ package v1alpha1
 
 import (
 	"context"
+	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -49,10 +51,20 @@ func TestValidateObjectMeta_RejectsBadNamespace(t *testing.T) {
 	}
 }
 
-func TestValidateObjectMeta_AcceptsDNSStyleName(t *testing.T) {
-	// Names can carry slashes (dns-like). Namespaces cannot.
-	errs := ValidateObjectMeta(ObjectMeta{Namespace: "default", Name: "ai.exa/exa"})
-	require.Empty(t, errs)
+func TestValidateObjectMeta_RejectsNonDNSSubdomainName(t *testing.T) {
+	// metadata.name across every kind must be DNS-1123 subdomain form.
+	for _, bad := range []string{"ai.exa/exa", "UPPER", "has_underscore", "name with space", "-leading", "trailing-", "..double-dot", "trailing-dot."} {
+		errs := ValidateObjectMeta(ObjectMeta{Namespace: "default", Name: bad})
+		require.NotEmpty(t, errs, "name %q should be invalid", bad)
+	}
+}
+
+func TestValidateObjectMeta_AcceptsDottedName(t *testing.T) {
+	// DNS-1123 subdomain allows dot-separated segments (reverse-DNS style).
+	for _, ok := range []string{"a", "foo", "foo-bar", "io.example", "io.example.app", "mcp.fetch.v1"} {
+		errs := ValidateObjectMeta(ObjectMeta{Namespace: "default", Name: ok})
+		require.Empty(t, errs, "name %q should be valid: %v", ok, errs)
+	}
 }
 
 func TestValidateObjectMeta_RejectsBadLabelKey(t *testing.T) {
@@ -401,6 +413,7 @@ func TestMCPServerValidate_OK(t *testing.T) {
 					RegistryType: "oci",
 					Identifier:   "ghcr.io/example/mcp-tools:1.0.0",
 					Transport:    MCPTransport{Type: "stdio"},
+					ServerName:   "mcp-tools",
 				},
 			},
 		},
@@ -428,6 +441,7 @@ func TestMCPServerValidate_RemoteAndSourceMutuallyExclusive(t *testing.T) {
 					RegistryType: "oci",
 					Identifier:   "ghcr.io/example/mcp-tools:1.0.0",
 					Transport:    MCPTransport{Type: "stdio"},
+					ServerName:   "mcp-tools",
 				},
 			},
 			Remote: &MCPRemote{Type: "streamable-http", URL: "https://example.test/mcp"},
@@ -456,6 +470,7 @@ func TestMCPServerValidate_HTTPPortRange(t *testing.T) {
 						RegistryType: "oci",
 						Identifier:   "img:latest",
 						Transport:    MCPTransport{Type: "http", Port: port},
+						ServerName:   "x",
 					},
 				},
 			},
@@ -464,4 +479,203 @@ func TestMCPServerValidate_HTTPPortRange(t *testing.T) {
 	const portPath = "spec.source.package.transport.port"
 	require.Contains(t, failedFields(t, mk(0).Validate()), portPath, "http with port 0 must fail")
 	require.NotContains(t, failedFields(t, mk(8080).Validate()), portPath, "http with a valid port must pass the port check")
+}
+
+func TestValidateNameField(t *testing.T) {
+	maxLabelLen := strings.Repeat("a", 63) // single segment at max label length
+	tooLongSegment := strings.Repeat("a", 64)
+	// 253-char dotted subdomain at the upper bound (4 segments of 63 + 3 dots = 255 → 3 segments of 63 + 1 of 61 + 3 dots = 253)
+	maxSubdomain := strings.Repeat("a", 63) + "." + strings.Repeat("b", 63) + "." + strings.Repeat("c", 63) + "." + strings.Repeat("d", 61)
+	tooLongSubdomain := maxSubdomain + "x"
+
+	testCases := []struct {
+		label     string
+		name      string
+		expectErr bool
+	}{
+		// positives
+		{"single char", "a", false},
+		{"lowercase only", "myserver", false},
+		{"contains hyphen", "my-server", false},
+		{"single dot-separated segment at label max", maxLabelLen, false},
+		{"dotted (reverse-DNS)", "io.example", false},
+		{"deeply dotted", "mcp.fetch.v1", false},
+		{"hyphen plus dot", "my-server.io", false},
+		{"max-length subdomain", maxSubdomain, false},
+
+		// negatives
+		{"empty", "", true},
+		{"contains uppercase", "MyServer", true},
+		{"contains underscore", "my_server", true},
+		{"contains slash", "example/server", true},
+		{"leading hyphen", "-server", true},
+		{"trailing hyphen", "server-", true},
+		{"leading dot", ".server", true},
+		{"trailing dot", "server.", true},
+		{"double dot", "foo..bar", true},
+		{"segment longer than 63 chars", tooLongSegment, true},
+		{"total longer than 253 chars", tooLongSubdomain, true},
+		{"single hyphen", "-", true},
+		{"non-ascii", "café", true},
+		{"contains space", "my server", true},
+	}
+	for _, c := range testCases {
+		t.Run(c.label, func(t *testing.T) {
+			err := validateNameField(c.name)
+			if c.expectErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateNameField_ErrorMessage(t *testing.T) {
+	// Format errors should mention DNS-1123 so operators can self-diagnose.
+	err := validateNameField("io.example/foo")
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrInvalidFormat)
+	assert.Contains(t, err.Error(), "DNS-1123 subdomain")
+
+	// Required-field errors should be the standard sentinel.
+	err = validateNameField("")
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrRequiredField)
+}
+
+func TestValidateMCPPackageName(t *testing.T) {
+	maxLenStr := strings.Repeat("a", 100) + "/" + strings.Repeat("b", 99)   // 200 chars, exact max
+	longLenStr := strings.Repeat("a", 100) + "/" + strings.Repeat("b", 101) // 202 chars
+
+	testCases := []struct {
+		label     string
+		name      string
+		expectErr bool
+	}{
+		{"empty (caught by required check elsewhere)", "", false},
+		{"single segment", "my-mcp", false},
+		{"dotted single segment", "io.example.mcp", false},
+		{"underscore in single segment", "my_mcp", false},
+		{"multi-period dns name", "io.github.user/server", false},
+		{"follows dns naming scheme", "com.example/foo", false},
+		{"contains multiple special ascii chars", "foo.bar-baz/my_server", false},
+		{"multiple slashes", "a/b/c", false},
+		{"within max len", maxLenStr, false},
+		{"single char", "a", false},
+		{"too long", longLenStr, true},
+		{"non-ascii", "café/foo", true},
+		{"contains space", "io.example/my server", true},
+		{"contains colon", "io.example:foo", true},
+		{"contains exclamation", "foo!bar", true},
+	}
+	for _, c := range testCases {
+		t.Run(c.label, func(t *testing.T) {
+			err := validateMCPPackageName(c.name)
+			if c.expectErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestMCPServerValidate_MCPPackageName_RejectsBadFormat(t *testing.T) {
+	m := &MCPServer{
+		TypeMeta: TypeMeta{APIVersion: "ar.dev/v1alpha1", Kind: KindMCPServer},
+		Metadata: ObjectMeta{Namespace: "default", Name: "my-server"},
+		Spec: MCPServerSpec{
+			Source: &MCPServerSource{
+				Package: &MCPPackage{
+					RegistryType: "npm",
+					Identifier:   "my-pkg",
+					Transport:    MCPTransport{Type: "stdio"},
+					ServerName:   "has space", // invalid: spaces not allowed
+				},
+			},
+		},
+	}
+	err := m.Validate()
+	require.Error(t, err)
+	paths := failedFields(t, err)
+	require.Contains(t, paths, "spec.source.package.serverName")
+}
+
+func TestMCPServerValidate_MCPPackageName_AcceptsValid(t *testing.T) {
+	m := &MCPServer{
+		TypeMeta: TypeMeta{APIVersion: "ar.dev/v1alpha1", Kind: KindMCPServer},
+		Metadata: ObjectMeta{Namespace: "default", Name: "my-server"},
+		Spec: MCPServerSpec{
+			Source: &MCPServerSource{
+				Package: &MCPPackage{
+					RegistryType: "pypi",
+					Identifier:   "mcp-server-fetch",
+					Transport:    MCPTransport{Type: "stdio"},
+					ServerName:   "io.github.modelcontextprotocol/server-fetch",
+				},
+			},
+		},
+	}
+	require.NoError(t, m.Validate())
+}
+
+func TestMCPServerValidate_ServerName_RequiredForNonMCPB(t *testing.T) {
+	for _, rt := range []string{"npm", "pypi", "oci", "nuget"} {
+		t.Run(rt, func(t *testing.T) {
+			m := &MCPServer{
+				TypeMeta: TypeMeta{APIVersion: "ar.dev/v1alpha1", Kind: KindMCPServer},
+				Metadata: ObjectMeta{Namespace: "default", Name: "my-server"},
+				Spec: MCPServerSpec{
+					Source: &MCPServerSource{
+						Package: &MCPPackage{
+							RegistryType: rt,
+							Identifier:   "my-pkg",
+							Transport:    MCPTransport{Type: "stdio"},
+							// ServerName intentionally omitted
+						},
+					},
+				},
+			}
+			err := m.Validate()
+			require.Error(t, err)
+			paths := failedFields(t, err)
+			require.Contains(t, paths, "spec.source.package.serverName")
+		})
+	}
+}
+
+func TestMCPServerValidate_ServerName_OptionalForMCPB(t *testing.T) {
+	m := &MCPServer{
+		TypeMeta: TypeMeta{APIVersion: "ar.dev/v1alpha1", Kind: KindMCPServer},
+		Metadata: ObjectMeta{Namespace: "default", Name: "my-server"},
+		Spec: MCPServerSpec{
+			Source: &MCPServerSource{
+				Package: &MCPPackage{
+					RegistryType: RegistryTypeMCPB,
+					Identifier:   "https://example.com/pkg.mcpb",
+					Transport:    MCPTransport{Type: "stdio"},
+					// ServerName intentionally omitted — MCPB has no ownership check
+				},
+			},
+		},
+	}
+	require.NoError(t, m.Validate())
+}
+
+func TestMCPServerValidateRegistries_UsesServerNameWhenSet(t *testing.T) {
+	var gotClaim string
+	validator := func(_ context.Context, _ RegistryPackage, claim string) error {
+		gotClaim = claim
+		return nil
+	}
+	m := &MCPServer{
+		Metadata: ObjectMeta{Namespace: "default", Name: "my-server"},
+		Spec: MCPServerSpec{Source: &MCPServerSource{Package: &MCPPackage{
+			RegistryType: "pypi", Identifier: "mcp-server-fetch", Transport: MCPTransport{Type: "stdio"},
+			ServerName: "io.github.modelcontextprotocol/server-fetch",
+		}}},
+	}
+	require.NoError(t, m.ValidateRegistries(context.Background(), validator))
+	require.Equal(t, "io.github.modelcontextprotocol/server-fetch", gotClaim)
 }
