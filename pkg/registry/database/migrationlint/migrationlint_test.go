@@ -86,6 +86,26 @@ func TestCheck_FlagsForbiddenPatterns(t *testing.T) {
 			"DROP addressing a non-default schema",
 		},
 		{
+			"DROP VIEW non-default schema",
+			"DROP VIEW other.v;",
+			"DROP addressing a non-default schema",
+		},
+		{
+			"DROP MATERIALIZED VIEW non-default schema",
+			"DROP MATERIALIZED VIEW IF EXISTS other.mv;",
+			"DROP addressing a non-default schema",
+		},
+		{
+			"DROP SEQUENCE non-default schema",
+			"DROP SEQUENCE other.seq;",
+			"DROP addressing a non-default schema",
+		},
+		{
+			"DROP TYPE non-default schema",
+			"DROP TYPE other.t;",
+			"DROP addressing a non-default schema",
+		},
+		{
 			// Inline FK into another schema — the context that has no
 			// leading-keyword rule of its own.
 			"REFERENCES non-default schema",

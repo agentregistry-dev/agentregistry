@@ -155,7 +155,7 @@ var forbiddenPatterns = []struct {
 		message: "INSERT INTO addressing a non-default schema is not allowed",
 	},
 	{
-		re:      regexp.MustCompile(`(?i)\bDROP\s+(?:TABLE|INDEX|TRIGGER|FUNCTION)(?:\s+IF\s+EXISTS)?\s+` + qualifiedIdent),
+		re:      regexp.MustCompile(`(?i)\bDROP\s+(?:TABLE|INDEX|TRIGGER|FUNCTION|VIEW|MATERIALIZED\s+VIEW|SEQUENCE|TYPE)(?:\s+IF\s+EXISTS)?\s+` + qualifiedIdent),
 		message: "DROP addressing a non-default schema is not allowed",
 	},
 	{
