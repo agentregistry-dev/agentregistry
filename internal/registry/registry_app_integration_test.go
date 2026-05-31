@@ -21,7 +21,7 @@ import (
 func TestBuildStores_PropagatesAuditor(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
 	auditor := &typestest.RecordingAuditor{}
-	stores := buildStores(pool, auditor)
+	stores := buildStores(pool, nil, nil, auditor)
 
 	agentStore := stores[v1alpha1.KindAgent]
 	require.NotNil(t, agentStore)
@@ -42,6 +42,6 @@ func TestBuildStores_PropagatesAuditor(t *testing.T) {
 
 	// Sanity: nil auditor still works (NoopAuditor fallback) — guards the
 	// nil-check branch in buildStores.
-	stores2 := buildStores(pool, nil)
+	stores2 := buildStores(pool, nil, nil, nil)
 	require.NotNil(t, stores2[v1alpha1.KindAgent])
 }
