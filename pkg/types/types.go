@@ -68,6 +68,12 @@ type PostUpsert func(ctx context.Context, obj v1alpha1.Object) error
 // batch's per-doc delete hook.
 type PostDelete func(ctx context.Context, obj v1alpha1.Object) error
 
+// Prepare runs after validation and before Store.Upsert on a
+// v1alpha1 resource. Wired into resource.Config.Prepare + the apply
+// batch's per-doc prepare hook. Used to mutate the decoded object
+// before persistence (e.g. strip sensitive spec fields).
+type Prepare func(ctx context.Context, obj v1alpha1.Object) error
+
 const (
 	AdmissionSourceApply  = "apply"
 	AdmissionSourceDelete = "delete"
@@ -231,6 +237,13 @@ type AppOptions struct {
 	// PostDeletes mirror PostUpserts on the delete path.
 	PostDeletes map[string]PostDelete
 
+	// Prepares run per-kind after validation and before Store.Upsert on
+	// both the dedicated PUT route and the batch /v0/apply path. Keyed by
+	// canonical Kind. Used to mutate the decoded object before persistence
+	// (e.g. strip sensitive spec fields). Missing keys = no prepare
+	// hook for that kind.
+	Prepares map[string]Prepare
+
 	// Admission optionally accepts a validated write before the row reaches
 	// production storage. Nil preserves normal direct writes.
 	// TODO(controller): temporary synchronous-handler bridge; remove with
@@ -247,6 +260,19 @@ type AppOptions struct {
 	// registration. Nil preserves the default store-backed resolver.
 	// TODO(controller): temporary bridge for pending staged refs in HTTP apply.
 	ResolverWrapper func(v1alpha1.ResolverFunc) v1alpha1.ResolverFunc
+
+	// V1Alpha1StoreTables registers additional v1alpha1 kinds with their
+	// backing PostgreSQL tables. Downstream builds that add their own
+	// Scheme kinds should populate this so the shared /v0/apply,
+	// resolver, and generic route plumbing can see the same store map
+	// as any ExtraRoutes they register.
+	V1Alpha1StoreTables map[string]string
+
+	// V1Alpha1MutableStoreKinds marks extra v1alpha1 kinds that use mutable
+	// namespace/name object behavior instead of tagged artifact semantics.
+	// Downstream control-plane/config kinds are v1alpha1-shaped but are not
+	// content artifacts.
+	V1Alpha1MutableStoreKinds map[string]bool
 
 	// RegistryValidator overrides the per-package registry
 	// validator (the dispatcher consulted on apply to confirm

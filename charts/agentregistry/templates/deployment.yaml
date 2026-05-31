@@ -134,7 +134,13 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.config.existingSecret | default (include "agentregistry.fullname" .) }}
                   key: AGENT_REGISTRY_JWT_PRIVATE_KEY
-            {{- if .Values.database.postgres.url }}
+            {{- if .Values.database.postgres.secretRef.name }}
+            - name: AGENT_REGISTRY_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.postgres.secretRef.name }}
+                  key: {{ .Values.database.postgres.secretRef.key | default "AGENT_REGISTRY_DATABASE_URL" }}
+            {{- else if .Values.database.postgres.url }}
             - name: AGENT_REGISTRY_DATABASE_URL
               value: {{ .Values.database.postgres.url | quote }}
             {{- else if .Values.database.postgres.bundled.enabled }}
@@ -146,7 +152,7 @@ spec:
             - name: AGENT_REGISTRY_DATABASE_URL
               value: {{ printf "postgres://agentregistry:$(POSTGRES_PASSWORD)@%s:5432/agentregistry?sslmode=disable" (include "agentregistry.postgresql.fullname" .) | quote }}
             {{- else }}
-            {{ fail "No database connection configured. Set database.postgres.url or enable database.postgres.bundled." }}
+            {{ fail "No database connection configured. Set database.postgres.url, database.postgres.secretRef.name, or enable database.postgres.bundled." }}
             {{- end }}
             {{- if .Values.extraEnvVars }}
             {{- tpl (toYaml .Values.extraEnvVars) . | nindent 12 }}

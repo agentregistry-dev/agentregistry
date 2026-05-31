@@ -185,6 +185,19 @@ func registerKindRoutes(
 	// same per-kind hook table populated above, so Deployment reconciliation
 	// and any caller-supplied PostUpsert/PostDelete fire identically on
 	// the batch path.
+	// ApplyConfig.Prepare is a single global hook, not a per-kind map, so
+	// dispatch by Kind over the per-kind Prepares table to match the
+	// dedicated PUT route's per-kind wiring.
+	var applyPrepare func(ctx context.Context, obj v1alpha1.Object) error
+	if len(perKind.Prepares) > 0 {
+		prepares := perKind.Prepares
+		applyPrepare = func(ctx context.Context, obj v1alpha1.Object) error {
+			if p := prepares[obj.GetKind()]; p != nil {
+				return p(ctx, obj)
+			}
+			return nil
+		}
+	}
 	applyCfg := resource.ApplyConfig{
 		BasePrefix:        basePrefix,
 		Stores:            stores,
@@ -196,6 +209,7 @@ func registerKindRoutes(
 		InitialFinalizers: perKind.InitialFinalizers,
 		Admission:         admission,
 		DeleteAdmission:   deleteAdmission,
+		Prepare:           applyPrepare,
 	}
 	productionApplyCfg := applyCfg
 	productionApplyCfg.Admission = resource.ProductionAdmission

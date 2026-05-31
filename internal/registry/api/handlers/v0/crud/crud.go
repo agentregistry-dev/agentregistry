@@ -47,6 +47,11 @@ type PerKindHooks struct {
 	// PostDeletes run after a successful DELETE; see
 	// resource.Config.PostDelete. Mirrors PostUpserts above.
 	PostDeletes map[string]func(ctx context.Context, obj v1alpha1.Object) error
+	// Prepares run after validation and before Store.Upsert; see
+	// resource.Config.Prepare. Wired by downstream builds that need to
+	// mutate the decoded object before persistence (e.g. strip
+	// sensitive spec fields). Missing keys = no prepare hook for that kind.
+	Prepares map[string]func(ctx context.Context, obj v1alpha1.Object) error
 	// InitialFinalizers seeds create-time finalizers per kind; see
 	// resource.Config.InitialFinalizers.
 	InitialFinalizers map[string]func(obj v1alpha1.Object) []string
@@ -86,6 +91,7 @@ func Register(
 			ListFilter:        perKind.ListFilters[kind],
 			PostUpsert:        perKind.PostUpserts[kind],
 			PostDelete:        perKind.PostDeletes[kind],
+			Prepare:           perKind.Prepares[kind],
 			DeleteAdmission:   deleteAdmission,
 			InitialFinalizers: perKind.InitialFinalizers[kind],
 		}, true

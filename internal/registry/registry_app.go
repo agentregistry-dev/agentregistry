@@ -102,7 +102,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	}
 	maps.Copy(deploymentAdapters, options.DeploymentAdapters)
 	pool := db.Pool()
-	stores := buildStores(pool, options.Auditor)
+	stores := buildStores(pool, options.V1Alpha1StoreTables, options.V1Alpha1MutableStoreKinds, options.Auditor)
 	perKindHooks := crudPerKindHooks(options)
 	if _, err := controller.StartDeploymentController(ctx, pool, stores, deploymentAdapters, deploymentControllerConfig(cfg)); err != nil {
 		return fmt.Errorf("start deployment controller: %w", err)
@@ -182,11 +182,23 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	return nil
 }
 
-func buildStores(pool *pgxpool.Pool, auditor types.Auditor) map[string]*v1alpha1store.Store {
+func buildStores(pool *pgxpool.Pool, extraStoreTables map[string]string, mutableExtraKinds map[string]bool, auditor types.Auditor) map[string]*v1alpha1store.Store {
 	if auditor == nil {
 		auditor = types.NoopAuditor
 	}
 	stores := v1alpha1store.NewStores(pool, v1alpha1store.WithAuditor(auditor))
+	for kind, table := range extraStoreTables {
+		if kind == "" || table == "" {
+			slog.Warn("skipping v1alpha1 extra store with empty kind or table", "kind", kind, "table", table)
+			continue
+		}
+		opts := []v1alpha1store.StoreOption{v1alpha1store.WithKind(kind), v1alpha1store.WithAuditor(auditor)}
+		if mutableExtraKinds[kind] {
+			stores[kind] = v1alpha1store.NewMutableObjectStore(pool, table, opts...)
+			continue
+		}
+		stores[kind] = v1alpha1store.NewStore(pool, table, opts...)
+	}
 
 	// pool == nil is the noop/DatabaseFactory path used by gen-openapi
 	// and the release-openapi make target. Routes still register so the
@@ -285,6 +297,12 @@ func crudPerKindHooks(options types.AppOptions) crud.PerKindHooks {
 		hooks.PostDeletes = make(map[string]func(ctx context.Context, obj v1alpha1.Object) error, len(options.PostDeletes))
 		for kind, fn := range options.PostDeletes {
 			hooks.PostDeletes[kind] = fn
+		}
+	}
+	if len(options.Prepares) > 0 {
+		hooks.Prepares = make(map[string]func(ctx context.Context, obj v1alpha1.Object) error, len(options.Prepares))
+		for kind, fn := range options.Prepares {
+			hooks.Prepares[kind] = fn
 		}
 	}
 	if len(options.InitialFinalizers) > 0 {
