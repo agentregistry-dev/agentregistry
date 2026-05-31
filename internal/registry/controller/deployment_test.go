@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -18,11 +17,6 @@ func TestDeriveDeploymentWorkDefaultsToApply(t *testing.T) {
 	require.Equal(t, ReconcileActionApply, work.Action)
 	require.Equal(t, "desired-deployed", work.Reason)
 	require.Equal(t, int64(7), work.Generation)
-
-	var payload DeploymentRequestPayload
-	require.NoError(t, json.Unmarshal(work.Payload, &payload))
-	require.Equal(t, v1alpha1.KindMCPServer, payload.TargetRef.Kind)
-	require.Equal(t, v1alpha1.KindRuntime, payload.RuntimeRef.Kind)
 }
 
 func TestDeriveDeploymentWorkRemovesForDesiredUndeployed(t *testing.T) {

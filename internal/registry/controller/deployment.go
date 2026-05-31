@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -15,15 +14,6 @@ const (
 	// ReconcileActionRemove tears down runtime resources.
 	ReconcileActionRemove = "remove"
 )
-
-// DeploymentRequestPayload is the payload persisted with Deployment
-// reconcile_work. It captures refs needed by a future executor without
-// embedding full object payloads.
-type DeploymentRequestPayload struct {
-	TargetRef    v1alpha1.ResourceRef `json:"targetRef"`
-	RuntimeRef   v1alpha1.ResourceRef `json:"runtimeRef"`
-	DesiredState string               `json:"desiredState,omitempty"`
-}
 
 // DeriveDeploymentWork converts a Deployment source row into durable work. It
 // performs no adapter calls and does not resolve references; executors must
@@ -45,14 +35,6 @@ func DeriveDeploymentWork(deployment *v1alpha1.Deployment) (v1alpha1store.Reconc
 	if err != nil {
 		return v1alpha1store.ReconcileWork{}, err
 	}
-	payload, err := json.Marshal(DeploymentRequestPayload{
-		TargetRef:    deployment.Spec.TargetRef,
-		RuntimeRef:   deployment.Spec.RuntimeRef,
-		DesiredState: deployment.Spec.DesiredState,
-	})
-	if err != nil {
-		return v1alpha1store.ReconcileWork{}, fmt.Errorf("controller: marshal deployment request payload: %w", err)
-	}
 
 	resource := v1alpha1store.ResourceKey{
 		Kind:      v1alpha1.KindDeployment,
@@ -66,7 +48,6 @@ func DeriveDeploymentWork(deployment *v1alpha1.Deployment) (v1alpha1store.Reconc
 		Generation: meta.Generation,
 		Action:     action,
 		Reason:     reason,
-		Payload:    payload,
 	}, nil
 }
 
