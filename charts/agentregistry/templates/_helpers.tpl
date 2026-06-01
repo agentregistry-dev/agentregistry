@@ -319,6 +319,15 @@ Called from templates/validate.yaml so it fires during helm template/install.
 {{- else if and (not .Values.config.existingSecret) (not (regexMatch "^[0-9a-fA-F]+$" .Values.config.jwtPrivateKey)) }}
 {{- $errors = append $errors "config.jwtPrivateKey must be a valid hex string (e.g. generated with: openssl rand -hex 32)." }}
 {{- end }}
+{{- if hasKey .Values.database.postgres "url" }}
+{{- $errors = append $errors "database.postgres.url has moved: set database.postgres.mode=external and database.postgres.external.url instead." }}
+{{- end }}
+{{- if hasKey .Values.database.postgres "secretRef" }}
+{{- $errors = append $errors "database.postgres.secretRef has moved: set database.postgres.mode=external and database.postgres.external.secretRef.{name,key} instead." }}
+{{- end }}
+{{- if hasKey .Values.database.postgres.bundled "enabled" }}
+{{- $errors = append $errors "database.postgres.bundled.enabled has been removed: use database.postgres.mode (bundled|external) instead." }}
+{{- end }}
 {{- $mode := .Values.database.postgres.mode }}
 {{- if not (has $mode (list "bundled" "external")) }}
 {{- $errors = append $errors (printf "database.postgres.mode must be \"bundled\" or \"external\" (got %q)." $mode) }}
@@ -329,6 +338,11 @@ Called from templates/validate.yaml so it fires during helm template/install.
 {{- end }}
 {{- if and (not .Values.database.postgres.external.url) (not .Values.database.postgres.external.secretRef.name) }}
 {{- $errors = append $errors "database.postgres.mode=external requires either database.postgres.external.url or database.postgres.external.secretRef.name to be set." }}
+{{- end }}
+{{- end }}
+{{- if eq $mode "bundled" }}
+{{- if or .Values.database.postgres.external.url .Values.database.postgres.external.secretRef.name }}
+{{- $errors = append $errors "database.postgres.external.* is set but ignored because mode=bundled. Set mode=external to use these fields, or remove them." }}
 {{- end }}
 {{- end }}
 {{- range $errors }}

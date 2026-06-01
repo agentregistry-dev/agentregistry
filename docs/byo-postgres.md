@@ -7,11 +7,11 @@ Point the agentregistry chart at an external Postgres (RDS, Cloud SQL, etc.) ins
 | Value | Default | Notes |
 |---|---|---|
 | `database.postgres.mode` | `bundled` | `bundled` (deploy in-cluster dev pod) or `external` (BYO). |
-| `database.postgres.external.url` | `""` | Inline connection string. Mutually exclusive with `secretRef.name`. |
+| `database.postgres.external.url` | `""` | Inline connection string. Mutually exclusive with `database.postgres.external.secretRef.name`. |
 | `database.postgres.external.secretRef.name` | `""` | Secret in the release namespace holding the connection string. |
 | `database.postgres.external.secretRef.key` | `AGENT_REGISTRY_DATABASE_URL` | Key within that Secret. |
 
-When `mode: external`, exactly one of `external.url` or `external.secretRef.name` must be set; the chart fails fast otherwise.
+When `mode: external`, exactly one of `database.postgres.external.url` or `database.postgres.external.secretRef.name` must be set; the chart fails fast otherwise.
 
 ## Connection-string formats
 

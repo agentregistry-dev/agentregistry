@@ -102,3 +102,47 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "mutually exclusive"
+
+  # ── Legacy keys removed in restructure ──────────────────────────────────────
+
+  - it: fails with migration guidance when legacy database.postgres.url is set
+    set:
+      config.jwtPrivateKey: deadbeef1234567890abcdef
+      database.postgres.url: "postgres://user:pass@host:5432/db"
+    asserts:
+      - failedTemplate:
+          errorPattern: "database.postgres.url has moved"
+
+  - it: fails with migration guidance when legacy database.postgres.secretRef is set
+    set:
+      config.jwtPrivateKey: deadbeef1234567890abcdef
+      database.postgres.secretRef.name: my-postgres-secret
+    asserts:
+      - failedTemplate:
+          errorPattern: "database.postgres.secretRef has moved"
+
+  - it: fails with migration guidance when legacy database.postgres.bundled.enabled is set
+    set:
+      config.jwtPrivateKey: deadbeef1234567890abcdef
+      database.postgres.bundled.enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "database.postgres.bundled.enabled has been removed"
+
+  # ── Silent-misconfig guard: external.* set with mode=bundled ────────────────
+
+  - it: fails when external.url is set while mode=bundled
+    set:
+      config.jwtPrivateKey: deadbeef1234567890abcdef
+      database.postgres.external.url: "postgres://user:pass@host:5432/db"
+    asserts:
+      - failedTemplate:
+          errorPattern: "external.\\* is set but ignored"
+
+  - it: fails when external.secretRef.name is set while mode=bundled
+    set:
+      config.jwtPrivateKey: deadbeef1234567890abcdef
+      database.postgres.external.secretRef.name: my-postgres-secret
+    asserts:
+      - failedTemplate:
+          errorPattern: "external.\\* is set but ignored"

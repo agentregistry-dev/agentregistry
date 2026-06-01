@@ -278,12 +278,12 @@ database:
     mode: bundled
     # -- External (BYO) PostgreSQL configuration. Only consumed when `mode: external`.
     external:
-      # -- Inline connection string. Mutually exclusive with `secretRef.name`.
+      # -- Inline connection string. Mutually exclusive with `external.secretRef.name`.
       url: ""
       # -- Source the connection string from an existing Secret instead of inlining it.
       # Use this when credentials are managed by an external secret store (e.g. AWS Secrets Manager
       # via External Secrets Operator) and synced into the cluster as a Secret. The chart does not
-      # create or manage this Secret. Mutually exclusive with `url`.
+      # create or manage this Secret. Mutually exclusive with `external.url`.
       # On credential rotation, Kubernetes does NOT auto-restart the pod — pair with a controller
       # such as stakater/Reloader if you need automatic restarts on Secret content changes.
       secretRef:
