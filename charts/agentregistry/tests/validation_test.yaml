@@ -5,34 +5,34 @@ templates:
 tests:
   # ── JWT key validation ───────────────────────────────────────────────────────
 
-  - it: renders nothing when bundled is enabled and jwtPrivateKey is set
+  - it: renders nothing when mode=bundled and jwtPrivateKey is set
     set:
       config.jwtPrivateKey: deadbeef1234567890abcdef
     asserts:
       - hasDocuments:
           count: 0
 
-  - it: renders nothing when jwtPrivateKey and database.postgres.url are set (bundled disabled)
+  - it: renders nothing when mode=external with url and jwtPrivateKey is set
     set:
       config.jwtPrivateKey: deadbeef1234567890abcdef
-      database.postgres.bundled.enabled: false
-      database.postgres.url: "postgres://user:pass@host:5432/db"
+      database.postgres.mode: external
+      database.postgres.external.url: "postgres://user:pass@host:5432/db"
     asserts:
       - hasDocuments:
           count: 0
 
-  - it: renders nothing when config.existingSecret is set (bundled disabled)
+  - it: renders nothing when config.existingSecret is set (mode=external with url)
     set:
       config.existingSecret: my-existing-secret
-      database.postgres.bundled.enabled: false
-      database.postgres.url: "postgres://user:pass@host:5432/db"
+      database.postgres.mode: external
+      database.postgres.external.url: "postgres://user:pass@host:5432/db"
     asserts:
       - hasDocuments:
           count: 0
 
   - it: fails when jwtPrivateKey is empty and no existingSecret is provided
     set:
-      database.postgres.bundled.enabled: true
+      database.postgres.mode: bundled
     asserts:
       - failedTemplate:
           errorPattern: "CHART CONFIGURATION ERROR"
@@ -44,59 +44,61 @@ tests:
       - failedTemplate:
           errorPattern: "CHART CONFIGURATION ERROR"
 
-  # ── Bundled PostgreSQL skips external validation ──────────────────────────
+  # ── mode discriminator ──────────────────────────────────────────────────────
 
-  - it: renders nothing with bundled enabled even when no url
+  - it: fails when database.postgres.mode is invalid
     set:
       config.jwtPrivateKey: deadbeef1234567890abcdef
-    asserts:
-      - hasDocuments:
-          count: 0
-
-  # ── Database URL validation (bundled disabled) ────────────────────────────
-
-  - it: fails when bundled is disabled and url is not set
-    set:
-      config.jwtPrivateKey: deadbeef1234567890abcdef
-      database.postgres.bundled.enabled: false
+      database.postgres.mode: invalid
     asserts:
       - failedTemplate:
-          errorPattern: "CHART CONFIGURATION ERROR"
+          errorPattern: 'database.postgres.mode must be "bundled" or "external"'
 
-  - it: renders nothing when database.postgres.url is set (bundled disabled)
+  # ── mode=bundled skips external validation ──────────────────────────────────
+
+  - it: renders nothing with mode=bundled even when no url
     set:
       config.jwtPrivateKey: deadbeef1234567890abcdef
-      database.postgres.bundled.enabled: false
-      database.postgres.url: "postgres://user:pass@host:5432/db"
     asserts:
       - hasDocuments:
           count: 0
 
-  # ── secretRef-backed external Postgres ────────────────────────────────────
+  # ── mode=external requires url or secretRef ────────────────────────────────
 
-  - it: renders nothing when database.postgres.secretRef.name is set (bundled disabled)
+  - it: fails when mode=external and neither url nor secretRef.name is set
     set:
       config.jwtPrivateKey: deadbeef1234567890abcdef
-      database.postgres.bundled.enabled: false
-      database.postgres.secretRef.name: my-postgres-secret
-    asserts:
-      - hasDocuments:
-          count: 0
-
-  - it: fails when database.postgres.url and database.postgres.secretRef.name are both set
-    set:
-      config.jwtPrivateKey: deadbeef1234567890abcdef
-      database.postgres.bundled.enabled: false
-      database.postgres.url: "postgres://user:pass@host:5432/db"
-      database.postgres.secretRef.name: my-postgres-secret
+      database.postgres.mode: external
     asserts:
       - failedTemplate:
-          errorPattern: "mutually exclusive"
+          errorPattern: "database.postgres.mode=external requires either"
 
-  - it: fails when database.postgres.bundled.enabled=true and database.postgres.secretRef.name is set
+  - it: renders nothing when mode=external and external.url is set
     set:
       config.jwtPrivateKey: deadbeef1234567890abcdef
-      database.postgres.secretRef.name: my-postgres-secret
+      database.postgres.mode: external
+      database.postgres.external.url: "postgres://user:pass@host:5432/db"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # ── secretRef-backed external Postgres ─────────────────────────────────────
+
+  - it: renders nothing when mode=external and external.secretRef.name is set
+    set:
+      config.jwtPrivateKey: deadbeef1234567890abcdef
+      database.postgres.mode: external
+      database.postgres.external.secretRef.name: my-postgres-secret
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: fails when external.url and external.secretRef.name are both set
+    set:
+      config.jwtPrivateKey: deadbeef1234567890abcdef
+      database.postgres.mode: external
+      database.postgres.external.url: "postgres://user:pass@host:5432/db"
+      database.postgres.external.secretRef.name: my-postgres-secret
     asserts:
       - failedTemplate:
           errorPattern: "mutually exclusive"

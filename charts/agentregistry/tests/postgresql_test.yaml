@@ -4,9 +4,9 @@ templates:
   - postgresql-secret.yaml
 
 tests:
-  # ── Bundled enabled (default) ─────────────────────────────────────────────
+  # ── mode=bundled (default) ────────────────────────────────────────────────
 
-  - it: renders PVC, Deployment, and Service when bundled is enabled
+  - it: renders PVC, Deployment, and Service when mode=bundled
     template: postgresql.yaml
     asserts:
       - hasDocuments:
@@ -174,24 +174,16 @@ tests:
           path: spec.type
           value: ClusterIP
 
-  # ── Bundled disabled ──────────────────────────────────────────────────────
+  # ── mode=external ────────────────────────────────────────────────────────
 
-  - it: renders nothing when bundled is disabled
+  - it: renders nothing when mode=external
     template: postgresql.yaml
     set:
-      database.postgres.bundled.enabled: false
-      database.postgres.url: "postgres://user:pass@host:5432/db"
+      database.postgres.mode: external
+      database.postgres.external.url: "postgres://user:pass@host:5432/db"
     asserts:
       - hasDocuments:
           count: 0
-
-  - it: still renders when bundled is enabled and url is also set
-    template: postgresql.yaml
-    set:
-      database.postgres.url: "postgres://user:pass@host:5432/db"
-    asserts:
-      - hasDocuments:
-          count: 3
 
   # ── Custom storage size ───────────────────────────────────────────────────
 
@@ -209,7 +201,7 @@ tests:
 
   # ── postgresql-secret.yaml ────────────────────────────────────────────────
 
-  - it: creates postgresql secret when bundled is enabled
+  - it: creates postgresql secret when mode=bundled
     template: postgresql-secret.yaml
     asserts:
       - hasDocuments:
@@ -237,19 +229,11 @@ tests:
           path: metadata.labels["app.kubernetes.io/component"]
           value: database
 
-  - it: creates postgresql secret even when url is set (bundled still enabled)
+  - it: does not create postgresql secret when mode=external
     template: postgresql-secret.yaml
     set:
-      database.postgres.url: "postgres://user:pass@host:5432/db"
-    asserts:
-      - hasDocuments:
-          count: 1
-
-  - it: does not create postgresql secret when bundled is disabled
-    template: postgresql-secret.yaml
-    set:
-      database.postgres.bundled.enabled: false
-      database.postgres.url: "postgres://user:pass@host:5432/db"
+      database.postgres.mode: external
+      database.postgres.external.url: "postgres://user:pass@host:5432/db"
     asserts:
       - hasDocuments:
           count: 0

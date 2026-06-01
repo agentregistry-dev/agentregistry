@@ -18,7 +18,7 @@ A PostgreSQL instance is bundled and started automatically — no external datab
 
 This chart bootstraps an [Agent Registry](https://github.com/agentregistry-dev/agentregistry) deployment on a [Kubernetes](https://kubernetes.io) cluster using the [Helm](https://helm.sh) package manager.
 
-It exposes both an HTTP REST API and an Agent Gateway gRPC endpoint. A PostgreSQL instance is bundled by default for development and evaluation. For production, disable the bundled database and supply a connection string to your own PostgreSQL service.
+It exposes both an HTTP REST API and an Agent Gateway gRPC endpoint. A PostgreSQL instance is bundled by default for development and evaluation. For production, set `database.postgres.mode: external` and supply a connection string to your own PostgreSQL service.
 
 ## Prerequisites
 
@@ -39,8 +39,8 @@ helm install my-agentregistry oci://ghcr.io/agentregistry-dev/agentregistry/char
 ```console
 helm install my-agentregistry oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry \
   --set config.jwtPrivateKey=$(openssl rand -hex 32) \
-  --set database.postgres.bundled.enabled=false \
-  --set database.postgres.url=postgres://<user>:<password>@<host>:5432/<dbname>
+  --set database.postgres.mode=external \
+  --set database.postgres.external.url=postgres://<user>:<password>@<host>:5432/<dbname>
 ```
 
 The command deploys Agent Registry on the Kubernetes cluster using the default configuration. The [Parameters](#parameters) section lists the values that can be configured during installation.
@@ -63,10 +63,10 @@ The chart deploys the following Kubernetes resources:
 | Service | Exposes HTTP (`:12121`) and gRPC (`:21212`) ports |
 | ConfigMap | Application configuration injected as environment variables |
 | Secret | JWT signing key (omitted when `config.existingSecret` is set) |
-| Secret (`-postgresql`) | Bundled PostgreSQL password (only when `database.postgres.bundled.enabled=true`) |
-| Deployment (`-postgresql`) | Bundled PostgreSQL instance (only when `database.postgres.bundled.enabled=true`) |
-| Service (`-postgresql`) | Internal service for bundled PostgreSQL (only when `database.postgres.bundled.enabled=true`) |
-| PersistentVolumeClaim (`-postgresql`) | Storage for bundled PostgreSQL data (only when `database.postgres.bundled.enabled=true`) |
+| Secret (`-postgresql`) | Bundled PostgreSQL password (only when `database.postgres.mode=bundled`) |
+| Deployment (`-postgresql`) | Bundled PostgreSQL instance (only when `database.postgres.mode=bundled`) |
+| Service (`-postgresql`) | Internal service for bundled PostgreSQL (only when `database.postgres.mode=bundled`) |
+| PersistentVolumeClaim (`-postgresql`) | Storage for bundled PostgreSQL data (only when `database.postgres.mode=bundled`) |
 | ServiceAccount | Dedicated service account for the workload |
 | ClusterRole / ClusterRoleBinding | RBAC rules for managing cluster-scoped resources and namespace discovery |
 | Role / RoleBinding | Per-namespace RBAC rules when `rbac.watchedNamespaces` is set |
@@ -80,31 +80,34 @@ By default, the chart deploys a PostgreSQL instance alongside Agent Registry. It
 ```yaml
 database:
   postgres:
-    bundled:
-      enabled: true  # default
+    mode: bundled  # default
 ```
 
 ### External PostgreSQL
 
-For production, disable the bundled database and provide a connection string:
+For production, switch to external mode and provide a connection string:
 
 ```yaml
 database:
   postgres:
-    bundled:
-      enabled: false
-    url: "postgres://agentregistry:changeme@my-postgres.example.com:5432/agentregistry?sslmode=require"
+    mode: external
+    external:
+      url: "postgres://agentregistry:changeme@my-postgres.example.com:5432/agentregistry?sslmode=require"
 ```
 
-To supply the connection string from a file (for example, a mounted Secret):
+Or source the connection string from an existing Kubernetes Secret (recommended when credentials come from a rotating store like AWS Secrets Manager or Vault):
 
 ```yaml
 database:
   postgres:
-    bundled:
-      enabled: false
-    urlFile: "/etc/secrets/db-url"
+    mode: external
+    external:
+      secretRef:
+        name: my-db-creds
+        key: AGENT_REGISTRY_DATABASE_URL
 ```
+
+See [docs/byo-postgres.md](../../docs/byo-postgres.md) for a complete walkthrough.
 
 ## Secrets
 
@@ -159,8 +162,7 @@ This creates a `Role`/`RoleBinding` in each listed namespace (plus the installat
 | containerSecurityContext.runAsNonRoot | bool | `true` | Prevent running as root |
 | containerSecurityContext.runAsUser | int | `1001` | User ID to run the container as |
 | containerSecurityContext.seccompProfile.type | string | `"RuntimeDefault"` | Seccomp profile type |
-| database.postgres.bundled | object | `{"enabled":true,"image":{"name":"postgres","pullPolicy":"IfNotPresent","registry":"docker.io","repository":"library","tag":"18"},"resources":{"limits":{"cpu":"1","memory":"1Gi"},"requests":{"cpu":"250m","memory":"256Mi"}},"storage":"5Gi"}` | Bundled PostgreSQL — dev/eval only. |
-| database.postgres.bundled.enabled | bool | `true` | Deploy a PostgreSQL instance alongside Agent Registry |
+| database.postgres.bundled | object | `{"image":{"name":"postgres","pullPolicy":"IfNotPresent","registry":"docker.io","repository":"library","tag":"18"},"resources":{"limits":{"cpu":"1","memory":"1Gi"},"requests":{"cpu":"250m","memory":"256Mi"}},"storage":"5Gi"}` | Bundled PostgreSQL — dev/eval only. Only consumed when `mode: bundled`. |
 | database.postgres.bundled.image.name | string | `"postgres"` | Bundled PostgreSQL image name |
 | database.postgres.bundled.image.pullPolicy | string | `"IfNotPresent"` | Bundled PostgreSQL image pull policy |
 | database.postgres.bundled.image.registry | string | `"docker.io"` | Bundled PostgreSQL image registry |
@@ -168,13 +170,15 @@ This creates a `Role`/`RoleBinding` in each listed namespace (plus the installat
 | database.postgres.bundled.image.tag | string | `"18"` | Bundled PostgreSQL image tag |
 | database.postgres.bundled.resources | object | `{"limits":{"cpu":"1","memory":"1Gi"},"requests":{"cpu":"250m","memory":"256Mi"}}` | Resource requests/limits for the bundled PostgreSQL container |
 | database.postgres.bundled.storage | string | `"5Gi"` | PersistentVolumeClaim size for the bundled PostgreSQL data directory |
-| database.postgres.secretRef | object | `{"key":"AGENT_REGISTRY_DATABASE_URL","name":""}` | Source the PostgreSQL connection URL from an existing Secret instead of inlining it. Use this when credentials are managed by an external secret store (e.g. AWS Secrets Manager via External Secrets Operator) and synced into the cluster as a Secret. The chart does not create or manage this Secret. Mutually exclusive with `url` and with `bundled.enabled=true`. On credential rotation, Kubernetes does NOT auto-restart the pod — pair with a controller such as stakater/Reloader if you need automatic restarts on Secret content changes. |
-| database.postgres.secretRef.key | string | `"AGENT_REGISTRY_DATABASE_URL"` | Key within the Secret that holds the connection URL. |
-| database.postgres.secretRef.name | string | `""` | Name of an existing Secret in the release namespace. Leave empty to disable. |
-| database.postgres.url | string | `""` | When set, Agent Registry connects here instead of the bundled instance. The bundled pod (if enabled) still deploys but is unused; the init container is skipped. Mutually exclusive with `secretRef.name`. |
+| database.postgres.external | object | `{"secretRef":{"key":"AGENT_REGISTRY_DATABASE_URL","name":""},"url":""}` | External (BYO) PostgreSQL configuration. Only consumed when `mode: external`. |
+| database.postgres.external.secretRef | object | `{"key":"AGENT_REGISTRY_DATABASE_URL","name":""}` | Source the connection string from an existing Secret instead of inlining it. Use this when credentials are managed by an external secret store (e.g. AWS Secrets Manager via External Secrets Operator) and synced into the cluster as a Secret. The chart does not create or manage this Secret. Mutually exclusive with `url`. On credential rotation, Kubernetes does NOT auto-restart the pod — pair with a controller such as stakater/Reloader if you need automatic restarts on Secret content changes. |
+| database.postgres.external.secretRef.key | string | `"AGENT_REGISTRY_DATABASE_URL"` | Key within the Secret that holds the connection string. |
+| database.postgres.external.secretRef.name | string | `""` | Name of an existing Secret in the release namespace. Leave empty to disable. |
+| database.postgres.external.url | string | `""` | Inline connection string. Mutually exclusive with `secretRef.name`. |
+| database.postgres.mode | string | `"bundled"` | Backend mode: "bundled" (deploy the chart's in-cluster dev/eval Postgres pod) or "external" (connect to a Postgres you bring yourself; configure under `external` below). |
 | dnsConfig | object | `{}` | DNS configuration for the pod |
 | dnsPolicy | string | `""` | DNS policy for the pod |
-| extraEnvVars | list | `[]` | Array of extra environment variables for the Agent Registry container. Additive only — cannot override env vars the chart already renders. For credentialed fields use the dedicated knobs (e.g. `database.postgres.secretRef`). |
+| extraEnvVars | list | `[]` | Array of extra environment variables for the Agent Registry container. Additive only — cannot override env vars the chart already renders. For credentialed fields use the dedicated knobs (e.g. `database.postgres.external.secretRef`). |
 | fullnameOverride | string | `""` | Override the full name of the chart |
 | global.imagePullSecrets | list | `[]` | Global Docker registry secret names |
 | global.imageRegistry | string | `""` | Global container image registry override |
@@ -256,9 +260,9 @@ This creates a `Role`/`RoleBinding` in each listed namespace (plus the installat
 ```yaml
 database:
   postgres:
-    bundled:
-      enabled: false
-    url: "postgres://agentregistry:changeme@pg.example.com:5432/agentregistry?sslmode=require"
+    mode: external
+    external:
+      url: "postgres://agentregistry:changeme@pg.example.com:5432/agentregistry?sslmode=require"
 
 config:
   existingSecret: "agentregistry-secrets"
@@ -272,14 +276,15 @@ resources:
     memory: 512Mi
 ```
 
-### Production with connection string from a mounted file
+### Production with connection string from a Kubernetes Secret
 
 ```yaml
 database:
   postgres:
-    bundled:
-      enabled: false
-    urlFile: "/etc/secrets/db-url"
+    mode: external
+    external:
+      secretRef:
+        name: my-db-creds
 
 config:
   existingSecret: "agentregistry-secrets"
