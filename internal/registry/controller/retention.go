@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"time"
 )
 
@@ -99,12 +98,12 @@ func (p *RetentionPruner) runOnceLogged(ctx context.Context) {
 	result, err := p.RunOnce(ctx)
 	if err != nil {
 		if !errors.Is(err, context.Canceled) {
-			slog.Error("deployment controller retention prune failed", "error", err)
+			logger.Error("deployment controller retention prune failed", "error", err)
 		}
 		return
 	}
 	if result != (RetentionPruneResult{}) {
-		slog.Info(
+		logger.Info(
 			"deployment controller retention pruned bookkeeping rows",
 			"control_plane_events", result.ControlPlaneEvents,
 			"reconcile_work", result.ReconcileWork,

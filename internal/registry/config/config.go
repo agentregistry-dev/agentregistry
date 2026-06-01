@@ -33,14 +33,21 @@ type Config struct {
 	RuntimeDir string `env:"RUNTIME_DIR" envDefault:"/tmp/arctl-runtime"`
 	Verbose    bool   `env:"VERBOSE" envDefault:"false"`
 
-	// Controller foundation retention. These settings bound the Deployment
-	// controller's durable invalidation/work tables. A zero duration disables
-	// pruning for that table.
-	ControllerEventRetention           time.Duration `env:"CONTROLLER_EVENT_RETENTION" envDefault:"24h"`
-	ControllerEventKeepAfterRevision   int64         `env:"CONTROLLER_EVENT_KEEP_AFTER_REVISION" envDefault:"0"`
-	ControllerWorkRetention            time.Duration `env:"CONTROLLER_WORK_RETENTION" envDefault:"24h"`
-	ControllerAttemptRetention         time.Duration `env:"CONTROLLER_ATTEMPT_RETENTION" envDefault:"168h"`
-	ControllerRetentionPruneBatchLimit int           `env:"CONTROLLER_RETENTION_PRUNE_BATCH_LIMIT" envDefault:"500"`
+	// ControllerEventRetention is how long handled control-plane events remain
+	// available for checkpoint replay. Set to 0 to disable event pruning.
+	ControllerEventRetention time.Duration `env:"CONTROLLER_EVENT_RETENTION" envDefault:"24h"`
+	// ControllerEventKeepAfterRevision preserves control-plane events newer than
+	// this Postgres revision even when they are older than ControllerEventRetention.
+	ControllerEventKeepAfterRevision int64 `env:"CONTROLLER_EVENT_KEEP_AFTER_REVISION" envDefault:"0"`
+	// ControllerWorkRetention is how long completed or abandoned reconcile work
+	// rows remain for debugging. Pending and running work is never pruned.
+	ControllerWorkRetention time.Duration `env:"CONTROLLER_WORK_RETENTION" envDefault:"24h"`
+	// ControllerAttemptRetention is how long reconcile attempt history remains
+	// available for diagnostics after work completes.
+	ControllerAttemptRetention time.Duration `env:"CONTROLLER_ATTEMPT_RETENTION" envDefault:"168h"`
+	// ControllerRetentionPruneBatchLimit caps rows removed per retention pass so
+	// pruning cannot monopolize the database during startup or repair loops.
+	ControllerRetentionPruneBatchLimit int `env:"CONTROLLER_RETENTION_PRUNE_BATCH_LIMIT" envDefault:"500"`
 }
 
 // NewConfig creates a new configuration with default values

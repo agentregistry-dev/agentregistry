@@ -8,11 +8,15 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
+// ReconcileAction is the durable operation requested by Deployment reconcile
+// work. Values are stored in reconcile_work.action and participate in work keys.
+type ReconcileAction string
+
 const (
 	// ReconcileActionApply converges a Deployment toward running desired state.
-	ReconcileActionApply = "apply"
-	// ReconcileActionRemove tears down runtime resources.
-	ReconcileActionRemove = "remove"
+	ReconcileActionApply ReconcileAction = "apply"
+	// ReconcileActionDelete tears down runtime resources for an undeploy/delete.
+	ReconcileActionDelete ReconcileAction = "delete"
 )
 
 // DeriveDeploymentWork converts a Deployment source row into durable work. It
@@ -46,25 +50,25 @@ func DeriveDeploymentWork(deployment *v1alpha1.Deployment) (v1alpha1store.Reconc
 		Resource:   resource,
 		UID:        meta.UID,
 		Generation: meta.Generation,
-		Action:     action,
+		Action:     string(action),
 		Reason:     reason,
 	}, nil
 }
 
-func deploymentAction(deployment *v1alpha1.Deployment) (action, reason string, err error) {
+func deploymentAction(deployment *v1alpha1.Deployment) (ReconcileAction, string, error) {
 	if deployment.Metadata.DeletionTimestamp != nil {
-		return ReconcileActionRemove, "terminating", nil
+		return ReconcileActionDelete, "terminating", nil
 	}
 	switch deployment.Spec.DesiredState {
 	case "", v1alpha1.DesiredStateDeployed:
 		return ReconcileActionApply, "desired-deployed", nil
 	case v1alpha1.DesiredStateUndeployed:
-		return ReconcileActionRemove, "desired-undeployed", nil
+		return ReconcileActionDelete, "desired-undeployed", nil
 	default:
 		return "", "", fmt.Errorf("controller: unsupported deployment desiredState %q", deployment.Spec.DesiredState)
 	}
 }
 
-func deploymentWorkKey(resource v1alpha1store.ResourceKey, uid string, generation int64, action string) string {
+func deploymentWorkKey(resource v1alpha1store.ResourceKey, uid string, generation int64, action ReconcileAction) string {
 	return fmt.Sprintf("%s:%s:%s:%s:%d:%s", resource.Kind, resource.Namespace, resource.Name, uid, generation, action)
 }

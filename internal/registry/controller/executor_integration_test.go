@@ -365,7 +365,7 @@ func TestDeploymentController_RemoveFailureKeepsFinalizerAndRetries(t *testing.T
 
 	workKey := deploymentWorkKey(
 		v1alpha1store.ResourceKey{Kind: v1alpha1.KindDeployment, Namespace: "default", Name: deployment.Metadata.Name},
-		deployment.Metadata.UID, deployment.Metadata.Generation, ReconcileActionRemove)
+		deployment.Metadata.UID, deployment.Metadata.Generation, ReconcileActionDelete)
 	history, err := eventStore.ListByWorkKey(ctx, workKey, 10)
 	require.NoError(t, err)
 	require.Len(t, history, 1)
@@ -426,7 +426,7 @@ func TestDeploymentController_SkipsClaimedApplyWhenDeploymentIsDeleted(t *testin
 	claimed, err := workStore.ClaimDue(ctx, "worker-a", time.Now().Add(time.Minute), 1)
 	require.NoError(t, err)
 	require.Len(t, claimed, 1)
-	require.Equal(t, ReconcileActionApply, claimed[0].Action)
+	require.Equal(t, string(ReconcileActionApply), claimed[0].Action)
 
 	require.NoError(t, stores[v1alpha1.KindDeployment].Delete(ctx, "default", deployment.Metadata.Name, ""))
 

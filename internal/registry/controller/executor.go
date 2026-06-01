@@ -137,14 +137,15 @@ func (e *DeploymentExecutor) reconcile(ctx context.Context, work v1alpha1store.R
 	if deployment.Metadata.UID != work.UID || deployment.Metadata.Generation != work.Generation {
 		return "stale", "deployment uid or generation changed before execution", nil
 	}
-	if work.Action == ReconcileActionApply && deployment.Metadata.DeletionTimestamp != nil {
+	action := ReconcileAction(work.Action)
+	if action == ReconcileActionApply && deployment.Metadata.DeletionTimestamp != nil {
 		return "stale", "deployment is terminating; skipping apply", nil
 	}
 
-	switch work.Action {
+	switch action {
 	case ReconcileActionApply:
 		return e.apply(ctx, deployment)
-	case ReconcileActionRemove:
+	case ReconcileActionDelete:
 		return e.remove(ctx, deployment)
 	default:
 		return "", "", fmt.Errorf("unsupported deployment reconcile action %q", work.Action)

@@ -4,21 +4,35 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/logging"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
+var logger = logging.New("registry-controller")
+
 const (
+	// defaultControllerResyncInterval is the repair cadence. LISTEN wakeups
+	// handle normal event-driven scheduling; the minute tick bounds missed
+	// notifications and retention-gap recovery without constantly scanning.
 	defaultControllerResyncInterval = time.Minute
-	defaultExecutorInterval         = time.Second
-	defaultExecutorBatchLimit       = 10
-	defaultWakeupReconnectDelay     = 5 * time.Second
+	// defaultExecutorInterval is the idle poll cadence. The executor also wakes
+	// after each batch, so steady-state throughput is mostly
+	// defaultExecutorBatchLimit / adapter latency; this interval bounds how long
+	// newly due retry/backoff work can wait when no event wakeup arrives.
+	defaultExecutorInterval = time.Second
+	// defaultExecutorBatchLimit caps each lease pass. Ten keeps work claims short
+	// and fair while still allowing roughly 10 quick reconciles per second before
+	// adapter latency dominates.
+	defaultExecutorBatchLimit = 10
+	// defaultWakeupReconnectDelay backs off LISTEN reconnects after transient DB
+	// connection failures so the controller does not hot-loop.
+	defaultWakeupReconnectDelay = 5 * time.Second
 )
 
 // ControllerHandle owns the always-on Deployment controller loops.
@@ -82,18 +96,18 @@ func StartDeploymentController(
 
 	go func() {
 		if err := controller.Run(ctx, defaultControllerResyncInterval); err != nil && !errors.Is(err, context.Canceled) {
-			slog.Error("deployment controller stopped", "error", err)
+			logger.Error("deployment controller stopped", "error", err)
 		}
 	}()
 	go func() {
 		if err := executor.Run(ctx, defaultExecutorInterval, defaultExecutorBatchLimit); err != nil && !errors.Is(err, context.Canceled) {
-			slog.Error("deployment controller executor stopped", "error", err)
+			logger.Error("deployment controller executor stopped", "error", err)
 		}
 	}()
 	if retention.Enabled() {
 		go func() {
 			if err := retention.Run(ctx, defaultRetentionPruneInterval); err != nil && !errors.Is(err, context.Canceled) {
-				slog.Error("deployment controller retention pruner stopped", "error", err)
+				logger.Error("deployment controller retention pruner stopped", "error", err)
 			}
 		}()
 	}
@@ -116,7 +130,7 @@ func runControlPlaneWakeupLoop(ctx context.Context, wakeups chan<- struct{}, lis
 		if err == nil || errors.Is(err, context.Canceled) || ctx.Err() != nil {
 			return
 		}
-		slog.Error("deployment controller control-plane listener stopped; reconnecting", "error", err, "retry_after", reconnectDelay)
+		logger.Error("deployment controller control-plane listener stopped; reconnecting", "error", err, "retry_after", reconnectDelay)
 		if !waitForReconnect(ctx, reconnectDelay) {
 			return
 		}

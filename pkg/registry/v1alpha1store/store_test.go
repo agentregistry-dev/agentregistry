@@ -768,9 +768,9 @@ func TestReconcileWorkStore_AbandonSupersededPendingBackoff(t *testing.T) {
 	}
 	require.NoError(t, workStore.Upsert(ctx, oldPending))
 	oldBackoff := oldPending
-	oldBackoff.Key = "Deployment:default:weather:uid-1:2:remove"
+	oldBackoff.Key = "Deployment:default:weather:uid-1:2:delete"
 	oldBackoff.Generation = 2
-	oldBackoff.Action = "remove"
+	oldBackoff.Action = "delete"
 	require.NoError(t, workStore.Upsert(ctx, oldBackoff))
 	claimed, err := workStore.ClaimDue(ctx, "worker-a", time.Now().Add(time.Minute), 1)
 	require.NoError(t, err)
@@ -812,19 +812,19 @@ func TestReconcileWorkStore_AbandonSupersededSameGenerationAction(t *testing.T) 
 	}
 	require.NoError(t, workStore.Upsert(ctx, applyWork))
 
-	removeWork := applyWork
-	removeWork.Key = "Deployment:default:weather:uid-1:1:remove"
-	removeWork.Action = "remove"
-	removeWork.Reason = "terminating"
-	require.NoError(t, workStore.Upsert(ctx, removeWork))
-	n, err := workStore.AbandonSuperseded(ctx, removeWork)
+	deleteWork := applyWork
+	deleteWork.Key = "Deployment:default:weather:uid-1:1:delete"
+	deleteWork.Action = "delete"
+	deleteWork.Reason = "terminating"
+	require.NoError(t, workStore.Upsert(ctx, deleteWork))
+	n, err := workStore.AbandonSuperseded(ctx, deleteWork)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), n)
 
 	claimed, err := workStore.ClaimDue(ctx, "worker-a", time.Now().Add(time.Minute), 10)
 	require.NoError(t, err)
 	require.Len(t, claimed, 1)
-	require.Equal(t, removeWork.Key, claimed[0].Key)
+	require.Equal(t, deleteWork.Key, claimed[0].Key)
 }
 
 func TestControlPlaneEventStore_PruneBeforeHonorsKeepAfterRevision(t *testing.T) {

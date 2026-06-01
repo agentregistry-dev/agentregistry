@@ -174,10 +174,10 @@ func registerKindRoutes(
 	// by DesiredState=undeployed + DELETE in the v1alpha1 lifecycle).
 	if logResolver != nil {
 		deploymentlogs.Register(api, deploymentlogs.Config{
-			BasePrefix: basePrefix,
-			Store:      stores[v1alpha1.KindDeployment],
-			Resolver:   logResolver,
-			Authorize:  perKind.Authorizers[v1alpha1.KindDeployment],
+			BasePrefix:  basePrefix,
+			Store:       stores[v1alpha1.KindDeployment],
+			LogResolver: logResolver,
+			Authorize:   perKind.Authorizers[v1alpha1.KindDeployment],
 		})
 	}
 

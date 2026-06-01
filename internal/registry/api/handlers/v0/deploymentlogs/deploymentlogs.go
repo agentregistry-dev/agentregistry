@@ -29,9 +29,9 @@ type LogResolver interface {
 // adapter.Logs; the store fetches the Deployment row so the endpoint
 // can reject 404s early.
 type Config struct {
-	BasePrefix string
-	Store      *v1alpha1store.Store
-	Resolver   LogResolver
+	BasePrefix  string
+	Store       *v1alpha1store.Store
+	LogResolver LogResolver
 	// Authorize gates the request the same way the regular Deployment
 	// GET handler does. nil means no gate. Logs leak runtime
 	// stdout/stderr — frequently containing PII or secrets — so a
@@ -148,7 +148,7 @@ func Register(api huma.API, cfg Config) {
 		if tailLines <= 0 || tailLines > maxLogLines {
 			tailLines = maxLogLines
 		}
-		ch, err := cfg.Resolver.Logs(ctx, deployment, types.LogsInput{
+		ch, err := cfg.LogResolver.Logs(ctx, deployment, types.LogsInput{
 			Follow:    false, // gated above; non-follow only for now
 			TailLines: tailLines,
 		})
