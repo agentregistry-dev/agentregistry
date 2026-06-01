@@ -13,6 +13,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -171,6 +172,7 @@ func RunOSS(ctx context.Context, db *sql.DB, schema database.Schema) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	logger := slog.Default().With("component", "database.legacymigrate.oss")
 	for _, table := range ossTables {
 		cols, ok := ossTableColumns[table]
 		if !ok {
@@ -184,16 +186,42 @@ func RunOSS(ctx context.Context, db *sql.DB, schema database.Schema) error {
 			return fmt.Errorf("probe v1alpha1.%s: %w", table, err)
 		}
 		if !tableExists {
+			// Logged (not silent) so an unexpected legacy layout surfaces.
+			logger.Warn("legacy source table absent; skipping", "table", "v1alpha1."+table)
 			continue
 		}
 		quotedTable := pgx.Identifier{table}.Sanitize()
+		var srcRows int64
+		if err := tx.QueryRowContext(ctx, "SELECT count(*) FROM v1alpha1."+quotedTable).Scan(&srcRows); err != nil {
+			return fmt.Errorf("count v1alpha1.%s: %w", table, err)
+		}
 		colList := quotedColumnList(cols)
 		q := fmt.Sprintf(
 			"INSERT INTO %s.%s (%s) SELECT %s FROM v1alpha1.%s ON CONFLICT DO NOTHING",
 			destSchema, quotedTable, colList, colList, quotedTable,
 		)
-		if _, err := tx.ExecContext(ctx, q); err != nil {
+		res, err := tx.ExecContext(ctx, q)
+		if err != nil {
 			return fmt.Errorf("copy v1alpha1.%s: %w", table, err)
+		}
+		inserted, _ := res.RowsAffected()
+		logger.Info("bridged table",
+			"source", "v1alpha1."+table, "dest", schema.Name()+"."+table,
+			"source_rows", srcRows, "inserted", inserted)
+		// Reconciliation: warn only when the destination ends up genuinely
+		// short (re-run-safe — on re-run dest_rows >= source_rows). A default
+		// seed from 001 keeps dest_rows >= source_rows for tables like runtimes.
+		if srcRows > 0 && inserted < srcRows {
+			var destRows int64
+			if err := tx.QueryRowContext(ctx,
+				fmt.Sprintf("SELECT count(*) FROM %s.%s", destSchema, quotedTable)).Scan(&destRows); err != nil {
+				return fmt.Errorf("count %s.%s: %w", destSchema, quotedTable, err)
+			}
+			if destRows < srcRows {
+				logger.Warn("destination has fewer rows than legacy source after copy; possible dropped rows",
+					"source", "v1alpha1."+table, "dest", schema.Name()+"."+table,
+					"source_rows", srcRows, "dest_rows", destRows)
+			}
 		}
 	}
 

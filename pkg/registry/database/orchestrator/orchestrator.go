@@ -162,7 +162,7 @@ const orchestratorGlobalLockKey int64 = 0x6172_6f72_6368_6573 // "arorches"
 // idempotent `.down.sql`, and each migration file applies as one implicit
 // transaction (so a failed file's DDL rolls back atomically, leaving only
 // a dirty marker — never half-applied schema). The lint test enforces the
-// latter for the common cases; see migrations/README.md.
+// latter for the common cases; see pkg/registry/v1alpha1store/migrations/README.md.
 //
 // Sources first-installed this run are reset to NilVersion if they carry
 // a dirty marker (their idempotent floor re-applies on a re-run) and
@@ -311,7 +311,7 @@ func restoreSource(ctx context.Context, dsn string, a appliedSource) error {
 
 	if dirty {
 		// The failed migration body rolled back atomically (see the
-		// single-transaction invariant in migrations/README.md), so cur's
+		// single-transaction invariant in pkg/registry/v1alpha1store/migrations/README.md), so cur's
 		// DDL is not present. Force the marker clean at cur so Migrate can
 		// run; the down to the entry version reverses the migrations that
 		// did commit this run. cur is a migration version (bounded by the
