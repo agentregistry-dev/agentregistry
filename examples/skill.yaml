@@ -4,10 +4,8 @@ metadata:
   name: summarize
 spec:
   title: Summarization
-  category: nlp
   description: "Summarizes long text into concise form"
-  packages:
-    - registryType: oci
-      identifier: ghcr.io/acme/summarize-skill:1.0.0
-      transport:
-        type: stdio                             # OCI containers communicate via stdio
+  source:
+    repository:
+      url: https://github.com/acme/agent-skills
+      subfolder: skills/summarize

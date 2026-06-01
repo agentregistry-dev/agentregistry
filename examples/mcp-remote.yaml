@@ -1,5 +1,5 @@
 apiVersion: ar.dev/v1alpha1
-kind: RemoteMCPServer
+kind: MCPServer
 metadata:
   name: databricks-unity-catalog
 spec:
