@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -180,16 +181,25 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	return nil
 }
 
+// resolveExtraStoreSchema resolves an extra-store table value to its schema
+// and bare table name. A bare "table" stays in ossSchema; a qualified
+// "schema.table" resolves to that schema. Panics via MustNewSchema if the
+// schema segment is not a valid identifier (see
+// types.AppOptions.V1Alpha1StoreTables).
+func resolveExtraStoreSchema(table string, ossSchema pkgdb.Schema) (pkgdb.Schema, string) {
+	if s, t, ok := strings.Cut(table, "."); ok {
+		return pkgdb.MustNewSchema(s), t
+	}
+	return ossSchema, table
+}
+
 func buildStores(pool *pgxpool.Pool, extraStoreTables map[string]string, mutableExtraKinds map[string]bool, auditor types.Auditor) map[string]*v1alpha1store.Store {
 	if auditor == nil {
 		auditor = types.NoopAuditor
 	}
 	// Resolve schemas once and inject them, so the stores qualify their
 	// tables explicitly rather than depend on the connection's
-	// search_path. Extra (downstream) kinds resolve to the OSS schema —
-	// the behavior they had when they relied on the OSS search_path; a
-	// build that places extra kinds in their own schema extends the
-	// registry and resolves them from it.
+	// search_path.
 	schemas := pkgdb.OSSSchemaRegistry()
 	ossSchema := schemas.MustGet(pkgdb.OSSSourceName)
 	stores := v1alpha1store.NewStores(pool, schemas, v1alpha1store.WithAuditor(auditor))
@@ -198,12 +208,20 @@ func buildStores(pool *pgxpool.Pool, extraStoreTables map[string]string, mutable
 			slog.Warn("skipping v1alpha1 extra store with empty kind or table", "kind", kind, "table", table)
 			continue
 		}
-		opts := []v1alpha1store.StoreOption{v1alpha1store.WithKind(kind), v1alpha1store.WithAuditor(auditor)}
-		if mutableExtraKinds[kind] {
-			stores[kind] = v1alpha1store.NewMutableObjectStore(pool, ossSchema, table, opts...)
+		// Honor a qualified "schema.table" so a kind registered in its own
+		// schema resolves there (see V1Alpha1StoreTables); a bare "table"
+		// stays in the OSS schema.
+		sch, tbl := resolveExtraStoreSchema(table, ossSchema)
+		if tbl == "" {
+			slog.Warn("skipping v1alpha1 extra store with empty table after schema qualifier", "kind", kind, "table", table)
 			continue
 		}
-		stores[kind] = v1alpha1store.NewStore(pool, ossSchema, table, opts...)
+		opts := []v1alpha1store.StoreOption{v1alpha1store.WithKind(kind), v1alpha1store.WithAuditor(auditor)}
+		if mutableExtraKinds[kind] {
+			stores[kind] = v1alpha1store.NewMutableObjectStore(pool, sch, tbl, opts...)
+			continue
+		}
+		stores[kind] = v1alpha1store.NewStore(pool, sch, tbl, opts...)
 	}
 
 	// pool == nil is the noop/DatabaseFactory path used by gen-openapi

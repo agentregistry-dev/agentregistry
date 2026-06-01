@@ -278,6 +278,11 @@ type AppOptions struct {
 	// Scheme kinds should populate this so the shared /v0/apply,
 	// resolver, and generic route plumbing can see the same store map
 	// as any ExtraRoutes they register.
+	//
+	// A bare "table" resolves in the OSS schema. To place a kind in
+	// another schema, qualify the value as "schema.table"; the schema
+	// segment must be a valid lowercase identifier (^[a-z_][a-z0-9_]*$)
+	// or server startup panics.
 	V1Alpha1StoreTables map[string]string
 
 	// V1Alpha1MutableStoreKinds marks extra v1alpha1 kinds that use mutable
