@@ -320,29 +320,29 @@ Called from templates/validate.yaml so it fires during helm template/install.
 {{- $errors = append $errors "config.jwtPrivateKey must be a valid hex string (e.g. generated with: openssl rand -hex 32)." }}
 {{- end }}
 {{- if hasKey .Values.database.postgres "url" }}
-{{- $errors = append $errors "database.postgres.url has moved: set database.postgres.mode=external and database.postgres.external.url instead." }}
+{{- $errors = append $errors "database.postgres.url has moved: set database.postgres.type=external and database.postgres.external.url instead." }}
 {{- end }}
 {{- if hasKey .Values.database.postgres "secretRef" }}
-{{- $errors = append $errors "database.postgres.secretRef has moved: set database.postgres.mode=external and database.postgres.external.secretRef.{name,key} instead." }}
+{{- $errors = append $errors "database.postgres.secretRef has moved: set database.postgres.type=external and database.postgres.external.secretRef.{name,key} instead." }}
 {{- end }}
 {{- if hasKey .Values.database.postgres.bundled "enabled" }}
-{{- $errors = append $errors "database.postgres.bundled.enabled has been removed: use database.postgres.mode (bundled|external) instead." }}
+{{- $errors = append $errors "database.postgres.bundled.enabled has been removed: use database.postgres.type (bundled|external) instead." }}
 {{- end }}
-{{- $mode := .Values.database.postgres.mode }}
-{{- if not (has $mode (list "bundled" "external")) }}
-{{- $errors = append $errors (printf "database.postgres.mode must be \"bundled\" or \"external\" (got %q)." $mode) }}
+{{- $type := .Values.database.postgres.type }}
+{{- if not (has $type (list "bundled" "external")) }}
+{{- $errors = append $errors (printf "database.postgres.type must be \"bundled\" or \"external\" (got %q)." $type) }}
 {{- end }}
-{{- if eq $mode "external" }}
+{{- if eq $type "external" }}
 {{- if and .Values.database.postgres.external.url .Values.database.postgres.external.secretRef.name }}
 {{- $errors = append $errors "database.postgres.external.url and database.postgres.external.secretRef.name are mutually exclusive: set one, not both." }}
 {{- end }}
 {{- if and (not .Values.database.postgres.external.url) (not .Values.database.postgres.external.secretRef.name) }}
-{{- $errors = append $errors "database.postgres.mode=external requires either database.postgres.external.url or database.postgres.external.secretRef.name to be set." }}
+{{- $errors = append $errors "database.postgres.type=external requires either database.postgres.external.url or database.postgres.external.secretRef.name to be set." }}
 {{- end }}
 {{- end }}
-{{- if eq $mode "bundled" }}
+{{- if eq $type "bundled" }}
 {{- if or .Values.database.postgres.external.url .Values.database.postgres.external.secretRef.name }}
-{{- $errors = append $errors "database.postgres.external.* is set but ignored because mode=bundled. Set mode=external to use these fields, or remove them." }}
+{{- $errors = append $errors "database.postgres.external.* is set but ignored because type=bundled. Set type=external to use these fields, or remove them." }}
 {{- end }}
 {{- end }}
 {{- range $errors }}

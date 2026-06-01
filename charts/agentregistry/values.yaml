@@ -273,10 +273,10 @@ rbac:
 
 database:
   postgres:
-    # -- Backend mode: "bundled" (deploy the chart's in-cluster dev/eval Postgres pod) or
+    # -- Backend type: "bundled" (deploy the chart's in-cluster dev/eval Postgres pod) or
     # "external" (connect to a Postgres you bring yourself; configure under `external` below).
-    mode: bundled
-    # -- External (BYO) PostgreSQL configuration. Only consumed when `mode: external`.
+    type: bundled
+    # -- External (BYO) PostgreSQL configuration. Only consumed when `type: external`.
     external:
       # -- Inline connection string. Mutually exclusive with `external.secretRef.name`.
       url: ""
@@ -291,7 +291,7 @@ database:
         name: ""
         # -- Key within the Secret that holds the connection string.
         key: AGENT_REGISTRY_DATABASE_URL
-    # -- Bundled PostgreSQL — dev/eval only. Only consumed when `mode: bundled`.
+    # -- Bundled PostgreSQL — dev/eval only. Only consumed when `type: bundled`.
     bundled:
       image:
         # -- Bundled PostgreSQL image registry

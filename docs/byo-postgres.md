@@ -1,17 +1,17 @@
 # Bring Your Own Postgres
 
-Point the agentregistry chart at an external Postgres (RDS, Cloud SQL, etc.) instead of the bundled dev/eval pod. Set `database.postgres.mode: external` and supply the connection string either inline (`database.postgres.external.url`) or from an existing Kubernetes Secret (`database.postgres.external.secretRef`).
+Point the agentregistry chart at an external Postgres (RDS, Cloud SQL, etc.) instead of the bundled dev/eval pod. Set `database.postgres.type: external` and supply the connection string either inline (`database.postgres.external.url`) or from an existing Kubernetes Secret (`database.postgres.external.secretRef`).
 
 ## Chart values
 
 | Value | Default | Notes |
 |---|---|---|
-| `database.postgres.mode` | `bundled` | `bundled` (deploy in-cluster dev pod) or `external` (BYO). |
+| `database.postgres.type` | `bundled` | `bundled` (deploy in-cluster dev pod) or `external` (BYO). |
 | `database.postgres.external.url` | `""` | Inline connection string. Mutually exclusive with `database.postgres.external.secretRef.name`. |
 | `database.postgres.external.secretRef.name` | `""` | Secret in the release namespace holding the connection string. |
 | `database.postgres.external.secretRef.key` | `AGENT_REGISTRY_DATABASE_URL` | Key within that Secret. |
 
-When `mode: external`, exactly one of `database.postgres.external.url` or `database.postgres.external.secretRef.name` must be set; the chart fails fast otherwise.
+When `type: external`, exactly one of `database.postgres.external.url` or `database.postgres.external.secretRef.name` must be set; the chart fails fast otherwise.
 
 ## Connection-string formats
 
@@ -33,7 +33,7 @@ Use keyword/value form when credentials come from a rotating store (AWS Secrets 
    ```bash
    helm upgrade --install agentregistry oci://<registry>/agentregistry \
      --namespace <ns> --create-namespace \
-     --set database.postgres.mode=external \
+     --set database.postgres.type=external \
      --set database.postgres.external.url="host=<host> port=5432 user=<user> password='<password>' dbname=<database> sslmode=require"
    ```
 
@@ -45,6 +45,6 @@ Use keyword/value form when credentials come from a rotating store (AWS Secrets 
 
    helm upgrade --install agentregistry oci://<registry>/agentregistry \
      --namespace <ns> --create-namespace \
-     --set database.postgres.mode=external \
+     --set database.postgres.type=external \
      --set database.postgres.external.secretRef.name=db-creds
    ```

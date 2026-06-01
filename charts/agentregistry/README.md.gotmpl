@@ -19,7 +19,7 @@ A PostgreSQL instance is bundled and started automatically — no external datab
 
 This chart bootstraps an [Agent Registry](https://github.com/agentregistry-dev/agentregistry) deployment on a [Kubernetes](https://kubernetes.io) cluster using the [Helm](https://helm.sh) package manager.
 
-It exposes both an HTTP REST API and an Agent Gateway gRPC endpoint. A PostgreSQL instance is bundled by default for development and evaluation. For production, set `database.postgres.mode: external` and supply a connection string to your own PostgreSQL service.
+It exposes both an HTTP REST API and an Agent Gateway gRPC endpoint. A PostgreSQL instance is bundled by default for development and evaluation. For production, set `database.postgres.type: external` and supply a connection string to your own PostgreSQL service.
 
 ## Prerequisites
 
@@ -40,7 +40,7 @@ helm install my-agentregistry oci://ghcr.io/agentregistry-dev/agentregistry/char
 ```console
 helm install my-agentregistry oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry \
   --set config.jwtPrivateKey=$(openssl rand -hex 32) \
-  --set database.postgres.mode=external \
+  --set database.postgres.type=external \
   --set database.postgres.external.url=postgres://<user>:<password>@<host>:5432/<dbname>
 ```
 
@@ -64,10 +64,10 @@ The chart deploys the following Kubernetes resources:
 | Service | Exposes HTTP (`:12121`) and gRPC (`:21212`) ports |
 | ConfigMap | Application configuration injected as environment variables |
 | Secret | JWT signing key (omitted when `config.existingSecret` is set) |
-| Secret (`-postgresql`) | Bundled PostgreSQL password (only when `database.postgres.mode=bundled`) |
-| Deployment (`-postgresql`) | Bundled PostgreSQL instance (only when `database.postgres.mode=bundled`) |
-| Service (`-postgresql`) | Internal service for bundled PostgreSQL (only when `database.postgres.mode=bundled`) |
-| PersistentVolumeClaim (`-postgresql`) | Storage for bundled PostgreSQL data (only when `database.postgres.mode=bundled`) |
+| Secret (`-postgresql`) | Bundled PostgreSQL password (only when `database.postgres.type=bundled`) |
+| Deployment (`-postgresql`) | Bundled PostgreSQL instance (only when `database.postgres.type=bundled`) |
+| Service (`-postgresql`) | Internal service for bundled PostgreSQL (only when `database.postgres.type=bundled`) |
+| PersistentVolumeClaim (`-postgresql`) | Storage for bundled PostgreSQL data (only when `database.postgres.type=bundled`) |
 | ServiceAccount | Dedicated service account for the workload |
 | ClusterRole / ClusterRoleBinding | RBAC rules for managing cluster-scoped resources and namespace discovery |
 | Role / RoleBinding | Per-namespace RBAC rules when `rbac.watchedNamespaces` is set |
@@ -81,17 +81,17 @@ By default, the chart deploys a PostgreSQL instance alongside Agent Registry. It
 ```yaml
 database:
   postgres:
-    mode: bundled  # default
+    type: bundled  # default
 ```
 
 ### External PostgreSQL
 
-For production, switch to external mode and provide a connection string:
+For production, set `type: external` and provide a connection string:
 
 ```yaml
 database:
   postgres:
-    mode: external
+    type: external
     external:
       url: "postgres://agentregistry:changeme@my-postgres.example.com:5432/agentregistry?sslmode=require"
 ```
@@ -101,7 +101,7 @@ Or source the connection string from an existing Kubernetes Secret (recommended 
 ```yaml
 database:
   postgres:
-    mode: external
+    type: external
     external:
       secretRef:
         name: my-db-creds
@@ -150,7 +150,7 @@ This creates a `Role`/`RoleBinding` in each listed namespace (plus the installat
 ```yaml
 database:
   postgres:
-    mode: external
+    type: external
     external:
       url: "postgres://agentregistry:changeme@pg.example.com:5432/agentregistry?sslmode=require"
 
@@ -171,7 +171,7 @@ resources:
 ```yaml
 database:
   postgres:
-    mode: external
+    type: external
     external:
       secretRef:
         name: my-db-creds

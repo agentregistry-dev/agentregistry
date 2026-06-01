@@ -85,7 +85,7 @@ spec:
       topologySpreadConstraints:
         {{- toYaml .Values.topologySpreadConstraints | nindent 8 }}
       {{- end }}
-      {{- if eq .Values.database.postgres.mode "bundled" }}
+      {{- if eq .Values.database.postgres.type "bundled" }}
       initContainers:
         - name: wait-for-postgres
           image: {{ include "agentregistry.postgresql.image" . }}
@@ -134,7 +134,7 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.config.existingSecret | default (include "agentregistry.fullname" .) }}
                   key: AGENT_REGISTRY_JWT_PRIVATE_KEY
-            {{- if eq .Values.database.postgres.mode "external" }}
+            {{- if eq .Values.database.postgres.type "external" }}
             {{- if .Values.database.postgres.external.secretRef.name }}
             - name: AGENT_REGISTRY_DATABASE_URL
               valueFrom:

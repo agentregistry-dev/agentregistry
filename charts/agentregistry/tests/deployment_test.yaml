@@ -65,7 +65,7 @@ tests:
           content:
             app.kubernetes.io/name: agentregistry
 
-  - it: injects POSTGRES_PASSWORD from postgresql secret when mode=bundled
+  - it: injects POSTGRES_PASSWORD from postgresql secret when type=bundled
     template: deployment.yaml
     asserts:
       - contains:
@@ -98,10 +98,10 @@ tests:
             name: AGENT_REGISTRY_DATABASE_URL
             value: "postgres://agentregistry:$(POSTGRES_PASSWORD)@RELEASE-NAME-agentregistry-postgresql:5432/agentregistry?sslmode=disable"
 
-  - it: sets AGENT_REGISTRY_DATABASE_URL directly when mode=external with external.url
+  - it: sets AGENT_REGISTRY_DATABASE_URL directly when type=external with external.url
     template: deployment.yaml
     set:
-      database.postgres.mode: external
+      database.postgres.type: external
       database.postgres.external.url: "postgres://user:pass@host:5432/db?sslmode=disable"
     asserts:
       - contains:
@@ -110,10 +110,10 @@ tests:
             name: AGENT_REGISTRY_DATABASE_URL
             value: "postgres://user:pass@host:5432/db?sslmode=disable"
 
-  - it: does not inject POSTGRES_PASSWORD when mode=external with url
+  - it: does not inject POSTGRES_PASSWORD when type=external with url
     template: deployment.yaml
     set:
-      database.postgres.mode: external
+      database.postgres.type: external
       database.postgres.external.url: "postgres://user:pass@host:5432/db"
     asserts:
       - notContains:
@@ -219,7 +219,7 @@ tests:
 
   # ── Init container (bundled PostgreSQL) ──────────────────────────────────────
 
-  - it: includes wait-for-postgres init container when mode=bundled
+  - it: includes wait-for-postgres init container when type=bundled
     template: deployment.yaml
     asserts:
       - isNotNull:
@@ -228,10 +228,10 @@ tests:
           path: spec.template.spec.initContainers[0].name
           value: wait-for-postgres
 
-  - it: does not include init container when mode=external with url
+  - it: does not include init container when type=external with url
     template: deployment.yaml
     set:
-      database.postgres.mode: external
+      database.postgres.type: external
       database.postgres.external.url: "postgres://user:pass@host:5432/db"
     asserts:
       - isNull:
@@ -242,7 +242,7 @@ tests:
   - it: sets AGENT_REGISTRY_DATABASE_URL via valueFrom.secretKeyRef when external.secretRef.name is set
     template: deployment.yaml
     set:
-      database.postgres.mode: external
+      database.postgres.type: external
       database.postgres.external.secretRef.name: my-postgres-secret
     asserts:
       - contains:
@@ -257,7 +257,7 @@ tests:
   - it: uses custom secret key when external.secretRef.key is set
     template: deployment.yaml
     set:
-      database.postgres.mode: external
+      database.postgres.type: external
       database.postgres.external.secretRef.name: my-postgres-secret
       database.postgres.external.secretRef.key: DB_URL
     asserts:
@@ -273,7 +273,7 @@ tests:
   - it: does not inject POSTGRES_PASSWORD when external.secretRef.name is set
     template: deployment.yaml
     set:
-      database.postgres.mode: external
+      database.postgres.type: external
       database.postgres.external.secretRef.name: my-postgres-secret
     asserts:
       - notContains:
@@ -284,7 +284,7 @@ tests:
   - it: does not render a plain value entry for AGENT_REGISTRY_DATABASE_URL when external.secretRef.name is set
     template: deployment.yaml
     set:
-      database.postgres.mode: external
+      database.postgres.type: external
       database.postgres.external.secretRef.name: my-postgres-secret
     asserts:
       - notContains:
@@ -296,7 +296,7 @@ tests:
   - it: does not include wait-for-postgres init container when external.secretRef.name is set
     template: deployment.yaml
     set:
-      database.postgres.mode: external
+      database.postgres.type: external
       database.postgres.external.secretRef.name: my-postgres-secret
     asserts:
       - isNull:

@@ -4,9 +4,9 @@ templates:
   - postgresql-secret.yaml
 
 tests:
-  # ── mode=bundled (default) ────────────────────────────────────────────────
+  # ── type=bundled (default) ────────────────────────────────────────────────
 
-  - it: renders PVC, Deployment, and Service when mode=bundled
+  - it: renders PVC, Deployment, and Service when type=bundled
     template: postgresql.yaml
     asserts:
       - hasDocuments:
@@ -174,12 +174,12 @@ tests:
           path: spec.type
           value: ClusterIP
 
-  # ── mode=external ────────────────────────────────────────────────────────
+  # ── type=external ────────────────────────────────────────────────────────
 
-  - it: renders nothing when mode=external
+  - it: renders nothing when type=external
     template: postgresql.yaml
     set:
-      database.postgres.mode: external
+      database.postgres.type: external
       database.postgres.external.url: "postgres://user:pass@host:5432/db"
     asserts:
       - hasDocuments:
@@ -201,7 +201,7 @@ tests:
 
   # ── postgresql-secret.yaml ────────────────────────────────────────────────
 
-  - it: creates postgresql secret when mode=bundled
+  - it: creates postgresql secret when type=bundled
     template: postgresql-secret.yaml
     asserts:
       - hasDocuments:
@@ -229,10 +229,10 @@ tests:
           path: metadata.labels["app.kubernetes.io/component"]
           value: database
 
-  - it: does not create postgresql secret when mode=external
+  - it: does not create postgresql secret when type=external
     template: postgresql-secret.yaml
     set:
-      database.postgres.mode: external
+      database.postgres.type: external
       database.postgres.external.url: "postgres://user:pass@host:5432/db"
     asserts:
       - hasDocuments:
