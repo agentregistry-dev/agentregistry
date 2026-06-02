@@ -21,15 +21,6 @@ const (
 	// handle normal event-driven scheduling; the minute tick bounds missed
 	// notifications and retention-gap recovery without constantly scanning.
 	defaultControllerResyncInterval = time.Minute
-	// defaultExecutorInterval is the idle poll cadence. The executor also wakes
-	// after each batch, so steady-state throughput is mostly
-	// defaultExecutorBatchLimit / adapter latency; this interval bounds how long
-	// newly due retry/backoff work can wait when no event wakeup arrives.
-	defaultExecutorInterval = time.Second
-	// defaultExecutorBatchLimit caps each lease pass. Ten keeps work claims short
-	// and fair while still allowing roughly 10 quick reconciles per second before
-	// adapter latency dominates.
-	defaultExecutorBatchLimit = 10
 	// defaultWakeupReconnectDelay backs off LISTEN reconnects after transient DB
 	// connection failures so the controller does not hot-loop.
 	defaultWakeupReconnectDelay = 5 * time.Second
@@ -38,7 +29,6 @@ const (
 // ControllerHandle owns the always-on Deployment controller loops.
 type ControllerHandle struct {
 	Controller *DeploymentController
-	Executor   *DeploymentExecutor
 	Retention  *RetentionPruner
 }
 
@@ -64,44 +54,29 @@ func StartDeploymentController(
 		return nil, errors.New("deployment controller: stores are required")
 	}
 
-	workStore := v1alpha1store.NewReconcileWorkStore(pool)
-	reconcileEventStore := v1alpha1store.NewReconcileEventStore(pool)
 	controlPlaneEventStore := v1alpha1store.NewControlPlaneEventStore(pool)
 	controller := &DeploymentController{
-		Stores: stores,
-		Work:   workStore,
-		Events: controlPlaneEventStore,
+		Stores:   stores,
+		Adapters: adapters,
+		Getter:   internaldb.NewGetter(stores),
+		Events:   controlPlaneEventStore,
 	}
 	if _, err := controller.Refresh(ctx); err != nil {
 		return nil, fmt.Errorf("deployment controller initial refresh: %w", err)
 	}
 	controller.Wakeups = controlPlaneWakeups(ctx, pool)
 
-	executor := &DeploymentExecutor{
-		Stores:   stores,
-		Adapters: adapters,
-		Getter:   internaldb.NewGetter(stores),
-		Work:     workStore,
-		Events:   reconcileEventStore,
-	}
 	retention := &RetentionPruner{
 		Stores: PruneStores{
 			ControlPlaneEvents: controlPlaneEventStore,
-			ReconcileWork:      workStore,
-			ReconcileAttempts:  reconcileEventStore,
 		},
 		Policy: config.Retention,
 	}
-	handle := &ControllerHandle{Controller: controller, Executor: executor, Retention: retention}
+	handle := &ControllerHandle{Controller: controller, Retention: retention}
 
 	go func() {
 		if err := controller.Run(ctx, defaultControllerResyncInterval); err != nil && !errors.Is(err, context.Canceled) {
 			logger.Error("deployment controller stopped", "error", err)
-		}
-	}()
-	go func() {
-		if err := executor.Run(ctx, defaultExecutorInterval, defaultExecutorBatchLimit); err != nil && !errors.Is(err, context.Canceled) {
-			logger.Error("deployment controller executor stopped", "error", err)
 		}
 	}()
 	if retention.Enabled() {

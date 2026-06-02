@@ -94,10 +94,10 @@ func TestDeploymentPut_PersistsWithoutSynchronousAdapterApply(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 
 	// Adapter status is no longer written during the API call; the
-	// controller executor patches it after claiming reconcile_work.
+	// Deployment controller patches it asynchronously.
 	var got v1alpha1.Deployment
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &got))
-	require.Empty(t, got.Status.Conditions, "adapter status is written asynchronously by the controller executor")
+	require.Empty(t, got.Status.Conditions, "adapter status is written asynchronously by the Deployment controller")
 
 	raw, err := stores[v1alpha1.KindDeployment].Get(t.Context(), "default", "weather-noop", "")
 	require.NoError(t, err)

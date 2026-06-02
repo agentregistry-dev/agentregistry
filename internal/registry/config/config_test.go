@@ -50,8 +50,6 @@ func TestNewConfig_ControllerRetentionEnv(t *testing.T) {
 	t.Setenv("AGENT_REGISTRY_RUNTIME_DIR", "/tmp/runtime")
 	t.Setenv("AGENT_REGISTRY_CONTROLLER_EVENT_RETENTION", "2h")
 	t.Setenv("AGENT_REGISTRY_CONTROLLER_EVENT_KEEP_AFTER_REVISION", "42")
-	t.Setenv("AGENT_REGISTRY_CONTROLLER_WORK_RETENTION", "3h")
-	t.Setenv("AGENT_REGISTRY_CONTROLLER_ATTEMPT_RETENTION", "4h")
 	t.Setenv("AGENT_REGISTRY_CONTROLLER_RETENTION_PRUNE_BATCH_LIMIT", "17")
 
 	cfg := NewConfig()
@@ -61,12 +59,6 @@ func TestNewConfig_ControllerRetentionEnv(t *testing.T) {
 	}
 	if cfg.ControllerEventKeepAfterRevision != 42 {
 		t.Fatalf("keep-after revision = %d, want 42", cfg.ControllerEventKeepAfterRevision)
-	}
-	if cfg.ControllerWorkRetention != 3*time.Hour {
-		t.Fatalf("work retention = %s, want 3h", cfg.ControllerWorkRetention)
-	}
-	if cfg.ControllerAttemptRetention != 4*time.Hour {
-		t.Fatalf("attempt retention = %s, want 4h", cfg.ControllerAttemptRetention)
 	}
 	if cfg.ControllerRetentionPruneBatchLimit != 17 {
 		t.Fatalf("prune batch limit = %d, want 17", cfg.ControllerRetentionPruneBatchLimit)

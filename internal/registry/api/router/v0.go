@@ -47,7 +47,7 @@ type RouteOptions struct {
 	Stores Stores
 
 	// DeploymentLogResolver supports the Deployment logs subresource. Adapter
-	// Apply/Remove side effects are owned by the controller executor, not by
+	// Apply/Remove side effects are owned by the Deployment controller, not by
 	// CRUD hook wiring.
 	DeploymentLogResolver deploymentlogs.LogResolver
 
@@ -119,7 +119,7 @@ func RegisterRoutes(
 
 	// v1alpha1 generic routes. Cross-kind dangling-ref detection uses
 	// a Store-backed resolver. Deployment side effects are handled by
-	// the always-on controller executor after the row is persisted.
+	// the always-on Deployment controller after the row is persisted.
 	registerKindRoutes(
 		api,
 		pathPrefix,

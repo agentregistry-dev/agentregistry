@@ -14,47 +14,45 @@ import (
 
 func TestDeploymentControllerFullReconcileSchedulesDeployments(t *testing.T) {
 	ctx := context.Background()
-	stores, workStore, _ := newControllerTestStores(t)
+	stores := newControllerTestStores(t)
 	seedRuntime(t, stores, "local")
 	seedMCPServer(t, stores, "weather")
 	seedDeployment(t, stores, "api", v1alpha1.DesiredStateDeployed)
 	seedDeployment(t, stores, "worker", v1alpha1.DesiredStateDeployed)
-	controller := newDeploymentTestController(stores, workStore)
+	controller := newDeploymentTestController(stores, &recordingDeploymentAdapter{})
 
 	count, err := controller.FullReconcile(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 2, count)
-
-	claimed, err := workStore.ClaimDue(ctx, "test", controller.now().Add(defaultExecutorLeaseDuration), 10)
-	require.NoError(t, err)
-	require.Len(t, claimed, 2)
+	require.Equal(t, 2, controller.workQueue().Len())
 }
 
 func TestDeploymentControllerHandleDeploymentEventSchedulesOneDeployment(t *testing.T) {
 	ctx := context.Background()
-	stores, workStore, _ := newControllerTestStores(t)
+	stores := newControllerTestStores(t)
 	seedRuntime(t, stores, "local")
 	seedMCPServer(t, stores, "weather")
 	target := seedDeployment(t, stores, "api", v1alpha1.DesiredStateDeployed)
 	seedDeployment(t, stores, "worker", v1alpha1.DesiredStateDeployed)
-	controller := newDeploymentTestController(stores, workStore)
+	controller := newDeploymentTestController(stores, &recordingDeploymentAdapter{})
 
 	count, err := controller.HandleEvent(ctx, v1alpha1store.ControlPlaneEvent{
 		Key: v1alpha1store.ResourceKey{Kind: v1alpha1.KindDeployment, Namespace: "default", Name: target.Metadata.Name},
 	})
 	require.NoError(t, err)
 	require.Equal(t, 1, count)
+	require.Equal(t, 1, controller.workQueue().Len())
 
-	claimed, err := workStore.ClaimDue(ctx, "test", controller.now().Add(defaultExecutorLeaseDuration), 10)
-	require.NoError(t, err)
-	require.Len(t, claimed, 1)
-	require.Equal(t, "api", claimed[0].Resource.Name)
+	item, shutdown := controller.workQueue().Get()
+	require.False(t, shutdown)
+	controller.workQueue().Done(item)
+	require.Equal(t, "api", item.Name)
 }
 
 func TestDeploymentControllerHandleMissingDeploymentEventNoops(t *testing.T) {
 	ctx := context.Background()
-	stores, workStore, _ := newControllerTestStores(t)
-	controller := newDeploymentTestController(stores, workStore)
+	stores := newControllerTestStores(t)
+	controller := newDeploymentTestController(stores, &recordingDeploymentAdapter{})
 
 	count, err := controller.HandleEvent(ctx, v1alpha1store.ControlPlaneEvent{
 		Key: v1alpha1store.ResourceKey{Kind: v1alpha1.KindDeployment, Namespace: "default", Name: "missing"},
@@ -67,29 +65,30 @@ func TestDeploymentControllerHandleDependencyEventsFullReconcileDeployments(t *t
 	ctx := context.Background()
 	for _, kind := range []string{v1alpha1.KindRuntime, v1alpha1.KindAgent, v1alpha1.KindMCPServer} {
 		t.Run(kind, func(t *testing.T) {
-			stores, workStore, _ := newControllerTestStores(t)
+			stores := newControllerTestStores(t)
 			seedRuntime(t, stores, "local")
 			seedMCPServer(t, stores, "weather")
 			seedDeployment(t, stores, "api", v1alpha1.DesiredStateDeployed)
 			seedDeployment(t, stores, "worker", v1alpha1.DesiredStateDeployed)
-			controller := newDeploymentTestController(stores, workStore)
+			controller := newDeploymentTestController(stores, &recordingDeploymentAdapter{})
 
 			count, err := controller.HandleEvent(ctx, v1alpha1store.ControlPlaneEvent{
 				Key: v1alpha1store.ResourceKey{Kind: kind, Namespace: "default", Name: "changed"},
 			})
 			require.NoError(t, err)
 			require.Equal(t, 2, count)
+			require.Equal(t, 2, controller.workQueue().Len())
 		})
 	}
 }
 
 func TestDeploymentControllerHandleSkillPromptEventsNoop(t *testing.T) {
 	ctx := context.Background()
-	stores, workStore, _ := newControllerTestStores(t)
+	stores := newControllerTestStores(t)
 	seedRuntime(t, stores, "local")
 	seedMCPServer(t, stores, "weather")
 	seedDeployment(t, stores, "api", v1alpha1.DesiredStateDeployed)
-	controller := newDeploymentTestController(stores, workStore)
+	controller := newDeploymentTestController(stores, &recordingDeploymentAdapter{})
 
 	for _, kind := range []string{v1alpha1.KindSkill, v1alpha1.KindPrompt} {
 		count, err := controller.HandleEvent(ctx, v1alpha1store.ControlPlaneEvent{
@@ -102,11 +101,11 @@ func TestDeploymentControllerHandleSkillPromptEventsNoop(t *testing.T) {
 
 func TestDeploymentControllerRetentionGapTriggersFullReconcile(t *testing.T) {
 	ctx := context.Background()
-	stores, workStore, _ := newControllerTestStores(t)
+	stores := newControllerTestStores(t)
 	seedRuntime(t, stores, "local")
 	seedMCPServer(t, stores, "weather")
 	seedDeployment(t, stores, "api", v1alpha1.DesiredStateDeployed)
-	controller := newDeploymentTestController(stores, workStore)
+	controller := newDeploymentTestController(stores, &recordingDeploymentAdapter{})
 	controller.Events = fakeEventReader{
 		oldest:  10,
 		current: 12,
@@ -117,8 +116,5 @@ func TestDeploymentControllerRetentionGapTriggersFullReconcile(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, result.FullResynced)
 	require.Equal(t, int64(13), result.Checkpoint)
-
-	claimed, err := workStore.ClaimDue(ctx, "test", controller.now().Add(defaultExecutorLeaseDuration), 10)
-	require.NoError(t, err)
-	require.Len(t, claimed, 1)
+	require.Equal(t, 1, controller.workQueue().Len())
 }

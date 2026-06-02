@@ -8,38 +8,26 @@ import (
 	"time"
 )
 
-func TestRunRetentionPruneAppliesConfiguredCutoffs(t *testing.T) {
+func TestRunRetentionPruneAppliesConfiguredEventCutoff(t *testing.T) {
 	now := time.Date(2026, 5, 21, 12, 0, 0, 0, time.UTC)
 	events := &fakeEventPruner{deleted: 2}
-	work := &fakePruner{deleted: 3}
-	attempts := &fakePruner{deleted: 5}
 
 	result, err := RunRetentionPrune(context.Background(), PruneStores{
 		ControlPlaneEvents: events,
-		ReconcileWork:      work,
-		ReconcileAttempts:  attempts,
 	}, RetentionPolicy{
 		ControlPlaneEvents: 2 * time.Hour,
 		EventKeepAfterRev:  42,
-		ReconcileWork:      3 * time.Hour,
-		ReconcileAttempts:  4 * time.Hour,
 		BatchLimit:         17,
 	}, now)
 	if err != nil {
 		t.Fatalf("RunRetentionPrune returned error: %v", err)
 	}
 
-	if result.ControlPlaneEvents != 2 || result.ReconcileWork != 3 || result.ReconcileAttempts != 5 {
-		t.Fatalf("result = %+v, want deleted counts 2/3/5", result)
+	if result.ControlPlaneEvents != 2 {
+		t.Fatalf("result = %+v, want event deleted count 2", result)
 	}
 	if events.before != now.Add(-2*time.Hour) || events.keepAfterRevision != 42 || events.limit != 17 {
 		t.Fatalf("event prune args = before %s keep %d limit %d", events.before, events.keepAfterRevision, events.limit)
-	}
-	if work.before != now.Add(-3*time.Hour) || work.limit != 17 {
-		t.Fatalf("work prune args = before %s limit %d", work.before, work.limit)
-	}
-	if attempts.before != now.Add(-4*time.Hour) || attempts.limit != 17 {
-		t.Fatalf("attempt prune args = before %s limit %d", attempts.before, attempts.limit)
 	}
 }
 
@@ -63,17 +51,15 @@ func TestRunRetentionPruneSkipsDisabledPolicies(t *testing.T) {
 func TestRunRetentionPruneReturnsContextualErrors(t *testing.T) {
 	_, err := RunRetentionPrune(context.Background(), PruneStores{
 		ControlPlaneEvents: &fakeEventPruner{err: errors.New("events failed")},
-		ReconcileWork:      &fakePruner{err: errors.New("work failed")},
 	}, RetentionPolicy{
 		ControlPlaneEvents: time.Hour,
-		ReconcileWork:      time.Hour,
 	}, time.Now())
 	if err == nil {
 		t.Fatal("expected error")
 	}
 	msg := err.Error()
-	if !strings.Contains(msg, "prune control-plane events") || !strings.Contains(msg, "prune reconcile work") {
-		t.Fatalf("error = %q, want contextual joined errors", msg)
+	if !strings.Contains(msg, "prune control-plane events") {
+		t.Fatalf("error = %q, want contextual event prune error", msg)
 	}
 }
 
@@ -85,8 +71,6 @@ func TestRetentionPolicyEnabled(t *testing.T) {
 	}{
 		{name: "empty", policy: RetentionPolicy{}, want: false},
 		{name: "events", policy: RetentionPolicy{ControlPlaneEvents: time.Hour}, want: true},
-		{name: "work", policy: RetentionPolicy{ReconcileWork: time.Hour}, want: true},
-		{name: "attempts", policy: RetentionPolicy{ReconcileAttempts: time.Hour}, want: true},
 		{name: "revision bound alone does not enable age pruning", policy: RetentionPolicy{EventKeepAfterRev: 42}, want: false},
 	}
 
@@ -137,19 +121,6 @@ func (f *fakeEventPruner) PruneBefore(_ context.Context, before time.Time, keepA
 	f.called = true
 	f.before = before
 	f.keepAfterRevision = keepAfterRevision
-	f.limit = limit
-	return f.deleted, f.err
-}
-
-type fakePruner struct {
-	before  time.Time
-	limit   int
-	deleted int64
-	err     error
-}
-
-func (f *fakePruner) Prune(_ context.Context, before time.Time, limit int) (int64, error) {
-	f.before = before
 	f.limit = limit
 	return f.deleted, f.err
 }

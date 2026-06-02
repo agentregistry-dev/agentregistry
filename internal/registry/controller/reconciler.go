@@ -7,7 +7,8 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"time"
+
+	"k8s.io/client-go/util/workqueue"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
@@ -19,12 +20,6 @@ const (
 	DeploymentControllerFinalizer = "agentregistry.dev/deployment-controller"
 	DeploymentForceAnnotation     = "reconcile.agentregistry.dev/force"
 
-	defaultExecutorOwner = "deployment-controller"
-	// Keep the default lease long enough for external adapter calls; without
-	// lease renewal, an expired claim may be retried by another worker.
-	defaultExecutorLeaseDuration = 5 * time.Minute
-	defaultExecutorBackoff       = 30 * time.Second
-
 	deploymentControllerDetailsKey = "deploymentController"
 )
 
@@ -33,141 +28,63 @@ type deploymentControllerDetails struct {
 	LastForceToken         string `json:"lastForceToken,omitempty"`
 }
 
-// DeploymentExecutor owns Deployment adapter side effects. It only acts after
-// durable reconcile_work has been claimed with a lease token.
-type DeploymentExecutor struct {
-	Stores   map[string]*v1alpha1store.Store
-	Adapters map[string]types.DeploymentAdapter
-	Getter   v1alpha1.GetterFunc
-
-	Work   *v1alpha1store.ReconcileWorkStore
-	Events *v1alpha1store.ReconcileEventStore
-
-	Owner         string
-	LeaseDuration time.Duration
-	BackoffDelay  time.Duration
-	Now           func() time.Time
-}
-
-func (e *DeploymentExecutor) Run(ctx context.Context, interval time.Duration, limit int) error {
-	if interval <= 0 {
-		interval = time.Second
-	}
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	for {
-		if _, err := e.RunOnce(ctx, limit); err != nil {
-			return err
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-		}
-	}
-}
-
-func (e *DeploymentExecutor) RunOnce(ctx context.Context, limit int) (int, error) {
-	if err := e.validate(); err != nil {
-		return 0, err
-	}
-	leaseUntil := e.now().Add(e.leaseDuration())
-	claims, err := e.Work.ClaimDue(ctx, e.owner(), leaseUntil, limit)
+func (c *DeploymentController) processQueueItem(
+	ctx context.Context,
+	queue workqueue.TypedRateLimitingInterface[deploymentQueueKey],
+	key deploymentQueueKey,
+) {
+	defer queue.Done(key)
+	outcome, message, err := c.reconcileKey(ctx, key)
 	if err != nil {
-		return 0, err
+		logger.Error("deployment reconcile failed", "namespace", key.Namespace, "name", key.Name, "error", err)
+		queue.AddRateLimited(key)
+		return
 	}
-	for i, work := range claims {
-		if work.Resource.Kind != v1alpha1.KindDeployment {
-			continue
-		}
-		if err := e.executeClaim(ctx, work); err != nil {
-			return i, err
-		}
+	queue.Forget(key)
+	if outcome != "" {
+		logger.Debug("deployment reconciled", "namespace", key.Namespace, "name", key.Name, "outcome", outcome, "message", message)
 	}
-	return len(claims), nil
 }
 
-func (e *DeploymentExecutor) executeClaim(ctx context.Context, work v1alpha1store.ReconcileWork) error {
-	outcome, message, reconcileErr := e.reconcile(ctx, work)
-	if reconcileErr != nil {
-		next := e.now().Add(e.backoffDelay())
-		if _, err := e.Events.Append(ctx, v1alpha1store.ReconcileEvent{
-			WorkKey:       work.Key,
-			Resource:      work.Resource,
-			UID:           work.UID,
-			Generation:    work.Generation,
-			Action:        work.Action,
-			Attempt:       work.Attempt,
-			Outcome:       "error",
-			Message:       message,
-			Error:         reconcileErr.Error(),
-			NextAttemptAt: &next,
-		}); err != nil {
-			return err
-		}
-		_, err := e.Work.Backoff(ctx, work.Key, work.LeaseToken, reconcileErr.Error(), next)
-		return err
-	}
-
-	if _, err := e.Events.Append(ctx, v1alpha1store.ReconcileEvent{
-		WorkKey:    work.Key,
-		Resource:   work.Resource,
-		UID:        work.UID,
-		Generation: work.Generation,
-		Action:     work.Action,
-		Attempt:    work.Attempt,
-		Outcome:    outcome,
-		Message:    message,
-	}); err != nil {
-		return err
-	}
-	_, err := e.Work.Complete(ctx, work.Key, work.LeaseToken)
-	return err
-}
-
-func (e *DeploymentExecutor) reconcile(ctx context.Context, work v1alpha1store.ReconcileWork) (outcome, message string, err error) {
-	deployment, found, err := e.loadDeployment(ctx, work)
+func (c *DeploymentController) reconcileKey(ctx context.Context, key deploymentQueueKey) (outcome, message string, err error) {
+	deployment, found, err := c.loadDeployment(ctx, key)
 	if err != nil {
 		return "", "", err
 	}
 	if !found {
-		return "stale", "deployment row no longer exists", nil
+		return "missing", "deployment row no longer exists", nil
 	}
-	if deployment.Metadata.UID != work.UID || deployment.Metadata.Generation != work.Generation {
-		return "stale", "deployment uid or generation changed before execution", nil
-	}
-	action := ReconcileAction(work.Action)
-	if action == ReconcileActionApply && deployment.Metadata.DeletionTimestamp != nil {
-		return "stale", "deployment is terminating; skipping apply", nil
+	action, err := deploymentAction(deployment)
+	if err != nil {
+		return "", "", err
 	}
 
 	switch action {
 	case ReconcileActionApply:
-		return e.apply(ctx, deployment)
+		return c.apply(ctx, deployment)
 	case ReconcileActionDelete:
-		return e.remove(ctx, deployment)
+		return c.remove(ctx, deployment)
 	default:
-		return "", "", fmt.Errorf("unsupported deployment reconcile action %q", work.Action)
+		return "", "", fmt.Errorf("unsupported deployment reconcile action %q", action)
 	}
 }
 
-func (e *DeploymentExecutor) apply(ctx context.Context, deployment *v1alpha1.Deployment) (string, string, error) {
-	target, err := e.resolveTarget(ctx, deployment)
+func (c *DeploymentController) apply(ctx context.Context, deployment *v1alpha1.Deployment) (string, string, error) {
+	target, err := c.resolveTarget(ctx, deployment)
 	if err != nil {
 		if errors.Is(err, v1alpha1.ErrDanglingRef) {
-			return e.blockReference(ctx, deployment, err)
+			return c.blockReference(ctx, deployment, err)
 		}
 		return "", "", err
 	}
-	runtime, err := e.resolveRuntime(ctx, deployment)
+	runtime, err := c.resolveRuntime(ctx, deployment)
 	if err != nil {
 		if errors.Is(err, v1alpha1.ErrDanglingRef) {
-			return e.blockReference(ctx, deployment, err)
+			return c.blockReference(ctx, deployment, err)
 		}
 		return "", "", err
 	}
-	adapter, err := e.resolveAdapter(runtime.Spec.Type)
+	adapter, err := c.resolveAdapter(runtime.Spec.Type)
 	if err != nil {
 		return "", "", err
 	}
@@ -179,12 +96,12 @@ func (e *DeploymentExecutor) apply(ctx context.Context, deployment *v1alpha1.Dep
 		Deployment: deployment,
 		Target:     target,
 		Runtime:    runtime,
-		Getter:     e.Getter,
+		Getter:     c.Getter,
 	}
 	fingerprint, err := desiredApplyFingerprint(ctx, adapter, input)
 	if err != nil {
 		if errors.Is(err, v1alpha1.ErrDanglingRef) {
-			return e.blockReference(ctx, deployment, err)
+			return c.blockReference(ctx, deployment, err)
 		}
 		return "", "", err
 	}
@@ -197,22 +114,22 @@ func (e *DeploymentExecutor) apply(ctx context.Context, deployment *v1alpha1.Dep
 	result, err := adapter.Apply(ctx, input)
 	if err != nil {
 		if errors.Is(err, v1alpha1.ErrDanglingRef) {
-			return e.blockReference(ctx, deployment, err)
+			return c.blockReference(ctx, deployment, err)
 		}
 		return "", "", fmt.Errorf("adapter %q apply: %w", adapter.Type(), err)
 	}
-	if err := e.persistApplyResult(ctx, deployment, result, fingerprint, forceToken); err != nil {
+	if err := c.persistApplyResult(ctx, deployment, result, fingerprint, forceToken); err != nil {
 		return "", "", err
 	}
 	return "success", "deployment applied", nil
 }
 
-func (e *DeploymentExecutor) remove(ctx context.Context, deployment *v1alpha1.Deployment) (string, string, error) {
-	runtime, err := e.resolveRuntime(ctx, deployment)
+func (c *DeploymentController) remove(ctx context.Context, deployment *v1alpha1.Deployment) (string, string, error) {
+	runtime, err := c.resolveRuntime(ctx, deployment)
 	if err != nil {
-		return e.handleRemoveRuntimeError(ctx, deployment, err)
+		return c.handleRemoveRuntimeError(ctx, deployment, err)
 	}
-	adapter, err := e.resolveAdapter(runtime.Spec.Type)
+	adapter, err := c.resolveAdapter(runtime.Spec.Type)
 	if err != nil {
 		return "", "", err
 	}
@@ -223,18 +140,18 @@ func (e *DeploymentExecutor) remove(ctx context.Context, deployment *v1alpha1.De
 	if err != nil {
 		return "", "", fmt.Errorf("adapter %q remove: %w", adapter.Type(), err)
 	}
-	if err := e.persistRemoveResult(ctx, deployment, result); err != nil {
+	if err := c.persistRemoveResult(ctx, deployment, result); err != nil {
 		return "", "", err
 	}
 	if deployment.Metadata.DeletionTimestamp != nil {
-		if err := e.finalizeDeletedDeployment(ctx, deployment); err != nil {
+		if err := c.finalizeDeletedDeployment(ctx, deployment); err != nil {
 			return "", "", err
 		}
 	}
 	return "success", "deployment removed", nil
 }
 
-func (e *DeploymentExecutor) handleRemoveRuntimeError(
+func (c *DeploymentController) handleRemoveRuntimeError(
 	ctx context.Context,
 	deployment *v1alpha1.Deployment,
 	cause error,
@@ -243,20 +160,20 @@ func (e *DeploymentExecutor) handleRemoveRuntimeError(
 		return "", "", cause
 	}
 	if deployment.Metadata.DeletionTimestamp == nil {
-		return e.blockReference(ctx, deployment, cause)
+		return c.blockReference(ctx, deployment, cause)
 	}
-	if err := e.finalizeDeletedDeployment(ctx, deployment); err != nil {
+	if err := c.finalizeDeletedDeployment(ctx, deployment); err != nil {
 		return "", "", err
 	}
 	return "success", "deployment finalized without adapter remove because runtimeRef is unavailable", nil
 }
 
-func (e *DeploymentExecutor) blockReference(ctx context.Context, deployment *v1alpha1.Deployment, cause error) (string, string, error) {
+func (c *DeploymentController) blockReference(ctx context.Context, deployment *v1alpha1.Deployment, cause error) (string, string, error) {
 	message := "referenced resource is not available yet"
 	if cause != nil {
 		message = cause.Error()
 	}
-	if err := e.persistApplyResult(ctx, deployment, &types.ApplyResult{
+	if err := c.persistApplyResult(ctx, deployment, &types.ApplyResult{
 		Conditions: []v1alpha1.Condition{{
 			Type:               "Ready",
 			Status:             v1alpha1.ConditionFalse,
@@ -270,12 +187,16 @@ func (e *DeploymentExecutor) blockReference(ctx context.Context, deployment *v1a
 	return "blocked", message, nil
 }
 
-func (e *DeploymentExecutor) loadDeployment(ctx context.Context, work v1alpha1store.ReconcileWork) (*v1alpha1.Deployment, bool, error) {
-	store := e.deploymentStore()
+func (c *DeploymentController) loadDeployment(ctx context.Context, key deploymentQueueKey) (*v1alpha1.Deployment, bool, error) {
+	store := c.deploymentStore()
 	if store == nil {
-		return nil, false, errors.New("deployment executor: no Deployment store registered")
+		return nil, false, errors.New("deployment controller: no Deployment store registered")
 	}
-	raw, err := store.GetLatestIncludingTerminating(ctx, work.Resource.Namespace, work.Resource.Name)
+	namespace := key.Namespace
+	if namespace == "" {
+		namespace = v1alpha1.DefaultNamespace
+	}
+	raw, err := store.GetLatestIncludingTerminating(ctx, namespace, key.Name)
 	if err != nil {
 		if errors.Is(err, pkgdb.ErrNotFound) {
 			return nil, false, nil
@@ -289,13 +210,13 @@ func (e *DeploymentExecutor) loadDeployment(ctx context.Context, work v1alpha1st
 	return deployment, true, nil
 }
 
-func (e *DeploymentExecutor) resolveTarget(ctx context.Context, deployment *v1alpha1.Deployment) (v1alpha1.Object, error) {
-	if e.Getter == nil {
-		return nil, errors.New("deployment executor: getter is nil")
+func (c *DeploymentController) resolveTarget(ctx context.Context, deployment *v1alpha1.Deployment) (v1alpha1.Object, error) {
+	if c.Getter == nil {
+		return nil, errors.New("deployment controller: getter is nil")
 	}
 	ref := deployment.Spec.TargetRef
 	ref.Namespace = refNamespace(ref.Namespace, deployment.Metadata.NamespaceOrDefault())
-	obj, err := e.Getter(ctx, ref)
+	obj, err := c.Getter(ctx, ref)
 	if err != nil {
 		return nil, fmt.Errorf("resolve targetRef %s/%s@%s: %w", ref.Namespace, ref.Name, ref.Tag, err)
 	}
@@ -305,13 +226,13 @@ func (e *DeploymentExecutor) resolveTarget(ctx context.Context, deployment *v1al
 	return obj, nil
 }
 
-func (e *DeploymentExecutor) resolveRuntime(ctx context.Context, deployment *v1alpha1.Deployment) (*v1alpha1.Runtime, error) {
-	if e.Getter == nil {
-		return nil, errors.New("deployment executor: getter is nil")
+func (c *DeploymentController) resolveRuntime(ctx context.Context, deployment *v1alpha1.Deployment) (*v1alpha1.Runtime, error) {
+	if c.Getter == nil {
+		return nil, errors.New("deployment controller: getter is nil")
 	}
 	ref := deployment.Spec.RuntimeRef
 	ref.Namespace = refNamespace(ref.Namespace, deployment.Metadata.NamespaceOrDefault())
-	obj, err := e.Getter(ctx, ref)
+	obj, err := c.Getter(ctx, ref)
 	if err != nil {
 		return nil, fmt.Errorf("resolve runtimeRef %s/%s: %w", ref.Namespace, ref.Name, err)
 	}
@@ -322,15 +243,15 @@ func (e *DeploymentExecutor) resolveRuntime(ctx context.Context, deployment *v1a
 	return runtime, nil
 }
 
-func (e *DeploymentExecutor) resolveAdapter(runtimeType string) (types.DeploymentAdapter, error) {
-	adapter, ok := e.Adapters[runtimeType]
+func (c *DeploymentController) resolveAdapter(runtimeType string) (types.DeploymentAdapter, error) {
+	adapter, ok := c.Adapters[runtimeType]
 	if !ok || adapter == nil {
-		return nil, fmt.Errorf("deployment executor: no DeploymentAdapter registered for runtime type %q", runtimeType)
+		return nil, fmt.Errorf("deployment controller: no DeploymentAdapter registered for runtime type %q", runtimeType)
 	}
 	return adapter, nil
 }
 
-func (e *DeploymentExecutor) persistApplyResult(
+func (c *DeploymentController) persistApplyResult(
 	ctx context.Context,
 	deployment *v1alpha1.Deployment,
 	result *types.ApplyResult,
@@ -344,7 +265,7 @@ func (e *DeploymentExecutor) persistApplyResult(
 		if fingerprint != "" {
 			patch.Status = deploymentControllerStatusPatch(deployment, nil, fingerprint, forceToken)
 		}
-		if err := e.deploymentStore().ApplyPatch(ctx, deployment.Metadata.NamespaceOrDefault(), deployment.Metadata.Name, "", patch); err != nil {
+		if err := c.deploymentStore().ApplyPatch(ctx, deployment.Metadata.NamespaceOrDefault(), deployment.Metadata.Name, "", patch); err != nil {
 			return fmt.Errorf("persist apply result: %w", err)
 		}
 		return nil
@@ -361,7 +282,7 @@ func (e *DeploymentExecutor) persistApplyResult(
 			return annotations
 		}
 	}
-	if err := e.deploymentStore().ApplyPatch(ctx, deployment.Metadata.NamespaceOrDefault(), deployment.Metadata.Name, "", patch); err != nil {
+	if err := c.deploymentStore().ApplyPatch(ctx, deployment.Metadata.NamespaceOrDefault(), deployment.Metadata.Name, "", patch); err != nil {
 		return fmt.Errorf("persist apply result: %w", err)
 	}
 	return nil
@@ -394,7 +315,7 @@ func deploymentControllerStatusPatch(
 	})
 }
 
-func (e *DeploymentExecutor) persistRemoveResult(ctx context.Context, deployment *v1alpha1.Deployment, result *types.RemoveResult) error {
+func (c *DeploymentController) persistRemoveResult(ctx context.Context, deployment *v1alpha1.Deployment, result *types.RemoveResult) error {
 	if result == nil || len(result.Conditions) == 0 {
 		return nil
 	}
@@ -408,75 +329,40 @@ func (e *DeploymentExecutor) persistRemoveResult(ctx context.Context, deployment
 			}
 		}),
 	}
-	if err := e.deploymentStore().ApplyPatch(ctx, deployment.Metadata.NamespaceOrDefault(), deployment.Metadata.Name, "", patch); err != nil {
+	if err := c.deploymentStore().ApplyPatch(ctx, deployment.Metadata.NamespaceOrDefault(), deployment.Metadata.Name, "", patch); err != nil {
 		return fmt.Errorf("persist remove result: %w", err)
 	}
 	return nil
 }
 
-func (e *DeploymentExecutor) finalizeDeletedDeployment(ctx context.Context, deployment *v1alpha1.Deployment) error {
-	err := e.deploymentStore().PatchFinalizers(ctx, deployment.Metadata.NamespaceOrDefault(), deployment.Metadata.Name, "", removeFinalizer(DeploymentControllerFinalizer))
+func (c *DeploymentController) finalizeDeletedDeployment(ctx context.Context, deployment *v1alpha1.Deployment) error {
+	err := c.deploymentStore().PatchFinalizers(ctx, deployment.Metadata.NamespaceOrDefault(), deployment.Metadata.Name, "", removeFinalizer(DeploymentControllerFinalizer))
 	if err != nil {
 		if errors.Is(err, pkgdb.ErrNotFound) {
 			return nil
 		}
 		return fmt.Errorf("clear deployment controller finalizer: %w", err)
 	}
-	if _, err := e.deploymentStore().PurgeFinalized(ctx); err != nil {
+	if _, err := c.deploymentStore().PurgeFinalized(ctx); err != nil {
 		return fmt.Errorf("purge finalized deployment: %w", err)
 	}
 	return nil
 }
 
-func (e *DeploymentExecutor) deploymentStore() *v1alpha1store.Store {
-	if e == nil || e.Stores == nil {
-		return nil
+func (c *DeploymentController) validateReconciler() error {
+	if c == nil {
+		return errors.New("deployment controller is required")
 	}
-	return e.Stores[v1alpha1.KindDeployment]
-}
-
-func (e *DeploymentExecutor) validate() error {
-	if e == nil {
-		return errors.New("deployment executor is required")
+	if c.deploymentStore() == nil {
+		return errors.New("deployment controller: Deployment store is required")
 	}
-	if e.Work == nil {
-		return errors.New("deployment executor: work store is required")
+	if c.Getter == nil {
+		return errors.New("deployment controller: getter is required")
 	}
-	if e.Events == nil {
-		return errors.New("deployment executor: event store is required")
-	}
-	if e.deploymentStore() == nil {
-		return errors.New("deployment executor: Deployment store is required")
+	if len(c.Adapters) == 0 {
+		return errors.New("deployment controller: adapters are required")
 	}
 	return nil
-}
-
-func (e *DeploymentExecutor) owner() string {
-	if e != nil && e.Owner != "" {
-		return e.Owner
-	}
-	return defaultExecutorOwner
-}
-
-func (e *DeploymentExecutor) leaseDuration() time.Duration {
-	if e != nil && e.LeaseDuration > 0 {
-		return e.LeaseDuration
-	}
-	return defaultExecutorLeaseDuration
-}
-
-func (e *DeploymentExecutor) backoffDelay() time.Duration {
-	if e != nil && e.BackoffDelay > 0 {
-		return e.BackoffDelay
-	}
-	return defaultExecutorBackoff
-}
-
-func (e *DeploymentExecutor) now() time.Time {
-	if e != nil && e.Now != nil {
-		return e.Now().UTC()
-	}
-	return time.Now().UTC()
 }
 
 func ensureFinalizer(finalizer string) func([]string) []string {

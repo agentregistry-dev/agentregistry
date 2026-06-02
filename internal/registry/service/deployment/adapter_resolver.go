@@ -11,8 +11,8 @@ import (
 )
 
 // AdapterResolver resolves Deployment runtime adapters for adjacent operations
-// such as logs and discovery. The controller executor is the only built-in
-// Deployment lifecycle path that may call adapter Apply/Remove.
+// such as logs and discovery. The Deployment controller is the only built-in
+// lifecycle path that may call adapter Apply/Remove.
 type AdapterResolver struct {
 	adapters map[string]types.DeploymentAdapter
 	getter   v1alpha1.GetterFunc

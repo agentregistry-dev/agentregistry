@@ -9,19 +9,17 @@ import (
 
 const defaultRetentionPruneInterval = time.Hour
 
-// RetentionPolicy is the bounded-history contract for the controller
-// foundation tables. Durations <= 0 disable pruning for that table.
+// RetentionPolicy is the bounded-history contract for the controller event
+// replay log. Durations <= 0 disable pruning.
 type RetentionPolicy struct {
 	ControlPlaneEvents time.Duration
 	EventKeepAfterRev  int64
-	ReconcileWork      time.Duration
-	ReconcileAttempts  time.Duration
 	BatchLimit         int
 }
 
-// Enabled reports whether the policy prunes at least one controller table.
+// Enabled reports whether the policy prunes the controller event log.
 func (p RetentionPolicy) Enabled() bool {
-	return p.ControlPlaneEvents > 0 || p.ReconcileWork > 0 || p.ReconcileAttempts > 0
+	return p.ControlPlaneEvents > 0
 }
 
 // PruneStores groups the store surfaces needed by RunRetentionPrune. Keeping
@@ -31,24 +29,16 @@ type PruneStores struct {
 	ControlPlaneEvents interface {
 		PruneBefore(ctx context.Context, before time.Time, keepAfterRevision int64, limit int) (int64, error)
 	}
-	ReconcileWork interface {
-		Prune(ctx context.Context, before time.Time, limit int) (int64, error)
-	}
-	ReconcileAttempts interface {
-		Prune(ctx context.Context, before time.Time, limit int) (int64, error)
-	}
 }
 
-// RetentionPruneResult reports how many rows were removed from each
-// controller foundation table in one maintenance pass.
+// RetentionPruneResult reports how many event rows were removed in one
+// maintenance pass.
 type RetentionPruneResult struct {
 	ControlPlaneEvents int64
-	ReconcileWork      int64
-	ReconcileAttempts  int64
 }
 
-// RetentionPruner owns the periodic maintenance loop for controller
-// bookkeeping tables.
+// RetentionPruner owns the periodic maintenance loop for controller event
+// replay rows.
 type RetentionPruner struct {
 	Stores PruneStores
 	Policy RetentionPolicy
@@ -106,15 +96,12 @@ func (p *RetentionPruner) runOnceLogged(ctx context.Context) {
 		logger.Info(
 			"deployment controller retention pruned bookkeeping rows",
 			"control_plane_events", result.ControlPlaneEvents,
-			"reconcile_work", result.ReconcileWork,
-			"reconcile_attempts", result.ReconcileAttempts,
 		)
 	}
 }
 
-// RunRetentionPrune applies a RetentionPolicy to the controller foundation
-// tables. It is intentionally side-effect-only on bookkeeping tables:
-// canonical resource tables remain the source of truth, so controllers can
+// RunRetentionPrune applies a RetentionPolicy to the controller event log.
+// Canonical resource tables remain the source of truth, so controllers can
 // full-reconcile if their checkpoint falls behind the retained event range.
 func RunRetentionPrune(ctx context.Context, stores PruneStores, policy RetentionPolicy, now time.Time) (RetentionPruneResult, error) {
 	if now.IsZero() {
@@ -130,16 +117,6 @@ func RunRetentionPrune(ctx context.Context, stores PruneStores, policy Retention
 		n, err := stores.ControlPlaneEvents.PruneBefore(ctx, now.Add(-policy.ControlPlaneEvents), policy.EventKeepAfterRev, limit)
 		result.ControlPlaneEvents = n
 		errs = errors.Join(errs, wrapRetentionErr("prune control-plane events", err))
-	}
-	if stores.ReconcileWork != nil && policy.ReconcileWork > 0 {
-		n, err := stores.ReconcileWork.Prune(ctx, now.Add(-policy.ReconcileWork), limit)
-		result.ReconcileWork = n
-		errs = errors.Join(errs, wrapRetentionErr("prune reconcile work", err))
-	}
-	if stores.ReconcileAttempts != nil && policy.ReconcileAttempts > 0 {
-		n, err := stores.ReconcileAttempts.Prune(ctx, now.Add(-policy.ReconcileAttempts), limit)
-		result.ReconcileAttempts = n
-		errs = errors.Join(errs, wrapRetentionErr("prune reconcile attempts", err))
 	}
 	return result, errs
 }

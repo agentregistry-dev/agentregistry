@@ -36,8 +36,8 @@ import (
 // doesn't block on convergence.
 //
 // Adapters with expensive Apply paths can also implement
-// DeploymentDesiredFingerprinter to make unchanged reconcile work a cheap
-// executor no-op after the same resolved input has already been accepted.
+// DeploymentDesiredFingerprinter to make unchanged reconciles cheap after the
+// same resolved input has already been accepted.
 type DeploymentAdapter interface {
 	// Type returns the canonical CamelCase discriminator string
 	// ("Local", "Kubernetes", "BedrockAgentCore", ...). Runtime.Validate

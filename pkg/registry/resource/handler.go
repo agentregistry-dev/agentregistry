@@ -80,8 +80,8 @@ type Config struct {
 	// PostUpsert is optional; when set, the apply handler invokes it
 	// after a successful Upsert + read-back so the kind can drive
 	// post-persist reconciliation. Built-in Deployment adapter side effects
-	// are not wired through this hook; they are owned by the controller
-	// executor after a durable reconcile_work claim.
+	// are not wired through this hook; they are owned by the Deployment
+	// controller's asynchronous reconcile loop.
 	//
 	// Hook errors surface as 500 — the row is already persisted, so a
 	// failure here indicates degraded state the caller should retry.

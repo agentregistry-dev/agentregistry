@@ -90,7 +90,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		}
 	}()
 
-	// v1alpha1 DeploymentAdapter map consumed by the controller executor and
+	// v1alpha1 DeploymentAdapter map consumed by the Deployment controller and
 	// adjacent adapter resolver surfaces.
 	// Built OSS-side from the local + kubernetes ports; enterprise extends
 	// via AppOptions.DeploymentAdapters. Keys are the canonical CamelCase
@@ -218,8 +218,6 @@ func deploymentControllerConfig(cfg *config.Config) controller.ControllerConfig 
 		Retention: controller.RetentionPolicy{
 			ControlPlaneEvents: cfg.ControllerEventRetention,
 			EventKeepAfterRev:  cfg.ControllerEventKeepAfterRevision,
-			ReconcileWork:      cfg.ControllerWorkRetention,
-			ReconcileAttempts:  cfg.ControllerAttemptRetention,
 			BatchLimit:         cfg.ControllerRetentionPruneBatchLimit,
 		},
 	}

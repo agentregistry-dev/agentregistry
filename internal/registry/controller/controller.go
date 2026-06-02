@@ -7,9 +7,12 @@ import (
 	"sync"
 	"time"
 
+	"k8s.io/client-go/util/workqueue"
+
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
 const (
@@ -28,22 +31,26 @@ type ControlPlaneEventReader interface {
 	CurrentRevision(ctx context.Context) (int64, error)
 }
 
-// DeploymentController replays durable source invalidations and schedules
-// Deployment reconcile work. It does not call adapters; side effects begin only
-// after DeploymentExecutor claims durable work.
+// DeploymentController replays durable source invalidations and reconciles
+// Deployments through an in-memory workqueue. Source state remains durable in
+// the v1alpha1 tables and control_plane_events; queued work is intentionally
+// process-local and rebuilt by startup/repair full reconciles.
 type DeploymentController struct {
-	Stores map[string]*v1alpha1store.Store
-	Work   *v1alpha1store.ReconcileWorkStore
-	Events ControlPlaneEventReader
+	Stores   map[string]*v1alpha1store.Store
+	Adapters map[string]types.DeploymentAdapter
+	Getter   v1alpha1.GetterFunc
+	Events   ControlPlaneEventReader
 
 	BatchLimit int
 	Wakeups    <-chan struct{}
-	Now        func() time.Time
+	Queue      workqueue.TypedRateLimitingInterface[deploymentQueueKey]
 
 	mu         sync.RWMutex
 	checkpoint int64
 	ready      bool
 	lastErr    error
+
+	queueMu sync.Mutex
 }
 
 // SyncResult describes one controller replay pass.
@@ -98,7 +105,7 @@ func (c *DeploymentController) FullReconcile(ctx context.Context) (int, error) {
 	}
 	count := 0
 	for _, deployment := range deployments {
-		if err := c.upsertDeploymentWork(ctx, deployment); err != nil {
+		if err := c.enqueueDeployment(deployment); err != nil {
 			return count, err
 		}
 		count++
@@ -156,8 +163,9 @@ func (c *DeploymentController) Drain(ctx context.Context) (SyncResult, error) {
 	return result, nil
 }
 
-// Run keeps Deployment work repaired. Wakeups should be wired to coarse
-// database invalidations; the resync ticker is a periodic safety refresh.
+// Run keeps Deployment reconciliation repaired. Wakeups should be wired to
+// coarse database invalidations; the resync ticker is a periodic safety
+// refresh. Adapter side effects run through the in-memory workqueue worker.
 func (c *DeploymentController) Run(ctx context.Context, resyncInterval time.Duration) error {
 	if c == nil {
 		return errors.New("deployment controller: controller is required")
@@ -167,6 +175,14 @@ func (c *DeploymentController) Run(ctx context.Context, resyncInterval time.Dura
 			return err
 		}
 	}
+	queue := c.workQueue()
+	defer queue.ShutDown()
+
+	workerErrs := make(chan error, 1)
+	go func() {
+		workerErrs <- c.RunWorker(ctx)
+	}()
+
 	var ticker *time.Ticker
 	var ticks <-chan time.Time
 	if resyncInterval > 0 {
@@ -178,6 +194,8 @@ func (c *DeploymentController) Run(ctx context.Context, resyncInterval time.Dura
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case err := <-workerErrs:
+			return err
 		case <-c.Wakeups:
 			if _, err := c.Drain(ctx); err != nil {
 				return err
@@ -188,6 +206,42 @@ func (c *DeploymentController) Run(ctx context.Context, resyncInterval time.Dura
 			}
 		}
 	}
+}
+
+// RunWorker processes queued Deployment keys until the queue is shut down.
+func (c *DeploymentController) RunWorker(ctx context.Context) error {
+	if err := c.validateReconciler(); err != nil {
+		return err
+	}
+	queue := c.workQueue()
+	for {
+		key, shutdown := queue.Get()
+		if shutdown {
+			return nil
+		}
+		c.processQueueItem(ctx, queue, key)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+	}
+}
+
+// RunOnce processes at most one currently ready queued Deployment key. It is
+// primarily a test hook; RunWorker owns the blocking production loop.
+func (c *DeploymentController) RunOnce(ctx context.Context) (int, error) {
+	if err := c.validateReconciler(); err != nil {
+		return 0, err
+	}
+	queue := c.workQueue()
+	if queue.Len() == 0 {
+		return 0, nil
+	}
+	key, shutdown := queue.Get()
+	if shutdown {
+		return 0, nil
+	}
+	c.processQueueItem(ctx, queue, key)
+	return 1, nil
 }
 
 // Sync replays retained events after checkpoint. If pruning created a gap, it
@@ -228,7 +282,7 @@ func (c *DeploymentController) reconcileDeployment(ctx context.Context, key v1al
 	if err != nil {
 		return 0, fmt.Errorf("deployment controller: decode Deployment %s/%s: %w", namespace, key.Name, err)
 	}
-	if err := c.upsertDeploymentWork(ctx, deployment); err != nil {
+	if err := c.enqueueDeployment(deployment); err != nil {
 		return 0, err
 	}
 	return 1, nil
@@ -262,22 +316,19 @@ func (c *DeploymentController) listDeployments(ctx context.Context) ([]*v1alpha1
 	}
 }
 
-func (c *DeploymentController) upsertDeploymentWork(ctx context.Context, deployment *v1alpha1.Deployment) error {
-	if c == nil || c.Work == nil {
-		return errors.New("deployment controller: reconcile work store is required")
+func (c *DeploymentController) enqueueDeployment(deployment *v1alpha1.Deployment) error {
+	if deployment == nil {
+		return errors.New("deployment controller: deployment is required")
 	}
-	work, err := deriveDeploymentWork(deployment)
-	if err != nil {
-		return err
+	meta := deployment.Metadata
+	if meta.Name == "" {
+		return errors.New("deployment controller: deployment metadata.name is required")
 	}
-	if work.NextAttemptAt.IsZero() {
-		work.NextAttemptAt = c.now()
-	}
-	if err := c.Work.Upsert(ctx, work); err != nil {
-		return err
-	}
-	_, err = c.Work.AbandonSuperseded(ctx, work)
-	return err
+	c.workQueue().Add(deploymentQueueKey{
+		Namespace: meta.NamespaceOrDefault(),
+		Name:      meta.Name,
+	})
+	return nil
 }
 
 func (c *DeploymentController) fullRefreshAndReplay(ctx context.Context) (SyncResult, error) {
@@ -335,6 +386,18 @@ func (c *DeploymentController) deploymentStore() *v1alpha1store.Store {
 	return c.Stores[v1alpha1.KindDeployment]
 }
 
+func (c *DeploymentController) workQueue() workqueue.TypedRateLimitingInterface[deploymentQueueKey] {
+	c.queueMu.Lock()
+	defer c.queueMu.Unlock()
+	if c.Queue == nil {
+		c.Queue = workqueue.NewTypedRateLimitingQueueWithConfig(
+			workqueue.DefaultTypedControllerRateLimiter[deploymentQueueKey](),
+			workqueue.TypedRateLimitingQueueConfig[deploymentQueueKey]{Name: "deployment-controller"},
+		)
+	}
+	return c.Queue
+}
+
 func (c *DeploymentController) markReady(checkpoint int64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -351,13 +414,6 @@ func (c *DeploymentController) markNotReady(err error) {
 	defer c.mu.Unlock()
 	c.ready = false
 	c.lastErr = err
-}
-
-func (c *DeploymentController) now() time.Time {
-	if c != nil && c.Now != nil {
-		return c.Now().UTC()
-	}
-	return time.Now().UTC()
 }
 
 func refNamespace(refNamespace, fallback string) string {

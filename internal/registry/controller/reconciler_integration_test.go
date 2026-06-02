@@ -18,54 +18,46 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
-func TestDeploymentController_DerivesAndExecutesApply(t *testing.T) {
+func TestDeploymentController_EnqueuesAndExecutesApply(t *testing.T) {
 	ctx := context.Background()
-	stores, workStore, eventStore := newControllerTestStores(t)
+	stores := newControllerTestStores(t)
 	seedRuntime(t, stores, "local")
 	seedMCPServer(t, stores, "weather")
 	deployment := seedDeployment(t, stores, "weather-deploy", v1alpha1.DesiredStateDeployed)
 
-	controller := newDeploymentTestController(stores, workStore)
+	adapter := &recordingDeploymentAdapter{}
+	controller := newDeploymentTestController(stores, adapter)
 	_, err := controller.FullReconcile(ctx)
 	require.NoError(t, err)
 	_, err = controller.FullReconcile(ctx)
-	require.NoError(t, err, "duplicate derivation should coalesce by work key")
+	require.NoError(t, err, "duplicate scheduling should coalesce by queue key")
 
-	adapter := &recordingDeploymentAdapter{}
-	executor := newTestExecutor(stores, workStore, eventStore, adapter)
-	processed, err := executor.RunOnce(ctx, 10)
+	processed, err := controller.RunOnce(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 1, processed)
 	require.Equal(t, int32(1), adapter.applyCalls.Load())
+	require.Equal(t, int64(deployment.Metadata.Generation), adapter.lastApplyGeneration.Load())
 
 	got := loadDeployment(t, stores, deployment.Metadata.Name)
 	ready := got.Status.GetCondition("Ready")
 	require.NotNil(t, ready)
 	require.Equal(t, v1alpha1.ConditionTrue, ready.Status)
 	require.Equal(t, deployment.Metadata.Generation, ready.ObservedGeneration)
-
-	history, err := eventStore.ListByWorkKey(ctx, deploymentWorkKey(
-		v1alpha1store.ResourceKey{Kind: v1alpha1.KindDeployment, Namespace: "default", Name: deployment.Metadata.Name},
-		deployment.Metadata.UID, deployment.Metadata.Generation, ReconcileActionApply), 10)
-	require.NoError(t, err)
-	require.Len(t, history, 1)
-	require.Equal(t, "success", history[0].Outcome)
 }
 
 func TestDeploymentController_SkipsUnchangedApplyAfterRepairReconcile(t *testing.T) {
 	ctx := context.Background()
-	stores, workStore, eventStore := newControllerTestStores(t)
+	stores := newControllerTestStores(t)
 	seedRuntime(t, stores, "local")
 	seedMCPServer(t, stores, "weather")
 	deployment := seedDeployment(t, stores, "weather-stable", v1alpha1.DesiredStateDeployed)
 
-	controller := newDeploymentTestController(stores, workStore)
+	adapter := &recordingDeploymentAdapter{}
+	controller := newDeploymentTestController(stores, adapter)
 	_, err := controller.FullReconcile(ctx)
 	require.NoError(t, err)
 
-	adapter := &recordingDeploymentAdapter{}
-	executor := newTestExecutor(stores, workStore, eventStore, adapter)
-	processed, err := executor.RunOnce(ctx, 10)
+	processed, err := controller.RunOnce(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 1, processed)
 	require.Equal(t, int32(1), adapter.applyCalls.Load())
@@ -79,35 +71,26 @@ func TestDeploymentController_SkipsUnchangedApplyAfterRepairReconcile(t *testing
 
 	_, err = controller.FullReconcile(ctx)
 	require.NoError(t, err)
-	processed, err = executor.RunOnce(ctx, 10)
+	processed, err = controller.RunOnce(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 1, processed)
 	require.Equal(t, int32(1), adapter.applyCalls.Load(), "unchanged desired input must not call the adapter again")
-
-	history, err := eventStore.ListByWorkKey(ctx, deploymentWorkKey(
-		v1alpha1store.ResourceKey{Kind: v1alpha1.KindDeployment, Namespace: "default", Name: deployment.Metadata.Name},
-		deployment.Metadata.UID, deployment.Metadata.Generation, ReconcileActionApply), 10)
-	require.NoError(t, err)
-	require.Len(t, history, 2)
-	require.Equal(t, "unchanged", history[0].Outcome)
-	require.Equal(t, "success", history[1].Outcome)
 }
 
 func TestDeploymentController_RepairResyncsDoNotReplayUnchangedApply(t *testing.T) {
 	ctx := context.Background()
-	stores, workStore, eventStore := newControllerTestStores(t)
+	stores := newControllerTestStores(t)
 	seedRuntime(t, stores, "local")
 	seedMCPServer(t, stores, "weather")
-	deployment := seedDeployment(t, stores, "weather-no-storm", v1alpha1.DesiredStateDeployed)
+	seedDeployment(t, stores, "weather-no-storm", v1alpha1.DesiredStateDeployed)
 
-	controller := newDeploymentTestController(stores, workStore)
+	adapter := &recordingDeploymentAdapter{}
+	controller := newDeploymentTestController(stores, adapter)
 	controller.Events = fakeEventReader{}
 	_, err := controller.Refresh(ctx)
 	require.NoError(t, err)
 
-	adapter := &recordingDeploymentAdapter{}
-	executor := newTestExecutor(stores, workStore, eventStore, adapter)
-	processed, err := executor.RunOnce(ctx, 10)
+	processed, err := controller.RunOnce(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 1, processed)
 	require.Equal(t, int32(1), adapter.applyCalls.Load())
@@ -118,45 +101,26 @@ func TestDeploymentController_RepairResyncsDoNotReplayUnchangedApply(t *testing.
 		require.NoError(t, err)
 		require.True(t, result.FullResynced)
 
-		processed, err = executor.RunOnce(ctx, 10)
+		processed, err = controller.RunOnce(ctx)
 		require.NoError(t, err)
 		require.Equal(t, 1, processed)
 		require.Equal(t, int32(1), adapter.applyCalls.Load(), "repair resync must complete work without calling adapter.Apply again")
 	}
-
-	history, err := eventStore.ListByWorkKey(ctx, deploymentWorkKey(
-		v1alpha1store.ResourceKey{Kind: v1alpha1.KindDeployment, Namespace: "default", Name: deployment.Metadata.Name},
-		deployment.Metadata.UID, deployment.Metadata.Generation, ReconcileActionApply), 10)
-	require.NoError(t, err)
-	require.Len(t, history, repairTicks+1)
-	successes := 0
-	unchanged := 0
-	for _, event := range history {
-		switch event.Outcome {
-		case "success":
-			successes++
-		case "unchanged":
-			unchanged++
-		}
-	}
-	require.Equal(t, 1, successes)
-	require.Equal(t, repairTicks, unchanged)
 }
 
 func TestDeploymentController_ForceAnnotationBypassesUnchangedApplyOnce(t *testing.T) {
 	ctx := context.Background()
-	stores, workStore, eventStore := newControllerTestStores(t)
+	stores := newControllerTestStores(t)
 	seedRuntime(t, stores, "local")
 	seedMCPServer(t, stores, "weather")
 	deployment := seedDeployment(t, stores, "weather-force", v1alpha1.DesiredStateDeployed)
 
-	controller := newDeploymentTestController(stores, workStore)
+	adapter := &recordingDeploymentAdapter{}
+	controller := newDeploymentTestController(stores, adapter)
 	_, err := controller.FullReconcile(ctx)
 	require.NoError(t, err)
 
-	adapter := &recordingDeploymentAdapter{}
-	executor := newTestExecutor(stores, workStore, eventStore, adapter)
-	processed, err := executor.RunOnce(ctx, 10)
+	processed, err := controller.RunOnce(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 1, processed)
 	require.Equal(t, int32(1), adapter.applyCalls.Load())
@@ -167,14 +131,14 @@ func TestDeploymentController_ForceAnnotationBypassesUnchangedApplyOnce(t *testi
 	}))
 	_, err = controller.FullReconcile(ctx)
 	require.NoError(t, err)
-	processed, err = executor.RunOnce(ctx, 10)
+	processed, err = controller.RunOnce(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 1, processed)
 	require.Equal(t, int32(2), adapter.applyCalls.Load())
 
 	_, err = controller.FullReconcile(ctx)
 	require.NoError(t, err)
-	processed, err = executor.RunOnce(ctx, 10)
+	processed, err = controller.RunOnce(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 1, processed)
 	require.Equal(t, int32(2), adapter.applyCalls.Load(), "the same force token must not force every resync forever")
@@ -189,17 +153,16 @@ func TestDeploymentController_ForceAnnotationBypassesUnchangedApplyOnce(t *testi
 
 func TestDeploymentController_BlocksMissingTargetWithoutAdapterCall(t *testing.T) {
 	ctx := context.Background()
-	stores, workStore, eventStore := newControllerTestStores(t)
+	stores := newControllerTestStores(t)
 	seedRuntime(t, stores, "local")
 	seedDeployment(t, stores, "missing-target", v1alpha1.DesiredStateDeployed)
 
-	controller := newDeploymentTestController(stores, workStore)
+	adapter := &recordingDeploymentAdapter{}
+	controller := newDeploymentTestController(stores, adapter)
 	_, err := controller.FullReconcile(ctx)
 	require.NoError(t, err)
 
-	adapter := &recordingDeploymentAdapter{}
-	executor := newTestExecutor(stores, workStore, eventStore, adapter)
-	processed, err := executor.RunOnce(ctx, 10)
+	processed, err := controller.RunOnce(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 1, processed)
 	require.Zero(t, adapter.applyCalls.Load())
@@ -213,17 +176,16 @@ func TestDeploymentController_BlocksMissingTargetWithoutAdapterCall(t *testing.T
 
 func TestDeploymentController_ReappliesWhenMissingTargetAppears(t *testing.T) {
 	ctx := context.Background()
-	stores, workStore, eventStore := newControllerTestStores(t)
+	stores := newControllerTestStores(t)
 	seedRuntime(t, stores, "local")
-	deployment := seedDeployment(t, stores, "target-later", v1alpha1.DesiredStateDeployed)
+	seedDeployment(t, stores, "target-later", v1alpha1.DesiredStateDeployed)
 
-	controller := newDeploymentTestController(stores, workStore)
+	adapter := &recordingDeploymentAdapter{}
+	controller := newDeploymentTestController(stores, adapter)
 	_, err := controller.FullReconcile(ctx)
 	require.NoError(t, err)
 
-	adapter := &recordingDeploymentAdapter{}
-	executor := newTestExecutor(stores, workStore, eventStore, adapter)
-	processed, err := executor.RunOnce(ctx, 10)
+	processed, err := controller.RunOnce(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 1, processed)
 	require.Zero(t, adapter.applyCalls.Load())
@@ -241,36 +203,27 @@ func TestDeploymentController_ReappliesWhenMissingTargetAppears(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
-		processed, err = executor.RunOnce(ctx, 10)
+		processed, err = controller.RunOnce(ctx)
 		return err == nil && adapter.applyCalls.Load() == 1
 	}, time.Second, 10*time.Millisecond)
 	require.Equal(t, 1, processed)
 	require.Equal(t, int32(1), adapter.applyCalls.Load())
-
-	history, err := eventStore.ListByWorkKey(ctx, deploymentWorkKey(
-		v1alpha1store.ResourceKey{Kind: v1alpha1.KindDeployment, Namespace: "default", Name: deployment.Metadata.Name},
-		deployment.Metadata.UID, deployment.Metadata.Generation, ReconcileActionApply), 10)
-	require.NoError(t, err)
-	require.Len(t, history, 2)
-	require.Equal(t, "success", history[0].Outcome)
-	require.Equal(t, "blocked", history[1].Outcome)
 }
 
 func TestDeploymentController_ReappliesAgentDeploymentWhenReferencedMCPServerChanges(t *testing.T) {
 	ctx := context.Background()
-	stores, workStore, eventStore := newControllerTestStores(t)
+	stores := newControllerTestStores(t)
 	seedRuntime(t, stores, "local")
 	seedMCPServerWithIdentifier(t, stores, "weather", "ghcr.io/example/weather:1.0.0")
 	seedAgent(t, stores, "assistant", []v1alpha1.ResourceRef{{Name: "weather"}})
-	deployment := seedAgentDeployment(t, stores, "assistant-deploy", "assistant", v1alpha1.DesiredStateDeployed)
+	seedAgentDeployment(t, stores, "assistant-deploy", "assistant", v1alpha1.DesiredStateDeployed)
 
-	controller := newDeploymentTestController(stores, workStore)
+	adapter := &recordingDeploymentAdapter{}
+	controller := newDeploymentTestController(stores, adapter)
 	_, err := controller.FullReconcile(ctx)
 	require.NoError(t, err)
 
-	adapter := &recordingDeploymentAdapter{}
-	executor := newTestExecutor(stores, workStore, eventStore, adapter)
-	processed, err := executor.RunOnce(ctx, 10)
+	processed, err := controller.RunOnce(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 1, processed)
 	require.Equal(t, int32(1), adapter.applyCalls.Load())
@@ -288,23 +241,15 @@ func TestDeploymentController_ReappliesAgentDeploymentWhenReferencedMCPServerCha
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
-		processed, err = executor.RunOnce(ctx, 10)
+		processed, err = controller.RunOnce(ctx)
 		return err == nil && adapter.applyCalls.Load() == 2
 	}, time.Second, 10*time.Millisecond)
 	require.Equal(t, 1, processed)
-
-	history, err := eventStore.ListByWorkKey(ctx, deploymentWorkKey(
-		v1alpha1store.ResourceKey{Kind: v1alpha1.KindDeployment, Namespace: "default", Name: deployment.Metadata.Name},
-		deployment.Metadata.UID, deployment.Metadata.Generation, ReconcileActionApply), 10)
-	require.NoError(t, err)
-	require.Len(t, history, 2)
-	require.Equal(t, "success", history[0].Outcome)
-	require.Equal(t, "success", history[1].Outcome)
 }
 
 func TestDeploymentController_DeleteWaitsForRemoveThenPurgesFinalizedRow(t *testing.T) {
 	ctx := context.Background()
-	stores, workStore, eventStore := newControllerTestStores(t)
+	stores := newControllerTestStores(t)
 	seedRuntime(t, stores, "local")
 	seedMCPServer(t, stores, "weather")
 	deployment := seedDeployment(t, stores, "delete-me", v1alpha1.DesiredStateDeployed)
@@ -313,13 +258,12 @@ func TestDeploymentController_DeleteWaitsForRemoveThenPurgesFinalizedRow(t *test
 	terminating := loadDeployment(t, stores, deployment.Metadata.Name)
 	require.NotNil(t, terminating.Metadata.DeletionTimestamp)
 
-	controller := newDeploymentTestController(stores, workStore)
+	adapter := &recordingDeploymentAdapter{}
+	controller := newDeploymentTestController(stores, adapter)
 	_, err := controller.FullReconcile(ctx)
 	require.NoError(t, err)
 
-	adapter := &recordingDeploymentAdapter{}
-	executor := newTestExecutor(stores, workStore, eventStore, adapter)
-	processed, err := executor.RunOnce(ctx, 10)
+	processed, err := controller.RunOnce(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 1, processed)
 	require.Equal(t, int32(1), adapter.removeCalls.Load())
@@ -338,20 +282,18 @@ func TestDeploymentController_DeleteWaitsForRemoveThenPurgesFinalizedRow(t *test
 
 func TestDeploymentController_RemoveFailureKeepsFinalizerAndRetries(t *testing.T) {
 	ctx := context.Background()
-	stores, workStore, eventStore := newControllerTestStores(t)
+	stores := newControllerTestStores(t)
 	seedRuntime(t, stores, "local")
 	seedMCPServer(t, stores, "weather")
 	deployment := seedDeployment(t, stores, "remove-retry", v1alpha1.DesiredStateDeployed)
 
 	require.NoError(t, stores[v1alpha1.KindDeployment].Delete(ctx, "default", deployment.Metadata.Name, ""))
-	controller := newDeploymentTestController(stores, workStore)
+	adapter := &recordingDeploymentAdapter{removeErr: errors.New("temporary remove failure")}
+	controller := newDeploymentTestController(stores, adapter)
 	_, err := controller.FullReconcile(ctx)
 	require.NoError(t, err)
 
-	adapter := &recordingDeploymentAdapter{removeErr: errors.New("temporary remove failure")}
-	executor := newTestExecutor(stores, workStore, eventStore, adapter)
-	executor.Now = func() time.Time { return time.Now().Add(-time.Minute) }
-	processed, err := executor.RunOnce(ctx, 10)
+	processed, err := controller.RunOnce(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 1, processed)
 	require.Equal(t, int32(1), adapter.removeCalls.Load())
@@ -363,38 +305,24 @@ func TestDeploymentController_RemoveFailureKeepsFinalizerAndRetries(t *testing.T
 	require.NoError(t, err)
 	require.Zero(t, purged)
 
-	workKey := deploymentWorkKey(
-		v1alpha1store.ResourceKey{Kind: v1alpha1.KindDeployment, Namespace: "default", Name: deployment.Metadata.Name},
-		deployment.Metadata.UID, deployment.Metadata.Generation, ReconcileActionDelete)
-	history, err := eventStore.ListByWorkKey(ctx, workKey, 10)
-	require.NoError(t, err)
-	require.Len(t, history, 1)
-	require.Equal(t, "error", history[0].Outcome)
-	require.Contains(t, history[0].Error, "temporary remove failure")
-
 	adapter.removeErr = nil
-	processed, err = executor.RunOnce(ctx, 10)
-	require.NoError(t, err)
-	require.Equal(t, 1, processed)
-	require.Equal(t, int32(2), adapter.removeCalls.Load())
+	require.Eventually(t, func() bool {
+		processed, err = controller.RunOnce(ctx)
+		return err == nil && adapter.removeCalls.Load() == 2
+	}, time.Second, 10*time.Millisecond)
 
 	requireDeploymentMissing(t, stores, deployment.Metadata.Name)
-
-	history, err = eventStore.ListByWorkKey(ctx, workKey, 10)
-	require.NoError(t, err)
-	require.Len(t, history, 2)
-	require.Equal(t, "success", history[0].Outcome)
-	require.Equal(t, "error", history[1].Outcome)
 }
 
 func TestDeploymentController_DeleteAbandonsPendingApplyWork(t *testing.T) {
 	ctx := context.Background()
-	stores, workStore, eventStore := newControllerTestStores(t)
+	stores := newControllerTestStores(t)
 	seedRuntime(t, stores, "local")
 	seedMCPServer(t, stores, "weather")
 	deployment := seedDeployment(t, stores, "delete-with-apply-pending", v1alpha1.DesiredStateDeployed)
 
-	controller := newDeploymentTestController(stores, workStore)
+	adapter := &recordingDeploymentAdapter{}
+	controller := newDeploymentTestController(stores, adapter)
 	_, err := controller.FullReconcile(ctx)
 	require.NoError(t, err)
 
@@ -402,9 +330,7 @@ func TestDeploymentController_DeleteAbandonsPendingApplyWork(t *testing.T) {
 	_, err = controller.FullReconcile(ctx)
 	require.NoError(t, err)
 
-	adapter := &recordingDeploymentAdapter{}
-	executor := newTestExecutor(stores, workStore, eventStore, adapter)
-	processed, err := executor.RunOnce(ctx, 10)
+	processed, err := controller.RunOnce(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 1, processed)
 	require.Zero(t, adapter.applyCalls.Load(), "pending apply work must not run after delete")
@@ -412,115 +338,92 @@ func TestDeploymentController_DeleteAbandonsPendingApplyWork(t *testing.T) {
 	requireDeploymentMissing(t, stores, deployment.Metadata.Name)
 }
 
-func TestDeploymentController_SkipsClaimedApplyWhenDeploymentIsDeleted(t *testing.T) {
+func TestDeploymentController_QueuedApplySeesCurrentDeleteState(t *testing.T) {
 	ctx := context.Background()
-	stores, workStore, eventStore := newControllerTestStores(t)
+	stores := newControllerTestStores(t)
 	seedRuntime(t, stores, "local")
 	seedMCPServer(t, stores, "weather")
 	deployment := seedDeployment(t, stores, "delete-with-apply-claimed", v1alpha1.DesiredStateDeployed)
 
-	work, err := deriveDeploymentWork(deployment)
+	adapter := &recordingDeploymentAdapter{}
+	controller := newDeploymentTestController(stores, adapter)
+	_, err := controller.FullReconcile(ctx)
 	require.NoError(t, err)
-	work.NextAttemptAt = time.Now().Add(-time.Minute)
-	require.NoError(t, workStore.Upsert(ctx, work))
-	claimed, err := workStore.ClaimDue(ctx, "worker-a", time.Now().Add(time.Minute), 1)
-	require.NoError(t, err)
-	require.Len(t, claimed, 1)
-	require.Equal(t, string(ReconcileActionApply), claimed[0].Action)
 
 	require.NoError(t, stores[v1alpha1.KindDeployment].Delete(ctx, "default", deployment.Metadata.Name, ""))
 
-	adapter := &recordingDeploymentAdapter{}
-	executor := newTestExecutor(stores, workStore, eventStore, adapter)
-	require.NoError(t, executor.executeClaim(ctx, claimed[0]))
-	require.Zero(t, adapter.applyCalls.Load(), "claimed apply work must be stale once the deployment is terminating")
-
-	history, err := eventStore.ListByWorkKey(ctx, work.Key, 10)
+	processed, err := controller.RunOnce(ctx)
 	require.NoError(t, err)
-	require.Len(t, history, 1)
-	require.Equal(t, "stale", history[0].Outcome)
+	require.Equal(t, 1, processed)
+	require.Zero(t, adapter.applyCalls.Load(), "queued apply must see the latest terminating row")
+	require.Equal(t, int32(1), adapter.removeCalls.Load())
+	requireDeploymentMissing(t, stores, deployment.Metadata.Name)
 }
 
 func TestDeploymentController_DeleteFinalizesWhenRuntimeRefMissing(t *testing.T) {
 	ctx := context.Background()
-	stores, workStore, eventStore := newControllerTestStores(t)
+	stores := newControllerTestStores(t)
 	seedRuntime(t, stores, "local")
 	seedMCPServer(t, stores, "weather")
 	deployment := seedDeployment(t, stores, "delete-missing-runtime", v1alpha1.DesiredStateDeployed)
 	require.NoError(t, stores[v1alpha1.KindRuntime].Delete(ctx, "default", "local", ""))
 	require.NoError(t, stores[v1alpha1.KindDeployment].Delete(ctx, "default", deployment.Metadata.Name, ""))
 
-	controller := newDeploymentTestController(stores, workStore)
+	adapter := &recordingDeploymentAdapter{}
+	controller := newDeploymentTestController(stores, adapter)
 	_, err := controller.FullReconcile(ctx)
 	require.NoError(t, err)
 
-	adapter := &recordingDeploymentAdapter{}
-	executor := newTestExecutor(stores, workStore, eventStore, adapter)
-	processed, err := executor.RunOnce(ctx, 10)
+	processed, err := controller.RunOnce(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 1, processed)
 	require.Zero(t, adapter.removeCalls.Load(), "missing runtime cannot dispatch adapter remove")
 	requireDeploymentMissing(t, stores, deployment.Metadata.Name)
 }
 
-func TestDeploymentController_SkipsStaleGenerationWork(t *testing.T) {
+func TestDeploymentController_QueuedDeploymentUsesLatestGeneration(t *testing.T) {
 	ctx := context.Background()
-	stores, workStore, eventStore := newControllerTestStores(t)
+	stores := newControllerTestStores(t)
 	seedRuntime(t, stores, "local")
 	seedMCPServer(t, stores, "weather")
 	deployment := seedDeployment(t, stores, "stale", v1alpha1.DesiredStateDeployed)
 
-	work, err := deriveDeploymentWork(deployment)
+	adapter := &recordingDeploymentAdapter{}
+	controller := newDeploymentTestController(stores, adapter)
+	_, err := controller.FullReconcile(ctx)
 	require.NoError(t, err)
-	work.NextAttemptAt = time.Now().Add(-time.Minute)
-	require.NoError(t, workStore.Upsert(ctx, work))
 
 	deployment.Spec.RuntimeConfig = map[string]any{"changed": true}
 	_, err = stores[v1alpha1.KindDeployment].Upsert(ctx, deployment)
 	require.NoError(t, err)
 
-	adapter := &recordingDeploymentAdapter{}
-	executor := newTestExecutor(stores, workStore, eventStore, adapter)
-	processed, err := executor.RunOnce(ctx, 10)
+	latest := loadDeployment(t, stores, deployment.Metadata.Name)
+	require.Greater(t, latest.Metadata.Generation, deployment.Metadata.Generation)
+
+	processed, err := controller.RunOnce(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 1, processed)
-	require.Zero(t, adapter.applyCalls.Load())
-
-	history, err := eventStore.ListByWorkKey(ctx, work.Key, 10)
-	require.NoError(t, err)
-	require.Len(t, history, 1)
-	require.Equal(t, "stale", history[0].Outcome)
+	require.Equal(t, int32(1), adapter.applyCalls.Load())
+	require.Equal(t, latest.Metadata.Generation, adapter.lastApplyGeneration.Load())
 }
 
-func newControllerTestStores(t *testing.T) (map[string]*v1alpha1store.Store, *v1alpha1store.ReconcileWorkStore, *v1alpha1store.ReconcileEventStore) {
+func newControllerTestStores(t *testing.T) map[string]*v1alpha1store.Store {
 	t.Helper()
 	pool := v1alpha1store.NewTestPool(t)
-	stores := v1alpha1store.NewStores(pool)
-	return stores, v1alpha1store.NewReconcileWorkStore(pool), v1alpha1store.NewReconcileEventStore(pool)
+	return v1alpha1store.NewStores(pool)
 }
 
 func newDeploymentTestController(
 	stores map[string]*v1alpha1store.Store,
-	workStore *v1alpha1store.ReconcileWorkStore,
-) *DeploymentController {
-	return &DeploymentController{Stores: stores, Work: workStore}
-}
-
-func newTestExecutor(
-	stores map[string]*v1alpha1store.Store,
-	workStore *v1alpha1store.ReconcileWorkStore,
-	eventStore *v1alpha1store.ReconcileEventStore,
 	adapter types.DeploymentAdapter,
-) *DeploymentExecutor {
-	return &DeploymentExecutor{
-		Stores:        stores,
-		Adapters:      map[string]types.DeploymentAdapter{"Local": adapter},
-		Getter:        internaldb.NewGetter(stores),
-		Work:          workStore,
-		Events:        eventStore,
-		Owner:         "test",
-		LeaseDuration: time.Minute,
-		BackoffDelay:  time.Millisecond,
+) *DeploymentController {
+	if adapter == nil {
+		adapter = &recordingDeploymentAdapter{}
+	}
+	return &DeploymentController{
+		Stores:   stores,
+		Adapters: map[string]types.DeploymentAdapter{"Local": adapter},
+		Getter:   internaldb.NewGetter(stores),
 	}
 }
 
@@ -631,10 +534,11 @@ func loadDeploymentFinalizers(t *testing.T, stores map[string]*v1alpha1store.Sto
 }
 
 type recordingDeploymentAdapter struct {
-	applyCalls  atomic.Int32
-	removeCalls atomic.Int32
-	applyErr    error
-	removeErr   error
+	applyCalls          atomic.Int32
+	removeCalls         atomic.Int32
+	lastApplyGeneration atomic.Int64
+	applyErr            error
+	removeErr           error
 }
 
 func (a *recordingDeploymentAdapter) Type() string { return "Local" }
@@ -643,8 +547,11 @@ func (a *recordingDeploymentAdapter) SupportedTargetKinds() []string {
 	return []string{v1alpha1.KindMCPServer, v1alpha1.KindAgent}
 }
 
-func (a *recordingDeploymentAdapter) Apply(context.Context, types.ApplyInput) (*types.ApplyResult, error) {
+func (a *recordingDeploymentAdapter) Apply(_ context.Context, input types.ApplyInput) (*types.ApplyResult, error) {
 	a.applyCalls.Add(1)
+	if input.Deployment != nil {
+		a.lastApplyGeneration.Store(input.Deployment.Metadata.Generation)
+	}
 	if a.applyErr != nil {
 		return nil, a.applyErr
 	}

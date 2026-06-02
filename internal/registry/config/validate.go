@@ -13,12 +13,6 @@ func Validate(cfg *Config) error {
 	if cfg.ControllerEventKeepAfterRevision < 0 {
 		return fmt.Errorf("controller event keep-after revision must be non-negative")
 	}
-	if cfg.ControllerWorkRetention < 0 {
-		return fmt.Errorf("controller work retention must be non-negative")
-	}
-	if cfg.ControllerAttemptRetention < 0 {
-		return fmt.Errorf("controller attempt retention must be non-negative")
-	}
 	if cfg.ControllerRetentionPruneBatchLimit < 0 {
 		return fmt.Errorf("controller retention prune batch limit must be non-negative")
 	}

@@ -39,12 +39,6 @@ type Config struct {
 	// ControllerEventKeepAfterRevision preserves control-plane events newer than
 	// this Postgres revision even when they are older than ControllerEventRetention.
 	ControllerEventKeepAfterRevision int64 `env:"CONTROLLER_EVENT_KEEP_AFTER_REVISION" envDefault:"0"`
-	// ControllerWorkRetention is how long completed or abandoned reconcile work
-	// rows remain for debugging. Pending and running work is never pruned.
-	ControllerWorkRetention time.Duration `env:"CONTROLLER_WORK_RETENTION" envDefault:"24h"`
-	// ControllerAttemptRetention is how long reconcile attempt history remains
-	// available for diagnostics after work completes.
-	ControllerAttemptRetention time.Duration `env:"CONTROLLER_ATTEMPT_RETENTION" envDefault:"168h"`
 	// ControllerRetentionPruneBatchLimit caps rows removed per retention pass so
 	// pruning cannot monopolize the database during startup or repair loops.
 	ControllerRetentionPruneBatchLimit int `env:"CONTROLLER_RETENTION_PRUNE_BATCH_LIMIT" envDefault:"500"`
