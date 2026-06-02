@@ -13,12 +13,12 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1/registries"
 )
 
-// TestValidateNPM_RegistryBaseURLOverride locks in @josh-pritchard's
-// requested behavior: a non-canonical RegistryBaseURL must be honored
-// as a private-mirror override, not rejected. Used to bail with
-// "registry type and base URL do not match"; now the validator's HTTP
-// probe is routed to whatever URL the package supplied.
-func TestValidateNPM_RegistryBaseURLOverride(t *testing.T) {
+// TestValidateNPM_MirrorOverride locks in @josh-pritchard's requested
+// behavior: a non-canonical Mirror must be honored as a private-mirror
+// override, not rejected. The validator's HTTP probe is routed to
+// whatever URL the package supplied (previously RegistryBaseURL, now
+// Origin.NPM.Mirror under the polymorphic shape).
+func TestValidateNPM_MirrorOverride(t *testing.T) {
 	const serverName = "io.example/private-server"
 	var probedPath string
 	mirror := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -29,15 +29,18 @@ func TestValidateNPM_RegistryBaseURLOverride(t *testing.T) {
 	defer mirror.Close()
 
 	err := registries.ValidateNPM(context.Background(),
-		v1alpha1.RegistryPackage{
-			RegistryType:    v1alpha1.RegistryTypeNPM,
-			Identifier:      "my-pkg",
-			Version:         "1.0.0",
-			RegistryBaseURL: mirror.URL,
+		v1alpha1.MCPPackageOrigin{
+			Type:       v1alpha1.MCPPackageOriginTypeNPM,
+			Identifier: "my-pkg",
+			NPM: &v1alpha1.MCPPackageOriginNPM{
+				Version:    "1.0.0",
+				Mirror:     mirror.URL,
+				ServerName: serverName,
+			},
 		},
 		serverName,
 	)
-	require.NoError(t, err, "non-canonical RegistryBaseURL must be honored as override")
+	require.NoError(t, err, "non-canonical Mirror must be honored as override")
 	require.Equal(t, "/my-pkg/1.0.0", probedPath, "validator must route HTTP probe to the override URL")
 }
 
@@ -150,13 +153,13 @@ func TestValidateNPM_RealPackages(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pkg := v1alpha1.RegistryPackage{
-				RegistryType: v1alpha1.RegistryTypeNPM,
-				Identifier:   tt.packageName,
-				Version:      tt.version,
+			origin := v1alpha1.MCPPackageOrigin{
+				Type:       v1alpha1.MCPPackageOriginTypeNPM,
+				Identifier: tt.packageName,
+				NPM:        &v1alpha1.MCPPackageOriginNPM{Version: tt.version},
 			}
 
-			err := registries.ValidateNPM(ctx, pkg, tt.serverName)
+			err := registries.ValidateNPM(ctx, origin, tt.serverName)
 
 			if tt.expectError {
 				require.Error(t, err)

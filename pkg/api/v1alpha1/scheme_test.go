@@ -84,12 +84,13 @@ spec:
   title: GitHub Tools
   source:
     package:
-      registryType: oci
-      identifier: ghcr.io/example/mcp-github
-      version: "0.2"
+      origin:
+        type: oci
+        identifier: ghcr.io/example/mcp-github:0.2
+        oci:
+          serverName: io.github.example/mcp-github
       transport:
         type: stdio
-      serverName: github-tools
 `)
 	obj, err := Default.Decode(doc)
 	if err != nil {
@@ -99,8 +100,14 @@ spec:
 	if !ok {
 		t.Fatalf("want *MCPServer, got %T", obj)
 	}
-	if m.Spec.Source == nil || m.Spec.Source.Package == nil || m.Spec.Source.Package.Identifier != "ghcr.io/example/mcp-github" {
+	if m.Spec.Source == nil || m.Spec.Source.Package == nil || m.Spec.Source.Package.Origin.Identifier != "ghcr.io/example/mcp-github:0.2" {
 		t.Fatalf("source.package mismatch: %+v", m.Spec.Source)
+	}
+	if m.Spec.Source.Package.Origin.Type != MCPPackageOriginTypeOCI {
+		t.Fatalf("origin.type mismatch: %q", m.Spec.Source.Package.Origin.Type)
+	}
+	if m.Spec.Source.Package.Origin.OCI == nil || m.Spec.Source.Package.Origin.OCI.ServerName != "io.github.example/mcp-github" {
+		t.Fatalf("origin.oci mismatch: %+v", m.Spec.Source.Package.Origin.OCI)
 	}
 	if m.Spec.Source.Package.Transport.Type != "stdio" {
 		t.Fatalf("transport mismatch: %+v", m.Spec.Source.Package.Transport)

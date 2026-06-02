@@ -410,10 +410,12 @@ func TestMCPServerValidate_OK(t *testing.T) {
 			Title: "Tools",
 			Source: &MCPServerSource{
 				Package: &MCPPackage{
-					RegistryType: "oci",
-					Identifier:   "ghcr.io/example/mcp-tools:1.0.0",
-					Transport:    MCPTransport{Type: "stdio"},
-					ServerName:   "mcp-tools",
+					Origin: MCPPackageOrigin{
+						Type:       MCPPackageOriginTypeOCI,
+						Identifier: "ghcr.io/example/mcp-tools:1.0.0",
+						OCI:        &MCPPackageOriginOCI{ServerName: "io.example/mcp-tools"},
+					},
+					Transport: MCPTransport{Type: "stdio"},
 				},
 			},
 		},
@@ -438,10 +440,12 @@ func TestMCPServerValidate_RemoteAndSourceMutuallyExclusive(t *testing.T) {
 		Spec: MCPServerSpec{
 			Source: &MCPServerSource{
 				Package: &MCPPackage{
-					RegistryType: "oci",
-					Identifier:   "ghcr.io/example/mcp-tools:1.0.0",
-					Transport:    MCPTransport{Type: "stdio"},
-					ServerName:   "mcp-tools",
+					Origin: MCPPackageOrigin{
+						Type:       MCPPackageOriginTypeOCI,
+						Identifier: "ghcr.io/example/mcp-tools:1.0.0",
+						OCI:        &MCPPackageOriginOCI{ServerName: "io.example/mcp-tools"},
+					},
+					Transport: MCPTransport{Type: "stdio"},
 				},
 			},
 			Remote: &MCPRemote{Type: "streamable-http", URL: "https://example.test/mcp"},
@@ -467,10 +471,12 @@ func TestMCPServerValidate_HTTPPortRange(t *testing.T) {
 			Spec: MCPServerSpec{
 				Source: &MCPServerSource{
 					Package: &MCPPackage{
-						RegistryType: "oci",
-						Identifier:   "img:latest",
-						Transport:    MCPTransport{Type: "http", Port: port},
-						ServerName:   "x",
+						Origin: MCPPackageOrigin{
+							Type:       MCPPackageOriginTypeOCI,
+							Identifier: "ghcr.io/example/img:latest",
+							OCI:        &MCPPackageOriginOCI{ServerName: "io.example/x"},
+						},
+						Transport: MCPTransport{Type: "http", Port: port},
 					},
 				},
 			},
@@ -588,10 +594,15 @@ func TestMCPServerValidate_MCPPackageName_RejectsBadFormat(t *testing.T) {
 		Spec: MCPServerSpec{
 			Source: &MCPServerSource{
 				Package: &MCPPackage{
-					RegistryType: "npm",
-					Identifier:   "my-pkg",
-					Transport:    MCPTransport{Type: "stdio"},
-					ServerName:   "has space", // invalid: spaces not allowed
+					Origin: MCPPackageOrigin{
+						Type:       MCPPackageOriginTypeNPM,
+						Identifier: "my-pkg",
+						NPM: &MCPPackageOriginNPM{
+							Version:    "1.0.0",
+							ServerName: "has space", // invalid: spaces not allowed
+						},
+					},
+					Transport: MCPTransport{Type: "stdio"},
 				},
 			},
 		},
@@ -599,7 +610,7 @@ func TestMCPServerValidate_MCPPackageName_RejectsBadFormat(t *testing.T) {
 	err := m.Validate()
 	require.Error(t, err)
 	paths := failedFields(t, err)
-	require.Contains(t, paths, "spec.source.package.serverName")
+	require.Contains(t, paths, "spec.source.package.origin.npm.serverName")
 }
 
 func TestMCPServerValidate_MCPPackageName_AcceptsValid(t *testing.T) {
@@ -609,10 +620,15 @@ func TestMCPServerValidate_MCPPackageName_AcceptsValid(t *testing.T) {
 		Spec: MCPServerSpec{
 			Source: &MCPServerSource{
 				Package: &MCPPackage{
-					RegistryType: "pypi",
-					Identifier:   "mcp-server-fetch",
-					Transport:    MCPTransport{Type: "stdio"},
-					ServerName:   "io.github.modelcontextprotocol/server-fetch",
+					Origin: MCPPackageOrigin{
+						Type:       MCPPackageOriginTypePyPI,
+						Identifier: "mcp-server-fetch",
+						PyPI: &MCPPackageOriginPyPI{
+							Version:    "1.0.0",
+							ServerName: "io.github.modelcontextprotocol/server-fetch",
+						},
+					},
+					Transport: MCPTransport{Type: "stdio"},
 				},
 			},
 		},
@@ -620,60 +636,160 @@ func TestMCPServerValidate_MCPPackageName_AcceptsValid(t *testing.T) {
 	require.NoError(t, m.Validate())
 }
 
-func TestMCPServerValidate_ServerName_RequiredForNonMCPB(t *testing.T) {
-	for _, rt := range []string{"npm", "pypi", "oci", "nuget"} {
-		t.Run(rt, func(t *testing.T) {
+// TestMCPServerValidate_ServerName_RequiredPerType asserts the new
+// invariant: ServerName lives on whichever per-type sub-struct is set
+// (NPM/PyPI/OCI), and is always required there. The error path is now
+// per-type (e.g. spec.source.package.origin.npm.serverName) rather than
+// the old flat spec.source.package.serverName.
+func TestMCPServerValidate_ServerName_RequiredPerType(t *testing.T) {
+	cases := []struct {
+		name   string
+		pkg    *MCPPackage
+		expect string
+	}{
+		{
+			name: "npm",
+			pkg: &MCPPackage{
+				Origin: MCPPackageOrigin{
+					Type:       MCPPackageOriginTypeNPM,
+					Identifier: "my-pkg",
+					NPM:        &MCPPackageOriginNPM{Version: "1.0.0"}, // ServerName missing
+				},
+				Transport: MCPTransport{Type: "stdio"},
+			},
+			expect: "spec.source.package.origin.npm.serverName",
+		},
+		{
+			name: "pypi",
+			pkg: &MCPPackage{
+				Origin: MCPPackageOrigin{
+					Type:       MCPPackageOriginTypePyPI,
+					Identifier: "my-pkg",
+					PyPI:       &MCPPackageOriginPyPI{Version: "1.0.0"}, // ServerName missing
+				},
+				Transport: MCPTransport{Type: "stdio"},
+			},
+			expect: "spec.source.package.origin.pypi.serverName",
+		},
+		{
+			name: "oci",
+			pkg: &MCPPackage{
+				Origin: MCPPackageOrigin{
+					Type:       MCPPackageOriginTypeOCI,
+					Identifier: "ghcr.io/example/my-pkg:1.0.0",
+					OCI:        &MCPPackageOriginOCI{}, // ServerName missing
+				},
+				Transport: MCPTransport{Type: "stdio"},
+			},
+			expect: "spec.source.package.origin.oci.serverName",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
 			m := &MCPServer{
 				TypeMeta: TypeMeta{APIVersion: "ar.dev/v1alpha1", Kind: KindMCPServer},
 				Metadata: ObjectMeta{Namespace: "default", Name: "my-server"},
-				Spec: MCPServerSpec{
-					Source: &MCPServerSource{
-						Package: &MCPPackage{
-							RegistryType: rt,
-							Identifier:   "my-pkg",
-							Transport:    MCPTransport{Type: "stdio"},
-							// ServerName intentionally omitted
-						},
-					},
-				},
+				Spec:     MCPServerSpec{Source: &MCPServerSource{Package: tc.pkg}},
 			}
 			err := m.Validate()
 			require.Error(t, err)
 			paths := failedFields(t, err)
-			require.Contains(t, paths, "spec.source.package.serverName")
+			require.Contains(t, paths, tc.expect)
 		})
 	}
 }
 
-func TestMCPServerValidate_ServerName_OptionalForMCPB(t *testing.T) {
+// TestMCPServerValidate_OriginPolymorphism covers the new discriminated-
+// union invariant: exactly one of NPM/PyPI/OCI must be non-nil, and the
+// sub-struct must match Origin.Type.
+func TestMCPServerValidate_OriginPolymorphism(t *testing.T) {
+	mk := func(o MCPPackageOrigin) *MCPServer {
+		return &MCPServer{
+			TypeMeta: TypeMeta{APIVersion: "ar.dev/v1alpha1", Kind: KindMCPServer},
+			Metadata: ObjectMeta{Namespace: "default", Name: "my-server"},
+			Spec: MCPServerSpec{Source: &MCPServerSource{Package: &MCPPackage{
+				Origin:    o,
+				Transport: MCPTransport{Type: "stdio"},
+			}}},
+		}
+	}
+
+	t.Run("zero sub-structs set is rejected", func(t *testing.T) {
+		paths := failedFields(t, mk(MCPPackageOrigin{
+			Type:       MCPPackageOriginTypeNPM,
+			Identifier: "my-pkg",
+		}).Validate())
+		require.Contains(t, paths, "spec.source.package.origin")
+	})
+
+	t.Run("multiple sub-structs set is rejected", func(t *testing.T) {
+		paths := failedFields(t, mk(MCPPackageOrigin{
+			Type:       MCPPackageOriginTypeNPM,
+			Identifier: "my-pkg",
+			NPM:        &MCPPackageOriginNPM{Version: "1.0.0", ServerName: "io.example/x"},
+			PyPI:       &MCPPackageOriginPyPI{Version: "1.0.0", ServerName: "io.example/x"},
+		}).Validate())
+		require.Contains(t, paths, "spec.source.package.origin")
+	})
+
+	t.Run("type mismatched with sub-struct is rejected", func(t *testing.T) {
+		// Type=npm but only PyPI sub-struct is set.
+		paths := failedFields(t, mk(MCPPackageOrigin{
+			Type:       MCPPackageOriginTypeNPM,
+			Identifier: "my-pkg",
+			PyPI:       &MCPPackageOriginPyPI{Version: "1.0.0", ServerName: "io.example/x"},
+		}).Validate())
+		require.Contains(t, paths, "spec.source.package.origin.npm")
+	})
+
+	t.Run("unsupported type is rejected", func(t *testing.T) {
+		paths := failedFields(t, mk(MCPPackageOrigin{
+			Type:       "bogus",
+			Identifier: "my-pkg",
+			NPM:        &MCPPackageOriginNPM{Version: "1.0.0", ServerName: "io.example/x"},
+		}).Validate())
+		require.Contains(t, paths, "spec.source.package.origin.type")
+	})
+}
+
+// TestMCPServerValidate_OriginTypeRequired asserts the field-path
+// rename from `registryType` to `origin.type` (required when Source.Package
+// is set).
+func TestMCPServerValidate_OriginTypeRequired(t *testing.T) {
 	m := &MCPServer{
 		TypeMeta: TypeMeta{APIVersion: "ar.dev/v1alpha1", Kind: KindMCPServer},
 		Metadata: ObjectMeta{Namespace: "default", Name: "my-server"},
-		Spec: MCPServerSpec{
-			Source: &MCPServerSource{
-				Package: &MCPPackage{
-					RegistryType: RegistryTypeMCPB,
-					Identifier:   "https://example.com/pkg.mcpb",
-					Transport:    MCPTransport{Type: "stdio"},
-					// ServerName intentionally omitted — MCPB has no ownership check
-				},
+		Spec: MCPServerSpec{Source: &MCPServerSource{Package: &MCPPackage{
+			Origin: MCPPackageOrigin{
+				// Type intentionally omitted; Identifier present
+				Identifier: "my-pkg",
+				NPM:        &MCPPackageOriginNPM{Version: "1.0.0", ServerName: "io.example/x"},
 			},
-		},
+			Transport: MCPTransport{Type: "stdio"},
+		}}},
 	}
-	require.NoError(t, m.Validate())
+	paths := failedFields(t, m.Validate())
+	require.Contains(t, paths, "spec.source.package.origin.type")
 }
 
-func TestMCPServerValidateRegistries_UsesServerNameWhenSet(t *testing.T) {
+func TestMCPServerValidateRegistries_UsesPerTypeServerName(t *testing.T) {
 	var gotClaim string
-	validator := func(_ context.Context, _ RegistryPackage, claim string) error {
+	validator := func(_ context.Context, _ MCPPackageOrigin, claim string) error {
 		gotClaim = claim
 		return nil
 	}
 	m := &MCPServer{
 		Metadata: ObjectMeta{Namespace: "default", Name: "my-server"},
 		Spec: MCPServerSpec{Source: &MCPServerSource{Package: &MCPPackage{
-			RegistryType: "pypi", Identifier: "mcp-server-fetch", Transport: MCPTransport{Type: "stdio"},
-			ServerName: "io.github.modelcontextprotocol/server-fetch",
+			Origin: MCPPackageOrigin{
+				Type:       MCPPackageOriginTypePyPI,
+				Identifier: "mcp-server-fetch",
+				PyPI: &MCPPackageOriginPyPI{
+					Version:    "1.0.0",
+					ServerName: "io.github.modelcontextprotocol/server-fetch",
+				},
+			},
+			Transport: MCPTransport{Type: "stdio"},
 		}}},
 	}
 	require.NoError(t, m.ValidateRegistries(context.Background(), validator))

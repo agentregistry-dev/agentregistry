@@ -11,6 +11,17 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1/registries"
 )
 
+// ociOrigin is a small fixture helper: every OCI origin in this file
+// shares the same Type and (almost always) a stub OCI sub-struct. Tests
+// vary the identifier and the validator's expected ServerName argument.
+func ociOrigin(identifier string) v1alpha1.MCPPackageOrigin {
+	return v1alpha1.MCPPackageOrigin{
+		Type:       v1alpha1.MCPPackageOriginTypeOCI,
+		Identifier: identifier,
+		OCI:        &v1alpha1.MCPPackageOriginOCI{},
+	}
+}
+
 func TestValidateOCI_RegistryAllowlist(t *testing.T) {
 	ctx := context.Background()
 
@@ -111,12 +122,7 @@ func TestValidateOCI_RegistryAllowlist(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pkg := v1alpha1.RegistryPackage{
-				RegistryType: "oci",
-				Identifier:   tt.identifier,
-			}
-
-			err := registries.ValidateOCI(ctx, pkg, "com.example/test")
+			err := registries.ValidateOCI(ctx, ociOrigin(tt.identifier), "com.example/test")
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -129,49 +135,24 @@ func TestValidateOCI_RegistryAllowlist(t *testing.T) {
 	}
 }
 
-func TestValidateOCI_RejectsOldFormat(t *testing.T) {
+// TestValidateOCI_RejectsBareIdentifier asserts the new tag-or-digest
+// invariant: an OCI Identifier without an explicit tag (`:<tag>`) or
+// digest (`@sha256:...`) is rejected up-front. Bare refs would
+// otherwise silently resolve `:latest` at pull time, breaking
+// reproducibility.
+func TestValidateOCI_RejectsBareIdentifier(t *testing.T) {
 	ctx := context.Background()
 
-	tests := []struct {
-		name         string
-		pkg          v1alpha1.RegistryPackage
-		errorMessage string
-	}{
-		{
-			name: "OCI package with registryBaseUrl should be rejected",
-			pkg: v1alpha1.RegistryPackage{
-				RegistryType:    "oci",
-				RegistryBaseURL: "https://docker.io",
-				Identifier:      "docker.io/test/image:latest",
-			},
-			errorMessage: "OCI packages must not have 'registryBaseUrl' field",
-		},
-		{
-			name: "OCI package with version field should be rejected",
-			pkg: v1alpha1.RegistryPackage{
-				RegistryType: "oci",
-				Identifier:   "docker.io/test/image:latest",
-				Version:      "1.0.0",
-			},
-			errorMessage: "OCI packages must not have 'version' field",
-		},
-		{
-			name: "OCI package with fileSha256 field should be rejected",
-			pkg: v1alpha1.RegistryPackage{
-				RegistryType: "oci",
-				Identifier:   "docker.io/test/image:latest",
-				FileSHA256:   "abcd1234",
-			},
-			errorMessage: "OCI packages must not have 'fileSha256' field",
-		},
+	bare := []string{
+		"ghcr.io/foo/bar",          // no tag, no digest
+		"docker.io/library/alpine", // no tag, no digest
+		"library/hello-world",      // implicit docker.io, still no tag
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := registries.ValidateOCI(ctx, tt.pkg, "com.example/test")
-
+	for _, id := range bare {
+		t.Run(id, func(t *testing.T) {
+			err := registries.ValidateOCI(ctx, ociOrigin(id), "com.example/test")
 			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.errorMessage)
+			assert.Contains(t, err.Error(), "must include an explicit tag")
 		})
 	}
 }
@@ -195,12 +176,7 @@ func TestValidateOCI_InvalidReferences(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pkg := v1alpha1.RegistryPackage{
-				RegistryType: "oci",
-				Identifier:   tt.identifier,
-			}
-
-			err := registries.ValidateOCI(ctx, pkg, "com.example/test")
+			err := registries.ValidateOCI(ctx, ociOrigin(tt.identifier), "com.example/test")
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "invalid OCI reference")
 		})
@@ -210,12 +186,7 @@ func TestValidateOCI_InvalidReferences(t *testing.T) {
 func TestValidateOCI_EmptyIdentifier(t *testing.T) {
 	ctx := context.Background()
 
-	pkg := v1alpha1.RegistryPackage{
-		RegistryType: "oci",
-		Identifier:   "",
-	}
-
-	err := registries.ValidateOCI(ctx, pkg, "com.example/test")
+	err := registries.ValidateOCI(ctx, ociOrigin(""), "com.example/test")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "package identifier is required")
 }
@@ -224,12 +195,10 @@ func TestValidateOCI_SuccessfulValidation(t *testing.T) {
 	ctx := context.Background()
 
 	// Test with a real MCP server image that has the correct label
-	pkg := v1alpha1.RegistryPackage{
-		RegistryType: "oci",
-		Identifier:   "ghcr.io/github/github-mcp-server:latest",
-	}
-
-	err := registries.ValidateOCI(ctx, pkg, "io.github.github/github-mcp-server")
+	err := registries.ValidateOCI(ctx,
+		ociOrigin("ghcr.io/github/github-mcp-server:latest"),
+		"io.github.github/github-mcp-server",
+	)
 	require.NoError(t, err)
 }
 
@@ -238,12 +207,10 @@ func TestValidateOCI_LabelMismatch(t *testing.T) {
 
 	// Test with a real MCP server image but wrong expected server name
 	// This should fail because the label doesn't match
-	pkg := v1alpha1.RegistryPackage{
-		RegistryType: "oci",
-		Identifier:   "ghcr.io/github/github-mcp-server:latest",
-	}
-
-	err := registries.ValidateOCI(ctx, pkg, "io.github.github/github-mcp-server-mismatch")
+	err := registries.ValidateOCI(ctx,
+		ociOrigin("ghcr.io/github/github-mcp-server:latest"),
+		"io.github.github/github-mcp-server-mismatch",
+	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "ownership validation failed")
 	assert.Contains(t, err.Error(), "Expected annotation")
