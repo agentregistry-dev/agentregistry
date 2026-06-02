@@ -74,26 +74,102 @@ func validateMCPServerSource(src *MCPServerSource) FieldErrors {
 	if pkg == nil {
 		return errs
 	}
-	if pkg.RegistryType == "" {
-		errs.Append("spec.source.package.registryType", fmt.Errorf("%w", ErrRequiredField))
-	}
-	if pkg.Identifier == "" {
-		errs.Append("spec.source.package.identifier", fmt.Errorf("%w", ErrRequiredField))
-	}
+
+	// Transport — required type, plus http requires port.
 	if pkg.Transport.Type == "" {
 		errs.Append("spec.source.package.transport.type", fmt.Errorf("%w", ErrRequiredField))
 	}
 	if pkg.Transport.Type == "http" && pkg.Transport.Port == 0 {
 		errs.Append("spec.source.package.transport.port", fmt.Errorf("%w: required for http transport", ErrRequiredField))
 	}
-	// MCPB has no ownership concept (the validator ignores serverName), so it's
-	// the only registry type where omitting serverName is allowed.
-	if pkg.RegistryType != "" && pkg.RegistryType != RegistryTypeMCPB && pkg.ServerName == "" {
-		errs.Append("spec.source.package.serverName",
-			fmt.Errorf("%w: required when registryType is %q", ErrRequiredField, pkg.RegistryType))
+
+	// Origin — type, identifier, and the polymorphism invariant.
+	if pkg.Origin.Type == "" {
+		errs.Append("spec.source.package.origin.type", fmt.Errorf("%w", ErrRequiredField))
 	}
-	if err := validateMCPPackageName(pkg.ServerName); err != nil {
-		errs.Append("spec.source.package.serverName", err)
+	if pkg.Origin.Identifier == "" {
+		errs.Append("spec.source.package.origin.identifier", fmt.Errorf("%w", ErrRequiredField))
 	}
+
+	errs = append(errs, validateMCPPackageOrigin(pkg.Origin)...)
+	return errs
+}
+
+// validateMCPPackageOrigin enforces the discriminated-union invariant:
+// exactly one of NPM/PyPI/OCI sub-structs is non-nil, matches Origin.Type,
+// and carries a non-empty (and well-formed) ServerName. Per-type version
+// requirements (NPM/PyPI must have Version) are enforced here; OCI's
+// tag-or-digest invariant lives in the per-type validator since it
+// parses Identifier.
+func validateMCPPackageOrigin(o MCPPackageOrigin) FieldErrors {
+	var errs FieldErrors
+
+	// Count non-nil sub-structs — exactly one must be set.
+	set := 0
+	if o.NPM != nil {
+		set++
+	}
+	if o.PyPI != nil {
+		set++
+	}
+	if o.OCI != nil {
+		set++
+	}
+	if set == 0 {
+		errs.Append("spec.source.package.origin", fmt.Errorf("%w: one of origin.npm, origin.pypi, or origin.oci must be set", ErrRequiredField))
+		return errs
+	}
+	if set > 1 {
+		errs.Append("spec.source.package.origin", fmt.Errorf("%w: exactly one of origin.npm, origin.pypi, or origin.oci may be set", ErrInvalidRef))
+		return errs
+	}
+
+	// Sub-struct must match Type discriminator.
+	switch o.Type {
+	case MCPPackageOriginTypeNPM:
+		if o.NPM == nil {
+			errs.Append("spec.source.package.origin.npm", fmt.Errorf("%w: required when origin.type is %q", ErrRequiredField, o.Type))
+			return errs
+		}
+		if o.NPM.Version == "" {
+			errs.Append("spec.source.package.origin.npm.version", fmt.Errorf("%w", ErrRequiredField))
+		}
+		if o.NPM.ServerName == "" {
+			errs.Append("spec.source.package.origin.npm.serverName", fmt.Errorf("%w", ErrRequiredField))
+		}
+		if err := validateMCPPackageName(o.NPM.ServerName); err != nil {
+			errs.Append("spec.source.package.origin.npm.serverName", err)
+		}
+	case MCPPackageOriginTypePyPI:
+		if o.PyPI == nil {
+			errs.Append("spec.source.package.origin.pypi", fmt.Errorf("%w: required when origin.type is %q", ErrRequiredField, o.Type))
+			return errs
+		}
+		if o.PyPI.Version == "" {
+			errs.Append("spec.source.package.origin.pypi.version", fmt.Errorf("%w", ErrRequiredField))
+		}
+		if o.PyPI.ServerName == "" {
+			errs.Append("spec.source.package.origin.pypi.serverName", fmt.Errorf("%w", ErrRequiredField))
+		}
+		if err := validateMCPPackageName(o.PyPI.ServerName); err != nil {
+			errs.Append("spec.source.package.origin.pypi.serverName", err)
+		}
+	case MCPPackageOriginTypeOCI:
+		if o.OCI == nil {
+			errs.Append("spec.source.package.origin.oci", fmt.Errorf("%w: required when origin.type is %q", ErrRequiredField, o.Type))
+			return errs
+		}
+		if o.OCI.ServerName == "" {
+			errs.Append("spec.source.package.origin.oci.serverName", fmt.Errorf("%w", ErrRequiredField))
+		}
+		if err := validateMCPPackageName(o.OCI.ServerName); err != nil {
+			errs.Append("spec.source.package.origin.oci.serverName", err)
+		}
+	case "":
+		// Already flagged as ErrRequiredField on origin.type — no further checks.
+	default:
+		errs.Append("spec.source.package.origin.type", fmt.Errorf("%w: unsupported origin type %q (expected one of: %q, %q, %q)", ErrInvalidRef, o.Type, MCPPackageOriginTypeNPM, MCPPackageOriginTypePyPI, MCPPackageOriginTypeOCI))
+	}
+
 	return errs
 }
