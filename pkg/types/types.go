@@ -310,9 +310,9 @@ type AppOptions struct {
 	//   - synthetic test names mean no public image can satisfy the
 	//     annotation match.
 	//
-	// Pass a custom RegistryValidatorFunc to filter out registry types
+	// Pass a custom RegistryValidatorFunc to filter out origin types
 	// the build doesn't want enforced (e.g. wrap registries.Dispatcher
-	// and short-circuit RegistryTypeOCI to nil), or pass an explicit
+	// and short-circuit when origin.OCI != nil), or pass an explicit
 	// no-op (`func(...) error { return nil }`) to disable per-package
 	// registry validation entirely. Cross-kind ResourceRef checks still
 	// run regardless.

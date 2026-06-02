@@ -24,12 +24,15 @@ spec:
   description: "Fetches content"
   source:
     package:
-      registryType: oci
-      identifier: ghcr.io/acme/fetch:1.0.0
-      runtimeHint: docker
+      origin:
+        type: oci
+        identifier: ghcr.io/acme/fetch:1.0.0
+        oci:
+          serverName: io.github.acme/fetch
+      launch:
+        command: docker
       transport:
         type: stdio
-      serverName: acme-fetch
 `
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "mcp.yaml"), []byte(envelopeYAML), 0o644))
 
