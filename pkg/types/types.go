@@ -292,7 +292,7 @@ type AppOptions struct {
 
 	// RegistryValidator overrides the per-package registry
 	// validator (the dispatcher consulted on apply to confirm
-	// each declared package — npm / pypi / oci / nuget / mcpb — exists
+	// each declared package — npm / pypi / oci — exists
 	// and (for OCI) carries the
 	// `LABEL io.modelcontextprotocol.server.name` ownership annotation
 	// proving the publisher controls the OCI namespace).

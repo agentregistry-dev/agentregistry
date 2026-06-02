@@ -257,41 +257,61 @@ export function ServerDetail({ server, onServerCopied }: ServerDetailProps) {
                 if (!pkg) {
                   return <p className="text-center text-sm text-muted-foreground py-8">No package defined</p>
                 }
+                const origin = pkg.origin
+                const identifier = origin?.identifier
+                const originType = origin?.type
+                const serverName =
+                  origin?.npm?.serverName ?? origin?.pypi?.serverName ?? origin?.oci?.serverName
+                const version = origin?.npm?.version ?? origin?.pypi?.version
+                const launchArgs = (pkg.launch?.args ?? []).map((a) => ({
+                  type: (a.type === 'named' || a.type === 'positional') ? a.type : 'positional',
+                  name: a.name,
+                  value: a.value,
+                })) as { type: 'named' | 'positional'; name?: string; value?: string }[]
+                const launchEnv = (pkg.launch?.env ?? []).map((e) => ({
+                  name: e.name,
+                  default: e.value,
+                  isSecret: e.isRequired,
+                }))
                 return (
                     <div className="p-4 rounded-lg border">
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
                           <Package className="h-4 w-4 text-primary" />
-                          <h4 className="text-sm font-semibold">{pkg.identifier}</h4>
+                          <h4 className="text-sm font-semibold">{identifier}</h4>
                         </div>
-                        <Badge variant="outline" className="text-xs">{pkg.registryType}</Badge>
+                        {originType && (
+                          <Badge variant="outline" className="text-xs">{originType}</Badge>
+                        )}
                       </div>
                       <div className="space-y-1.5 text-sm mb-3 pb-3 border-b">
-                        {pkg.serverName && (
+                        {serverName && (
                           <div className="flex justify-between text-xs gap-2">
                             <span className="text-muted-foreground shrink-0">MCP Name</span>
-                            <span className="font-mono truncate" title={pkg.serverName}>{pkg.serverName}</span>
+                            <span className="font-mono truncate" title={serverName}>{serverName}</span>
                           </div>
                         )}
-                        <div className="flex justify-between text-xs">
-                          <span className="text-muted-foreground">Version</span>
-                          <span className="font-mono">{pkg.version}</span>
-                        </div>
-                        {(pkg as any).runtimeHint && (
+                        {version && (
                           <div className="flex justify-between text-xs">
-                            <span className="text-muted-foreground">Runtime</span>
-                            <Badge variant="secondary" className="text-[10px] h-4">{(pkg as any).runtimeHint}</Badge>
+                            <span className="text-muted-foreground">Version</span>
+                            <span className="font-mono">{version}</span>
                           </div>
                         )}
-                        {(pkg as any).transport?.type && (
+                        {pkg.launch?.command && (
+                          <div className="flex justify-between text-xs">
+                            <span className="text-muted-foreground">Command</span>
+                            <span className="font-mono truncate" title={pkg.launch.command}>{pkg.launch.command}</span>
+                          </div>
+                        )}
+                        {pkg.transport?.type && (
                           <div className="flex justify-between text-xs">
                             <span className="text-muted-foreground">Transport</span>
-                            <Badge variant="secondary" className="text-[10px] h-4">{(pkg as any).transport.type}</Badge>
+                            <Badge variant="secondary" className="text-[10px] h-4">{pkg.transport.type}</Badge>
                           </div>
                         )}
                       </div>
-                      <RuntimeArgumentsTable arguments={(pkg as any).runtimeArguments} />
-                      <EnvironmentVariablesTable variables={(pkg as any).environmentVariables} />
+                      <RuntimeArgumentsTable arguments={launchArgs} />
+                      <EnvironmentVariablesTable variables={launchEnv} />
                     </div>
                 )
               })()}

@@ -16,8 +16,11 @@ const mockServer: ServerResponse = {
         url: "https://github.com/acme/database-server",
       },
       package: {
-        registryType: "npm",
-        identifier: "@acme/database-server",
+        origin: {
+          type: "npm",
+          identifier: "@acme/database-server",
+          npm: { version: "3.2.1", serverName: "@acme/database-server" },
+        },
         transport: { type: "stdio" },
       },
     },
@@ -74,7 +77,7 @@ describe("ServerCard", () => {
   it("shows deploy button when showDeploy is true and server has OCI package", () => {
     const onDeploy = vi.fn()
     const ociServer: ServerResponse = {
-      server: { ...mockServer.server, source: { package: { registryType: "oci", identifier: "ghcr.io/acme/db", transport: { type: "stdio" } } } },
+      server: { ...mockServer.server, source: { package: { origin: { type: "oci", identifier: "ghcr.io/acme/db", oci: { serverName: "acme-db" } }, transport: { type: "stdio" } } } },
       _meta: mockServer._meta,
     }
     render(<ServerCard server={ociServer} showDeploy onDeploy={onDeploy} />)
@@ -86,7 +89,7 @@ describe("ServerCard", () => {
     const onDeploy = vi.fn()
     const onClick = vi.fn()
     const ociServer: ServerResponse = {
-      server: { ...mockServer.server, source: { package: { registryType: "oci", identifier: "ghcr.io/acme/db", transport: { type: "stdio" } } } },
+      server: { ...mockServer.server, source: { package: { origin: { type: "oci", identifier: "ghcr.io/acme/db", oci: { serverName: "acme-db" } }, transport: { type: "stdio" } } } },
       _meta: mockServer._meta,
     }
     render(<ServerCard server={ociServer} showDeploy onDeploy={onDeploy} onClick={onClick} />)

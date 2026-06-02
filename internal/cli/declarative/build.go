@@ -91,7 +91,7 @@ Examples:
 		},
 	}
 
-	cmd.Flags().StringVar(&buildImage, "image", "", "Docker image tag override (default: from spec.source.image / spec.packages[0].identifier)")
+	cmd.Flags().StringVar(&buildImage, "image", "", "Docker image tag override (default: from spec.source.image / spec.source.package.origin.identifier)")
 	cmd.Flags().BoolVar(&buildPush, "push", false, "Push the image after building")
 	cmd.Flags().StringVar(&buildPlatform, "platform", "", "Target platform (e.g. linux/amd64, linux/arm64)")
 

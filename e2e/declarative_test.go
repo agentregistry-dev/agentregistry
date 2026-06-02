@@ -1899,9 +1899,11 @@ spec:
   description: "packages-shape round-trip test"
   source:
     package:
-      registryType: oci
-      identifier: %s
-      serverName: %s
+      origin:
+        type: oci
+        identifier: %s
+        oci:
+          serverName: %s
       transport:
         type: stdio
 `, serverName, imageRef, serverName)
@@ -1915,7 +1917,7 @@ spec:
 	result = RunArctl(t, tmpDir, "get", "mcp", serverName, "-o", "yaml", "--registry-url", regURL)
 	RequireSuccess(t, result)
 	RequireOutputContains(t, result, "package:")
-	RequireOutputContains(t, result, "registryType: oci")
+	RequireOutputContains(t, result, "type: oci")
 	RequireOutputContains(t, result, imageRef)
 	RequireOutputContains(t, result, "type: stdio")
 	// Exclusive shape — must not leak a remotes block.

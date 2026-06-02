@@ -16,14 +16,13 @@ import { toast } from "sonner"
 const UPSTREAM_MCP_PACKAGE_NAME_RE = /^[a-zA-Z0-9._/-]+$/
 
 // isValidMCPPackageName checks if the MCP package's serverName is valid.
-//
-// Server-side serverName is optional ONLY when registryType is `mcpb` (which
-// has no ownership check). This dialog's registry-type dropdown does not
-// expose `mcpb`, so every package created through here will be subject to
-// ownership validation and must carry a non-empty serverName.
+// Every supported origin type (npm / pypi / oci) carries a per-type
+// serverName and the server-side validator requires it.
 function isValidMCPPackageName(s: string): boolean {
   return s.length >= 1 && s.length <= 200 && UPSTREAM_MCP_PACKAGE_NAME_RE.test(s)
 }
+
+type OriginType = 'npm' | 'pypi' | 'oci'
 
 interface AddServerDialogProps {
   open: boolean
@@ -42,8 +41,11 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
   const [tag, setTag] = useState("latest")
   const [repositoryUrl, setRepositoryUrl] = useState("")
 
-  // Schema collapsed to a single package per server.
-  type PackageDraft = { identifier: string; version: string; registryType: string; transport: string; serverName: string }
+  // Schema collapsed to a single package per server. The dialog mirrors
+  // the new polymorphic MCPPackage shape: origin.type drives which
+  // per-type sub-object (npm / pypi / oci) is populated. `version` is
+  // ignored for OCI (the version lives in the image ref's tag).
+  type PackageDraft = { identifier: string; version: string; originType: OriginType; transport: string; serverName: string }
   const [pkg, setPkg] = useState<PackageDraft | null>(null)
 
   const resetForm = () => {
@@ -96,15 +98,25 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
           url: repositoryUrl.trim(),
         }
       }
-      if (pkg && pkg.identifier.trim() && pkg.version.trim()) {
-        source.package = {
-          identifier: pkg.identifier.trim(),
-          version: pkg.version.trim(),
-          registryType: pkg.registryType as 'npm' | 'pypi' | 'docker',
-          transport: { type: pkg.transport || 'stdio' },
+      // OCI carries its version in the image ref tag (identifier); npm
+      // and pypi need a separate version. Validate accordingly.
+      if (pkg && pkg.identifier.trim() && (pkg.originType === 'oci' || pkg.version.trim())) {
+        const identifier = pkg.identifier.trim()
+        const serverName = pkg.serverName.trim()
+        const origin: NonNullable<NonNullable<typeof source.package>['origin']> = {
+          type: pkg.originType,
+          identifier,
         }
-        if (pkg.serverName.trim()) {
-          source.package.serverName = pkg.serverName.trim()
+        if (pkg.originType === 'npm') {
+          origin.npm = { version: pkg.version.trim(), serverName }
+        } else if (pkg.originType === 'pypi') {
+          origin.pypi = { version: pkg.version.trim(), serverName }
+        } else {
+          origin.oci = { serverName }
+        }
+        source.package = {
+          origin,
+          transport: { type: pkg.transport || 'stdio' },
         }
       }
       if (source.repository || source.package) {
@@ -130,7 +142,7 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
   }
 
   const addPackage = () => {
-    setPkg({ identifier: "", version: "", registryType: "npm", transport: "stdio", serverName: "" })
+    setPkg({ identifier: "", version: "", originType: "npm", transport: "stdio", serverName: "" })
   }
 
   const removePackage = () => {
@@ -138,7 +150,16 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
   }
 
   const updatePackage = (field: keyof PackageDraft, value: string) => {
-    setPkg(prev => (prev ? { ...prev, [field]: value } : prev))
+    setPkg(prev => {
+      if (!prev) return prev
+      if (field === 'originType') {
+        const originType = value as OriginType
+        // OCI carries the version in the image ref tag — clear any
+        // separately-entered version so the form doesn't carry stale state.
+        return { ...prev, originType, version: originType === 'oci' ? '' : prev.version }
+      }
+      return { ...prev, [field]: value }
+    })
   }
 
   return (
@@ -248,21 +269,21 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
                     className="flex-1"
                   />
                   <Input
-                    placeholder="Version"
+                    placeholder={pkg.originType === 'oci' ? 'Version (in image tag)' : 'Version'}
                     value={pkg.version}
                     onChange={(e) => updatePackage("version", e.target.value)}
-                    disabled={loading}
+                    disabled={loading || pkg.originType === 'oci'}
                     className="w-32"
                   />
                   <select
-                    value={pkg.registryType}
-                    onChange={(e) => updatePackage("registryType", e.target.value)}
+                    value={pkg.originType}
+                    onChange={(e) => updatePackage("originType", e.target.value)}
                     className="px-3 py-2 border rounded-md bg-background text-foreground border-input focus:outline-none focus:ring-2 focus:ring-ring"
                     disabled={loading}
                   >
                     <option value="npm">npm</option>
                     <option value="pypi">pypi</option>
-                    <option value="docker">docker</option>
+                    <option value="oci">oci</option>
                   </select>
                   <Button
                     type="button"
@@ -290,11 +311,10 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
                     </label>
                   ))}
                 </div>
-                {/* Required for every registryType except mcpb. The dropdown
-                    above does not expose mcpb, so this is effectively always
-                    required when a package is added. Value must match the
-                    identity the publisher embedded in the upstream artifact
-                    (npm mcpName / PyPI mcp-name / OCI io.modelcontextprotocol.server.name). */}
+                {/* Required for every origin type (npm / pypi / oci).
+                    Value must match the identity the publisher embedded in
+                    the upstream artifact (npm mcpName / PyPI mcp-name /
+                    OCI io.modelcontextprotocol.server.name). */}
                 <div className="pl-2">
                   <Label htmlFor="serverName" className="text-sm text-muted-foreground">
                     Upstream catalogue name (mcpName) *

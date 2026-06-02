@@ -30,7 +30,7 @@ export function ServerCard({ server, onDelete, onDeploy, showDelete = false, sho
   const githubStars = publisherMetadata?.stars
   const identityData = publisherMetadata?.identity
   const sourcePackage = serverData.source?.package
-  const hasOciPackage = sourcePackage?.registryType === "oci"
+  const hasOciPackage = sourcePackage?.origin?.type === "oci"
 
   const formatDate = (dateString: string) => {
     try {
