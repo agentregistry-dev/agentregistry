@@ -487,6 +487,34 @@ func TestMCPServerValidate_HTTPPortRange(t *testing.T) {
 	require.NotContains(t, failedFields(t, mk(8080).Validate()), portPath, "http with a valid port must pass the port check")
 }
 
+// TestMCPServerValidate_TransportTypeClosedSet asserts the transport type
+// is restricted to {stdio, http}. The resolver in
+// internal/registry/runtimes/utils/deployment_adapter_utils.go has a
+// default→http switch, so a typo like "sse" would silently route to HTTP
+// if the validator didn't gate it here.
+func TestMCPServerValidate_TransportTypeClosedSet(t *testing.T) {
+	m := &MCPServer{
+		Metadata: ObjectMeta{Namespace: "default", Name: "tools", Tag: "v1"},
+		Spec: MCPServerSpec{
+			Source: &MCPServerSource{
+				Package: &MCPPackage{
+					Origin: MCPPackageOrigin{
+						Type:       MCPPackageOriginTypeOCI,
+						Identifier: "ghcr.io/example/mcp-tools:1.0.0",
+						OCI:        &MCPPackageOriginOCI{ServerName: "io.example/mcp-tools"},
+					},
+					Transport: MCPTransport{Type: "sse"}, // not in the closed set
+				},
+			},
+		},
+	}
+	err := m.Validate()
+	require.Error(t, err)
+	require.Contains(t, failedFields(t, err), "spec.source.package.transport.type")
+	require.Contains(t, err.Error(), "sse", "error message should name the rejected value")
+	require.Contains(t, err.Error(), ErrInvalidRef.Error(), "error should wrap ErrInvalidRef")
+}
+
 func TestValidateNameField(t *testing.T) {
 	maxLabelLen := strings.Repeat("a", 63) // single segment at max label length
 	tooLongSegment := strings.Repeat("a", 64)

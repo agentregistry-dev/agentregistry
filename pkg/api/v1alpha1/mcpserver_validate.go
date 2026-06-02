@@ -75,9 +75,16 @@ func validateMCPServerSource(src *MCPServerSource) FieldErrors {
 		return errs
 	}
 
-	// Transport — required type, plus http requires port.
+	// Transport — required type, closed to {stdio, http}, plus http requires port.
 	if pkg.Transport.Type == "" {
 		errs.Append("spec.source.package.transport.type", fmt.Errorf("%w", ErrRequiredField))
+	}
+	switch pkg.Transport.Type {
+	case "", "stdio", "http":
+		// empty is already flagged above; stdio/http are valid
+	default:
+		errs.Append("spec.source.package.transport.type",
+			fmt.Errorf("%w: must be one of \"stdio\" or \"http\" (got %q)", ErrInvalidRef, pkg.Transport.Type))
 	}
 	if pkg.Transport.Type == "http" && pkg.Transport.Port == 0 {
 		errs.Append("spec.source.package.transport.port", fmt.Errorf("%w: required for http transport", ErrRequiredField))

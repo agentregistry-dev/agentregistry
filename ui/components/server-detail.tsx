@@ -270,7 +270,7 @@ export function ServerDetail({ server, onServerCopied }: ServerDetailProps) {
                 })) as { type: 'named' | 'positional'; name?: string; value?: string }[]
                 const launchEnv = (pkg.launch?.env ?? []).map((e) => ({
                   name: e.name,
-                  default: e.value,
+                  default: e.value || undefined,
                   isRequired: e.isRequired,
                 }))
                 return (

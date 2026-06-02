@@ -24,7 +24,10 @@ func loadFromEnvelope(data []byte) (*ProjectManifest, error) {
 		Description: server.Spec.Description,
 	}
 	// Extract the runtime hint from the bundled OCI package's Launch
-	// command, if present.
+	// command, if present. OCI-only because NPM/PyPI packages use
+	// universal runners (npx/uvx) whose Launch.Command isn't a
+	// project-level runtime hint — it's the wrapper itself. Only OCI's
+	// Launch.Command names the actual binary that runs inside the image.
 	if server.Spec.Source != nil && server.Spec.Source.Package != nil {
 		p := server.Spec.Source.Package
 		if p.Origin.OCI != nil && p.Launch != nil {
