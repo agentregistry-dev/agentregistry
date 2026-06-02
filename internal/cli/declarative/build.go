@@ -155,10 +155,10 @@ func agentSpecImage(obj v1alpha1.Object) string {
 	return ""
 }
 
-// mcpSpecPackageIdentifier extracts spec.source.package.identifier for an MCPServer resource.
+// mcpSpecPackageIdentifier extracts spec.source.package.origin.identifier for an MCPServer resource.
 func mcpSpecPackageIdentifier(obj v1alpha1.Object) string {
 	if s, ok := obj.(*v1alpha1.MCPServer); ok && s.Spec.Source != nil && s.Spec.Source.Package != nil {
-		return s.Spec.Source.Package.Identifier
+		return s.Spec.Source.Package.Origin.Identifier
 	}
 	return ""
 }

@@ -806,14 +806,18 @@ func writeDeclarativeMCPYAML(projectDir, name, image, description string, port i
 			Description: desc,
 			Source: &v1alpha1.MCPServerSource{
 				Package: &v1alpha1.MCPPackage{
-					RegistryType: "oci",
-					Identifier:   image,
+					Origin: v1alpha1.MCPPackageOrigin{
+						Type:       v1alpha1.MCPPackageOriginTypeOCI,
+						Identifier: image,
+						OCI: &v1alpha1.MCPPackageOriginOCI{
+							ServerName: name,
+						},
+					},
 					Transport: v1alpha1.MCPTransport{
 						Type: "http",
 						Port: uint16(port),
 						Path: "/mcp",
 					},
-					ServerName: name,
 				},
 			},
 		},
