@@ -1,238 +1,115 @@
+// Package database wraps golang-migrate/migrate v4 with the
+// schema-parameterized *migrate.Migrate factory the orchestrator and
+// the arctl db migrate CLI consume. Dirty-state recovery is not
+// attempted here — the orchestrator's idempotent-DDL convention and
+// advisory lock are the production contract.
 package database
 
 import (
-	"cmp"
 	"context"
-	"embed"
-	"errors"
+	"database/sql"
 	"fmt"
-	"log/slog"
-	"path"
-	"slices"
-	"strconv"
-	"strings"
+	"io/fs"
+	"net/url"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/golang-migrate/migrate/v4"
+	migratepgx "github.com/golang-migrate/migrate/v4/database/pgx/v5"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
+	_ "github.com/jackc/pgx/v5/stdlib" // pgx stdlib driver — required by sql.Open("pgx", ...)
 )
 
-// Migration represents a database migration
-type Migration struct {
-	Version int
-	Name    string
-	SQL     string
-}
+// OSSSchema is the Postgres schema name OSS tables live in. The
+// `golang-migrate` pgx/v5 driver is configured with `SchemaName: OSSSchema`,
+// so `schema_migrations` and every data table land in this schema.
+//
+// Exposed as a constant for now; future work makes it env-driven so
+// operators can point the binary at an operator-configured schema.
+const OSSSchema = "agentregistry"
 
-// MigratorConfig configures a migrator instance.
-// This allows external libraries (e.g., Enterprise extensions) to provide
-// their own migrations while sharing the same schema_migrations table.
-type MigratorConfig struct {
-	// MigrationFiles is the embedded filesystem containing migration files.
-	// The filesystem should contain a directory (named by MigrationDir) with .sql files
-	// named using the pattern "NNN_description.sql" (e.g., "001_initial_schema.sql").
-	MigrationFiles embed.FS
-	// MigrationDir is the directory within MigrationFiles to read migrations from.
-	// Defaults to "migrations" when empty.
-	MigrationDir string
-	// VersionOffset is added to all migration versions to avoid conflicts.
-	// Set to 0 for OSS migrations, 500+ for extensions.
-	// This allows multiple migration sources to avoid collisions.
-	VersionOffset int
-	// EnsureTable creates the schema_migrations table if it doesn't exist.
-	// Set to true for OSS (creates table), false for extensions (assumes it exists from OSS).
-	EnsureTable bool
-}
+// migrationsTable is the table name `golang-migrate` uses for its own
+// bookkeeping. Lives in the source's `SchemaName`, so two sources with
+// different `SchemaName` values share the table name without colliding.
+const migrationsTable = "schema_migrations"
 
-// Migrator handles database migrations.
-// It supports configurable migration sources and version offsets to allow
-// multiple migration sets (e.g., OSS + extensions) to coexist.
-type Migrator struct {
-	conn   *pgx.Conn
-	config MigratorConfig
-	logger *slog.Logger
-}
-
-// NewMigrator creates a new migrator instance with the given configuration.
-func NewMigrator(conn *pgx.Conn, config MigratorConfig) *Migrator {
-	return &Migrator{
-		conn:   conn,
-		config: config,
-		logger: slog.Default().With("component", "database.migrate"),
-	}
-}
-
-// ensureMigrationsTable creates the migrations tracking table if it doesn't exist
-func (m *Migrator) ensureMigrationsTable(ctx context.Context) error {
-	query := `
-		CREATE TABLE IF NOT EXISTS schema_migrations (
-			version INTEGER PRIMARY KEY,
-			name VARCHAR(255) NOT NULL,
-			applied_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-		)
-	`
-	_, err := m.conn.Exec(ctx, query)
-	return err
-}
-
-// getAppliedMigrations returns a map of already applied migration versions
-func (m *Migrator) getAppliedMigrations(ctx context.Context) (map[int]struct{}, error) {
-	query := "SELECT version FROM schema_migrations ORDER BY version"
-	rows, err := m.conn.Query(ctx, query)
+// NewMigrator constructs a *migrate.Migrate against `schema` for the
+// embedded migration set at `migrationsFS`/`dir`. The migrator's
+// `schema_migrations` bookkeeping table is created in `schema` (via
+// `migratepgx.Config{SchemaName: schema}`).
+//
+// The caller owns `mg.Close()` — it tears down both the iofs source
+// and the underlying *sql.DB. A single dedicated connection (not a
+// pool) is used because go-migrate's advisory lock is session-level
+// and must not be shared.
+//
+// `ctx` is accepted for API symmetry with the surrounding startup
+// code; sql.Open is lazy (never pings) and go-migrate's API is
+// synchronous and doesn't accept a context.
+func NewMigrator(ctx context.Context, dsn string, migrationsFS fs.FS, dir string, schema Schema) (*migrate.Migrate, error) {
+	// migratepgx.WithInstance does NOT set search_path on the connection
+	// it acquires — its `SchemaName` config only controls where
+	// `schema_migrations` lives. Unqualified identifiers in migration
+	// SQL therefore resolve against the connection's default
+	// search_path (`"$user", public`), which lands tables in the wrong
+	// schema when the schema name does not match the connecting user.
+	// Inject `search_path=<schema>` into the DSN so the pgx stdlib
+	// driver passes it as a connection-startup parameter and every
+	// connection migratepgx pulls from the pool sees the right
+	// search_path from the moment it's established.
+	dsnWithSchema, err := withSearchPath(dsn, schema.Name())
 	if err != nil {
-		return nil, fmt.Errorf("failed to query applied migrations: %w", err)
-	}
-	defer rows.Close()
-
-	applied := make(map[int]struct{})
-	for rows.Next() {
-		var version int
-		if err := rows.Scan(&version); err != nil {
-			return nil, fmt.Errorf("failed to scan migration version: %w", err)
-		}
-		applied[version] = struct{}{}
+		return nil, fmt.Errorf("inject search_path into DSN: %w", err)
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to read migration rows: %w", err)
-	}
-
-	return applied, nil
-}
-
-// loadMigrations loads all migration files from the embedded filesystem
-func (m *Migrator) loadMigrations() ([]Migration, error) {
-	dir := cmp.Or(m.config.MigrationDir, "migrations")
-	entries, err := m.config.MigrationFiles.ReadDir(dir)
+	db, err := sql.Open("pgx", dsnWithSchema)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read migrations directory: %w", err)
+		return nil, fmt.Errorf("open database: %w", err)
 	}
 
-	var migrations []Migration
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
-			continue
-		}
-
-		// Parse version from filename (e.g., "001_initial_schema.sql" -> version 1)
-		name := entry.Name()
-		parts := strings.SplitN(name, "_", 2)
-		if len(parts) != 2 {
-			m.logger.Error("skipping migration file with invalid name format", "name", name)
-			continue
-		}
-
-		version, err := strconv.Atoi(parts[0])
-		if err != nil {
-			m.logger.Error("skipping migration file with invalid version", "name", name)
-			continue
-		}
-
-		// Apply version offset
-		offsetVersion := version + m.config.VersionOffset
-
-		// Read the migration SQL
-		content, err := m.config.MigrationFiles.ReadFile(path.Join(dir, name))
-		if err != nil {
-			return nil, fmt.Errorf("failed to read migration file %s: %w", name, err)
-		}
-
-		// Generate migration name with offset if offset is applied
-		var migrationName string
-		if m.config.VersionOffset > 0 {
-			// Add offset to name to avoid conflicts with OSS migrations
-			migrationName = fmt.Sprintf("%d_%s", offsetVersion, parts[1])
-		} else {
-			migrationName = name
-		}
-
-		migrations = append(migrations, Migration{
-			Version: offsetVersion,
-			Name:    strings.TrimSuffix(migrationName, ".sql"),
-			SQL:     string(content),
-		})
+	// migratepgx.WithInstance creates schema_migrations in `schema`
+	// during construction, which fails on a fresh DB where the schema
+	// doesn't yet exist. CREATE SCHEMA IF NOT EXISTS makes the factory
+	// safe to call on both fresh and existing DBs.
+	if _, err := db.ExecContext(ctx,
+		"CREATE SCHEMA IF NOT EXISTS "+schema.Quoted()); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("create schema %s: %w", schema.Name(), err)
 	}
 
-	// Sort migrations by version
-	slices.SortFunc(migrations, func(a, b Migration) int {
-		return cmp.Compare(a.Version, b.Version)
+	src, err := iofs.New(migrationsFS, dir)
+	if err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("load migration files from %s: %w", dir, err)
+	}
+
+	driver, err := migratepgx.WithInstance(db, &migratepgx.Config{
+		SchemaName:      schema.Name(),
+		MigrationsTable: migrationsTable,
 	})
+	if err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("create migration driver: %w", err)
+	}
 
-	return migrations, nil
+	mg, err := migrate.NewWithInstance("iofs", src, "pgx", driver)
+	if err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("construct migrator: %w", err)
+	}
+	return mg, nil
 }
 
-// Migrate runs all pending migrations.
-func (m *Migrator) Migrate(ctx context.Context) error {
-	// Ensure the migrations table exists if configured
-	if m.config.EnsureTable {
-		if err := m.ensureMigrationsTable(ctx); err != nil {
-			return fmt.Errorf("failed to create migrations table: %w", err)
-		}
-	}
-
-	// Get applied migrations
-	applied, err := m.getAppliedMigrations(ctx)
+// withSearchPath returns dsn with the `search_path` connection-startup
+// parameter set to schema. If dsn already specifies a search_path it
+// is replaced. Used by NewMigrator so unqualified identifiers in
+// migration SQL resolve against the target schema regardless of the
+// connecting user.
+func withSearchPath(dsn, schema string) (string, error) {
+	u, err := url.Parse(dsn)
 	if err != nil {
-		return fmt.Errorf("failed to get applied migrations: %w", err)
+		return "", fmt.Errorf("parse DSN: %w", err)
 	}
-
-	// Load all migration files
-	migrations, err := m.loadMigrations()
-	if err != nil {
-		return fmt.Errorf("failed to load migrations: %w", err)
-	}
-
-	// Find pending migrations
-	var pending []Migration
-	for _, migration := range migrations {
-		if _, ok := applied[migration.Version]; !ok {
-			pending = append(pending, migration)
-		}
-	}
-
-	if len(pending) == 0 {
-		m.logger.Info("no pending migrations")
-		return nil
-	}
-
-	m.logger.Info("applying pending migrations", "count", len(pending))
-
-	// Apply each pending migration in a transaction
-	for _, migration := range pending {
-		if err := m.applyMigration(ctx, migration); err != nil {
-			return fmt.Errorf("failed to apply migration %s (v%d): %w", migration.Name, migration.Version, err)
-		}
-		m.logger.Info("applied migration", "version", migration.Version, "name", migration.Name)
-	}
-
-	m.logger.Info("all migrations applied successfully")
-	return nil
-}
-
-// applyMigration applies a single migration in a transaction
-func (m *Migrator) applyMigration(ctx context.Context, migration Migration) error {
-	tx, err := m.conn.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer func() {
-		// Rollback is safe to be called after a transaction is committed, where it won't be rolled back (ErrTxClosed).
-		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
-			m.logger.Error("failed to rollback migration transaction", "error", err)
-		}
-	}()
-
-	// Execute the migration SQL
-	_, err = tx.Exec(ctx, migration.SQL)
-	if err != nil {
-		return fmt.Errorf("failed to execute migration SQL: %w", err)
-	}
-
-	// Record the migration as applied
-	_, err = tx.Exec(ctx,
-		"INSERT INTO schema_migrations (version, name) VALUES ($1, $2)",
-		migration.Version, migration.Name)
-	if err != nil {
-		return fmt.Errorf("failed to record migration: %w", err)
-	}
-
-	return tx.Commit(ctx)
+	q := u.Query()
+	q.Set("search_path", schema)
+	u.RawQuery = q.Encode()
+	return u.String(), nil
 }

@@ -17,7 +17,10 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/cli/annotations"
+	"github.com/agentregistry-dev/agentregistry/pkg/cli/db"
+	"github.com/agentregistry-dev/agentregistry/pkg/cli/db/migrate"
 	"github.com/agentregistry-dev/agentregistry/pkg/daemon/dockercompose"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/database/legacymigrate"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
@@ -141,6 +144,12 @@ func init() {
 	rootCmd.AddCommand(declarative.RunCmd)
 	rootCmd.AddCommand(declarative.PullCmd)
 	rootCmd.AddCommand(declarative.WaitCmd)
+	rootCmd.AddCommand(db.NewCommand())
+
+	// Register the OSS migration source. The source's LegacyRun
+	// bridges legacy v1alpha1.* data into the orchestrator-owned
+	// schema; the orchestrator gates the bridge to fresh-upgrade boots.
+	migrate.Register(legacymigrate.OSSSource())
 }
 
 // resolveRegistryTarget returns base URL and token from flags and env.
@@ -204,6 +213,11 @@ var preRunSkipCommands = map[string]map[string]bool{
 		"init":       true,
 		"build":      true,
 		"help":       true,
+		// db subcommands talk to Postgres directly via --db-url / env
+		// and never call the registry API. Skipping pre-run lets
+		// operators run `arctl db migrate up` before the server is
+		// reachable (the canonical pre-rollout workflow).
+		"db": true,
 	},
 }
 

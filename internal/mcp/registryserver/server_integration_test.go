@@ -18,7 +18,7 @@ import (
 func TestMCPListServers_HappyPath(t *testing.T) {
 	ctx := context.Background()
 	pool := v1alpha1store.NewTestPool(t)
-	stores := v1alpha1store.NewStores(pool)
+	stores := v1alpha1store.NewStores(pool, v1alpha1store.TestSchemaRegistry())
 
 	// Seed a published MCPServer so the MCP tool has something to return.
 	const (

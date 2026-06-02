@@ -28,7 +28,7 @@ import (
 func seedDeploymentFixtures(t *testing.T) (humatest.TestAPI, map[string]*v1alpha1store.Store) {
 	t.Helper()
 	pool := v1alpha1store.NewTestPool(t)
-	stores := v1alpha1store.NewStores(pool)
+	stores := v1alpha1store.NewStores(pool, v1alpha1store.TestSchemaRegistry())
 	ctx := t.Context()
 
 	_, err := stores[v1alpha1.KindMCPServer].Upsert(ctx, &v1alpha1.MCPServer{

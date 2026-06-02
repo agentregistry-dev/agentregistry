@@ -16,6 +16,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
+	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
@@ -74,7 +75,7 @@ func generateSpec(apiVersion string) *huma.OpenAPI {
 		GitCommit: version.GitCommit,
 		BuildTime: version.BuildDate,
 	}, &router.RouteOptions{
-		Stores: v1alpha1store.NewStores(nil),
+		Stores: v1alpha1store.NewStores(nil, pkgdb.OSSSchemaRegistry()),
 	}); err != nil {
 		panic(fmt.Sprintf("router.RegisterRoutes: %v", err))
 	}

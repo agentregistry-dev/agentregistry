@@ -13,7 +13,7 @@ import (
 
 func TestStore_AnnotationsRoundTrip(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, testTable)
+	store := NewStore(pool, TestSchema(), testTable)
 	ctx := context.Background()
 
 	annotations := map[string]string{
@@ -39,7 +39,7 @@ func TestStore_AnnotationsRoundTrip(t *testing.T) {
 // Annotations are user-managed, not server-managed, in the new world.
 func TestStore_AnnotationsReplacedOnReapplyWithEmpty(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, testTable)
+	store := NewStore(pool, TestSchema(), testTable)
 	ctx := context.Background()
 
 	_, err := store.Upsert(ctx, &v1alpha1.Agent{
@@ -66,7 +66,7 @@ func TestStore_AnnotationsReplacedOnReapplyWithEmpty(t *testing.T) {
 
 func TestStore_AnnotationsClearedOnEmptyMap(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, testTable)
+	store := NewStore(pool, TestSchema(), testTable)
 	ctx := context.Background()
 
 	_, err := store.Upsert(ctx, &v1alpha1.Agent{
