@@ -103,7 +103,6 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	maps.Copy(deploymentAdapters, options.DeploymentAdapters)
 	pool := db.Pool()
 	stores := buildStores(pool, options.V1Alpha1StoreTables, options.V1Alpha1MutableStoreKinds, options.Auditor)
-	perKindHooks := crudPerKindHooks(options)
 	if _, err := controller.StartDeploymentController(ctx, pool, stores, deploymentAdapters, deploymentControllerConfig(cfg)); err != nil {
 		return fmt.Errorf("start deployment controller: %w", err)
 	}
@@ -128,7 +127,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		}
 	}()
 
-	routeOpts := buildRouteOptions(options, stores, deploymentAdapters, perKindHooks)
+	routeOpts := buildRouteOptions(options, stores, deploymentAdapters, crudPerKindHooks(options))
 
 	// Initialize HTTP server
 	baseServer, err := api.NewServer(cfg, metrics, versionInfo, options.UIHandler, authnProvider, routeOpts)

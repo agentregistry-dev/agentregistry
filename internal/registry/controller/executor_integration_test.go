@@ -419,7 +419,7 @@ func TestDeploymentController_SkipsClaimedApplyWhenDeploymentIsDeleted(t *testin
 	seedMCPServer(t, stores, "weather")
 	deployment := seedDeployment(t, stores, "delete-with-apply-claimed", v1alpha1.DesiredStateDeployed)
 
-	work, err := DeriveDeploymentWork(deployment)
+	work, err := deriveDeploymentWork(deployment)
 	require.NoError(t, err)
 	work.NextAttemptAt = time.Now().Add(-time.Minute)
 	require.NoError(t, workStore.Upsert(ctx, work))
@@ -470,7 +470,7 @@ func TestDeploymentController_SkipsStaleGenerationWork(t *testing.T) {
 	seedMCPServer(t, stores, "weather")
 	deployment := seedDeployment(t, stores, "stale", v1alpha1.DesiredStateDeployed)
 
-	work, err := DeriveDeploymentWork(deployment)
+	work, err := deriveDeploymentWork(deployment)
 	require.NoError(t, err)
 	work.NextAttemptAt = time.Now().Add(-time.Minute)
 	require.NoError(t, workStore.Upsert(ctx, work))

@@ -266,7 +266,7 @@ func (c *DeploymentController) upsertDeploymentWork(ctx context.Context, deploym
 	if c == nil || c.Work == nil {
 		return errors.New("deployment controller: reconcile work store is required")
 	}
-	work, err := DeriveDeploymentWork(deployment)
+	work, err := deriveDeploymentWork(deployment)
 	if err != nil {
 		return err
 	}

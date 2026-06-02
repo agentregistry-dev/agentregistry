@@ -10,7 +10,7 @@ import (
 )
 
 func TestDeriveDeploymentWorkDefaultsToApply(t *testing.T) {
-	work, err := DeriveDeploymentWork(deploymentFixture(""))
+	work, err := deriveDeploymentWork(deploymentFixture(""))
 	require.NoError(t, err)
 
 	require.Equal(t, "Deployment:default:weather:uid-1:7:apply", work.Key)
@@ -20,7 +20,7 @@ func TestDeriveDeploymentWorkDefaultsToApply(t *testing.T) {
 }
 
 func TestDeriveDeploymentWorkDeletesForDesiredUndeployed(t *testing.T) {
-	work, err := DeriveDeploymentWork(deploymentFixture(v1alpha1.DesiredStateUndeployed))
+	work, err := deriveDeploymentWork(deploymentFixture(v1alpha1.DesiredStateUndeployed))
 	require.NoError(t, err)
 
 	require.Equal(t, string(ReconcileActionDelete), work.Action)
@@ -33,14 +33,14 @@ func TestDeriveDeploymentWorkDeletesForTerminatingDeployment(t *testing.T) {
 	now := time.Now()
 	deployment.Metadata.DeletionTimestamp = &now
 
-	work, err := DeriveDeploymentWork(deployment)
+	work, err := deriveDeploymentWork(deployment)
 	require.NoError(t, err)
 	require.Equal(t, string(ReconcileActionDelete), work.Action)
 	require.Equal(t, "terminating", work.Reason)
 }
 
 func TestDeriveDeploymentWorkRejectsInvalidDesiredState(t *testing.T) {
-	_, err := DeriveDeploymentWork(deploymentFixture("running"))
+	_, err := deriveDeploymentWork(deploymentFixture("running"))
 	require.ErrorContains(t, err, "unsupported deployment desiredState")
 }
 

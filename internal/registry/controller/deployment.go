@@ -19,10 +19,10 @@ const (
 	ReconcileActionDelete ReconcileAction = "delete"
 )
 
-// DeriveDeploymentWork converts a Deployment source row into durable work. It
+// deriveDeploymentWork converts a Deployment source row into durable work. It
 // performs no adapter calls and does not resolve references; executors must
 // re-read the row and dependencies after claiming.
-func DeriveDeploymentWork(deployment *v1alpha1.Deployment) (v1alpha1store.ReconcileWork, error) {
+func deriveDeploymentWork(deployment *v1alpha1.Deployment) (v1alpha1store.ReconcileWork, error) {
 	if deployment == nil {
 		return v1alpha1store.ReconcileWork{}, errors.New("controller: deployment is required")
 	}
