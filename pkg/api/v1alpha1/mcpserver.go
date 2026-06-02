@@ -60,81 +60,86 @@ type MCPTransport struct {
 	Path string `json:"path,omitempty" yaml:"path,omitempty"` // http endpoint path, e.g. "/mcp" (ignored for stdio)
 }
 
-// MCPPackage is a runnable distribution of the MCP server (stdio binary,
-// container image, npm package, etc.).
+// MCPPackage is a runnable distribution of an MCP server, grouped by
+// concern: Origin (what to fetch), Launch (how to start it), Transport
+// (how to talk to it).
 type MCPPackage struct {
-	RegistryType    string `json:"registryType" yaml:"registryType"`
-	RegistryBaseURL string `json:"registryBaseUrl,omitempty" yaml:"registryBaseUrl,omitempty"`
-	Identifier      string `json:"identifier" yaml:"identifier"`
-	Version         string `json:"version,omitempty" yaml:"version,omitempty"`
-
-	// ServerName is the MCP-ecosystem catalogue identity claimed by this
-	// package. The registry's ownership validator compares this value
-	// against the identity the package's publisher embedded in the upstream
-	// artifact (NPM: `mcpName`, PyPI: `mcp-name`,
-	// OCI: `io.modelcontextprotocol.server.name` label).
-	//
-	// Required for every registryType except `mcpb` (which has no ownership
-	// concept). Accepts any identifier-shaped string Both single-segment (`my-mcp`)
-	// and namespace/name (`io.example/foo`) forms validate, so the value can match
-	// whatever the publisher embedded regardless of shape.
-	ServerName string `json:"serverName,omitempty" yaml:"serverName,omitempty"`
-
-	FileSHA256           string             `json:"fileSha256,omitempty" yaml:"fileSha256,omitempty"`
-	RuntimeHint          string             `json:"runtimeHint,omitempty" yaml:"runtimeHint,omitempty"`
-	Transport            MCPTransport       `json:"transport" yaml:"transport"`
-	RuntimeArguments     []MCPArgument      `json:"runtimeArguments,omitempty" yaml:"runtimeArguments,omitempty"`
-	PackageArguments     []MCPArgument      `json:"packageArguments,omitempty" yaml:"packageArguments,omitempty"`
-	EnvironmentVariables []MCPKeyValueInput `json:"environmentVariables,omitempty" yaml:"environmentVariables,omitempty"`
+	Origin    MCPPackageOrigin  `json:"origin" yaml:"origin"`
+	Launch    *MCPPackageLaunch `json:"launch,omitempty" yaml:"launch,omitempty"`
+	Transport MCPTransport      `json:"transport" yaml:"transport"`
 }
 
-// MCPInputVariable describes a parameterizable value referenced from
-// MCPArgument.Variables or MCPKeyValueInput.Variables.
-type MCPInputVariable struct {
-	Description string   `json:"description,omitempty" yaml:"description,omitempty"`
-	IsRequired  bool     `json:"isRequired,omitempty" yaml:"isRequired,omitempty"`
-	Format      string   `json:"format,omitempty" yaml:"format,omitempty"`
-	Value       string   `json:"value,omitempty" yaml:"value,omitempty"`
-	IsSecret    bool     `json:"isSecret,omitempty" yaml:"isSecret,omitempty"`
-	Default     string   `json:"default,omitempty" yaml:"default,omitempty"`
-	Placeholder string   `json:"placeholder,omitempty" yaml:"placeholder,omitempty"`
-	Choices     []string `json:"choices,omitempty" yaml:"choices,omitempty"`
+// MCPPackageOrigin identifies the package and where to fetch it. The Type
+// discriminator selects which per-type sub-struct must be set; exactly one
+// of NPM/PyPI/OCI is non-nil, matching Type.
+type MCPPackageOrigin struct {
+	Type       MCPPackageOriginType `json:"type" yaml:"type"`
+	Identifier string               `json:"identifier" yaml:"identifier"`
+
+	NPM  *MCPPackageOriginNPM  `json:"npm,omitempty"  yaml:"npm,omitempty"`
+	PyPI *MCPPackageOriginPyPI `json:"pypi,omitempty" yaml:"pypi,omitempty"`
+	OCI  *MCPPackageOriginOCI  `json:"oci,omitempty"  yaml:"oci,omitempty"`
 }
 
-// MCPArgument.Type values. Kept as string literals to match the YAML wire
-// format; platform translators compare against these.
+type MCPPackageOriginType string
+
 const (
-	MCPArgumentTypePositional = "positional"
-	MCPArgumentTypeNamed      = "named"
+	MCPPackageOriginTypeNPM  MCPPackageOriginType = "npm"
+	MCPPackageOriginTypePyPI MCPPackageOriginType = "pypi"
+	MCPPackageOriginTypeOCI  MCPPackageOriginType = "oci"
 )
 
-// MCPArgument is a positional or named argument passed to a package's runtime.
-type MCPArgument struct {
-	Type        string                      `json:"type" yaml:"type"`
-	Name        string                      `json:"name,omitempty" yaml:"name,omitempty"`
-	ValueHint   string                      `json:"valueHint,omitempty" yaml:"valueHint,omitempty"`
-	IsRepeated  bool                        `json:"isRepeated,omitempty" yaml:"isRepeated,omitempty"`
-	Description string                      `json:"description,omitempty" yaml:"description,omitempty"`
-	IsRequired  bool                        `json:"isRequired,omitempty" yaml:"isRequired,omitempty"`
-	Format      string                      `json:"format,omitempty" yaml:"format,omitempty"`
-	Value       string                      `json:"value,omitempty" yaml:"value,omitempty"`
-	IsSecret    bool                        `json:"isSecret,omitempty" yaml:"isSecret,omitempty"`
-	Default     string                      `json:"default,omitempty" yaml:"default,omitempty"`
-	Placeholder string                      `json:"placeholder,omitempty" yaml:"placeholder,omitempty"`
-	Choices     []string                    `json:"choices,omitempty" yaml:"choices,omitempty"`
-	Variables   map[string]MCPInputVariable `json:"variables,omitempty" yaml:"variables,omitempty"`
+// MCPPackageOriginNPM holds npm-specific fetch inputs.
+type MCPPackageOriginNPM struct {
+	Version    string `json:"version" yaml:"version"`
+	Mirror     string `json:"mirror,omitempty" yaml:"mirror,omitempty"`
+	ServerName string `json:"serverName" yaml:"serverName"`
 }
 
-// MCPKeyValueInput represents an environment variable or HTTP header input.
+// MCPPackageOriginPyPI holds pypi-specific fetch inputs.
+type MCPPackageOriginPyPI struct {
+	Version    string `json:"version" yaml:"version"`
+	Mirror     string `json:"mirror,omitempty" yaml:"mirror,omitempty"`
+	ServerName string `json:"serverName" yaml:"serverName"`
+}
+
+// MCPPackageOriginOCI holds oci-specific fetch inputs. Version is encoded
+// in Identifier (e.g. "ghcr.io/foo/bar:1.0.0" or "...@sha256:..."); bare
+// image refs that would silently resolve `:latest` are rejected by the
+// validator.
+type MCPPackageOriginOCI struct {
+	ServerName string `json:"serverName" yaml:"serverName"`
+}
+
+// MCPPackageLaunch declares how to start the fetched package. If Launch
+// is nil, the resolver derives Command and Args from Origin.Type defaults
+// (npm → "npx -y <id>@<ver>"; pypi → "uvx <id>==<ver>"; oci → image
+// entrypoint). If Launch is set, the manifest owns Command and Args
+// verbatim — no implicit identifier injection. Command may be empty only
+// for oci.
+type MCPPackageLaunch struct {
+	Command string             `json:"command,omitempty" yaml:"command,omitempty"`
+	Args    []MCPArgument      `json:"args,omitempty" yaml:"args,omitempty"`
+	Env     []MCPKeyValueInput `json:"env,omitempty" yaml:"env,omitempty"`
+}
+
+// MCPArgument is one command-line argument.
+type MCPArgument struct {
+	Type  MCPArgumentType `json:"type" yaml:"type"`
+	Name  string          `json:"name,omitempty" yaml:"name,omitempty"`
+	Value string          `json:"value,omitempty" yaml:"value,omitempty"`
+}
+
+type MCPArgumentType string
+
+const (
+	MCPArgumentTypePositional MCPArgumentType = "positional"
+	MCPArgumentTypeNamed      MCPArgumentType = "named"
+)
+
+// MCPKeyValueInput is one declared environment variable.
 type MCPKeyValueInput struct {
-	Name        string                      `json:"name" yaml:"name"`
-	Description string                      `json:"description,omitempty" yaml:"description,omitempty"`
-	IsRequired  bool                        `json:"isRequired,omitempty" yaml:"isRequired,omitempty"`
-	Format      string                      `json:"format,omitempty" yaml:"format,omitempty"`
-	Value       string                      `json:"value,omitempty" yaml:"value,omitempty"`
-	IsSecret    bool                        `json:"isSecret,omitempty" yaml:"isSecret,omitempty"`
-	Default     string                      `json:"default,omitempty" yaml:"default,omitempty"`
-	Placeholder string                      `json:"placeholder,omitempty" yaml:"placeholder,omitempty"`
-	Choices     []string                    `json:"choices,omitempty" yaml:"choices,omitempty"`
-	Variables   map[string]MCPInputVariable `json:"variables,omitempty" yaml:"variables,omitempty"`
+	Name       string `json:"name" yaml:"name"`
+	Value      string `json:"value,omitempty" yaml:"value,omitempty"`
+	IsRequired bool   `json:"isRequired,omitempty" yaml:"isRequired,omitempty"`
 }
