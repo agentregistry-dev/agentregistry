@@ -37,10 +37,12 @@ func TestV1Alpha1Apply_MCPServerTarget_WritesComposeAndMarksProgressing(t *testi
 		Spec: v1alpha1.MCPServerSpec{
 			Source: &v1alpha1.MCPServerSource{
 				Package: &v1alpha1.MCPPackage{
-					RegistryType: "oci",
-					Identifier:   "ghcr.io/example/weather:v1",
-					Transport:    v1alpha1.MCPTransport{Type: "stdio"},
-					ServerName:   "weather",
+					Origin: v1alpha1.MCPPackageOrigin{
+						Type:       v1alpha1.MCPPackageOriginTypeOCI,
+						Identifier: "ghcr.io/example/weather:v1",
+						OCI:        &v1alpha1.MCPPackageOriginOCI{ServerName: "weather"},
+					},
+					Transport: v1alpha1.MCPTransport{Type: "stdio"},
 				},
 			},
 		},

@@ -37,9 +37,12 @@ func seedDeploymentFixtures(t *testing.T) (humatest.TestAPI, map[string]*v1alpha
 			Description: "noop server",
 			Source: &v1alpha1.MCPServerSource{
 				Package: &v1alpha1.MCPPackage{
-					RegistryType: v1alpha1.RegistryTypeOCI,
-					Identifier:   "ghcr.io/example/weather:1.0.0",
-					Transport:    v1alpha1.MCPTransport{Type: "stdio"},
+					Origin: v1alpha1.MCPPackageOrigin{
+						Type:       v1alpha1.MCPPackageOriginTypeOCI,
+						Identifier: "ghcr.io/example/weather:1.0.0",
+						OCI:        &v1alpha1.MCPPackageOriginOCI{ServerName: "weather"},
+					},
+					Transport: v1alpha1.MCPTransport{Type: "stdio"},
 				},
 			},
 		},
