@@ -61,11 +61,19 @@ const (
 // caller explicitly includes terminating rows. PurgeFinalized removes
 // terminating mutable rows after finalizers are empty.
 type Store struct {
-	pool     *pgxpool.Pool
-	table    string
-	behavior StoreBehavior
-	kind     string
-	auditor  types.Auditor
+	pool *pgxpool.Pool
+	// table is the unqualified table name (e.g. "agents") — the identity
+	// used for the advisory-lock key and audit events.
+	table string
+	// qualified is the schema-qualified, quoted table reference used in
+	// every SQL statement (e.g. `"agentregistry"."agents"`). Queries name
+	// the schema explicitly rather than relying on search_path, so the
+	// Store is correct even on a connection whose search_path points at a
+	// different schema (e.g. an extension's).
+	qualified string
+	behavior  StoreBehavior
+	kind      string
+	auditor   types.Auditor
 }
 
 // Behavior reports which private persistence behavior this Store uses. Generic
@@ -106,12 +114,13 @@ func WithKind(kind string) StoreOption {
 }
 
 // NewStore constructs a tagged-artifact Store bound to a single table
-// (e.g. "v1alpha1.agents"). The table must exist in the schema; NewStore
-// does not validate it.
+// (e.g. "agents") in schema. The table must exist; NewStore does not
+// validate it. Queries qualify the table with schema explicitly, so the
+// Store does not depend on the connection's search_path.
 //
 // For mutable object tables, use NewMutableObjectStore.
-func NewStore(pool *pgxpool.Pool, table string, opts ...StoreOption) *Store {
-	s := &Store{pool: pool, table: table, behavior: TaggedArtifactStore, auditor: types.NoopAuditor}
+func NewStore(pool *pgxpool.Pool, schema pkgdb.Schema, table string, opts ...StoreOption) *Store {
+	s := &Store{pool: pool, table: table, qualified: schema.Qualify(table), behavior: TaggedArtifactStore, auditor: types.NoopAuditor}
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -119,9 +128,9 @@ func NewStore(pool *pgxpool.Pool, table string, opts ...StoreOption) *Store {
 }
 
 // NewMutableObjectStore constructs a mutable-object Store for tables keyed by
-// namespace/name.
-func NewMutableObjectStore(pool *pgxpool.Pool, table string, opts ...StoreOption) *Store {
-	s := &Store{pool: pool, table: table, behavior: MutableObjectStore, auditor: types.NoopAuditor}
+// namespace/name in schema.
+func NewMutableObjectStore(pool *pgxpool.Pool, schema pkgdb.Schema, table string, opts ...StoreOption) *Store {
+	s := &Store{pool: pool, table: table, qualified: schema.Qualify(table), behavior: MutableObjectStore, auditor: types.NoopAuditor}
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -346,7 +355,7 @@ func (s *Store) upsertTagged(ctx context.Context, meta *v1alpha1.ObjectMeta, spe
 						SELECT content_hash, deletion_timestamp, generation, uid::text
 						FROM %s
 						WHERE namespace=$1 AND name=$2 AND tag=$3
-						FOR UPDATE`, s.table),
+						FOR UPDATE`, s.qualified),
 			meta.Namespace, meta.Name, meta.Tag).Scan(&existingHash, &existingDeletionTS, &existingGeneration, &existingUID)
 		switch {
 		case err == nil:
@@ -369,7 +378,7 @@ func (s *Store) upsertTagged(ctx context.Context, meta *v1alpha1.ObjectMeta, spe
 				fmt.Sprintf(`
 						INSERT INTO %s (namespace, name, tag, labels, annotations, spec, content_hash)
 						VALUES ($1, $2, $3, $4, $5, $6, $7)
-						RETURNING uid::text`, s.table),
+						RETURNING uid::text`, s.qualified),
 				meta.Namespace, meta.Name, meta.Tag, incomingLabelsJSON, incomingAnnotationsJSON, []byte(specJSON), incomingHash).Scan(&uid); err != nil {
 				return fmt.Errorf("insert tag: %w", err)
 			}
@@ -389,7 +398,7 @@ func (s *Store) upsertTagged(ctx context.Context, meta *v1alpha1.ObjectMeta, spe
 						UPDATE %s
 						SET labels=$4, annotations=$5, spec=$6, content_hash=$7, generation=$8, status='{}'::jsonb, deletion_timestamp=NULL
 						WHERE namespace=$1 AND name=$2 AND tag=$3
-						RETURNING uid::text`, s.table),
+						RETURNING uid::text`, s.qualified),
 			meta.Namespace, meta.Name, meta.Tag, incomingLabelsJSON, incomingAnnotationsJSON, []byte(specJSON), incomingHash, nextGeneration).Scan(&uid); err != nil {
 			return fmt.Errorf("replace tag: %w", err)
 		}
@@ -430,7 +439,7 @@ func (s *Store) upsertMutable(ctx context.Context, meta *v1alpha1.ObjectMeta, sp
 					SELECT spec, generation, finalizers, annotations, labels, deletion_timestamp, uid::text
 					FROM %s
 					WHERE namespace=$1 AND name=$2
-					FOR UPDATE`, s.table),
+					FOR UPDATE`, s.qualified),
 			meta.Namespace, meta.Name).Scan(&oldSpec, &oldGen, &oldFinalizers, &oldAnnotations, &oldLabels, &oldDeletion, &oldUID)
 		switch {
 		case err == nil:
@@ -490,7 +499,7 @@ func (s *Store) upsertMutable(ctx context.Context, meta *v1alpha1.ObjectMeta, sp
 					    spec        = EXCLUDED.spec,
 					    finalizers  = EXCLUDED.finalizers
 					RETURNING uid::text
-				`, s.table),
+				`, s.qualified),
 			meta.Namespace, meta.Name, newGen, labelsJSON, annotationsJSON, []byte(specJSON), finalizersJSON).Scan(&uid)
 		if err != nil {
 			return fmt.Errorf("upsert row: %w", err)
@@ -577,7 +586,7 @@ func (s *Store) ApplyPatch(ctx context.Context, namespace, name, tag string, pat
 
 		if _, err := tx.Exec(ctx,
 			fmt.Sprintf(`UPDATE %s SET %s WHERE %s`,
-				s.table, strings.Join(setClauses, ", "), where),
+				s.qualified, strings.Join(setClauses, ", "), where),
 			args...); err != nil {
 			return fmt.Errorf("apply patch: %w", err)
 		}
@@ -595,7 +604,7 @@ func (s *Store) loadPatchRow(ctx context.Context, tx pgx.Tx, namespace, name, ta
 			fmt.Sprintf(`
 				SELECT status, annotations, finalizers FROM %s
 				WHERE namespace=$1 AND name=$2
-				FOR UPDATE`, s.table),
+				FOR UPDATE`, s.qualified),
 			namespace, name,
 		).Scan(&statusJSON, &annotationsJSON, &finalizersJSON)
 	} else {
@@ -603,7 +612,7 @@ func (s *Store) loadPatchRow(ctx context.Context, tx pgx.Tx, namespace, name, ta
 			fmt.Sprintf(`
 				SELECT status, annotations FROM %s
 				WHERE namespace=$1 AND name=$2 AND tag=$3
-				FOR UPDATE`, s.table),
+				FOR UPDATE`, s.qualified),
 			namespace, name, tag,
 		).Scan(&statusJSON, &annotationsJSON)
 	}
@@ -702,7 +711,7 @@ func (s *Store) Get(ctx context.Context, namespace, name, tag string) (*v1alpha1
 			fmt.Sprintf(`
 				SELECT %s
 				FROM %s
-				WHERE namespace=$1 AND name=$2 AND tag=$3`, s.selectColumns(), s.table),
+				WHERE namespace=$1 AND name=$2 AND tag=$3`, s.selectColumns(), s.qualified),
 			namespace, name, tag)
 		return scanRow(row, true)
 	}
@@ -710,7 +719,7 @@ func (s *Store) Get(ctx context.Context, namespace, name, tag string) (*v1alpha1
 		fmt.Sprintf(`
 			SELECT %s
 			FROM %s
-			WHERE namespace=$1 AND name=$2`, s.selectColumns(), s.table),
+			WHERE namespace=$1 AND name=$2`, s.selectColumns(), s.qualified),
 		namespace, name)
 	return scanRow(row, false)
 }
@@ -739,14 +748,14 @@ func (s *Store) GetLatest(ctx context.Context, namespace, name string) (*v1alpha
 		query = fmt.Sprintf(`
 			SELECT %s
 			FROM %s
-			WHERE namespace=$1 AND name=$2 AND tag=$3 AND deletion_timestamp IS NULL`, s.selectColumns(), s.table)
+			WHERE namespace=$1 AND name=$2 AND tag=$3 AND deletion_timestamp IS NULL`, s.selectColumns(), s.qualified)
 		row := s.pool.QueryRow(ctx, query, namespace, name, DefaultTag())
 		return scanRow(row, true)
 	} else {
 		query = fmt.Sprintf(`
 			SELECT %s
 			FROM %s
-			WHERE namespace=$1 AND name=$2 AND deletion_timestamp IS NULL`, s.selectColumns(), s.table)
+			WHERE namespace=$1 AND name=$2 AND deletion_timestamp IS NULL`, s.selectColumns(), s.qualified)
 	}
 	row := s.pool.QueryRow(ctx, query, namespace, name)
 	return scanRow(row, false)
@@ -764,14 +773,14 @@ func (s *Store) GetLatestIncludingTerminating(ctx context.Context, namespace, na
 		query = fmt.Sprintf(`
 			SELECT %s
 			FROM %s
-			WHERE namespace=$1 AND name=$2 AND tag=$3`, s.selectColumns(), s.table)
+			WHERE namespace=$1 AND name=$2 AND tag=$3`, s.selectColumns(), s.qualified)
 		row := s.pool.QueryRow(ctx, query, namespace, name, DefaultTag())
 		return scanRow(row, true)
 	}
 	query = fmt.Sprintf(`
 		SELECT %s
 		FROM %s
-		WHERE namespace=$1 AND name=$2`, s.selectColumns(), s.table)
+		WHERE namespace=$1 AND name=$2`, s.selectColumns(), s.qualified)
 	row := s.pool.QueryRow(ctx, query, namespace, name)
 	return scanRow(row, false)
 }
@@ -828,7 +837,7 @@ func (s *Store) ListTags(ctx context.Context, namespace, name string) ([]*v1alph
 			SELECT %s
 			FROM %s
 			WHERE namespace=$1 AND name=$2 AND deletion_timestamp IS NULL
-			ORDER BY updated_at DESC, tag DESC`, s.selectColumns(), s.table),
+			ORDER BY updated_at DESC, tag DESC`, s.selectColumns(), s.qualified),
 		namespace, name)
 	if err != nil {
 		return nil, fmt.Errorf("list tags: %w", err)
@@ -868,7 +877,7 @@ func (s *Store) DeleteAllTags(ctx context.Context, namespace, name string) error
 	cmdTag, err := s.pool.Exec(ctx,
 		fmt.Sprintf(`
 			DELETE FROM %s
-			WHERE namespace=$1 AND name=$2`, s.table),
+			WHERE namespace=$1 AND name=$2`, s.qualified),
 		namespace, name)
 	if err != nil {
 		return fmt.Errorf("delete all tags: %w", err)
@@ -887,7 +896,7 @@ func (s *Store) deleteTagged(ctx context.Context, args []any) error {
 				SELECT deletion_timestamp
 				FROM %s
 				WHERE namespace=$1 AND name=$2 AND tag=$3
-				FOR UPDATE`, s.table),
+				FOR UPDATE`, s.qualified),
 			args...).Scan(&deletionTS)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -901,7 +910,7 @@ func (s *Store) deleteTagged(ctx context.Context, args []any) error {
 		// rows: `arctl delete X` then `arctl apply X` works without any
 		// background GC.
 		if _, err := tx.Exec(ctx,
-			fmt.Sprintf(`DELETE FROM %s WHERE namespace=$1 AND name=$2 AND tag=$3`, s.table),
+			fmt.Sprintf(`DELETE FROM %s WHERE namespace=$1 AND name=$2 AND tag=$3`, s.qualified),
 			args...); err != nil {
 			return fmt.Errorf("hard delete: %w", err)
 		}
@@ -920,7 +929,7 @@ func (s *Store) deleteMutable(ctx context.Context, namespace, name string) error
 				SELECT finalizers, deletion_timestamp
 				FROM %s
 				WHERE namespace=$1 AND name=$2
-				FOR UPDATE`, s.table),
+				FOR UPDATE`, s.qualified),
 			namespace, name).Scan(&finalizersRaw, &deletionTS)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -935,7 +944,7 @@ func (s *Store) deleteMutable(ctx context.Context, namespace, name string) error
 		}
 		if !hasFinalizers {
 			if _, err := tx.Exec(ctx,
-				fmt.Sprintf(`DELETE FROM %s WHERE namespace=$1 AND name=$2`, s.table),
+				fmt.Sprintf(`DELETE FROM %s WHERE namespace=$1 AND name=$2`, s.qualified),
 				namespace, name); err != nil {
 				return fmt.Errorf("hard delete: %w", err)
 			}
@@ -948,7 +957,7 @@ func (s *Store) deleteMutable(ctx context.Context, namespace, name string) error
 
 		if _, err := tx.Exec(ctx,
 			fmt.Sprintf(`UPDATE %s SET deletion_timestamp = NOW()
-			             WHERE namespace=$1 AND name=$2`, s.table),
+			             WHERE namespace=$1 AND name=$2`, s.qualified),
 			namespace, name); err != nil {
 			return fmt.Errorf("mark terminating: %w", err)
 		}
@@ -976,12 +985,12 @@ func jsonArrayNonEmpty(raw []byte) (bool, error) {
 func (s *Store) PurgeFinalized(ctx context.Context) (int64, error) {
 	var query string
 	if s.behavior == TaggedArtifactStore {
-		query = fmt.Sprintf(`DELETE FROM %s WHERE deletion_timestamp IS NOT NULL`, s.table)
+		query = fmt.Sprintf(`DELETE FROM %s WHERE deletion_timestamp IS NOT NULL`, s.qualified)
 	} else {
 		query = fmt.Sprintf(`
 			DELETE FROM %s
 			WHERE deletion_timestamp IS NOT NULL
-			  AND finalizers = '[]'::jsonb`, s.table)
+			  AND finalizers = '[]'::jsonb`, s.qualified)
 	}
 	cmdTag, err := s.pool.Exec(ctx, query)
 	if err != nil {
@@ -1068,7 +1077,7 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 
 	query := fmt.Sprintf(`
 		SELECT %s
-		FROM %s`, s.selectColumns(), s.table)
+		FROM %s`, s.selectColumns(), s.qualified)
 	if len(where) > 0 {
 		query += " WHERE " + strings.Join(where, " AND ")
 	}
@@ -1209,7 +1218,7 @@ func (s *Store) FindReferrers(ctx context.Context, pathJSON json.RawMessage, opt
 	query := fmt.Sprintf(`
 		SELECT %s
 		FROM %s
-		WHERE spec @> $1::jsonb`, s.selectColumns(), s.table)
+		WHERE spec @> $1::jsonb`, s.selectColumns(), s.qualified)
 	if !opts.IncludeTerminating {
 		query += " AND deletion_timestamp IS NULL"
 	}

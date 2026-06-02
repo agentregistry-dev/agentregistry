@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"slices"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -76,7 +77,12 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	}
 	authz := auth.Authorizer{Authz: authzProvider}
 
-	db, err := openDatabase(ctx, dbCtx, cfg, options, authz)
+	// Effective SkipMigrations: AppOptions wins when set, otherwise the
+	// env-driven Config value (SKIP_MIGRATIONS) applies.
+	// Either may be true; both being false means run the migrator.
+	skipMigrations := options.SkipMigrations || cfg.SkipMigrations
+
+	db, err := openDatabase(ctx, dbCtx, cfg, options, authz, skipMigrations)
 	if err != nil {
 		return err
 	}
@@ -181,22 +187,47 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	return nil
 }
 
+// resolveExtraStoreSchema resolves an extra-store table value to its schema
+// and bare table name. A bare "table" stays in ossSchema; a qualified
+// "schema.table" resolves to that schema. Panics via MustNewSchema if the
+// schema segment is not a valid identifier (see
+// types.AppOptions.V1Alpha1StoreTables).
+func resolveExtraStoreSchema(table string, ossSchema pkgdb.Schema) (pkgdb.Schema, string) {
+	if s, t, ok := strings.Cut(table, "."); ok {
+		return pkgdb.MustNewSchema(s), t
+	}
+	return ossSchema, table
+}
+
 func buildStores(pool *pgxpool.Pool, extraStoreTables map[string]string, mutableExtraKinds map[string]bool, auditor types.Auditor) map[string]*v1alpha1store.Store {
 	if auditor == nil {
 		auditor = types.NoopAuditor
 	}
-	stores := v1alpha1store.NewStores(pool, v1alpha1store.WithAuditor(auditor))
+	// Resolve schemas once and inject them, so the stores qualify their
+	// tables explicitly rather than depend on the connection's
+	// search_path.
+	schemas := pkgdb.OSSSchemaRegistry()
+	ossSchema := schemas.MustGet(pkgdb.OSSSourceName)
+	stores := v1alpha1store.NewStores(pool, schemas, v1alpha1store.WithAuditor(auditor))
 	for kind, table := range extraStoreTables {
 		if kind == "" || table == "" {
 			slog.Warn("skipping v1alpha1 extra store with empty kind or table", "kind", kind, "table", table)
 			continue
 		}
-		opts := []v1alpha1store.StoreOption{v1alpha1store.WithKind(kind), v1alpha1store.WithAuditor(auditor)}
-		if mutableExtraKinds[kind] {
-			stores[kind] = v1alpha1store.NewMutableObjectStore(pool, table, opts...)
+		// Honor a qualified "schema.table" so a kind registered in its own
+		// schema resolves there (see V1Alpha1StoreTables); a bare "table"
+		// stays in the OSS schema.
+		sch, tbl := resolveExtraStoreSchema(table, ossSchema)
+		if tbl == "" {
+			slog.Warn("skipping v1alpha1 extra store with empty table after schema qualifier", "kind", kind, "table", table)
 			continue
 		}
-		stores[kind] = v1alpha1store.NewStore(pool, table, opts...)
+		opts := []v1alpha1store.StoreOption{v1alpha1store.WithKind(kind), v1alpha1store.WithAuditor(auditor)}
+		if mutableExtraKinds[kind] {
+			stores[kind] = v1alpha1store.NewMutableObjectStore(pool, sch, tbl, opts...)
+			continue
+		}
+		stores[kind] = v1alpha1store.NewStore(pool, sch, tbl, opts...)
 	}
 
 	// pool == nil is the noop/DatabaseFactory path used by gen-openapi
@@ -397,6 +428,7 @@ func openDatabase(
 	cfg *config.Config,
 	options types.AppOptions,
 	authz auth.Authorizer,
+	skipMigrations bool,
 ) (pkgdb.Store, error) {
 	if cfg.DatabaseURL == "noop" {
 		if options.DatabaseFactory == nil {
@@ -410,7 +442,7 @@ func openDatabase(
 		return db, nil
 	}
 
-	baseDB, err := internaldb.NewPostgreSQL(dbCtx, cfg.DatabaseURL, authz)
+	baseDB, err := internaldb.NewPostgreSQL(dbCtx, cfg.DatabaseURL, authz, skipMigrations)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to PostgreSQL: %w", err)
 	}

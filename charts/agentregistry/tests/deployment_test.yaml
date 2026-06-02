@@ -65,7 +65,7 @@ tests:
           content:
             app.kubernetes.io/name: agentregistry
 
-  - it: injects POSTGRES_PASSWORD from postgresql secret when bundled is enabled
+  - it: injects POSTGRES_PASSWORD from postgresql secret when type=bundled
     template: deployment.yaml
     asserts:
       - contains:
@@ -98,11 +98,11 @@ tests:
             name: AGENT_REGISTRY_DATABASE_URL
             value: "postgres://agentregistry:$(POSTGRES_PASSWORD)@RELEASE-NAME-agentregistry-postgresql:5432/agentregistry?sslmode=disable"
 
-  - it: sets AGENT_REGISTRY_DATABASE_URL directly when database.postgres.url is set
+  - it: sets AGENT_REGISTRY_DATABASE_URL directly when type=external with external.url
     template: deployment.yaml
     set:
-      database.postgres.bundled.enabled: false
-      database.postgres.url: "postgres://user:pass@host:5432/db?sslmode=disable"
+      database.postgres.type: external
+      database.postgres.external.url: "postgres://user:pass@host:5432/db?sslmode=disable"
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
@@ -110,10 +110,11 @@ tests:
             name: AGENT_REGISTRY_DATABASE_URL
             value: "postgres://user:pass@host:5432/db?sslmode=disable"
 
-  - it: does not inject POSTGRES_PASSWORD when url is set (bundled enabled or disabled)
+  - it: does not inject POSTGRES_PASSWORD when type=external with url
     template: deployment.yaml
     set:
-      database.postgres.url: "postgres://user:pass@host:5432/db"
+      database.postgres.type: external
+      database.postgres.external.url: "postgres://user:pass@host:5432/db"
     asserts:
       - notContains:
           path: spec.template.spec.containers[0].env
@@ -218,7 +219,7 @@ tests:
 
   # ── Init container (bundled PostgreSQL) ──────────────────────────────────────
 
-  - it: includes wait-for-postgres init container when bundled is enabled
+  - it: includes wait-for-postgres init container when type=bundled
     template: deployment.yaml
     asserts:
       - isNotNull:
@@ -227,30 +228,22 @@ tests:
           path: spec.template.spec.initContainers[0].name
           value: wait-for-postgres
 
-  - it: does not include init container when bundled is disabled
+  - it: does not include init container when type=external with url
     template: deployment.yaml
     set:
-      database.postgres.bundled.enabled: false
-      database.postgres.url: "postgres://user:pass@host:5432/db"
-    asserts:
-      - isNull:
-          path: spec.template.spec.initContainers
-
-  - it: does not include init container when bundled is enabled but url is also set
-    template: deployment.yaml
-    set:
-      database.postgres.url: "postgres://user:pass@host:5432/db"
+      database.postgres.type: external
+      database.postgres.external.url: "postgres://user:pass@host:5432/db"
     asserts:
       - isNull:
           path: spec.template.spec.initContainers
 
   # ── secretRef-backed external Postgres ──────────────────────────────────────
 
-  - it: sets AGENT_REGISTRY_DATABASE_URL via valueFrom.secretKeyRef when database.postgres.secretRef.name is set
+  - it: sets AGENT_REGISTRY_DATABASE_URL via valueFrom.secretKeyRef when external.secretRef.name is set
     template: deployment.yaml
     set:
-      database.postgres.bundled.enabled: false
-      database.postgres.secretRef.name: my-postgres-secret
+      database.postgres.type: external
+      database.postgres.external.secretRef.name: my-postgres-secret
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
@@ -261,12 +254,12 @@ tests:
                 name: my-postgres-secret
                 key: AGENT_REGISTRY_DATABASE_URL
 
-  - it: uses custom secret key when database.postgres.secretRef.key is set
+  - it: uses custom secret key when external.secretRef.key is set
     template: deployment.yaml
     set:
-      database.postgres.bundled.enabled: false
-      database.postgres.secretRef.name: my-postgres-secret
-      database.postgres.secretRef.key: DB_URL
+      database.postgres.type: external
+      database.postgres.external.secretRef.name: my-postgres-secret
+      database.postgres.external.secretRef.key: DB_URL
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
@@ -277,22 +270,22 @@ tests:
                 name: my-postgres-secret
                 key: DB_URL
 
-  - it: does not inject POSTGRES_PASSWORD when database.postgres.secretRef.name is set
+  - it: does not inject POSTGRES_PASSWORD when external.secretRef.name is set
     template: deployment.yaml
     set:
-      database.postgres.bundled.enabled: false
-      database.postgres.secretRef.name: my-postgres-secret
+      database.postgres.type: external
+      database.postgres.external.secretRef.name: my-postgres-secret
     asserts:
       - notContains:
           path: spec.template.spec.containers[0].env
           content:
             name: POSTGRES_PASSWORD
 
-  - it: does not render a plain value entry for AGENT_REGISTRY_DATABASE_URL when secretRef.name is set
+  - it: does not render a plain value entry for AGENT_REGISTRY_DATABASE_URL when external.secretRef.name is set
     template: deployment.yaml
     set:
-      database.postgres.bundled.enabled: false
-      database.postgres.secretRef.name: my-postgres-secret
+      database.postgres.type: external
+      database.postgres.external.secretRef.name: my-postgres-secret
     asserts:
       - notContains:
           path: spec.template.spec.containers[0].env
@@ -300,11 +293,11 @@ tests:
             name: AGENT_REGISTRY_DATABASE_URL
             value: ""
 
-  - it: does not include wait-for-postgres init container when database.postgres.secretRef.name is set
+  - it: does not include wait-for-postgres init container when external.secretRef.name is set
     template: deployment.yaml
     set:
-      database.postgres.bundled.enabled: false
-      database.postgres.secretRef.name: my-postgres-secret
+      database.postgres.type: external
+      database.postgres.external.secretRef.name: my-postgres-secret
     asserts:
       - isNull:
           path: spec.template.spec.initContainers

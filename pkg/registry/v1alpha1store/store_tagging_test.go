@@ -35,7 +35,7 @@ func taggedAgentObj(name, tag, modelName string, labels map[string]string) *v1al
 func setupAgentStore(t *testing.T) *v1alpha1store.Store {
 	t.Helper()
 	pool := v1alpha1store.NewTestPool(t)
-	return v1alpha1store.NewStore(pool, "v1alpha1.agents")
+	return v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
 }
 
 func TestUpsert_NewName_DefaultsTagLatest(t *testing.T) {
@@ -191,7 +191,7 @@ func TestUpsert_IdempotentAcrossRestarts(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
 	ctx := context.Background()
 
-	s1 := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+	s1 := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
 	res1, err := s1.Upsert(ctx, agentObj("foo", "model-a", nil))
 	require.NoError(t, err)
 	require.Equal(t, v1alpha1store.DefaultTag(), res1.Tag)
@@ -199,7 +199,7 @@ func TestUpsert_IdempotentAcrossRestarts(t *testing.T) {
 
 	// Simulate a restart: drop s1, build a fresh Store against the same
 	// underlying database. Re-applying the same spec must dedupe to no-op.
-	s2 := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+	s2 := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
 	res2, err := s2.Upsert(ctx, agentObj("foo", "model-a", nil))
 	require.NoError(t, err)
 	require.Equal(t, res1.Tag, res2.Tag)
@@ -209,7 +209,7 @@ func TestUpsert_IdempotentAcrossRestarts(t *testing.T) {
 func setupAgentStoreWithAuditor(t *testing.T, a types.Auditor) *v1alpha1store.Store {
 	t.Helper()
 	pool := v1alpha1store.NewTestPool(t)
-	return v1alpha1store.NewStore(pool, "v1alpha1.agents",
+	return v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents",
 		v1alpha1store.WithKind(v1alpha1.KindAgent),
 		v1alpha1store.WithAuditor(a),
 	)
@@ -218,7 +218,7 @@ func setupAgentStoreWithAuditor(t *testing.T, a types.Auditor) *v1alpha1store.St
 func setupProviderStoreWithAuditor(t *testing.T, a types.Auditor) *v1alpha1store.Store {
 	t.Helper()
 	pool := v1alpha1store.NewTestPool(t)
-	return v1alpha1store.NewMutableObjectStore(pool, "v1alpha1.runtimes",
+	return v1alpha1store.NewMutableObjectStore(pool, v1alpha1store.TestSchema(), "runtimes",
 		v1alpha1store.WithKind(v1alpha1.KindRuntime),
 		v1alpha1store.WithAuditor(a),
 	)

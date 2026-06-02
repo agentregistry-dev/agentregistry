@@ -10,6 +10,7 @@ import (
 
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/logging"
+	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
@@ -54,7 +55,7 @@ func StartDeploymentController(
 		return nil, errors.New("deployment controller: stores are required")
 	}
 
-	controlPlaneEventStore := v1alpha1store.NewControlPlaneEventStore(pool)
+	controlPlaneEventStore := v1alpha1store.NewControlPlaneEventStore(pool, pkgdb.MustNewSchema(pkgdb.OSSSchema))
 	controller := &DeploymentController{
 		Stores:   stores,
 		Adapters: adapters,

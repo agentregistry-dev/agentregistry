@@ -30,7 +30,7 @@ import (
 // declared spec content.
 func TestRegisterDeploymentLogs_RespectsAuthorize(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	stores := v1alpha1store.NewStores(pool)
+	stores := v1alpha1store.NewStores(pool, v1alpha1store.TestSchemaRegistry())
 	deployments := stores[v1alpha1.KindDeployment]
 
 	resolver := deploymentsvc.NewAdapterResolver(deploymentsvc.ResolverDependencies{
@@ -73,7 +73,7 @@ func TestRegisterDeploymentLogs_RespectsAuthorize(t *testing.T) {
 // silently flips the default to deny.
 func TestRegisterDeploymentLogs_NilAuthorizeAllowsThrough(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	stores := v1alpha1store.NewStores(pool)
+	stores := v1alpha1store.NewStores(pool, v1alpha1store.TestSchemaRegistry())
 	deployments := stores[v1alpha1.KindDeployment]
 
 	resolver := deploymentsvc.NewAdapterResolver(deploymentsvc.ResolverDependencies{

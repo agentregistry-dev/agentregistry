@@ -27,7 +27,7 @@ import (
 // to end and pins the shape the CLI + UI regen will consume.
 func TestClient_V1Alpha1RoundTrip(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	stores := v1alpha1store.NewStores(pool)
+	stores := v1alpha1store.NewStores(pool, v1alpha1store.TestSchemaRegistry())
 
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("test", "v1"))
@@ -104,7 +104,7 @@ spec:
 // per-document failure branch at the client level.
 func TestClient_V1Alpha1_ApplyInvalid(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	stores := v1alpha1store.NewStores(pool)
+	stores := v1alpha1store.NewStores(pool, v1alpha1store.TestSchemaRegistry())
 
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("test", "v1"))
@@ -139,7 +139,7 @@ spec:
 // TestClient_V1Alpha1_NotFound proves the ErrNotFound sentinel path.
 func TestClient_V1Alpha1_NotFound(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	stores := v1alpha1store.NewStores(pool)
+	stores := v1alpha1store.NewStores(pool, v1alpha1store.TestSchemaRegistry())
 
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("test", "v1"))

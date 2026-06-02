@@ -190,6 +190,17 @@ type AppOptions struct {
 	// database.
 	DatabaseFactory DatabaseFactory
 
+	// SkipMigrations skips the server's startup OSS migrator (the
+	// v1alpha1 migration set inside internaldb.NewPostgreSQL) so the
+	// server boots against a schema that was already migrated by
+	// `arctl db migrate up` (typically from CI/CD ahead of the
+	// rollout). DatabaseFactory-supplied migrators are NOT
+	// automatically skipped — downstream factories that run their own
+	// migrations should consult this same flag (e.g. via closure
+	// capture from AppOptions construction) to honor the operator's
+	// intent. Wins over the SKIP_MIGRATIONS env var when set true.
+	SkipMigrations bool
+
 	// RuntimeAdapters registers per-type PostUpsert/PostDelete
 	// hooks for the KindRuntime resource handler, keyed by the
 	// lowercase canonical Runtime.Spec.Type ("bedrockagentcore",
@@ -266,6 +277,11 @@ type AppOptions struct {
 	// Scheme kinds should populate this so the shared /v0/apply,
 	// resolver, and generic route plumbing can see the same store map
 	// as any ExtraRoutes they register.
+	//
+	// A bare "table" resolves in the OSS schema. To place a kind in
+	// another schema, qualify the value as "schema.table"; the schema
+	// segment must be a valid lowercase identifier (^[a-z_][a-z0-9_]*$)
+	// or server startup panics.
 	V1Alpha1StoreTables map[string]string
 
 	// V1Alpha1MutableStoreKinds marks extra v1alpha1 kinds that use mutable

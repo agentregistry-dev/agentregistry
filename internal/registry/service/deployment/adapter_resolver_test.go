@@ -19,7 +19,7 @@ import (
 func seedAdapterResolverFixtures(t *testing.T) (map[string]*v1alpha1store.Store, *v1alpha1.Deployment, *v1alpha1.Runtime) {
 	t.Helper()
 	pool := v1alpha1store.NewTestPool(t)
-	stores := v1alpha1store.NewStores(pool)
+	stores := v1alpha1store.NewStores(pool, v1alpha1store.TestSchemaRegistry())
 	ctx := context.Background()
 
 	runtime := &v1alpha1.Runtime{

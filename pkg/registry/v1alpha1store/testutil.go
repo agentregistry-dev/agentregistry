@@ -8,9 +8,11 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"log/slog"
 	"testing"
 	"time"
 
+	"github.com/golang-migrate/migrate/v4"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -67,10 +69,36 @@ func NewTestPool(t *testing.T) *pgxpool.Pool {
 	})
 
 	testURI := fmt.Sprintf("postgres://agentregistry:agentregistry@localhost:5432/%s?sslmode=disable", dbName)
-	pool, err := pgxpool.New(ctx, testURI)
+	cfg, err := pgxpool.ParseConfig(testURI)
+	require.NoError(t, err)
+	// Mirror the production pool's AfterConnect default. Stores qualify
+	// their tables explicitly, so this only covers any unqualified query
+	// not routed through a Store.
+	cfg.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		_, err := conn.Exec(ctx, "SET search_path TO "+TestSchema().Quoted())
+		return err
+	}
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	require.NoError(t, err)
 	t.Cleanup(func() { pool.Close() })
 	return pool
+}
+
+// TestSchema resolves the OSS schema for tests that construct a Store
+// directly. Panics on the (impossible) invalid-identifier path so call
+// sites stay one-liners.
+func TestSchema() pkgdb.Schema {
+	s, err := pkgdb.NewSchema(pkgdb.OSSSchema)
+	if err != nil {
+		panic(err)
+	}
+	return s
+}
+
+// TestSchemaRegistry returns the OSS schema registry for tests that
+// construct the full Store set via NewStores.
+func TestSchemaRegistry() *pkgdb.SchemaRegistry {
+	return pkgdb.OSSSchemaRegistry()
 }
 
 const v1alpha1TemplateDBName = "agent_registry_v1alpha1_template"
@@ -109,14 +137,17 @@ func ensureTemplate(ctx context.Context, adminConn *pgx.Conn) error {
 	templateURI := fmt.Sprintf(
 		"postgres://agentregistry:agentregistry@localhost:5432/%s?sslmode=disable",
 		v1alpha1TemplateDBName)
-	templateConn, err := pgx.Connect(ctx, templateURI)
+	mg, err := NewOSSMigrator(ctx, templateURI)
 	if err != nil {
-		return fmt.Errorf("connect to template: %w", err)
+		return fmt.Errorf("construct template migrator: %w", err)
 	}
-	defer func() { _ = templateConn.Close(ctx) }()
-
-	mig := pkgdb.NewMigrator(templateConn, MigratorConfig())
-	if err := mig.Migrate(ctx); err != nil {
+	defer func() {
+		srcErr, dbErr := mg.Close()
+		if srcErr != nil || dbErr != nil {
+			slog.Warn("error closing template migrator", "source_error", srcErr, "database_error", dbErr)
+		}
+	}()
+	if err := mg.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 		return fmt.Errorf("apply v1alpha1 migrations: %w", err)
 	}
 	return nil

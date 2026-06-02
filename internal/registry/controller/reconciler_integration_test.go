@@ -410,7 +410,7 @@ func TestDeploymentController_QueuedDeploymentUsesLatestGeneration(t *testing.T)
 func newControllerTestStores(t *testing.T) map[string]*v1alpha1store.Store {
 	t.Helper()
 	pool := v1alpha1store.NewTestPool(t)
-	return v1alpha1store.NewStores(pool)
+	return v1alpha1store.NewStores(pool, v1alpha1store.TestSchemaRegistry())
 }
 
 func newDeploymentTestController(

@@ -9,6 +9,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
 
 // ControlPlaneNotifyChannel is the single coarse wakeup channel for
@@ -41,12 +43,16 @@ type ControlPlaneEvent struct {
 // ControlPlaneEventStore reads and prunes the durable invalidation cursor used
 // by controllers.
 type ControlPlaneEventStore struct {
-	pool *pgxpool.Pool
+	pool      *pgxpool.Pool
+	qualified string
 }
 
 // NewControlPlaneEventStore constructs a control-plane event reader.
-func NewControlPlaneEventStore(pool *pgxpool.Pool) *ControlPlaneEventStore {
-	return &ControlPlaneEventStore{pool: pool}
+func NewControlPlaneEventStore(pool *pgxpool.Pool, schema pkgdb.Schema) *ControlPlaneEventStore {
+	return &ControlPlaneEventStore{
+		pool:      pool,
+		qualified: schema.Qualify("control_plane_events"),
+	}
 }
 
 // ListAfter returns events with revision > afterRevision, ordered by revision.
@@ -59,7 +65,7 @@ func (s *ControlPlaneEventStore) ListAfter(ctx context.Context, afterRevision in
 	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT revision, kind, namespace, name, tag, uid::text, generation, op, committed_at
-		FROM v1alpha1.control_plane_events
+		FROM `+s.qualified+`
 		WHERE revision > $1
 		ORDER BY revision
 		LIMIT $2`, afterRevision, limit)
@@ -89,7 +95,7 @@ func (s *ControlPlaneEventStore) OldestRevision(ctx context.Context) (revision i
 		return 0, false, errors.New("v1alpha1 store: control-plane event store has nil pool")
 	}
 	var oldest sql.NullInt64
-	if err := s.pool.QueryRow(ctx, `SELECT MIN(revision) FROM v1alpha1.control_plane_events`).Scan(&oldest); err != nil {
+	if err := s.pool.QueryRow(ctx, `SELECT MIN(revision) FROM `+s.qualified).Scan(&oldest); err != nil {
 		return 0, false, fmt.Errorf("load oldest control-plane event revision: %w", err)
 	}
 	if !oldest.Valid {
@@ -105,7 +111,7 @@ func (s *ControlPlaneEventStore) CurrentRevision(ctx context.Context) (int64, er
 		return 0, errors.New("v1alpha1 store: control-plane event store has nil pool")
 	}
 	var revision int64
-	if err := s.pool.QueryRow(ctx, `SELECT COALESCE(MAX(revision), 0) FROM v1alpha1.control_plane_events`).Scan(&revision); err != nil {
+	if err := s.pool.QueryRow(ctx, `SELECT COALESCE(MAX(revision), 0) FROM `+s.qualified).Scan(&revision); err != nil {
 		return 0, fmt.Errorf("load current control-plane event revision: %w", err)
 	}
 	return revision, nil
@@ -131,13 +137,13 @@ func (s *ControlPlaneEventStore) PruneBefore(ctx context.Context, before time.Ti
 	cmdTag, err := s.pool.Exec(ctx, `
 		WITH doomed AS (
 			SELECT revision
-			FROM v1alpha1.control_plane_events
+			FROM `+s.qualified+`
 			WHERE ($1::timestamptz IS NULL OR committed_at < $1)
 			  AND ($2::bigint <= 0 OR revision < $2)
 			ORDER BY revision
 			LIMIT $3
 		)
-		DELETE FROM v1alpha1.control_plane_events e
+		DELETE FROM `+s.qualified+` e
 		USING doomed
 		WHERE e.revision = doomed.revision`, beforeArg, keepAfterRevision, limit)
 	if err != nil {
