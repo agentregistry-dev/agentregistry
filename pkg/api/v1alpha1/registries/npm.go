@@ -22,35 +22,29 @@ type NPMPackageResponse struct {
 	MCPName string `json:"mcpName"`
 }
 
-// ValidateNPM validates that an NPM package contains the correct MCP server name
-func ValidateNPM(ctx context.Context, pkg v1alpha1.RegistryPackage, serverName string) error {
-	// RegistryBaseURL is honored as an override — empty falls back to
-	// the canonical default, non-empty drives the probe directly so
-	// private mirrors (Verdaccio etc.) work without OSS patching.
-	if pkg.RegistryBaseURL == "" {
-		pkg.RegistryBaseURL = DefaultURLNPM
+// ValidateNPM validates that an NPM package contains the correct MCP server name.
+func ValidateNPM(ctx context.Context, origin v1alpha1.MCPPackageOrigin, serverName string) error {
+	if origin.NPM == nil {
+		return fmt.Errorf("NPM validator called without origin.NPM set")
 	}
-
-	if pkg.Identifier == "" {
+	if origin.Identifier == "" {
 		return ErrMissingIdentifierForNPM
 	}
-
-	// we need version to look up the package metadata
-	// not providing version will return all the versions
-	// and we won't be able to validate the mcpName field
-	// against the server name
-	if pkg.Version == "" {
+	if origin.NPM.Version == "" {
 		return ErrMissingVersionForNPM
 	}
 
-	// Validate that MCPB-specific fields are not present
-	if pkg.FileSHA256 != "" {
-		return fmt.Errorf("NPM packages must not have 'fileSha256' field")
+	// Mirror is honored as an override — empty falls back to the
+	// canonical default, non-empty drives the probe directly so private
+	// mirrors (Verdaccio etc.) work without OSS patching.
+	mirror := origin.NPM.Mirror
+	if mirror == "" {
+		mirror = DefaultURLNPM
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
 
-	requestURL := pkg.RegistryBaseURL + "/" + url.PathEscape(pkg.Identifier) + "/" + url.PathEscape(pkg.Version)
+	requestURL := mirror + "/" + url.PathEscape(origin.Identifier) + "/" + url.PathEscape(origin.NPM.Version)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
@@ -66,7 +60,7 @@ func ValidateNPM(ctx context.Context, pkg v1alpha1.RegistryPackage, serverName s
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("NPM package '%s' not found (status: %d)", pkg.Identifier, resp.StatusCode)
+		return fmt.Errorf("NPM package '%s' not found (status: %d)", origin.Identifier, resp.StatusCode)
 	}
 
 	var npmResp NPMPackageResponse
@@ -75,7 +69,7 @@ func ValidateNPM(ctx context.Context, pkg v1alpha1.RegistryPackage, serverName s
 	}
 
 	if npmResp.MCPName == "" {
-		return fmt.Errorf("NPM package '%s' is missing required 'mcpName' field. Add this to your package.json: \"mcpName\": \"%s\"", pkg.Identifier, serverName)
+		return fmt.Errorf("NPM package '%s' is missing required 'mcpName' field. Add this to your package.json: \"mcpName\": \"%s\"", origin.Identifier, serverName)
 	}
 
 	if npmResp.MCPName != serverName {

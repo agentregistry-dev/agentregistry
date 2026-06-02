@@ -1,14 +1,8 @@
-// Package registries ports the per-registry validators from
-// internal/registry/validators/registries onto the v1alpha1.RegistryPackage
-// view. Each validator (OCI, NPM, PyPI, NuGet, MCPB) is a standalone
-// function that hits the corresponding external registry to confirm
-// the package exists + (where supported) carries an ownership
-// annotation matching the resource's metadata.name.
-//
-// git mv preserves authorship of each file through the move; the
-// only byte-level change on each moved file is the signature swap
-// from modelcontextprotocol/registry model.Package to
-// pkg/api/v1alpha1.RegistryPackage.
+// Package registries holds the per-registry validators that confirm a
+// package exists in its upstream registry and carries an ownership
+// annotation matching the resource's expected server name. Each
+// validator (OCI, NPM, PyPI) is a standalone function consumed by
+// Dispatcher via the v1alpha1.RegistryValidatorFunc type.
 package registries
 
 import (
@@ -48,8 +42,10 @@ var allowedOCIRegistries = map[string]bool{
 	// Google Artifact Registry (*.pkg.dev pattern handled in isAllowedRegistry)
 }
 
-// ValidateOCI validates that an OCI image contains the correct MCP server name annotation.
-// Supports canonical OCI references including:
+// ValidateOCI validates that an OCI image contains the correct MCP
+// server name annotation.
+//
+// Supported reference forms (Identifier must include an explicit tag or digest):
 //   - registry/namespace/image:tag
 //   - registry/namespace/image@sha256:digest
 //   - registry/namespace/image:tag@sha256:digest
@@ -59,25 +55,18 @@ var allowedOCIRegistries = map[string]bool{
 //   - Docker Hub (docker.io)
 //   - GitHub Container Registry (ghcr.io)
 //   - Google Artifact Registry (*.pkg.dev)
-func ValidateOCI(ctx context.Context, pkg v1alpha1.RegistryPackage, serverName string) error {
-	if pkg.Identifier == "" {
+func ValidateOCI(ctx context.Context, origin v1alpha1.MCPPackageOrigin, serverName string) error {
+	if origin.OCI == nil {
+		return fmt.Errorf("OCI validator called without origin.OCI set")
+	}
+	if origin.Identifier == "" {
 		return ErrMissingIdentifierForOCI
 	}
-
-	// Validate that old format fields are not present
-	if pkg.RegistryBaseURL != "" {
-		return fmt.Errorf("OCI packages must not have 'registryBaseUrl' field - use canonical reference in 'identifier' instead (e.g., 'docker.io/owner/image:1.0.0')")
-	}
-	if pkg.Version != "" {
-		return fmt.Errorf("OCI packages must not have 'version' field - include version in 'identifier' instead (e.g., 'docker.io/owner/image:1.0.0')")
-	}
-	if pkg.FileSHA256 != "" {
-		return fmt.Errorf("OCI packages must not have 'fileSha256' field")
+	if !ociIdentifierHasTagOrDigest(origin.Identifier) {
+		return fmt.Errorf("OCI identifier %q must include an explicit tag (e.g. ':1.0.0') or digest (e.g. '@sha256:...') — bare references would silently resolve ':latest'", origin.Identifier)
 	}
 
-	// Parse the OCI reference using go-containerregistry's name package
-	// This handles all the complexity of reference parsing including defaults
-	ref, err := name.ParseReference(pkg.Identifier)
+	ref, err := name.ParseReference(origin.Identifier)
 	if err != nil {
 		return fmt.Errorf("invalid OCI reference: %w", err)
 	}
@@ -90,65 +79,50 @@ func ValidateOCI(ctx context.Context, pkg v1alpha1.RegistryPackage, serverName s
 	// private workflows pre-date that contract.
 	registry := ref.Context().RegistryStr()
 	if isPrivateRegistry(registry) {
-		slog.Info("skipping OCI validation for private registry", "identifier", pkg.Identifier, "registry", registry)
+		slog.Info("skipping OCI validation for private registry", "identifier", origin.Identifier, "registry", registry)
 		return nil
 	}
 
-	// Validate that the registry is in the allowlist
 	if !isAllowedRegistry(registry) {
 		return fmt.Errorf("%w: %s", ErrUnsupportedRegistry, registry)
 	}
 
-	// Add explicit timeout to prevent hanging on slow registries
-	// Use a new context with timeout to avoid modifying the caller's context
 	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	// Fetch the image using anonymous authentication (public images only)
-	// The go-containerregistry library handles:
-	// - OCI auth discovery via WWW-Authenticate headers
-	// - Token negotiation for different registries
-	// - Rate limiting and retries
-	// - Multi-arch manifest resolution
 	img, err := remote.Image(ref, remote.WithAuth(authn.Anonymous), remote.WithContext(timeoutCtx))
 	if err != nil {
-		// Check if this is a timeout error
 		if errors.Is(err, context.DeadlineExceeded) {
-			return fmt.Errorf("OCI image validation timed out after 30 seconds for '%s'. The registry may be slow or unreachable", pkg.Identifier)
+			return fmt.Errorf("OCI image validation timed out after 30 seconds for '%s'. The registry may be slow or unreachable", origin.Identifier)
 		}
 
-		// Check for specific HTTP status codes
 		var transportErr *transport.Error
 		if errors.As(err, &transportErr) {
 			switch transportErr.StatusCode {
 			case http.StatusTooManyRequests:
-				// Rate limited - skip validation to avoid blocking publishers
-				// This is intentional: we prioritize UX over strict validation during high traffic
-				slog.Info("skipping OCI validation due to rate limiting", "identifier", pkg.Identifier)
+				slog.Info("skipping OCI validation due to rate limiting", "identifier", origin.Identifier)
 				return nil
 			case http.StatusNotFound:
-				return fmt.Errorf("OCI image '%s' does not exist in the registry", pkg.Identifier)
+				return fmt.Errorf("OCI image '%s' does not exist in the registry", origin.Identifier)
 			case http.StatusUnauthorized, http.StatusForbidden:
-				return fmt.Errorf("OCI image '%s' is private or requires authentication. Only public images are supported", pkg.Identifier)
+				return fmt.Errorf("OCI image '%s' is private or requires authentication. Only public images are supported", origin.Identifier)
 			}
 		}
 		return fmt.Errorf("failed to fetch OCI image: %w", err)
 	}
 
-	// Get the image config which contains labels
 	configFile, err := img.ConfigFile()
 	if err != nil {
 		return fmt.Errorf("failed to get image config: %w", err)
 	}
 
-	// Validate the MCP server name label
 	if configFile.Config.Labels == nil {
-		return fmt.Errorf("OCI image '%s' is missing required annotation. Add this to your Dockerfile: LABEL io.modelcontextprotocol.server.name=\"%s\"", pkg.Identifier, serverName)
+		return fmt.Errorf("OCI image '%s' is missing required annotation. Add this to your Dockerfile: LABEL io.modelcontextprotocol.server.name=\"%s\"", origin.Identifier, serverName)
 	}
 
 	mcpName, exists := configFile.Config.Labels["io.modelcontextprotocol.server.name"]
 	if !exists {
-		return fmt.Errorf("OCI image '%s' is missing required annotation. Add this to your Dockerfile: LABEL io.modelcontextprotocol.server.name=\"%s\"", pkg.Identifier, serverName)
+		return fmt.Errorf("OCI image '%s' is missing required annotation. Add this to your Dockerfile: LABEL io.modelcontextprotocol.server.name=\"%s\"", origin.Identifier, serverName)
 	}
 
 	if mcpName != serverName {
@@ -156,6 +130,21 @@ func ValidateOCI(ctx context.Context, pkg v1alpha1.RegistryPackage, serverName s
 	}
 
 	return nil
+}
+
+// ociIdentifierHasTagOrDigest reports whether ref has an explicit tag
+// (`:<tag>`) or digest (`@sha256:...`) after the final path component.
+// Registry ports (e.g. `localhost:5000/foo`) are not mistaken for tags
+// because they appear before any `/`.
+func ociIdentifierHasTagOrDigest(ref string) bool {
+	if strings.Contains(ref, "@") {
+		return true
+	}
+	tail := ref
+	if i := strings.LastIndex(ref, "/"); i >= 0 {
+		tail = ref[i+1:]
+	}
+	return strings.Contains(tail, ":")
 }
 
 // isAllowedRegistry checks if the given registry is in the allowlist.
