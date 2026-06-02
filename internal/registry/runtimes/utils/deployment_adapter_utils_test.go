@@ -48,28 +48,72 @@ func TestTranslateMCPServer_RemoteAppliesHeaderOverridesAndDefaults(t *testing.T
 	}
 }
 
-func TestTranslateMCPServerLocalIncludesOverridesAndExtraArgs(t *testing.T) {
+func TestTranslateMCPServer_LocalDerivesDefaultsWhenLaunchNil(t *testing.T) {
 	server, err := TranslateMCPServer(context.Background(), &MCPServerRunRequest{
 		Name: "test/server",
 		Spec: v1alpha1.MCPServerSpec{
 			Source: &v1alpha1.MCPServerSource{
 				Package: &v1alpha1.MCPPackage{
-					RegistryType: v1alpha1.RegistryTypeNPM,
-					Identifier:   "@test/server",
-					Version:      "1.2.3",
-					RuntimeArguments: []v1alpha1.MCPArgument{{
-						Name:    "--token",
-						Type:    v1alpha1.MCPArgumentTypeNamed,
-						Default: "default-token",
-					}},
-					PackageArguments: []v1alpha1.MCPArgument{{
-						Name:  "--mode",
-						Type:  v1alpha1.MCPArgumentTypeNamed,
-						Value: "safe",
-					}},
-					EnvironmentVariables: []v1alpha1.MCPKeyValueInput{
-						{Name: "API_KEY", IsRequired: true},
-						{Name: "OPTIONAL", Default: "fallback"},
+					Origin: v1alpha1.MCPPackageOrigin{
+						Type:       v1alpha1.MCPPackageOriginTypeNPM,
+						Identifier: "@test/server",
+						NPM: &v1alpha1.MCPPackageOriginNPM{
+							Version:    "1.2.3",
+							ServerName: "io.github.test/server",
+						},
+					},
+					Transport: v1alpha1.MCPTransport{Type: "stdio"},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("TranslateMCPServer() unexpected error: %v", err)
+	}
+	if server.Local == nil {
+		t.Fatal("expected local config")
+	}
+	if got := server.Local.Deployment.Image; got != "node:24-alpine3.21" {
+		t.Fatalf("image = %q, want node:24-alpine3.21", got)
+	}
+	if got := server.Local.Deployment.Cmd; got != "npx" {
+		t.Fatalf("cmd = %q, want npx", got)
+	}
+	wantArgs := []string{"-y", "@test/server@1.2.3"}
+	if !slicesEqual(server.Local.Deployment.Args, wantArgs) {
+		t.Fatalf("args = %v, want %v", server.Local.Deployment.Args, wantArgs)
+	}
+	if server.Local.TransportType != runtimetypes.TransportTypeStdio {
+		t.Fatalf("transport = %v, want stdio", server.Local.TransportType)
+	}
+}
+
+func TestTranslateMCPServer_LocalHonorsLaunchAndOverrides(t *testing.T) {
+	server, err := TranslateMCPServer(context.Background(), &MCPServerRunRequest{
+		Name: "test/server",
+		Spec: v1alpha1.MCPServerSpec{
+			Source: &v1alpha1.MCPServerSource{
+				Package: &v1alpha1.MCPPackage{
+					Origin: v1alpha1.MCPPackageOrigin{
+						Type:       v1alpha1.MCPPackageOriginTypeNPM,
+						Identifier: "@test/server",
+						NPM: &v1alpha1.MCPPackageOriginNPM{
+							Version:    "1.2.3",
+							ServerName: "io.github.test/server",
+						},
+					},
+					Launch: &v1alpha1.MCPPackageLaunch{
+						Command: "npx",
+						Args: []v1alpha1.MCPArgument{
+							{Name: "--token", Type: v1alpha1.MCPArgumentTypeNamed},
+							{Type: v1alpha1.MCPArgumentTypePositional, Value: "-y"},
+							{Type: v1alpha1.MCPArgumentTypePositional, Value: "@test/server@1.2.3"},
+							{Name: "--mode", Type: v1alpha1.MCPArgumentTypeNamed, Value: "safe"},
+						},
+						Env: []v1alpha1.MCPKeyValueInput{
+							{Name: "API_KEY", IsRequired: true},
+							{Name: "OPTIONAL", Value: "fallback"},
+						},
 					},
 					Transport: v1alpha1.MCPTransport{
 						Type: "http",
@@ -85,26 +129,17 @@ func TestTranslateMCPServerLocalIncludesOverridesAndExtraArgs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TranslateMCPServer() unexpected error: %v", err)
 	}
-	if server.MCPServerType != "local" {
-		t.Fatalf("MCPServerType = %q, want local", server.MCPServerType)
+	if got := server.Local.Deployment.Image; got != "node:24-alpine3.21" {
+		t.Fatalf("image = %q, want node:24-alpine3.21", got)
 	}
-	if server.Local == nil {
-		t.Fatal("expected local config")
+	if got := server.Local.Deployment.Cmd; got != "npx" {
+		t.Fatalf("cmd = %q, want npx", got)
 	}
-	if server.Local.Deployment.Image != "node:24-alpine3.21" {
-		t.Fatalf("image = %q, want node:24-alpine3.21", server.Local.Deployment.Image)
-	}
-	if server.Local.Deployment.Cmd != "npx" {
-		t.Fatalf("cmd = %q, want npx", server.Local.Deployment.Cmd)
-	}
-	wantArgs := []string{"--token", "override-token", "-y", "@test/server@1.2.3", "--mode", "safe", "--extra", "value"}
-	if len(server.Local.Deployment.Args) != len(wantArgs) {
-		t.Fatalf("args len = %d, want %d (%v)", len(server.Local.Deployment.Args), len(wantArgs), server.Local.Deployment.Args)
-	}
-	for i := range wantArgs {
-		if server.Local.Deployment.Args[i] != wantArgs[i] {
-			t.Fatalf("args[%d] = %q, want %q (all args %v)", i, server.Local.Deployment.Args[i], wantArgs[i], server.Local.Deployment.Args)
-		}
+	// Positionals first (in declaration order), then named (in declaration
+	// order), then extras (sorted by name).
+	wantArgs := []string{"-y", "@test/server@1.2.3", "--token", "override-token", "--mode", "safe", "--extra", "value"}
+	if !slicesEqual(server.Local.Deployment.Args, wantArgs) {
+		t.Fatalf("args = %v, want %v", server.Local.Deployment.Args, wantArgs)
 	}
 	if got := server.Local.Deployment.Env["API_KEY"]; got != "secret" {
 		t.Fatalf("API_KEY = %q, want secret", got)
@@ -115,6 +150,18 @@ func TestTranslateMCPServerLocalIncludesOverridesAndExtraArgs(t *testing.T) {
 	if server.Local.HTTP == nil || server.Local.HTTP.Port != 7777 || server.Local.HTTP.Path != "/mcp" {
 		t.Fatalf("unexpected HTTP transport: %+v", server.Local.HTTP)
 	}
+}
+
+func slicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func TestBuildRemoteMCPURL(t *testing.T) {

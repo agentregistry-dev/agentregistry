@@ -53,10 +53,12 @@ func TestSpecToPlatformMCPServer_OCIPackage(t *testing.T) {
 	spec := v1alpha1.MCPServerSpec{
 		Source: &v1alpha1.MCPServerSource{
 			Package: &v1alpha1.MCPPackage{
-				RegistryType: "oci",
-				Identifier:   "ghcr.io/example/mcp:v0.1.0",
-				Transport:    v1alpha1.MCPTransport{Type: "stdio"},
-				ServerName:   "example",
+				Origin: v1alpha1.MCPPackageOrigin{
+					Type:       v1alpha1.MCPPackageOriginTypeOCI,
+					Identifier: "ghcr.io/example/mcp:v0.1.0",
+					OCI:        &v1alpha1.MCPPackageOriginOCI{ServerName: "example"},
+				},
+				Transport: v1alpha1.MCPTransport{Type: "stdio"},
 			},
 		},
 	}
@@ -78,10 +80,12 @@ func TestSpecToPlatformMCPServer_NamespaceOptOverridesMeta(t *testing.T) {
 	spec := v1alpha1.MCPServerSpec{
 		Source: &v1alpha1.MCPServerSource{
 			Package: &v1alpha1.MCPPackage{
-				RegistryType: "oci",
-				Identifier:   "ghcr.io/example/mcp:v1",
-				Transport:    v1alpha1.MCPTransport{Type: "stdio"},
-				ServerName:   "example",
+				Origin: v1alpha1.MCPPackageOrigin{
+					Type:       v1alpha1.MCPPackageOriginTypeOCI,
+					Identifier: "ghcr.io/example/mcp:v1",
+					OCI:        &v1alpha1.MCPPackageOriginOCI{ServerName: "example"},
+				},
+				Transport: v1alpha1.MCPTransport{Type: "stdio"},
 			},
 		},
 	}
@@ -106,10 +110,12 @@ func TestSpecToPlatformAgent_ResolvesMCPServerRefs(t *testing.T) {
 		Spec: v1alpha1.MCPServerSpec{
 			Source: &v1alpha1.MCPServerSource{
 				Package: &v1alpha1.MCPPackage{
-					RegistryType: "oci",
-					Identifier:   "ghcr.io/example/tools:v1",
-					Transport:    v1alpha1.MCPTransport{Type: "stdio"},
-					ServerName:   "tools",
+					Origin: v1alpha1.MCPPackageOrigin{
+						Type:       v1alpha1.MCPPackageOriginTypeOCI,
+						Identifier: "ghcr.io/example/tools:v1",
+						OCI:        &v1alpha1.MCPPackageOriginOCI{ServerName: "tools"},
+					},
+					Transport: v1alpha1.MCPTransport{Type: "stdio"},
 				},
 			},
 		},
