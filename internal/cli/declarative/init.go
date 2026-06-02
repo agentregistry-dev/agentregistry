@@ -744,7 +744,11 @@ Picks a framework + language interactively (or via --framework / --language).`,
 			}
 
 			disp := displayPath(projectDir)
-			fmt.Fprintf(cmd.OutOrStdout(), "✓ Created MCP server: %s (framework: %s, language: %s, port: %d)\n", name, framework.Framework, framework.Language, initPort)
+			transportDesc := fmt.Sprintf("transport: %s", initTransport)
+			if initTransport == "http" {
+				transportDesc = fmt.Sprintf("transport: http, port: %d", initPort)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "✓ Created MCP server: %s (framework: %s, language: %s, %s)\n", name, framework.Framework, framework.Language, transportDesc)
 			fmt.Fprintf(cmd.OutOrStdout(), "\n🚀 Next steps:\n")
 			fmt.Fprintf(cmd.OutOrStdout(), "  1. Run locally (optional):\n")
 			fmt.Fprintf(cmd.OutOrStdout(), "     arctl run %s\n", disp)
