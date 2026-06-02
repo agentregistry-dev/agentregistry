@@ -297,7 +297,7 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
                 </div>
                 <div className="flex gap-3 items-center pl-2">
                   <Label className="text-sm text-muted-foreground">Transport *:</Label>
-                  {["stdio", "sse", "streamable-http"].map((transport) => (
+                  {["stdio", "http"].map((transport) => (
                     <label key={transport} className="flex items-center gap-1.5 cursor-pointer">
                       <input
                         type="radio"

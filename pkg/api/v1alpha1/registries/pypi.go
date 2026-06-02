@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -46,7 +47,7 @@ func ValidatePyPI(ctx context.Context, origin v1alpha1.MCPPackageOrigin, serverN
 
 	client := &http.Client{Timeout: 10 * time.Second}
 
-	requestURL := fmt.Sprintf("%s/pypi/%s/%s/json", mirror, origin.Identifier, origin.PyPI.Version)
+	requestURL := fmt.Sprintf("%s/pypi/%s/%s/json", mirror, url.PathEscape(origin.Identifier), url.PathEscape(origin.PyPI.Version))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)

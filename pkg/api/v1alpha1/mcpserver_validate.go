@@ -25,7 +25,7 @@ func validateMCPPackageName(s string) error {
 		return fmt.Errorf("%w: serverName length must be %d-%d chars, got %d", ErrInvalidFormat, UpstreamMCPPackageNameMinLen, UpstreamMCPPackageNameMaxLen, l)
 	}
 	if !UpstreamMCPPackageNameRegex.MatchString(s) {
-		return fmt.Errorf("%w: serverName must match upstream pattern `namespace/name` (e.g. \"io.github.user/server\"): %q", ErrInvalidFormat, s)
+		return fmt.Errorf("%w: serverName must match upstream identifier pattern (e.g. `io.github.user/server` or `my-mcp`): %q", ErrInvalidFormat, s)
 	}
 	return nil
 }

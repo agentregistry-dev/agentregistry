@@ -8,6 +8,7 @@ interface EnvironmentVariable {
   description?: string
   default?: string
   isSecret?: boolean
+  isRequired?: boolean
   format?: string
   choices?: string[]
 }
@@ -56,10 +57,13 @@ export function EnvironmentVariablesTable({ variables }: EnvironmentVariablesTab
                     {envVar.isSecret && (
                       <Badge variant="destructive" className="text-xs">Secret</Badge>
                     )}
+                    {envVar.isRequired && (
+                      <Badge variant="secondary" className="text-xs">Required</Badge>
+                    )}
                     {envVar.format && (
                       <Badge variant="outline" className="text-xs">{envVar.format}</Badge>
                     )}
-                    {!envVar.isSecret && !envVar.format && (
+                    {!envVar.isSecret && !envVar.isRequired && !envVar.format && (
                       <span className="text-muted-foreground text-xs">-</span>
                     )}
                   </div>

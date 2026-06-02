@@ -271,7 +271,7 @@ export function ServerDetail({ server, onServerCopied }: ServerDetailProps) {
                 const launchEnv = (pkg.launch?.env ?? []).map((e) => ({
                   name: e.name,
                   default: e.value,
-                  isSecret: e.isRequired,
+                  isRequired: e.isRequired,
                 }))
                 return (
                     <div className="p-4 rounded-lg border">
