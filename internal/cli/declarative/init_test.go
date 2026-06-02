@@ -155,6 +155,95 @@ func TestInitMCP_WritesYAMLAndArctl(t *testing.T) {
 	assert.Equal(t, "fastmcp", cfg.Framework)
 }
 
+// TestInitMCP_StdioTransport runs the command with --transport stdio and
+// asserts the manifest declares stdio (no port/path) while the OCI origin
+// and arctl.yaml are intact — the runtime/framework binary handles the
+// stdio loop, so no template changes are needed.
+func TestInitMCP_StdioTransport(t *testing.T) {
+	tmp := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmp))
+	defer func() { _ = os.Chdir(origDir) }()
+
+	cmd := declarative.NewInitCmd()
+	cmd.SetArgs([]string{
+		"mcp", "my-stdio-mcp",
+		"--framework", "fastmcp", "--language", "python",
+		"--transport", "stdio",
+	})
+	require.NoError(t, cmd.Execute())
+
+	projectDir := filepath.Join(tmp, "my-stdio-mcp")
+	_, err = os.Stat(filepath.Join(projectDir, "mcp.yaml"))
+	require.NoError(t, err)
+
+	mcpSpec := readYAMLFile(t, filepath.Join(projectDir, "mcp.yaml"))["spec"].(map[string]any)
+	pkg := mcpSpec["source"].(map[string]any)["package"].(map[string]any)
+	transport := pkg["transport"].(map[string]any)
+	assert.Equal(t, "stdio", transport["type"])
+	// port/path use omitempty in the API type, so a stdio transport must
+	// not emit them.
+	assert.NotContains(t, transport, "port", "stdio transport should not emit port")
+	assert.NotContains(t, transport, "path", "stdio transport should not emit path")
+
+	// Origin block intact: type=oci, identifier=image, oci.serverName=name.
+	origin := pkg["origin"].(map[string]any)
+	assert.Equal(t, "oci", origin["type"])
+	assert.NotEmpty(t, origin["identifier"])
+	oci := origin["oci"].(map[string]any)
+	assert.Equal(t, "my-stdio-mcp", oci["serverName"])
+
+	// arctl.yaml unchanged by transport choice — framework/language still
+	// land in the build config the same way.
+	cfg, err := buildconfig.Read(projectDir)
+	require.NoError(t, err)
+	assert.Equal(t, "fastmcp", cfg.Framework)
+	assert.Equal(t, "python", cfg.Language)
+}
+
+// TestInitMCP_PortIncompatibleWithStdio rejects --port + --transport stdio
+// up front so the user doesn't get a manifest with a port that the runtime
+// will ignore.
+func TestInitMCP_PortIncompatibleWithStdio(t *testing.T) {
+	tmp := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmp))
+	defer func() { _ = os.Chdir(origDir) }()
+
+	cmd := declarative.NewInitCmd()
+	cmd.SetArgs([]string{
+		"mcp", "my-mcp",
+		"--framework", "fastmcp", "--language", "python",
+		"--transport", "stdio",
+		"--port", "4000",
+	})
+	err = cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--port")
+}
+
+// TestInitMCP_InvalidTransport rejects unknown --transport values rather
+// than silently falling back to a default.
+func TestInitMCP_InvalidTransport(t *testing.T) {
+	tmp := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmp))
+	defer func() { _ = os.Chdir(origDir) }()
+
+	cmd := declarative.NewInitCmd()
+	cmd.SetArgs([]string{
+		"mcp", "my-mcp",
+		"--framework", "fastmcp", "--language", "python",
+		"--transport", "sse",
+	})
+	err = cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--transport")
+}
+
 // ---- init skill ----
 
 func TestInitSkill_StillWorks(t *testing.T) {
