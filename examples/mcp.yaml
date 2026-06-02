@@ -7,12 +7,21 @@ spec:
   description: "Fetches and extracts content from URLs"
   source:
     package:
-      registryType: oci
-      identifier: localhost:5001/acme/fetch:1.0.0
-      runtimeHint: docker                       # optional: hint for local runtime
+      origin:
+        type: oci
+        # OCI identifier must include an explicit tag or digest.
+        identifier: localhost:5001/acme/fetch:1.0.0
+        oci:
+          # Must match the io.modelcontextprotocol.server.name OCI label
+          # the publisher embedded into the image.
+          serverName: acme-fetch
       transport:
-        type: stdio                             # stdio | http
-      # Required for every registryType except mcpb. Must match the
-      # identity the publisher embedded into the published artifact
-      # (e.g. the io.modelcontextprotocol.server.name OCI label, npm mcpName).
-      serverName: acme-fetch
+        type: stdio                     # stdio | http
+      # launch: is optional — when omitted, the image entrypoint runs.
+      # To override the command/args or declare required env vars, set:
+      # launch:
+      #   command: my-server-binary
+      #   args:
+      #     - {type: positional, value: --config=/etc/server.json}
+      #   env:
+      #     - {name: API_KEY, isRequired: true}
