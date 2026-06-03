@@ -213,7 +213,6 @@ type deleteOpts struct {
 	PreDeleteObject v1alpha1.Object
 	DeleteAdmission types.DeleteAdmission
 	Source          string
-	Force           bool
 }
 
 // deleteCore runs Authorize → delete admission for a single resource.
@@ -259,7 +258,6 @@ func deleteCore(
 		Object:     opts.PreDeleteObject,
 		Store:      store,
 		PostDelete: opts.PostDelete,
-		Force:      opts.Force,
 	})
 	if err != nil {
 		if ae, ok := err.(*applyError); ok {

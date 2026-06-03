@@ -1,0 +1,129 @@
+package controller
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+)
+
+const defaultRetentionPruneInterval = time.Hour
+
+// RetentionPolicy is the bounded-history contract for the controller event
+// replay log. Durations <= 0 disable pruning.
+type RetentionPolicy struct {
+	ControlPlaneEvents time.Duration
+	EventKeepAfterRev  int64
+	BatchLimit         int
+}
+
+// Enabled reports whether the policy prunes the controller event log.
+func (p RetentionPolicy) Enabled() bool {
+	return p.ControlPlaneEvents > 0
+}
+
+// PruneStores groups the store surfaces needed by RunRetentionPrune. Keeping
+// these as tiny interfaces lets the controller package stay independent from
+// concrete Postgres store construction and keeps tests cheap.
+type PruneStores struct {
+	ControlPlaneEvents interface {
+		PruneBefore(ctx context.Context, before time.Time, keepAfterRevision int64, limit int) (int64, error)
+	}
+}
+
+// RetentionPruneResult reports how many event rows were removed in one
+// maintenance pass.
+type RetentionPruneResult struct {
+	ControlPlaneEvents int64
+}
+
+// RetentionPruner owns the periodic maintenance loop for controller event
+// replay rows.
+type RetentionPruner struct {
+	Stores PruneStores
+	Policy RetentionPolicy
+	Now    func() time.Time
+}
+
+func (p *RetentionPruner) Enabled() bool {
+	return p != nil && p.Policy.Enabled()
+}
+
+func (p *RetentionPruner) RunOnce(ctx context.Context) (RetentionPruneResult, error) {
+	if p == nil {
+		return RetentionPruneResult{}, errors.New("controller retention: pruner is required")
+	}
+	return RunRetentionPrune(ctx, p.Stores, p.Policy, p.now())
+}
+
+func (p *RetentionPruner) Run(ctx context.Context, interval time.Duration) error {
+	if p == nil {
+		return errors.New("controller retention: pruner is required")
+	}
+	if interval <= 0 {
+		interval = defaultRetentionPruneInterval
+	}
+	p.runOnceLogged(ctx)
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			p.runOnceLogged(ctx)
+		}
+	}
+}
+
+func (p *RetentionPruner) now() time.Time {
+	if p != nil && p.Now != nil {
+		return p.Now().UTC()
+	}
+	return time.Now().UTC()
+}
+
+func (p *RetentionPruner) runOnceLogged(ctx context.Context) {
+	result, err := p.RunOnce(ctx)
+	if err != nil {
+		if !errors.Is(err, context.Canceled) {
+			logger.Error("deployment controller retention prune failed", "error", err)
+		}
+		return
+	}
+	if result != (RetentionPruneResult{}) {
+		logger.Info(
+			"deployment controller retention pruned bookkeeping rows",
+			"control_plane_events", result.ControlPlaneEvents,
+		)
+	}
+}
+
+// RunRetentionPrune applies a RetentionPolicy to the controller event log.
+// Canonical resource tables remain the source of truth, so controllers can
+// full-reconcile if their checkpoint falls behind the retained event range.
+func RunRetentionPrune(ctx context.Context, stores PruneStores, policy RetentionPolicy, now time.Time) (RetentionPruneResult, error) {
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	limit := policy.BatchLimit
+	var (
+		result RetentionPruneResult
+		errs   error
+	)
+
+	if stores.ControlPlaneEvents != nil && policy.ControlPlaneEvents > 0 {
+		n, err := stores.ControlPlaneEvents.PruneBefore(ctx, now.Add(-policy.ControlPlaneEvents), policy.EventKeepAfterRev, limit)
+		result.ControlPlaneEvents = n
+		errs = errors.Join(errs, wrapRetentionErr("prune control-plane events", err))
+	}
+	return result, errs
+}
+
+func wrapRetentionErr(context string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("%s: %w", context, err)
+}

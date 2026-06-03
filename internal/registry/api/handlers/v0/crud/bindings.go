@@ -11,10 +11,11 @@ import (
 
 // bindings maps a Kind name to the typed Wire closure that knows how
 // to call resource.Register[T] with the concrete envelope. Populated
-// by init() below — adding a new built-in kind is one new register()
-// call. The Wire indirection is the smallest layer compatible with Go
-// generics: resource.Register[T] needs a concrete T at the call site,
-// and the typed closure is exactly that.
+// by init() below. Built-in kind metadata lives in v1alpha1.KindDescriptor;
+// this map is only the typed route-registration companion that Go generics
+// still require. The Wire indirection is the smallest layer compatible with
+// Go generics: resource.Register[T] needs a concrete T at the call site, and
+// the typed closure is exactly that.
 //
 // The generic resource.Register handles every per-kind quirk
 // internally — per-kind authz / list filtering / post-upsert /

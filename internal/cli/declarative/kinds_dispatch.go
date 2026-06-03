@@ -37,13 +37,11 @@ func getItem(k *scheme.Kind, name, tag string) (any, error) {
 }
 
 // deleteItem deletes a single item by (name, tag) for the given kind.
-// force=true asks the server to skip its PostDelete reconciliation hook
-// (e.g. provider teardown for Deployment).
-func deleteItem(k *scheme.Kind, name, tag string, force bool) error {
+func deleteItem(k *scheme.Kind, name, tag string) error {
 	if k.Delete == nil {
 		return fmt.Errorf("delete not supported for kind %q", k.Kind)
 	}
-	return k.Delete(context.Background(), name, tag, force)
+	return k.Delete(context.Background(), name, tag)
 }
 
 // listTags returns every live tag for (kind, name). Errors when the kind is not

@@ -8,6 +8,10 @@ type Skill struct {
 	Status   Status     `json:"status,omitzero" yaml:"status,omitempty"`
 }
 
+func init() {
+	MustRegisterKind[*Skill, SkillSpec](KindSkill)
+}
+
 // SkillSpec is the skill resource's declarative body.
 type SkillSpec struct {
 	Title       string       `json:"title,omitempty" yaml:"title,omitempty"`

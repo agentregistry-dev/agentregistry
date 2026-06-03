@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -22,6 +23,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/crud"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/router"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
+	controller "github.com/agentregistry-dev/agentregistry/internal/registry/controller"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/kubernetes"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/local"
@@ -94,11 +96,12 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		}
 	}()
 
-	// v1alpha1 DeploymentAdapter map consumed by the coordinator below.
+	// v1alpha1 DeploymentAdapter map consumed by the Deployment controller and
+	// adjacent adapter resolver surfaces.
 	// Built OSS-side from the local + kubernetes ports; enterprise extends
 	// via AppOptions.DeploymentAdapters. Keys are the canonical CamelCase
 	// Spec.Type values; Runtime.Validate canonicalizes user-supplied case
-	// at admission so the coordinator's lookup can use exact-match.
+	// at admission so adapter lookup can use exact-match.
 	deploymentAdapters := map[string]types.DeploymentAdapter{
 		v1alpha1.TypeLocal:      local.NewLocalDeploymentAdapter(cfg.RuntimeDir, cfg.AgentGatewayPort),
 		v1alpha1.TypeKubernetes: kubernetes.NewKubernetesDeploymentAdapter(),
@@ -106,6 +109,9 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	maps.Copy(deploymentAdapters, options.DeploymentAdapters)
 	pool := db.Pool()
 	stores := buildStores(pool, options.V1Alpha1StoreTables, options.V1Alpha1MutableStoreKinds, options.Auditor)
+	if _, err := controller.StartDeploymentController(ctx, pool, stores, deploymentAdapters, deploymentControllerConfig(cfg)); err != nil {
+		return fmt.Errorf("start deployment controller: %w", err)
+	}
 
 	slog.Info("starting agentregistry", "version", version.Version, "commit", version.GitCommit)
 
@@ -127,7 +133,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		}
 	}()
 
-	routeOpts := buildRouteOptions(options, stores, deploymentAdapters)
+	routeOpts := buildRouteOptions(options, stores, deploymentAdapters, crudPerKindHooks(options))
 
 	// Initialize HTTP server
 	baseServer, err := api.NewServer(cfg, metrics, versionInfo, options.UIHandler, authnProvider, routeOpts)
@@ -238,15 +244,26 @@ func buildStores(pool *pgxpool.Pool, extraStoreTables map[string]string, mutable
 	return stores
 }
 
+func deploymentControllerConfig(cfg *config.Config) controller.ControllerConfig {
+	return controller.ControllerConfig{
+		Retention: controller.RetentionPolicy{
+			ControlPlaneEvents: cfg.ControllerEventRetention,
+			EventKeepAfterRev:  cfg.ControllerEventKeepAfterRevision,
+			BatchLimit:         cfg.ControllerRetentionPruneBatchLimit,
+		},
+	}
+}
+
 func buildRouteOptions(
 	options types.AppOptions,
 	stores map[string]*v1alpha1store.Store,
 	adapters map[string]types.DeploymentAdapter,
+	perKindHooks crud.PerKindHooks,
 ) *router.RouteOptions {
 	routeOpts := &router.RouteOptions{
 		ExtraRoutes:         options.ExtraRoutes,
 		Stores:              stores,
-		PerKindHooks:        crudPerKindHooks(options),
+		PerKindHooks:        perKindHooks,
 		RegistryValidator:   options.RegistryValidator,
 		Admission:           options.Admission,
 		DeleteAdmission:     options.DeleteAdmission,
@@ -255,8 +272,7 @@ func buildRouteOptions(
 	}
 
 	if stores != nil {
-		routeOpts.DeploymentCoordinator = deploymentsvc.NewCoordinator(deploymentsvc.Dependencies{
-			Stores:   stores,
+		routeOpts.DeploymentLogResolver = deploymentsvc.NewAdapterResolver(deploymentsvc.ResolverDependencies{
 			Adapters: adapters,
 			Getter:   internaldb.NewGetter(stores),
 		})
@@ -320,6 +336,20 @@ func crudPerKindHooks(options types.AppOptions) crud.PerKindHooks {
 	if len(options.InitialFinalizers) > 0 {
 		hooks.InitialFinalizers = make(map[string]func(obj v1alpha1.Object) []string, len(options.InitialFinalizers))
 		maps.Copy(hooks.InitialFinalizers, options.InitialFinalizers)
+	}
+	if hooks.InitialFinalizers == nil {
+		hooks.InitialFinalizers = map[string]func(obj v1alpha1.Object) []string{}
+	}
+	previousDeploymentFinalizers := hooks.InitialFinalizers[v1alpha1.KindDeployment]
+	hooks.InitialFinalizers[v1alpha1.KindDeployment] = func(obj v1alpha1.Object) []string {
+		var finalizers []string
+		if previousDeploymentFinalizers != nil {
+			finalizers = previousDeploymentFinalizers(obj)
+		}
+		if slices.Contains(finalizers, controller.DeploymentControllerFinalizer) {
+			return finalizers
+		}
+		return append(finalizers, controller.DeploymentControllerFinalizer)
 	}
 	// RuntimeAdapters map dispatches the KindRuntime PostUpsert /
 	// PostDelete by Spec.Type → adapter. A Runtime whose type has

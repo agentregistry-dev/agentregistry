@@ -1,5 +1,5 @@
 // Package deploymentlogs owns the Deployment logs subresource:
-// `/v0/deployments/{name}/logs`. Drains adapter.Logs through the Coordinator
+// `/v0/deployments/{name}/logs`. Drains adapter.Logs through a narrow resolver
 // and returns the captured lines as JSON. The endpoint is bound to one specific
 // kind (Deployment); the rest of the v1alpha1 CRUD surface lives in crud.
 package deploymentlogs
@@ -13,7 +13,6 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
@@ -21,13 +20,18 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
-// Config bundles the inputs for Register. The coordinator drives
+// LogResolver is the only Deployment runtime capability needed by this handler.
+type LogResolver interface {
+	Logs(ctx context.Context, deployment *v1alpha1.Deployment, in types.LogsInput) (<-chan types.LogLine, error)
+}
+
+// Config bundles the inputs for Register. The resolver drives
 // adapter.Logs; the store fetches the Deployment row so the endpoint
 // can reject 404s early.
 type Config struct {
 	BasePrefix  string
 	Store       *v1alpha1store.Store
-	Coordinator *deploymentsvc.Coordinator
+	LogResolver LogResolver
 	// Authorize gates the request the same way the regular Deployment
 	// GET handler does. nil means no gate. Logs leak runtime
 	// stdout/stderr — frequently containing PII or secrets — so a
@@ -69,14 +73,14 @@ type deploymentLogsOutput struct {
 }
 
 // Register wires GET {basePrefix}/deployments/{name}/logs?namespace=default.
-// The response is a JSON payload of log records drained from coordinator.Logs;
+// The response is a JSON payload of log records drained from Resolver.Logs;
 // follow=true keeps the channel open until the client disconnects (or until the
 // adapter's context is cancelled).
 //
 // Non-streaming for now — huma lacks first-class SSE output and the
 // kubernetes/local adapters still return closed channels. When real log
 // streaming lands upstream, swap this for an SSE/chunked handler at the
-// same path without touching the coordinator surface.
+// same path without touching the adapter resolver surface.
 func Register(api huma.API, cfg Config) {
 	path := cfg.BasePrefix + "/deployments/{name}/logs"
 
@@ -144,7 +148,7 @@ func Register(api huma.API, cfg Config) {
 		if tailLines <= 0 || tailLines > maxLogLines {
 			tailLines = maxLogLines
 		}
-		ch, err := cfg.Coordinator.Logs(ctx, deployment, types.LogsInput{
+		ch, err := cfg.LogResolver.Logs(ctx, deployment, types.LogsInput{
 			Follow:    false, // gated above; non-follow only for now
 			TailLines: tailLines,
 		})

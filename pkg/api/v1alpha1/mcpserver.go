@@ -8,6 +8,10 @@ type MCPServer struct {
 	Status   Status        `json:"status,omitzero" yaml:"status,omitempty"`
 }
 
+func init() {
+	MustRegisterKind[*MCPServer, MCPServerSpec](KindMCPServer)
+}
+
 // MCPServerSpec is the MCP server's declarative body.
 type MCPServerSpec struct {
 	Title       string `json:"title,omitempty" yaml:"title,omitempty"`

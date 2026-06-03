@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestNewConfig_RuntimeDirHasRandomSuffix(t *testing.T) {
@@ -42,6 +43,25 @@ func TestNewConfig_RuntimeDirRespectsEnvOverride(t *testing.T) {
 
 	if cfg.RuntimeDir != custom {
 		t.Fatalf("RuntimeDir should be %q when env var is set, got %q", custom, cfg.RuntimeDir)
+	}
+}
+
+func TestNewConfig_ControllerRetentionEnv(t *testing.T) {
+	t.Setenv("AGENT_REGISTRY_RUNTIME_DIR", "/tmp/runtime")
+	t.Setenv("AGENT_REGISTRY_CONTROLLER_EVENT_RETENTION", "2h")
+	t.Setenv("AGENT_REGISTRY_CONTROLLER_EVENT_KEEP_AFTER_REVISION", "42")
+	t.Setenv("AGENT_REGISTRY_CONTROLLER_RETENTION_PRUNE_BATCH_LIMIT", "17")
+
+	cfg := NewConfig()
+
+	if cfg.ControllerEventRetention != 2*time.Hour {
+		t.Fatalf("event retention = %s, want 2h", cfg.ControllerEventRetention)
+	}
+	if cfg.ControllerEventKeepAfterRevision != 42 {
+		t.Fatalf("keep-after revision = %d, want 42", cfg.ControllerEventKeepAfterRevision)
+	}
+	if cfg.ControllerRetentionPruneBatchLimit != 17 {
+		t.Fatalf("prune batch limit = %d, want 17", cfg.ControllerRetentionPruneBatchLimit)
 	}
 }
 

@@ -8,6 +8,10 @@ type Agent struct {
 	Status   Status     `json:"status,omitzero" yaml:"status,omitempty"`
 }
 
+func init() {
+	MustRegisterKind[*Agent, AgentSpec](KindAgent)
+}
+
 // AgentSpec is the agent resource's declarative body.
 //
 // References to other resources (MCP servers) are pure ResourceRefs — no

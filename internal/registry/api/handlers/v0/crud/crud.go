@@ -57,18 +57,16 @@ type PerKindHooks struct {
 	InitialFinalizers map[string]func(obj v1alpha1.Object) []string
 }
 
-// Register wires the namespace-scoped + cross-namespace list endpoints
-// for every built-in v1alpha1 Kind against the supplied Stores map (as
-// produced by v1alpha1store.NewStores). Each kind shares the
-// same BasePrefix and cross-kind Resolver.
+// Register wires the namespace-scoped + cross-namespace list endpoints for
+// registered v1alpha1 kinds against the supplied Stores map (as produced by
+// v1alpha1store.NewStores). Each kind shares the same BasePrefix and cross-kind
+// Resolver.
 //
-// Iteration order is fixed by v1alpha1.BuiltinKinds so OpenAPI output
-// stays stable across builds. Kinds in BuiltinKinds with no Store
-// entry or no registered binding are silently skipped; callers that
-// want strict behavior should validate the maps ahead of the call.
-//
-// Adding a new kind: append to v1alpha1.BuiltinKinds and add one
-// `register(...)` call in bindings.go's init().
+// Kinds with no Store entry or no registered typed binding are silently
+// skipped; callers that want strict behavior should validate the maps ahead of
+// the call. Go generics still require a concrete type at the route-registration
+// call site, so bindings.go remains the small typed companion to the generic
+// v1alpha1 kind registry.
 func Register(
 	api huma.API,
 	basePrefix string,
@@ -99,7 +97,7 @@ func Register(
 		}, true
 	}
 
-	for _, kind := range v1alpha1.BuiltinKinds {
+	for _, kind := range v1alpha1.RegisteredKinds() {
 		cfg, ok := cfgFor(kind)
 		if !ok {
 			continue

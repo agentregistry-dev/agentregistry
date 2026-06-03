@@ -105,7 +105,7 @@ func deleteAllTagsAny[T v1alpha1.Object](ctx context.Context, kind, name string,
 	return errorsJoin(errs)
 }
 
-func deleteAny[T v1alpha1.Object](ctx context.Context, kind, name, tag string, force bool, newObj func() T) error {
+func deleteAny[T v1alpha1.Object](ctx context.Context, kind, name, tag string, newObj func() T) error {
 	targetTag := tag
 	if targetTag == "" {
 		obj, err := client.GetTyped(ctx, apiClient, kind, v1alpha1.DefaultNamespace, name, "", newObj)
@@ -114,7 +114,7 @@ func deleteAny[T v1alpha1.Object](ctx context.Context, kind, name, tag string, f
 		}
 		targetTag = obj.GetMetadata().Tag
 	}
-	return apiClient.Delete(ctx, kind, v1alpha1.DefaultNamespace, name, targetTag, client.DeleteOpts{Force: force})
+	return apiClient.Delete(ctx, kind, v1alpha1.DefaultNamespace, name, targetTag)
 }
 
 func listDeploymentAny(ctx context.Context) ([]any, error) {

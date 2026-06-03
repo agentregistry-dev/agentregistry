@@ -563,3 +563,75 @@ func TestStore_NotifyPayloadDiscreteFields(t *testing.T) {
 		"name must round-trip intact, including the / character")
 	require.Equal(t, DefaultTag(), payload.Tag, "tag emitted as the default latest tag")
 }
+
+func TestStore_ControlPlaneEventsTrackSourceWritesOnly(t *testing.T) {
+	pool := NewTestPool(t)
+	store := NewStore(pool, TestSchema(), testTable)
+	events := NewControlPlaneEventStore(pool, TestSchema())
+	ctx := context.Background()
+
+	_, err := store.Upsert(ctx, &v1alpha1.Agent{
+		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "evented"},
+		Spec:     v1alpha1.AgentSpec{Title: "first"},
+	})
+	require.NoError(t, err)
+
+	batch, err := events.ListAfter(ctx, 0, 10)
+	require.NoError(t, err)
+	require.NotEmpty(t, batch)
+	insert := batch[len(batch)-1]
+	require.Equal(t, v1alpha1.KindAgent, insert.Key.Kind)
+	require.Equal(t, testNS, insert.Key.Namespace)
+	require.Equal(t, "evented", insert.Key.Name)
+	require.Equal(t, DefaultTag(), insert.Key.Tag)
+	require.Equal(t, "insert", insert.Operation)
+
+	err = store.PatchStatus(ctx, testNS, "evented", DefaultTag(), v1alpha1.StatusPatcher(func(s *v1alpha1.Status) {
+		s.SetCondition(v1alpha1.Condition{Type: "Ready", Status: v1alpha1.ConditionTrue})
+	}))
+	require.NoError(t, err)
+	batch, err = events.ListAfter(ctx, insert.Revision, 10)
+	require.NoError(t, err)
+	require.Empty(t, batch, "status-only patches must not invalidate controller source collections")
+
+	_, err = store.Upsert(ctx, &v1alpha1.Agent{
+		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "evented"},
+		Spec:     v1alpha1.AgentSpec{Title: "second"},
+	})
+	require.NoError(t, err)
+	batch, err = events.ListAfter(ctx, insert.Revision, 10)
+	require.NoError(t, err)
+	require.Len(t, batch, 1)
+	require.Equal(t, "update", batch[0].Operation)
+	require.Equal(t, int64(2), batch[0].Generation)
+
+	require.NoError(t, store.Delete(ctx, testNS, "evented", DefaultTag()))
+	batch, err = events.ListAfter(ctx, batch[0].Revision, 10)
+	require.NoError(t, err)
+	require.Len(t, batch, 1)
+	require.Equal(t, "delete", batch[0].Operation)
+}
+
+func TestControlPlaneEventStore_PruneBeforeHonorsKeepAfterRevision(t *testing.T) {
+	pool := NewTestPool(t)
+	store := NewStore(pool, TestSchema(), testTable)
+	events := NewControlPlaneEventStore(pool, TestSchema())
+	ctx := context.Background()
+
+	upsertAgent(t, store, "pruned", v1alpha1.AgentSpec{Title: "first"}, nil)
+	upsertAgent(t, store, "pruned", v1alpha1.AgentSpec{Title: "second"}, nil)
+
+	batch, err := events.ListAfter(ctx, 0, 10)
+	require.NoError(t, err)
+	require.Len(t, batch, 2)
+	keep := batch[1].Revision
+
+	deleted, err := events.PruneBefore(ctx, time.Now().Add(time.Hour), keep, 10)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), deleted)
+
+	remaining, err := events.ListAfter(ctx, 0, 10)
+	require.NoError(t, err)
+	require.Len(t, remaining, 1)
+	require.Equal(t, keep, remaining[0].Revision)
+}

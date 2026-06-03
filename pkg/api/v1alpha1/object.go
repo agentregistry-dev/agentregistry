@@ -60,9 +60,8 @@ const DefaultNamespace = "default"
 // DeletionTimestamp marks a row as terminating. Soft-delete is
 // server-side: a DELETE call sets DeletionTimestamp and the row is
 // later hard-deleted by the GC pass. There is no user-facing finalizer
-// API; the storage layer retains a `finalizers` column for a future
-// orphan-reconciler hook, but normal apply / delete flow does not
-// populate or drain it.
+// API; controllers may seed internal finalizers for async teardown
+// (for example Deployment adapter removal) before GC purges the row.
 type ObjectMeta struct {
 	Namespace   string            `json:"namespace,omitempty" yaml:"namespace,omitempty"`
 	Name        string            `json:"name" yaml:"name"`

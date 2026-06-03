@@ -76,6 +76,16 @@ type Store struct {
 	auditor   types.Auditor
 }
 
+// Behavior reports which private persistence behavior this Store uses. Generic
+// controller/read-model code uses it to interpret ResourceRef tag semantics
+// without maintaining its own per-kind switch.
+func (s *Store) Behavior() StoreBehavior {
+	if s == nil {
+		return ""
+	}
+	return s.behavior
+}
+
 // StoreOption configures an optional Store behaviour at construction
 // time. Options compose; later options override earlier ones for the
 // same field.

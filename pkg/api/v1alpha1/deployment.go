@@ -14,6 +14,13 @@ type Deployment struct {
 	Status   Status         `json:"status,omitzero" yaml:"status,omitempty"`
 }
 
+func init() {
+	MustRegisterKind[*Deployment, DeploymentSpec](
+		KindDeployment,
+		WithMutableObjectStorage(),
+	)
+}
+
 // DeploymentDesiredState lifecycle intents. Empty is equivalent to
 // DesiredStateDeployed.
 const (
