@@ -67,8 +67,4 @@ ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 ENV OTEL_SERVICE_NAME={{.ProjectName}}
 
-# ENTRYPOINT is the minimum invocation; per-transport flags come from
-# spec.source.package.launch in mcp.yaml (arctl init populates that from
-# framework.yaml's launch.{stdio,http} defaults so the deployed Cmd/Args
-# carry --transport/--host/--port as needed).
 ENTRYPOINT ["python", "src/main.py"]
