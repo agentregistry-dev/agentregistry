@@ -4,11 +4,12 @@
 // into the registry app lives here.
 //
 // The types are split by domain across files:
-//   - types.go     — AppOptions, Server, HTTPServerFactory,
+//   - types.go         — AppOptions, Server, HTTPServerFactory,
 //     Response/EmptyResponse wrappers
-//   - adapter.go   — deployment + runtime adapter surfaces
+//   - adapter.go       — deployment + runtime adapter surfaces
 //     (DeploymentAdapter, RuntimeAdapter)
-//   - daemon.go    — CLI-side daemon + token provider hooks
+//   - daemon.go        — CLI-side daemon + token provider hooks
+//   - runner_images.go — default runner image refs for non-OCI origins
 package types
 
 import (

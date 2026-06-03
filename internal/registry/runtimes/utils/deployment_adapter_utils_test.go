@@ -6,6 +6,7 @@ import (
 
 	runtimetypes "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
 func TestTranslateMCPServer_RemoteAppliesHeaderOverridesAndDefaults(t *testing.T) {
@@ -73,8 +74,8 @@ func TestTranslateMCPServer_LocalDerivesDefaultsWhenLaunchNil(t *testing.T) {
 	if server.Local == nil {
 		t.Fatal("expected local config")
 	}
-	if got := server.Local.Deployment.Image; got != "node:24-alpine3.21" {
-		t.Fatalf("image = %q, want node:24-alpine3.21", got)
+	if got := server.Local.Deployment.Image; got != types.DefaultNPMRunnerImage {
+		t.Fatalf("image = %q, want %q", got, types.DefaultNPMRunnerImage)
 	}
 	if got := server.Local.Deployment.Cmd; got != "npx" {
 		t.Fatalf("cmd = %q, want npx", got)
@@ -129,8 +130,8 @@ func TestTranslateMCPServer_LocalHonorsLaunchAndOverrides(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TranslateMCPServer() unexpected error: %v", err)
 	}
-	if got := server.Local.Deployment.Image; got != "node:24-alpine3.21" {
-		t.Fatalf("image = %q, want node:24-alpine3.21", got)
+	if got := server.Local.Deployment.Image; got != types.DefaultNPMRunnerImage {
+		t.Fatalf("image = %q, want %q", got, types.DefaultNPMRunnerImage)
 	}
 	if got := server.Local.Deployment.Cmd; got != "npx" {
 		t.Fatalf("cmd = %q, want npx", got)

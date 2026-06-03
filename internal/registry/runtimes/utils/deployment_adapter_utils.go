@@ -16,6 +16,7 @@ import (
 
 	runtimetypes "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
 // DefaultLocalAgentPort is the port kagent-runtime listens on inside the
@@ -452,14 +453,8 @@ func processHeaders(
 // GetRegistryConfig returns the runner image and the resolver's
 // derived-default Command + Args for an Origin. These defaults apply
 // when MCPPackage.Launch is nil — Launch sets the wire-level
-// {Command, Args} and bypasses these defaults entirely.
-//
-// Per-type defaults:
-//   - npm:  Image="node:24-alpine3.21", Command="npx",  Args=["-y", "<id>[@ver]"]
-//   - pypi: Image="ghcr.io/astral-sh/uv:debian", Command="uvx", Args=["<id>[==ver]"]
-//   - oci:  Image="<Origin.Identifier>", Command="", Args=nil (image entrypoint)
-//
-// Unsupported Origin (no sub-struct set) returns an error.
+// {Command, Args} and bypasses these defaults entirely. Unsupported
+// Origin (no sub-struct set) returns an error.
 func GetRegistryConfig(origin v1alpha1.MCPPackageOrigin) (RegistryConfig, []string, error) {
 	switch {
 	case origin.NPM != nil:
@@ -468,7 +463,7 @@ func GetRegistryConfig(origin v1alpha1.MCPPackageOrigin) (RegistryConfig, []stri
 			ref = ref + "@" + origin.NPM.Version
 		}
 		return RegistryConfig{
-			Image:   "node:24-alpine3.21",
+			Image:   types.DefaultNPMRunnerImage,
 			Command: "npx",
 		}, []string{"-y", ref}, nil
 	case origin.PyPI != nil:
@@ -477,7 +472,7 @@ func GetRegistryConfig(origin v1alpha1.MCPPackageOrigin) (RegistryConfig, []stri
 			ref = ref + "==" + origin.PyPI.Version
 		}
 		return RegistryConfig{
-			Image:   "ghcr.io/astral-sh/uv:debian",
+			Image:   types.DefaultPyPIRunnerImage,
 			Command: "uvx",
 		}, []string{ref}, nil
 	case origin.OCI != nil:
