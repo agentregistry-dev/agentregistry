@@ -34,6 +34,10 @@ import (
 // Apply is ALWAYS ASYNC. Apply returns quickly; convergence is tracked
 // via the adapter's own watch loop writing status. The reconciler
 // doesn't block on convergence.
+//
+// Adapters with expensive Apply paths can also implement
+// DeploymentDesiredFingerprinter to make unchanged reconciles cheap after the
+// same resolved input has already been accepted.
 type DeploymentAdapter interface {
 	// Type returns the canonical CamelCase discriminator string
 	// ("Local", "Kubernetes", "BedrockAgentCore", ...). Runtime.Validate

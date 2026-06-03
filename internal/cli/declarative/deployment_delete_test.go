@@ -155,34 +155,9 @@ func TestDelete_RejectsTagForDeploymentAndRuntime(t *testing.T) {
 	}
 }
 
-// (5) --force sends ?force=true query param to the server.
-func TestDeploymentDelete_ForcePassesQueryParam(t *testing.T) {
-	deployments := []v1alpha1.Deployment{
-		deploymentFixture("aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "deployed"),
-	}
-
-	srv, _, capturedForce := deploymentTestServer(t, deployments, map[string]bool{"default/gcp-v1": true})
-	setupClientForServer(t, srv)
-
-	cmd := declarative.NewDeleteCmd()
-	cmd.SetArgs([]string{"deployment", "aws-v1", "--force"})
-	require.NoError(t, cmd.Execute())
-
-	require.Len(t, (*capturedForce), 1)
-	assert.Equal(t, "force=true", (*capturedForce)[0], "?force=true must be sent when --force is passed")
-}
-
-// (6) --force cannot be combined with -f (file mode).
-func TestDeploymentDelete_ForceWithFileReturnsError(t *testing.T) {
-	cmd := declarative.NewDeleteCmd()
-	cmd.SetArgs([]string{"-f", "agent.yaml", "--force"})
-	err := cmd.Execute()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "--force cannot be used with -f")
-}
-
-// (7) Without --force, no ?force query param is sent.
-func TestDeploymentDelete_NoForceFlagOmitsQueryParam(t *testing.T) {
+// (5) Deployment delete does not send legacy force query params. Teardown is
+// controller/finalizer-owned.
+func TestDeploymentDelete_OmitsLegacyForceQueryParam(t *testing.T) {
 	deployments := []v1alpha1.Deployment{
 		deploymentFixture("aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "deployed"),
 	}
@@ -195,18 +170,5 @@ func TestDeploymentDelete_NoForceFlagOmitsQueryParam(t *testing.T) {
 	require.NoError(t, cmd.Execute())
 
 	require.Len(t, *capturedQuery, 1)
-	assert.Empty(t, (*capturedQuery)[0], "no query params should be sent without --force")
-}
-
-// (8) --force is rejected for non-deployment kinds.
-func TestDelete_ForceRejectedForNonDeploymentKinds(t *testing.T) {
-	for _, kind := range []string{"agent", "mcp", "skill", "prompt", "runtime"} {
-		t.Run(kind, func(t *testing.T) {
-			cmd := declarative.NewDeleteCmd()
-			cmd.SetArgs([]string{kind, "test-name", "--tag", "1.0.0", "--force"})
-			err := cmd.Execute()
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), "--force is only supported for deployments")
-		})
-	}
+	assert.Empty(t, (*capturedQuery)[0], "no query params should be sent")
 }

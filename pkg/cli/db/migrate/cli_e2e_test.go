@@ -19,10 +19,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -31,6 +33,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
 // ---- binary build (lazy, once per `go test` invocation) ----
@@ -74,6 +77,41 @@ func arctlBin(t *testing.T) string {
 		t.Fatalf("build arctl: %v", arctlBuildErr)
 	}
 	return arctlBinPath
+}
+
+type migrationExpectation struct {
+	applied int
+	latest  int
+}
+
+func ossMigrationExpectation(t *testing.T) migrationExpectation {
+	t.Helper()
+	entries, err := fs.ReadDir(v1alpha1store.MigrationFiles, v1alpha1store.MigrationsDir)
+	if err != nil {
+		t.Fatalf("read OSS migrations: %v", err)
+	}
+	var out migrationExpectation
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".up.sql") {
+			continue
+		}
+		parts := strings.SplitN(entry.Name(), "_", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		version, err := strconv.Atoi(parts[0])
+		if err != nil {
+			continue
+		}
+		out.applied++
+		if version > out.latest {
+			out.latest = version
+		}
+	}
+	if out.applied == 0 {
+		t.Fatal("OSS migration set has no up migrations")
+	}
+	return out
 }
 
 // ---- exec helper ----
@@ -269,8 +307,9 @@ func TestE2E_ArgValidation(t *testing.T) {
 
 // TestE2E_HappyPath — `up` → `status` → `version` against a fresh
 // Postgres. Asserts exit 0 on each step, the operator-facing stdout
-// shape, and the post-Up version (1 — the single collapsed migration).
+// shape, and the post-Up version (the latest shipped OSS migration).
 func TestE2E_HappyPath(t *testing.T) {
+	expected := ossMigrationExpectation(t)
 	dsn := freshDB(t)
 	env := append(stripARRegistryEnv(), "AGENT_REGISTRY_DATABASE_URL="+dsn)
 
@@ -286,8 +325,9 @@ func TestE2E_HappyPath(t *testing.T) {
 	if r.exitCode != 0 {
 		t.Fatalf("status: exit %d\nstderr: %s", r.exitCode, r.stderr)
 	}
-	if !strings.Contains(r.stdout, "1 migration(s) applied (at v1), 0 pending") {
-		t.Errorf("status should show 1 applied (at v1), 0 pending; got: %q", r.stdout)
+	wantStatus := fmt.Sprintf("%d migration(s) applied (at v%d), 0 pending", expected.applied, expected.latest)
+	if !strings.Contains(r.stdout, wantStatus) {
+		t.Errorf("status should show %q; got: %q", wantStatus, r.stdout)
 	}
 
 	r = runArctl(t, env, "db", "migrate", "version")
@@ -295,8 +335,9 @@ func TestE2E_HappyPath(t *testing.T) {
 		t.Fatalf("version: exit %d\nstderr: %s", r.exitCode, r.stderr)
 	}
 	v := strings.TrimSpace(r.stdout)
-	if v != "1" {
-		t.Errorf("version should be 1; got %q", v)
+	wantVersion := strconv.Itoa(expected.latest)
+	if v != wantVersion {
+		t.Errorf("version should be %s; got %q", wantVersion, v)
 	}
 }
 
@@ -389,6 +430,7 @@ func TestE2E_ForceWritesRowOnly(t *testing.T) {
 // TestE2E_StatusJSON — `status --output json` emits a stable JSON
 // shape that CI/CD shell scripts can pipe through `jq`.
 func TestE2E_StatusJSON(t *testing.T) {
+	expected := ossMigrationExpectation(t)
 	dsn := freshDB(t)
 	env := append(stripARRegistryEnv(), "AGENT_REGISTRY_DATABASE_URL="+dsn)
 
@@ -415,15 +457,15 @@ func TestE2E_StatusJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(r.stdout), &payload); err != nil {
 		t.Fatalf("status -o json output not parseable: %v\nstdout: %s", err, r.stdout)
 	}
-	if payload.Applied != 1 || payload.Pending != 0 {
-		t.Errorf("aggregate counts: got applied=%d pending=%d; want 1/0", payload.Applied, payload.Pending)
+	if payload.Applied != expected.applied || payload.Pending != 0 {
+		t.Errorf("aggregate counts: got applied=%d pending=%d; want %d/0", payload.Applied, payload.Pending, expected.applied)
 	}
 	if len(payload.Sources) != 1 {
 		t.Fatalf("expected 1 source in JSON; got %d", len(payload.Sources))
 	}
 	s := payload.Sources[0]
-	if s.Name != "oss" || s.Applied != 1 || s.Pending != 0 || s.Version != 1 || s.Downgraded {
-		t.Errorf("source[0]: got %+v; want {oss 1 0 1 false}", s)
+	if s.Name != "oss" || s.Applied != expected.applied || s.Pending != 0 || s.Version != expected.latest || s.Downgraded {
+		t.Errorf("source[0]: got %+v; want {oss %d 0 %d false}", s, expected.applied, expected.latest)
 	}
 
 	// Invalid --output rejected with a useful message.

@@ -26,16 +26,16 @@ var TableFor = map[string]string{
 	v1alpha1.KindDeployment: "deployments",
 }
 
-// NewStores builds one *Store per built-in v1alpha1 Kind, bound
-// to its canonical table. The returned map is keyed by Kind name (e.g.
-// "Agent", "MCPServer") and is the single input the router/apply
-// layers take. They never look up tables by string literal themselves.
+// NewStores builds one *Store per OSS built-in v1alpha1 Kind, bound to its
+// canonical table. The returned map is keyed by Kind name (e.g. "Agent",
+// "MCPServer") and is the single input the router/apply layers take. They
+// never look up tables by string literal themselves.
 //
-// KindDeployment and KindRuntime are bound through NewMutableObjectStore —
-// both are infra/lifecycle state, not tagged artifacts. Every other built-in
-// kind uses NewStore (tagged-artifact behavior). Iterates v1alpha1.BuiltinKinds so
-// registration order stays stable across builds (important for
-// OpenAPI output).
+// Kinds whose descriptors use KindStorageMutableObject are bound through
+// NewMutableObjectStore. Every other built-in kind uses NewStore
+// (tagged-artifact behavior). Extension kinds are intentionally not built here;
+// the composition root wires them from V1Alpha1StoreTables after this function
+// returns.
 //
 // The variadic opts are applied to every Store produced. Downstream
 // callers pass WithAuditor(...) here to plumb a single audit sink
@@ -46,28 +46,28 @@ func NewStores(pool *pgxpool.Pool, schemas *pkgdb.SchemaRegistry, opts ...StoreO
 	// wiring bug, so MustGet panics rather than returning a nil schema
 	// that would surface as a malformed query later.
 	ossSchema := schemas.MustGet(pkgdb.OSSSourceName)
-	out := make(map[string]*Store, len(v1alpha1.BuiltinKinds))
-	for _, kind := range v1alpha1.BuiltinKinds {
+	out := make(map[string]*Store, len(TableFor))
+	for _, descriptor := range v1alpha1.KindDescriptors() {
+		kind := descriptor.Kind
 		table, ok := TableFor[kind]
 		if !ok {
-			// BuiltinKinds and TableFor must stay in sync — a missing
-			// table here is a coding error, not a runtime condition.
-			panic("v1alpha1store: no table registered for kind " + kind)
+			continue
 		}
 		// Prepend WithKind so per-kind audit events name the kind
 		// correctly even if the inbound object's TypeMeta is empty.
 		// Caller-supplied opts win (they appear after WithKind in the
 		// option chain).
 		kindOpts := append([]StoreOption{WithKind(kind)}, opts...)
-		if kind == v1alpha1.KindRuntime {
-			out[kind] = NewMutableObjectStore(pool, ossSchema, table, kindOpts...)
-			continue
-		}
-		if kind == v1alpha1.KindDeployment {
+		if descriptor.Storage == v1alpha1.KindStorageMutableObject {
 			out[kind] = NewMutableObjectStore(pool, ossSchema, table, kindOpts...)
 			continue
 		}
 		out[kind] = NewStore(pool, ossSchema, table, kindOpts...)
+	}
+	for kind := range TableFor {
+		if _, ok := out[kind]; !ok {
+			panic("v1alpha1store: no kind descriptor registered for table " + kind)
+		}
 	}
 	return out
 }

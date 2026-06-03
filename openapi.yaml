@@ -824,16 +824,6 @@ paths:
         required: true
         schema:
           type: string
-      - description: Skip provider-specific teardown and only remove the registry
-          record.
-        explode: false
-        in: query
-        name: force
-        schema:
-          default: false
-          description: Skip provider-specific teardown and only remove the registry
-            record.
-          type: boolean
       responses:
         "204":
           description: No Content
@@ -1062,16 +1052,6 @@ paths:
         required: true
         schema:
           type: string
-      - description: Skip provider-specific teardown and only remove the registry
-          record.
-        explode: false
-        in: query
-        name: force
-        schema:
-          default: false
-          description: Skip provider-specific teardown and only remove the registry
-            record.
-          type: boolean
       responses:
         "204":
           description: No Content
@@ -1289,16 +1269,6 @@ paths:
         required: true
         schema:
           type: string
-      - description: Skip provider-specific teardown and only remove the registry
-          record.
-        explode: false
-        in: query
-        name: force
-        schema:
-          default: false
-          description: Skip provider-specific teardown and only remove the registry
-            record.
-          type: boolean
       responses:
         "204":
           description: No Content
@@ -1517,16 +1487,6 @@ paths:
         required: true
         schema:
           type: string
-      - description: Skip provider-specific teardown and only remove the registry
-          record.
-        explode: false
-        in: query
-        name: force
-        schema:
-          default: false
-          description: Skip provider-specific teardown and only remove the registry
-            record.
-          type: boolean
       responses:
         "204":
           description: No Content
@@ -1690,16 +1650,6 @@ paths:
         required: true
         schema:
           type: string
-      - description: Skip provider-specific teardown and only remove the registry
-          record.
-        explode: false
-        in: query
-        name: force
-        schema:
-          default: false
-          description: Skip provider-specific teardown and only remove the registry
-            record.
-          type: boolean
       responses:
         "204":
           description: No Content
@@ -1897,16 +1847,6 @@ paths:
         required: true
         schema:
           type: string
-      - description: Skip provider-specific teardown and only remove the registry
-          record.
-        explode: false
-        in: query
-        name: force
-        schema:
-          default: false
-          description: Skip provider-specific teardown and only remove the registry
-            record.
-          type: boolean
       responses:
         "204":
           description: No Content

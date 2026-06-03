@@ -9,7 +9,7 @@ import (
 )
 
 // UnsupportedDeploymentRuntimeError reports that no deployment adapter
-// exists for a runtime type. Coordinator returns this when the runtime's
+// exists for a runtime type. AdapterResolver returns this when the runtime's
 // Spec.Type string has no registered adapter so callers (MCP tool
 // surface, HTTP handler) can distinguish "no adapter" from transient
 // plumbing failures.

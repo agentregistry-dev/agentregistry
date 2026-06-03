@@ -47,10 +47,11 @@ type Status struct {
 	ObservedGeneration int64       `json:"-" yaml:"-"`
 	Conditions         []Condition `json:"conditions,omitempty" yaml:"conditions,omitempty"`
 
-	// Details is an opaque JSON object populated by runtime adapters that need
-	// to surface structured state beyond what Conditions can express. Each
-	// adapter owns its own top-level key inside Details; consumers parse only
-	// the keys they care about. Empty when no adapter has written.
+	// Details is an opaque JSON object populated by controllers and runtime
+	// adapters that need to surface structured state beyond what Conditions can
+	// express. Each writer owns its own top-level key inside Details; consumers
+	// parse only the keys they care about. Empty when no writer has stored
+	// details.
 	//
 	// Use SetDetailsKey / GetDetailsKey to merge or read keys without clobbering
 	// other adapters' state.

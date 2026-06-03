@@ -36,20 +36,9 @@ func NewScheme() *Scheme {
 	return &Scheme{kinds: make(map[string]kindEntry)}
 }
 
-// Default is the package-level Scheme pre-registered with every kind defined
-// in this package. Extension kinds may register onto it at init.
-var Default = newDefaultScheme()
-
-func newDefaultScheme() *Scheme {
-	s := NewScheme()
-	s.MustRegister(KindAgent, AgentSpec{}, func() any { return &Agent{} })
-	s.MustRegister(KindMCPServer, MCPServerSpec{}, func() any { return &MCPServer{} })
-	s.MustRegister(KindSkill, SkillSpec{}, func() any { return &Skill{} })
-	s.MustRegister(KindPrompt, PromptSpec{}, func() any { return &Prompt{} })
-	s.MustRegister(KindDeployment, DeploymentSpec{}, func() any { return &Deployment{} })
-	s.MustRegister(KindRuntime, RuntimeSpec{}, func() any { return &Runtime{} })
-	return s
-}
+// Default is the package-level Scheme. Built-in and extension kinds register
+// onto it through MustRegisterKind at init.
+var Default = NewScheme()
 
 // Register associates a kind name with a spec type and a constructor for the
 // typed envelope. newObject must return a pointer to a zero-valued envelope
@@ -147,12 +136,8 @@ func IsContentRegistryKind(kind string) bool {
 // IsTaggedArtifactKind reports whether refs to kind may use tag pinning and
 // whether the private store behavior keys rows by namespace/name/tag.
 func IsTaggedArtifactKind(kind string) bool {
-	switch kind {
-	case KindAgent, KindMCPServer, KindSkill, KindPrompt:
-		return true
-	default:
-		return false
-	}
+	descriptor, ok := KindDescriptorFor(kind)
+	return ok && descriptor.Storage == KindStorageTaggedArtifact
 }
 
 // DecodeMulti parses a YAML stream (possibly containing multiple `---`-

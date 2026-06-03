@@ -8,6 +8,10 @@ type Prompt struct {
 	Status   Status     `json:"status,omitzero" yaml:"status,omitempty"`
 }
 
+func init() {
+	MustRegisterKind[*Prompt, PromptSpec](KindPrompt)
+}
+
 // PromptSpec is the prompt resource's declarative body. Content holds the
 // prompt text inline; for large bodies or binary assets, use references via
 // a Skill resource instead.

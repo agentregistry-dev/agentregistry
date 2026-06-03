@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
+	"time"
 
 	env "github.com/caarlos0/env/v11"
 )
@@ -32,6 +33,16 @@ type Config struct {
 	// Runtime Configuration
 	RuntimeDir string `env:"RUNTIME_DIR" envDefault:"/tmp/arctl-runtime"`
 	Verbose    bool   `env:"VERBOSE" envDefault:"false"`
+
+	// ControllerEventRetention is how long handled control-plane events remain
+	// available for checkpoint replay. Set to 0 to disable event pruning.
+	ControllerEventRetention time.Duration `env:"CONTROLLER_EVENT_RETENTION" envDefault:"24h"`
+	// ControllerEventKeepAfterRevision preserves control-plane events newer than
+	// this Postgres revision even when they are older than ControllerEventRetention.
+	ControllerEventKeepAfterRevision int64 `env:"CONTROLLER_EVENT_KEEP_AFTER_REVISION" envDefault:"0"`
+	// ControllerRetentionPruneBatchLimit caps rows removed per retention pass so
+	// pruning cannot monopolize the database during startup or repair loops.
+	ControllerRetentionPruneBatchLimit int `env:"CONTROLLER_RETENTION_PRUNE_BATCH_LIMIT" envDefault:"500"`
 
 	// SkipMigrations gates the server's Postgres migrator at startup.
 	// Set true when migrations are applied out-of-band (e.g. by

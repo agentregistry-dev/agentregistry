@@ -17,6 +17,58 @@ func TestScheme_RegisterAllBuiltins(t *testing.T) {
 	}
 }
 
+func TestKindDescriptorsDriveKindMetadata(t *testing.T) {
+	descriptors := KindDescriptors()
+	gotKinds := make([]string, 0, len(descriptors))
+	for _, descriptor := range descriptors {
+		gotKinds = append(gotKinds, descriptor.Kind)
+		if descriptor.SpecSample == nil {
+			t.Fatalf("%s descriptor missing spec sample", descriptor.Kind)
+		}
+		if descriptor.NewObject == nil {
+			t.Fatalf("%s descriptor missing object constructor", descriptor.Kind)
+		}
+	}
+	if !reflect.DeepEqual(gotKinds, RegisteredKinds()) {
+		t.Fatalf("descriptor kinds = %v, want RegisteredKinds %v", gotKinds, RegisteredKinds())
+	}
+
+	agent, ok := KindDescriptorFor(KindAgent)
+	if !ok {
+		t.Fatalf("missing %s descriptor", KindAgent)
+	}
+	if agent.Storage != KindStorageTaggedArtifact {
+		t.Fatalf("agent storage = %s, want %s", agent.Storage, KindStorageTaggedArtifact)
+	}
+	if agent.Plural != "agents" || agent.Table != "v1alpha1.agents" {
+		t.Fatalf("agent routing/storage = %s/%s", agent.Plural, agent.Table)
+	}
+	if !IsTaggedArtifactKind(KindAgent) {
+		t.Fatalf("agent should be tagged artifact kind")
+	}
+	mcp, ok := KindDescriptorFor(KindMCPServer)
+	if !ok {
+		t.Fatalf("missing %s descriptor", KindMCPServer)
+	}
+	if mcp.Plural != "mcpservers" || mcp.Table != "v1alpha1.mcp_servers" {
+		t.Fatalf("mcpserver routing/storage = %s/%s", mcp.Plural, mcp.Table)
+	}
+
+	deployment, ok := KindDescriptorFor(KindDeployment)
+	if !ok {
+		t.Fatalf("missing %s descriptor", KindDeployment)
+	}
+	if deployment.Storage != KindStorageMutableObject {
+		t.Fatalf("deployment storage = %s, want %s", deployment.Storage, KindStorageMutableObject)
+	}
+	if deployment.Plural != "deployments" || deployment.Table != "v1alpha1.deployments" {
+		t.Fatalf("deployment routing/storage = %s/%s", deployment.Plural, deployment.Table)
+	}
+	if IsTaggedArtifactKind(KindDeployment) {
+		t.Fatalf("deployment should not be tagged artifact kind")
+	}
+}
+
 func TestScheme_Register_Duplicate(t *testing.T) {
 	s := NewScheme()
 	if err := s.Register("Foo", struct{}{}, func() any { return &struct{}{} }); err != nil {
