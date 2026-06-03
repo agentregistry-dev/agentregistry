@@ -99,12 +99,35 @@ def _get_all_mcp_servers() -> List[dict]:
 
     return servers
 
+
+def _tool_name_prefix(server_name: str) -> str:
+    """Sanitize the server name into a tool-name-safe prefix.
+
+    The LLM API rejects requests where two tools share a name, but multiple
+    MCP servers commonly expose the same tool (e.g. `echo` on every demo
+    server). Prefixing each toolset's tools with the server name makes them
+    globally unique. ADK's tool name grammar is alphanumeric + underscore,
+    so any non-conforming chars in the server name (hyphens, dots) collapse
+    to underscores.
+
+    Caveat: distinct server names that differ only by punctuation collapse
+    to the same prefix (e.g. `my-foo`, `my.foo`, `my_foo` all → `my_foo`).
+    Server names are expected to be distinct identifiers, not differ only by
+    punctuation; if you hit this, rename one of the servers.
+    """
+    return re.sub(r"[^a-zA-Z0-9_]", "_", server_name)
+
+
 def get_mcp_tools(
     server_names: Optional[List[str]] = None,
     server_filters: Optional[Union[ToolPredicate, List[str]]] = None,
     global_filter: Optional[Union[ToolPredicate, List[str]]] = None,
 ) -> List[MCPToolset]:
     """Return MCP toolsets for the configured servers.
+
+    Each toolset's tools are prefixed with the sanitized server name so
+    multiple MCPs can share underlying tool names without colliding when
+    the merged list reaches the LLM API.
 
     Environment variables:
         MCP_TERMINATE_ON_CLOSE: Set to "false" for stateless MCP servers.
@@ -149,10 +172,13 @@ def get_mcp_tools(
                 url=url, timeout=connect_timeout, terminate_on_close=terminate_on_close
             )
 
+        toolset_kwargs = {
+            "connection_params": connection_params,
+            "tool_name_prefix": _tool_name_prefix(server_name),
+        }
         if predicate is not None:
-            toolset = MCPToolset(connection_params=connection_params, tool_filter=predicate)
-        else:
-            toolset = MCPToolset(connection_params=connection_params)
+            toolset_kwargs["tool_filter"] = predicate
+        toolset = MCPToolset(**toolset_kwargs)
 
         toolsets.append(toolset)
 

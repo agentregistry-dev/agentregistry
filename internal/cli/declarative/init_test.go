@@ -59,6 +59,30 @@ func TestInitAgent_WritesYAMLAndArctlAndDotEnv(t *testing.T) {
 	assert.Contains(t, string(gi), ".env")
 }
 
+// TestInitAgent_MCPToolsHasNamePrefix asserts the scaffolded mcp_tools.py
+// constructs each MCPToolset with tool_name_prefix set. Without this, two
+// MCP servers exposing the same tool name (e.g. `echo`) merge into a single
+// flat list and the LLM API rejects with "tools: Tool names must be
+// unique." See google-adk's MCPToolset tool_name_prefix parameter.
+func TestInitAgent_MCPToolsHasNamePrefix(t *testing.T) {
+	tmp := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmp))
+	defer func() { _ = os.Chdir(origDir) }()
+
+	cmd := declarative.NewInitCmd()
+	cmd.SetArgs([]string{"agent", "myagent", "--framework", "adk", "--language", "python"})
+	require.NoError(t, cmd.Execute())
+
+	body, err := os.ReadFile(filepath.Join(tmp, "myagent", "myagent", "mcp_tools.py"))
+	require.NoError(t, err)
+	src := string(body)
+
+	assert.Contains(t, src, "tool_name_prefix",
+		"mcp_tools.py must pass tool_name_prefix to MCPToolset; without it, two MCPs exposing the same tool name collide at the LLM API")
+}
+
 func TestInitAgent_OutputDirFlag(t *testing.T) {
 	tmp := t.TempDir()
 	out := t.TempDir() // separate from cwd
