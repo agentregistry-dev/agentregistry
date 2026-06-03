@@ -8,12 +8,19 @@ templatesDir: ./templates
 env:
   optional:
     - LOG_LEVEL
-# Default exec configuration for stdio-mode deployments. arctl init
-# writes this into spec.source.package.launch when --transport stdio
-# is selected.
+# Per-transport exec defaults. arctl init writes the block matching the
+# requested --transport into spec.source.package.launch in the scaffolded
+# mcp.yaml. {{.Port}} is templated from the --port flag at scaffold time
+# (same Go text/template syntax used by build.command and run.command).
 launch:
-  command: /app/server
-  args: []
+  stdio:
+    command: /app/server
+    args: []
+  http:
+    command: /app/server
+    args:
+      - "-http"
+      - ":{{.Port}}"
 build:
   command: ["docker", "build", "{{if .Platform}}--platform={{.Platform}}{{end}}", "-t", "{{.Image}}", "{{.ProjectDir}}"]
 run:

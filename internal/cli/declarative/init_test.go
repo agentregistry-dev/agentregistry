@@ -237,10 +237,12 @@ func TestInitMCP_StdioTransport_WritesLaunchFromFramework(t *testing.T) {
 	assert.Equal(t, "src/main.py", first["value"])
 }
 
-// TestInitMCP_HTTPTransport_OmitsLaunch confirms the http path does not
-// emit a launch block — the runtime handles http transport configuration
-// on its own.
-func TestInitMCP_HTTPTransport_OmitsLaunch(t *testing.T) {
+// TestInitMCP_HTTPTransport_WritesLaunchFromFramework asserts that http
+// transport also gets a launch block populated from the framework's
+// http defaults — so the deployed container runs with the right flags
+// (--transport http --host 0.0.0.0 --port N for fastmcp) rather than
+// defaulting to stdio per the image ENTRYPOINT.
+func TestInitMCP_HTTPTransport_WritesLaunchFromFramework(t *testing.T) {
 	tmp := t.TempDir()
 	origDir, err := os.Getwd()
 	require.NoError(t, err)
@@ -248,13 +250,32 @@ func TestInitMCP_HTTPTransport_OmitsLaunch(t *testing.T) {
 	defer func() { _ = os.Chdir(origDir) }()
 
 	cmd := declarative.NewInitCmd()
-	cmd.SetArgs([]string{"mcp", "my-http-mcp", "--framework", "fastmcp", "--language", "python"})
+	cmd.SetArgs([]string{
+		"mcp", "my-http-mcp",
+		"--framework", "fastmcp", "--language", "python",
+		"--port", "4321",
+	})
 	require.NoError(t, cmd.Execute())
 
 	projectDir := filepath.Join(tmp, "my-http-mcp")
 	mcpSpec := readYAMLFile(t, filepath.Join(projectDir, "mcp.yaml"))["spec"].(map[string]any)
 	pkg := mcpSpec["source"].(map[string]any)["package"].(map[string]any)
-	assert.NotContains(t, pkg, "launch", "http transport must not emit a launch block")
+
+	launch, ok := pkg["launch"].(map[string]any)
+	require.True(t, ok, "http transport must scaffold spec.source.package.launch")
+	assert.Equal(t, "python", launch["command"])
+
+	args, ok := launch["args"].([]any)
+	require.True(t, ok, "launch.args must be a list")
+	values := make([]string, 0, len(args))
+	for _, a := range args {
+		item := a.(map[string]any)
+		assert.Equal(t, "positional", item["type"])
+		values = append(values, item["value"].(string))
+	}
+	assert.Equal(t, []string{
+		"src/main.py", "--transport", "http", "--host", "0.0.0.0", "--port", "4321",
+	}, values, "http launch.args must carry --transport/--host/--port with the user's --port substituted")
 }
 
 // TestInitMCP_PortIncompatibleWithStdio rejects --port + --transport stdio
