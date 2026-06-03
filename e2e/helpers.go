@@ -138,16 +138,6 @@ func RequireOutputContains(t *testing.T, result ArctlResult, substr string) {
 	}
 }
 
-// RequireEnv skips the test if the given environment variable is not set.
-func RequireEnv(t *testing.T, envVar string) string {
-	t.Helper()
-	val := os.Getenv(envVar)
-	if val == "" {
-		t.Skipf("Skipping: requires %s environment variable", envVar)
-	}
-	return val
-}
-
 // RegistryURL returns the agentregistry URL set during TestMain setup.
 func RegistryURL(t *testing.T) string {
 	t.Helper()
@@ -214,11 +204,6 @@ func WaitForHealth(t *testing.T, url string, timeout time.Duration) {
 		time.Sleep(2 * time.Second)
 	}
 	t.Fatalf("Health check timed out after %v: %s", timeout, url)
-}
-
-// ListServersURL returns the full URL for the list-servers endpoint.
-func ListServersURL(regURL string) string {
-	return regURL + "/servers"
 }
 
 // RegistryGet performs an HTTP GET against the given URL and returns the response.
