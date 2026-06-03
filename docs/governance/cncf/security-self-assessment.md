@@ -163,7 +163,7 @@ In the future, agentregistry intends to build and maintain compliance with sever
 - **Automated Testing**: Comprehensive test suite including unit tests, integration tests, and Helm chart tests. Tests are automatically run on all pull requests via GitHub Actions and must pass before merging.
 - **Static Code Analysis**: golangci-lint v2.8.0 runs on every push and pull request with a comprehensive linter configuration including security-relevant analyzers (staticcheck, govet, depguard with restricted import paths). Frontend code is linted via ESLint.
 - **Dependency Management**: Go dependencies are tracked via `go.mod` and `go.sum` with checksum verification against the Go module proxy and checksum database. Frontend dependencies are managed via npm with `package-lock.json`.
-- **Code Generation Verification**: A dedicated CI workflow (`verify.yml`) ensures that generated code is up to date and has not been manually modified, preventing drift between generated and committed code.
+- **Code Generation Verification**: A dedicated CI workflow (`verify.yaml`) ensures that generated code is up to date and has not been manually modified, preventing drift between generated and committed code.
 - **Release Integrity**: Release artifacts (CLI binaries, Helm charts) include checksums published alongside the GitHub Release. Multi-platform Docker images are built using Docker Buildx with pinned action versions.
 
 ### Communication Channels
