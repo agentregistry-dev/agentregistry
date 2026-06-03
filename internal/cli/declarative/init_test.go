@@ -202,6 +202,61 @@ func TestInitMCP_StdioTransport(t *testing.T) {
 	assert.Equal(t, "python", cfg.Language)
 }
 
+// TestInitMCP_StdioTransport_WritesLaunchFromFramework asserts that for
+// stdio transport the framework's launch defaults land in
+// spec.source.package.launch in structured form so the runtime has a
+// non-empty Cmd at deploy time.
+func TestInitMCP_StdioTransport_WritesLaunchFromFramework(t *testing.T) {
+	tmp := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmp))
+	defer func() { _ = os.Chdir(origDir) }()
+
+	cmd := declarative.NewInitCmd()
+	cmd.SetArgs([]string{
+		"mcp", "my-stdio-mcp",
+		"--framework", "fastmcp", "--language", "python",
+		"--transport", "stdio",
+	})
+	require.NoError(t, cmd.Execute())
+
+	projectDir := filepath.Join(tmp, "my-stdio-mcp")
+	mcpSpec := readYAMLFile(t, filepath.Join(projectDir, "mcp.yaml"))["spec"].(map[string]any)
+	pkg := mcpSpec["source"].(map[string]any)["package"].(map[string]any)
+
+	launch, ok := pkg["launch"].(map[string]any)
+	require.True(t, ok, "stdio transport must scaffold spec.source.package.launch")
+	assert.Equal(t, "python", launch["command"])
+
+	args, ok := launch["args"].([]any)
+	require.True(t, ok, "launch.args must be a list")
+	require.Len(t, args, 1)
+	first := args[0].(map[string]any)
+	assert.Equal(t, "positional", first["type"])
+	assert.Equal(t, "src/main.py", first["value"])
+}
+
+// TestInitMCP_HTTPTransport_OmitsLaunch confirms the http path does not
+// emit a launch block — the runtime handles http transport configuration
+// on its own.
+func TestInitMCP_HTTPTransport_OmitsLaunch(t *testing.T) {
+	tmp := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmp))
+	defer func() { _ = os.Chdir(origDir) }()
+
+	cmd := declarative.NewInitCmd()
+	cmd.SetArgs([]string{"mcp", "my-http-mcp", "--framework", "fastmcp", "--language", "python"})
+	require.NoError(t, cmd.Execute())
+
+	projectDir := filepath.Join(tmp, "my-http-mcp")
+	mcpSpec := readYAMLFile(t, filepath.Join(projectDir, "mcp.yaml"))["spec"].(map[string]any)
+	pkg := mcpSpec["source"].(map[string]any)["package"].(map[string]any)
+	assert.NotContains(t, pkg, "launch", "http transport must not emit a launch block")
+}
+
 // TestInitMCP_PortIncompatibleWithStdio rejects --port + --transport stdio
 // up front so the user doesn't get a manifest with a port that the runtime
 // will ignore.

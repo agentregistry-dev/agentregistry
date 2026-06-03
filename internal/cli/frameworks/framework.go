@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
 const APIVersionV1 = "arctl.dev/v1"
@@ -21,6 +23,13 @@ type Framework struct {
 	Build        Command `yaml:"build,omitempty"`
 	Run          Command `yaml:"run,omitempty"`
 
+	// Launch is the default exec configuration for projects scaffolded
+	// from this framework. arctl init writes it into the scaffolded
+	// mcp.yaml's spec.source.package.launch when transport is stdio.
+	// HTTP transport omits launch — the runtime configures the container
+	// to listen on the declared port itself.
+	Launch *MCPLaunch `yaml:"launch,omitempty" json:"launch,omitempty"`
+
 	// SourceDir is the on-disk root of this framework (its framework.yaml's directory).
 	// Set by the loader, not in YAML.
 	SourceDir string `yaml:"-"`
@@ -37,6 +46,32 @@ type EnvSpec struct {
 type Command struct {
 	Command []string `yaml:"command,omitempty"`
 	Script  string   `yaml:"script,omitempty"`
+}
+
+// MCPLaunch is the framework-level default for spec.source.package.launch
+// in a scaffolded mcp.yaml. Args is a flat list of positional strings;
+// arctl init expands it into the v1alpha1 structured form when it writes
+// mcp.yaml. Frameworks always declare all-positional defaults at this
+// layer — named args / env overrides are a per-project concern.
+type MCPLaunch struct {
+	Command string   `yaml:"command,omitempty" json:"command,omitempty"`
+	Args    []string `yaml:"args,omitempty"    json:"args,omitempty"`
+}
+
+// ToMCPArguments converts the flat-list framework defaults into the
+// v1alpha1 structured form (all positional, no overrides).
+func (l *MCPLaunch) ToMCPArguments() []v1alpha1.MCPArgument {
+	if l == nil {
+		return nil
+	}
+	args := make([]v1alpha1.MCPArgument, 0, len(l.Args))
+	for _, a := range l.Args {
+		args = append(args, v1alpha1.MCPArgument{
+			Type:  v1alpha1.MCPArgumentTypePositional,
+			Value: a,
+		})
+	}
+	return args
 }
 
 // ParseDescriptor parses a framework.yaml.
