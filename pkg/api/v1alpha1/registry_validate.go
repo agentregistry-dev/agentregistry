@@ -2,42 +2,20 @@ package v1alpha1
 
 import (
 	"context"
-	"fmt"
 )
 
 // RegistryValidatorFunc validates a single package's origin against
 // its referenced external registry. Implementations fan out by which
 // sub-struct (Origin.NPM/PyPI/OCI) is non-nil to the appropriate
-// per-registry validator. objectName is the resource's metadata.name,
-// passed through to ownership-annotation checks (e.g. OCI's
-// io.modelcontextprotocol.server.name label match).
+// per-registry validator. expectedServerName is the upstream-claimed
+// server identity declared on the origin's sub-struct (e.g.
+// origin.oci.serverName), passed through to ownership-annotation
+// checks (e.g. OCI's io.modelcontextprotocol.server.name label match).
 //
 // A nil RegistryValidatorFunc is a no-op on the ValidateRegistries
 // methods; callers that aren't wired with a dispatcher skip the
 // check.
-type RegistryValidatorFunc func(ctx context.Context, origin MCPPackageOrigin, objectName string) error
-
-// validateOrigins runs v against every element of origins,
-// accumulating FieldErrors under the supplied path prefix (e.g.
-// "spec.source.package.origin"). Returns nil FieldErrors when every
-// validation passes — no-ops cleanly when v itself is nil.
-func validateOrigins(
-	ctx context.Context,
-	v RegistryValidatorFunc,
-	origins []MCPPackageOrigin,
-	objectName, pathPrefix string,
-) FieldErrors {
-	if v == nil || len(origins) == 0 {
-		return nil
-	}
-	var errs FieldErrors
-	for i, o := range origins {
-		if err := v(ctx, o, objectName); err != nil {
-			errs.Append(fmt.Sprintf("%s[%d]", pathPrefix, i), err)
-		}
-	}
-	return errs
-}
+type RegistryValidatorFunc func(ctx context.Context, origin MCPPackageOrigin, expectedServerName string) error
 
 // ValidateRegistries on *MCPServer dispatches the bundled MCPPackage's
 // Origin to the caller-supplied per-registry validator.
@@ -46,11 +24,12 @@ func (m *MCPServer) ValidateRegistries(ctx context.Context, v RegistryValidatorF
 		return nil
 	}
 	p := m.Spec.Source.Package
-	errs := validateOrigins(ctx, v, []MCPPackageOrigin{p.Origin}, serverNameFromOrigin(p.Origin), "spec.source.package.origin")
-	if len(errs) == 0 {
-		return nil
+	if err := v(ctx, p.Origin, serverNameFromOrigin(p.Origin)); err != nil {
+		var errs FieldErrors
+		errs.Append("spec.source.package.origin", err)
+		return errs
 	}
-	return errs
+	return nil
 }
 
 // serverNameFromOrigin returns the per-type ServerName declared on
