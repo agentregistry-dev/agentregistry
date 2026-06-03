@@ -45,7 +45,7 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
   // the new polymorphic MCPPackage shape: origin.type drives which
   // per-type sub-object (npm / pypi / oci) is populated. `version` is
   // ignored for OCI (the version lives in the image ref's tag).
-  type PackageDraft = { identifier: string; version: string; originType: OriginType; transport: string; serverName: string }
+  type PackageDraft = { identifier: string; version: string; originType: OriginType; transport: string; port: string; serverName: string }
   const [pkg, setPkg] = useState<PackageDraft | null>(null)
 
   const resetForm = () => {
@@ -114,9 +114,19 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
         } else {
           origin.oci = { serverName }
         }
+        const transport: NonNullable<NonNullable<typeof source.package>['transport']> = {
+          type: pkg.transport || 'stdio',
+        }
+        if (transport.type === 'http') {
+          const port = parseInt(pkg.port, 10)
+          if (!Number.isFinite(port) || port <= 0 || port > 65535) {
+            throw new Error('http transport requires a port between 1 and 65535')
+          }
+          transport.port = port
+        }
         source.package = {
           origin,
-          transport: { type: pkg.transport || 'stdio' },
+          transport,
         }
       }
       if (source.repository || source.package) {
@@ -142,7 +152,7 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
   }
 
   const addPackage = () => {
-    setPkg({ identifier: "", version: "", originType: "npm", transport: "stdio", serverName: "" })
+    setPkg({ identifier: "", version: "", originType: "npm", transport: "stdio", port: "3000", serverName: "" })
   }
 
   const removePackage = () => {
@@ -310,6 +320,23 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
                       <span className="text-sm">{transport}</span>
                     </label>
                   ))}
+                  {pkg.transport === "http" && (
+                    <>
+                      <Label htmlFor="package-port" className="text-sm text-muted-foreground ml-2">
+                        Port *:
+                      </Label>
+                      <Input
+                        id="package-port"
+                        type="number"
+                        min={1}
+                        max={65535}
+                        value={pkg.port}
+                        onChange={(e) => updatePackage("port", e.target.value)}
+                        disabled={loading}
+                        className="w-24"
+                      />
+                    </>
+                  )}
                 </div>
                 {/* Required for every origin type (npm / pypi / oci).
                     Value must match the identity the publisher embedded in

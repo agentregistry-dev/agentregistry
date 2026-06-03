@@ -226,6 +226,30 @@ func TestInitMCP_StdioTransport(t *testing.T) {
 	assert.Equal(t, "python", cfg.Language)
 }
 
+// TestInitMCP_StdioTransport_OmitsPortFromArctlYAML asserts the scaffolded
+// arctl.yaml has no `port` field for stdio projects. The cobra default
+// (3000) used to leak into arctl.yaml regardless of transport, which made
+// `arctl run` and --local-mcp wiring point at a non-existent HTTP server.
+func TestInitMCP_StdioTransport_OmitsPortFromArctlYAML(t *testing.T) {
+	tmp := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmp))
+	defer func() { _ = os.Chdir(origDir) }()
+
+	cmd := declarative.NewInitCmd()
+	cmd.SetArgs([]string{
+		"mcp", "my-stdio-mcp",
+		"--framework", "fastmcp", "--language", "python",
+		"--transport", "stdio",
+	})
+	require.NoError(t, cmd.Execute())
+
+	cfg, err := buildconfig.Read(filepath.Join(tmp, "my-stdio-mcp"))
+	require.NoError(t, err)
+	assert.Equal(t, 0, cfg.Port, "stdio scaffold must not write a port (HTTP-only semantic)")
+}
+
 // TestInitMCP_StdioTransport_WritesLaunchFromFramework asserts that for
 // stdio transport the framework's launch defaults land in
 // spec.source.package.launch in structured form so the runtime has a

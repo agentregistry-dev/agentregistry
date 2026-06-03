@@ -449,9 +449,19 @@ func localMCPEntries(paths []string) ([]mcpEnvEntry, error) {
 		if err != nil {
 			return nil, fmt.Errorf("read sibling arctl.yaml at %s: %w", abs, err)
 		}
+		doc, err := readMCPYAML(abs)
+		if err != nil {
+			return nil, err
+		}
+		if doc != nil && doc.Spec.Source != nil && doc.Spec.Source.Package != nil &&
+			doc.Spec.Source.Package.Transport.Type == "stdio" {
+			return nil, fmt.Errorf("sibling MCP at %s declares transport.type=stdio; "+
+				"--local-mcp wires siblings via an HTTP URL, so only http-transport MCPs are supported", abs)
+		}
 		port := cfg.Port
 		if port == 0 {
-			port = 3000
+			return nil, fmt.Errorf("sibling MCP at %s has no port in arctl.yaml; "+
+				"re-scaffold with `arctl init mcp --transport http --port <PORT>`", abs)
 		}
 		siblingName, err := readMCPName(abs)
 		if err != nil {
@@ -724,11 +734,14 @@ Picks a framework + language interactively (or via --framework / --language).`,
 			if err := frameworks.RenderTemplates(framework, projectDir, vars); err != nil {
 				return err
 			}
-			if err := buildconfig.Write(projectDir, &buildconfig.Config{
+			cfg := &buildconfig.Config{
 				Framework: framework.Framework,
 				Language:  framework.Language,
-				Port:      initPort,
-			}); err != nil {
+			}
+			if initTransport == "http" {
+				cfg.Port = initPort
+			}
+			if err := buildconfig.Write(projectDir, cfg); err != nil {
 				return err
 			}
 			if err := buildconfig.WriteDotEnv(projectDir, framework.Env.Required, framework.Env.Optional); err != nil {
