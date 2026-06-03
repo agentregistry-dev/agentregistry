@@ -170,7 +170,7 @@ func TestMCPLaunch_Render_NilReceiver(t *testing.T) {
 	var l *MCPLaunch
 	cmd, args, err := l.Render(3000)
 	require.NoError(t, err)
-	assert.Equal(t, "", cmd)
+	assert.Empty(t, cmd)
 	assert.Nil(t, args)
 }
 

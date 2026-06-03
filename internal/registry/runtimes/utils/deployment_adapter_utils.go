@@ -136,45 +136,10 @@ func translateLocalMCPServer(
 		cmd = config.Command
 		args = defaultArgs
 	} else {
-		// Manifest-owned path: Launch.Command + Launch.Args verbatim.
-		// Empty Command is allowed only for OCI (image entrypoint runs);
-		// the resolver doesn't enforce this — the validator's job — but
-		// we leave cmd empty rather than falling back to the default to
-		// preserve manifest intent.
-		cmd = pkg.Launch.Command
-		args = processArguments(nil, pkg.Launch.Args, argValues)
-
-		// Append any overrides not declared in spec args as raw
-		// (name, value) pairs so callers can inject one-off flags
-		// without editing the manifest. Order: sorted by name.
-		processedArgNames := make(map[string]bool, len(pkg.Launch.Args))
-		for _, a := range pkg.Launch.Args {
-			processedArgNames[a.Name] = true
-		}
-		var extraArgNames []string
-		for argName := range argValues {
-			if !processedArgNames[argName] {
-				extraArgNames = append(extraArgNames, argName)
-			}
-		}
-		slices.Sort(extraArgNames)
-		for _, argName := range extraArgNames {
-			args = append(args, argName)
-			if argValue := argValues[argName]; argValue != "" {
-				args = append(args, argValue)
-			}
-		}
-
-		// Merge Launch.Env into envValues (overrides win; spec-declared
-		// values back-populate keys the caller didn't override).
-		processedEnvVars, err := processEnvironmentVariables(pkg.Launch.Env, envValues)
+		var err error
+		cmd, args, err = applyManifestLaunch(pkg.Launch, argValues, envValues)
 		if err != nil {
 			return nil, err
-		}
-		for key, value := range processedEnvVars {
-			if _, exists := envValues[key]; !exists {
-				envValues[key] = value
-			}
 		}
 	}
 
@@ -220,6 +185,50 @@ type parsedURL struct {
 
 // parseURL enforces http/https-only and normalizes missing ports to the
 // protocol default.
+// applyManifestLaunch implements the manifest-owned Cmd/Args/Env path for
+// translateLocalMCPServer. Empty Command is allowed only for OCI (image
+// ENTRYPOINT runs); the resolver doesn't enforce this — the validator's
+// job — but we leave cmd empty rather than falling back to the default to
+// preserve manifest intent. Mutates envValues in place: spec-declared
+// values back-populate keys the caller didn't override.
+func applyManifestLaunch(
+	launch *v1alpha1.MCPPackageLaunch,
+	argValues map[string]string,
+	envValues map[string]string,
+) (string, []string, error) {
+	cmd := launch.Command
+	args := processArguments(nil, launch.Args, argValues)
+
+	processedArgNames := make(map[string]bool, len(launch.Args))
+	for _, a := range launch.Args {
+		processedArgNames[a.Name] = true
+	}
+	var extraArgNames []string
+	for argName := range argValues {
+		if !processedArgNames[argName] {
+			extraArgNames = append(extraArgNames, argName)
+		}
+	}
+	slices.Sort(extraArgNames)
+	for _, argName := range extraArgNames {
+		args = append(args, argName)
+		if argValue := argValues[argName]; argValue != "" {
+			args = append(args, argValue)
+		}
+	}
+
+	processedEnvVars, err := processEnvironmentVariables(launch.Env, envValues)
+	if err != nil {
+		return "", nil, err
+	}
+	for key, value := range processedEnvVars {
+		if _, exists := envValues[key]; !exists {
+			envValues[key] = value
+		}
+	}
+	return cmd, args, nil
+}
+
 func parseURL(rawURL string) (*parsedURL, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
