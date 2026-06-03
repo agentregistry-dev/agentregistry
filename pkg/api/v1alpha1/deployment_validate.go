@@ -89,6 +89,18 @@ func validateDeploymentSpec(s *DeploymentSpec) FieldErrors {
 				DesiredStateDeployed, DesiredStateUndeployed))
 	}
 
+	if s.ReconcilePolicy != nil {
+		switch s.ReconcilePolicy.OnDrift {
+		case "", OnDriftReport, OnDriftReapply:
+			// Empty is allowed — defaults to report-only drift handling.
+		default:
+			errs.Append("spec.reconcilePolicy.onDrift",
+				fmt.Errorf("%w: %q (expected %q or %q)",
+					ErrInvalidDriftPolicy, s.ReconcilePolicy.OnDrift,
+					OnDriftReport, OnDriftReapply))
+		}
+	}
+
 	for i, ref := range s.DeploymentRefs {
 		path := fmt.Sprintf("spec.deploymentRefs[%d]", i)
 		if err := validateNameField(ref.Name); err != nil {

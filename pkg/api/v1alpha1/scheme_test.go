@@ -174,6 +174,8 @@ spec:
     kind: Runtime
     name: local
   desiredState: deployed
+  reconcilePolicy:
+    onDrift: Reapply
   env:
     OPENAI_API_KEY: "{{ .Secrets.openai }}"
 `)
@@ -190,6 +192,12 @@ spec:
 	}
 	if d.Spec.DesiredState != DesiredStateDeployed {
 		t.Fatalf("desiredState mismatch: %q", d.Spec.DesiredState)
+	}
+	if d.Spec.ReconcilePolicy == nil {
+		t.Fatalf("reconcilePolicy missing")
+	}
+	if d.Spec.ReconcilePolicy.OnDrift != OnDriftReapply {
+		t.Fatalf("reconcilePolicy.onDrift mismatch: %q", d.Spec.ReconcilePolicy.OnDrift)
 	}
 }
 
@@ -368,10 +376,11 @@ func TestEncode_RoundTrip_JSON(t *testing.T) {
 		TypeMeta: TypeMeta{APIVersion: GroupVersion, Kind: KindDeployment},
 		Metadata: ObjectMeta{Name: "prod"},
 		Spec: DeploymentSpec{
-			TargetRef:    ResourceRef{Kind: KindAgent, Name: "x", Tag: "1"},
-			RuntimeRef:   ResourceRef{Kind: KindRuntime, Name: "local"},
-			DesiredState: DesiredStateDeployed,
-			Env:          map[string]string{"FOO": "bar"},
+			TargetRef:       ResourceRef{Kind: KindAgent, Name: "x", Tag: "1"},
+			RuntimeRef:      ResourceRef{Kind: KindRuntime, Name: "local"},
+			DesiredState:    DesiredStateDeployed,
+			ReconcilePolicy: &DeploymentReconcilePolicy{OnDrift: OnDriftReapply},
+			Env:             map[string]string{"FOO": "bar"},
 		},
 	}
 	out, err := EncodeJSON(original)
@@ -384,6 +393,34 @@ func TestEncode_RoundTrip_JSON(t *testing.T) {
 	}
 	if !reflect.DeepEqual(original.Spec, &got.Spec) && !reflect.DeepEqual(*original, got) {
 		t.Fatalf("round-trip mismatch\nwant: %+v\ngot:  %+v", original, got)
+	}
+}
+
+func TestEncode_DeploymentOmitsUnsetReconcilePolicy(t *testing.T) {
+	deployment := &Deployment{
+		TypeMeta: TypeMeta{APIVersion: GroupVersion, Kind: KindDeployment},
+		Metadata: ObjectMeta{Name: "prod"},
+		Spec: DeploymentSpec{
+			TargetRef:    ResourceRef{Kind: KindAgent, Name: "x", Tag: "1"},
+			RuntimeRef:   ResourceRef{Kind: KindRuntime, Name: "local"},
+			DesiredState: DesiredStateDeployed,
+		},
+	}
+
+	yamlOut, err := Encode(deployment)
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	if strings.Contains(string(yamlOut), "reconcilePolicy") {
+		t.Fatalf("unset reconcilePolicy should be omitted from YAML:\n%s", yamlOut)
+	}
+
+	jsonOut, err := EncodeJSON(deployment)
+	if err != nil {
+		t.Fatalf("EncodeJSON: %v", err)
+	}
+	if strings.Contains(string(jsonOut), "reconcilePolicy") {
+		t.Fatalf("unset reconcilePolicy should be omitted from JSON:\n%s", jsonOut)
 	}
 }
 

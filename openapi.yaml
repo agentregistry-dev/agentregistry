@@ -117,6 +117,12 @@ components:
       - apiVersion
       - kind
       type: object
+    DeploymentReconcilePolicy:
+      additionalProperties: false
+      properties:
+        onDrift:
+          type: string
+      type: object
     DeploymentRef:
       additionalProperties: false
       properties:
@@ -142,6 +148,8 @@ components:
           additionalProperties:
             type: string
           type: object
+        reconcilePolicy:
+          $ref: '#/components/schemas/DeploymentReconcilePolicy'
         runtimeConfig:
           additionalProperties: {}
           type: object

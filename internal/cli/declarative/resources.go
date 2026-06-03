@@ -144,6 +144,29 @@ func deploymentToDocument(dep *cliCommon.DeploymentRecord) any {
 	// are distinct rows; collapsing them onto target identity here
 	// (previous behavior) made get-then-apply round-trips clobber the
 	// wrong row and made delete by metadata identity impossible.
+	spec := dep.Spec
+	if spec.TargetRef.Kind == "" {
+		spec.TargetRef.Kind = targetKind
+	}
+	if spec.TargetRef.Name == "" {
+		spec.TargetRef.Name = dep.TargetName
+	}
+	if spec.TargetRef.Tag == "" {
+		spec.TargetRef.Tag = dep.TargetTag
+	}
+	if spec.RuntimeRef.Kind == "" {
+		spec.RuntimeRef.Kind = v1alpha1.KindRuntime
+	}
+	if spec.RuntimeRef.Name == "" {
+		spec.RuntimeRef.Name = dep.RuntimeID
+	}
+	if spec.Env == nil {
+		spec.Env = dep.Env
+	}
+	if spec.RuntimeConfig == nil {
+		spec.RuntimeConfig = dep.RuntimeConfig
+	}
+
 	return struct {
 		APIVersion string                  `json:"apiVersion" yaml:"apiVersion"`
 		Kind       string                  `json:"kind" yaml:"kind"`
@@ -157,19 +180,7 @@ func deploymentToDocument(dep *cliCommon.DeploymentRecord) any {
 			Namespace: dep.Namespace,
 			Name:      dep.Name,
 		},
-		Spec: v1alpha1.DeploymentSpec{
-			TargetRef: v1alpha1.ResourceRef{
-				Kind: targetKind,
-				Name: dep.TargetName,
-				Tag:  dep.TargetTag,
-			},
-			RuntimeRef: v1alpha1.ResourceRef{
-				Kind: v1alpha1.KindRuntime,
-				Name: dep.RuntimeID,
-			},
-			Env:           dep.Env,
-			RuntimeConfig: dep.RuntimeConfig,
-		},
+		Spec: spec,
 		Status: deploymentStatus{
 			ID:              dep.ID,
 			Phase:           dep.Status,

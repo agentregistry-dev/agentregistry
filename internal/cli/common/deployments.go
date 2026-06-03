@@ -41,6 +41,11 @@ type DeploymentRecord struct {
 
 	// Details is the opaque adapter-owned status map (see v1alpha1.Status.Details).
 	Details json.RawMessage `json:"details,omitempty"`
+
+	// Spec preserves the declarative Deployment spec for get -o yaml/json
+	// round-trips. It is intentionally hidden from the flat deployment list
+	// projection to avoid duplicating target/runtime fields in table/JSON views.
+	Spec v1alpha1.DeploymentSpec `json:"-" yaml:"-"`
 }
 
 // ListDeployments returns every Deployment row visible from the default namespace.
@@ -114,6 +119,7 @@ func DeploymentRecordFromObject(dep *v1alpha1.Deployment) *DeploymentRecord {
 		DeletionTimestamp: dep.Metadata.DeletionTimestamp,
 		Conditions:        cloneConditions(dep.Status.Conditions),
 		Details:           cloneDetails(dep.Status.Details),
+		Spec:              cloneDeploymentSpec(dep.Spec),
 	}
 }
 
@@ -132,6 +138,18 @@ func cloneDetails(in json.RawMessage) json.RawMessage {
 	}
 	out := make(json.RawMessage, len(in))
 	copy(out, in)
+	return out
+}
+
+func cloneDeploymentSpec(in v1alpha1.DeploymentSpec) v1alpha1.DeploymentSpec {
+	out := in
+	if in.ReconcilePolicy != nil {
+		policy := *in.ReconcilePolicy
+		out.ReconcilePolicy = &policy
+	}
+	out.DeploymentRefs = append([]v1alpha1.DeploymentRef(nil), in.DeploymentRefs...)
+	out.Env = cloneStringMap(in.Env)
+	out.RuntimeConfig = cloneAnyMap(in.RuntimeConfig)
 	return out
 }
 

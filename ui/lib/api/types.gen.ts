@@ -56,6 +56,10 @@ export type Deployment = {
     status?: Status;
 };
 
+export type DeploymentReconcilePolicy = {
+    onDrift?: string;
+};
+
 export type DeploymentRef = {
     name: string;
     namespace?: string;
@@ -67,6 +71,7 @@ export type DeploymentSpec = {
     env?: {
         [key: string]: string;
     };
+    reconcilePolicy?: DeploymentReconcilePolicy;
     runtimeConfig?: {
         [key: string]: unknown;
     };

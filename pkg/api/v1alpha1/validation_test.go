@@ -238,6 +238,45 @@ func TestDeploymentValidate_OK(t *testing.T) {
 	require.NoError(t, d.Validate())
 }
 
+func TestDeploymentValidate_ReconcilePolicyOK(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		policy *DeploymentReconcilePolicy
+	}{
+		{"unset", nil},
+		{"empty onDrift", &DeploymentReconcilePolicy{}},
+		{"report", &DeploymentReconcilePolicy{OnDrift: OnDriftReport}},
+		{"reapply", &DeploymentReconcilePolicy{OnDrift: OnDriftReapply}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			d := &Deployment{
+				Metadata: ObjectMeta{Namespace: "default", Name: "prod"},
+				Spec: DeploymentSpec{
+					TargetRef:       ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
+					RuntimeRef:      ResourceRef{Kind: KindRuntime, Name: "local"},
+					ReconcilePolicy: tt.policy,
+				},
+			}
+			require.NoError(t, d.Validate())
+		})
+	}
+}
+
+func TestDeploymentValidate_RejectsBadDriftPolicy(t *testing.T) {
+	d := &Deployment{
+		Metadata: ObjectMeta{Namespace: "default", Name: "prod"},
+		Spec: DeploymentSpec{
+			TargetRef:  ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
+			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "local"},
+			ReconcilePolicy: &DeploymentReconcilePolicy{
+				OnDrift: "AutoFix",
+			},
+		},
+	}
+	paths := failedFields(t, d.Validate())
+	require.Contains(t, paths, "spec.reconcilePolicy.onDrift")
+}
+
 func TestDeploymentValidate_RejectsBadTargetKind(t *testing.T) {
 	d := &Deployment{
 		Metadata: ObjectMeta{Namespace: "default", Name: "prod"},

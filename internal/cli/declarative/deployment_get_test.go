@@ -166,6 +166,7 @@ func TestDeploymentGet_ListReturnsAll(t *testing.T) {
 func TestDeploymentGet_YAMLOutputIncludesStatus(t *testing.T) {
 	deployment := deploymentFixture("aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "deployed")
 	deployment.Spec.Env = map[string]string{"GOOGLE_API_KEY": "xxx"}
+	deployment.Spec.ReconcilePolicy = &v1alpha1.DeploymentReconcilePolicy{OnDrift: v1alpha1.OnDriftReapply}
 	deployment.Metadata.Annotations = map[string]string{
 		"runtimes.agentregistry.solo.io/remoteId": "runtime-abc",
 	}
@@ -193,6 +194,8 @@ func TestDeploymentGet_YAMLOutputIncludesStatus(t *testing.T) {
 	assert.Contains(t, got, "targetRef:")
 	assert.Contains(t, got, "kind: Agent")
 	assert.Contains(t, got, "GOOGLE_API_KEY: xxx")
+	assert.Contains(t, got, "reconcilePolicy:")
+	assert.Contains(t, got, "onDrift: Reapply")
 
 	// Status block — server-managed runtime state, available for debugging.
 	assert.Contains(t, got, "status:")

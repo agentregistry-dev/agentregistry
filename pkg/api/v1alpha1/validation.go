@@ -21,6 +21,7 @@ var (
 	ErrInvalidRef          = errors.New("invalid resource reference")
 	ErrUnknownRuntimeType  = errors.New("unknown runtime type")
 	ErrInvalidDesiredState = errors.New("invalid deployment desired state")
+	ErrInvalidDriftPolicy  = errors.New("invalid deployment drift policy")
 	// ErrDanglingRef is returned by ResolverFunc implementations when the
 	// referenced resource does not exist. Tests + callers identify
 	// dangling references via errors.Is(err, ErrDanglingRef).

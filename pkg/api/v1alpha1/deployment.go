@@ -28,6 +28,22 @@ const (
 	DesiredStateUndeployed = "undeployed"
 )
 
+// DeploymentOnDriftPolicy controls what a reconciler should do when it
+// observes runtime state that differs from registry-owned desired state. Empty
+// is equivalent to OnDriftReport.
+const (
+	OnDriftReport  = "Report"
+	OnDriftReapply = "Reapply"
+)
+
+// DeploymentReconcilePolicy contains reconciliation knobs for observed
+// runtime drift. It is intentionally small for the first discovery/drift
+// contract: controllers may report drift by default, and deployments can opt
+// into normal reapply after drift evidence is recorded.
+type DeploymentReconcilePolicy struct {
+	OnDrift string `json:"onDrift,omitempty" yaml:"onDrift,omitempty"`
+}
+
 // DeploymentSpec is the deployment resource's declarative body.
 //
 // TargetRef is required and must name a top-level Agent or MCPServer. The
@@ -38,9 +54,10 @@ const (
 // RuntimeRef is required and must name a top-level Runtime. The Runtime
 // resolves how/where the target is executed (local daemon, kubernetes, etc.).
 type DeploymentSpec struct {
-	TargetRef    ResourceRef `json:"targetRef" yaml:"targetRef"`
-	RuntimeRef   ResourceRef `json:"runtimeRef" yaml:"runtimeRef"`
-	DesiredState string      `json:"desiredState,omitempty" yaml:"desiredState,omitempty"`
+	TargetRef       ResourceRef                `json:"targetRef" yaml:"targetRef"`
+	RuntimeRef      ResourceRef                `json:"runtimeRef" yaml:"runtimeRef"`
+	DesiredState    string                     `json:"desiredState,omitempty" yaml:"desiredState,omitempty"`
+	ReconcilePolicy *DeploymentReconcilePolicy `json:"reconcilePolicy,omitempty" yaml:"reconcilePolicy,omitempty"`
 	// DeploymentRefs declaratively binds this Deployment to other
 	// Deployments — e.g. an Agent Deployment binding to the MCPServer
 	// Deployments whose status should feed its runtime config. Stored
