@@ -64,6 +64,45 @@ func TestDefaultApplyFingerprintIncludesAgentMCPServerDependency(t *testing.T) {
 	}
 }
 
+func TestDefaultApplyFingerprintResultIncludesDependencySnapshot(t *testing.T) {
+	in := testApplyInput()
+	in.Target = &v1alpha1.Agent{
+		TypeMeta: v1alpha1.TypeMeta{Kind: v1alpha1.KindAgent},
+		Metadata: v1alpha1.ObjectMeta{
+			Namespace: "default",
+			Name:      "assistant",
+		},
+		Spec: v1alpha1.AgentSpec{
+			MCPServers: []v1alpha1.ResourceRef{{Name: "weather"}},
+		},
+	}
+
+	in.Getter = func(context.Context, v1alpha1.ResourceRef) (v1alpha1.Object, error) {
+		return testMCPServer("ghcr.io/example/weather:1.0.0"), nil
+	}
+
+	result, err := DefaultApplyFingerprintResult(context.Background(), in, ApplyFingerprintOptions{AdapterType: "test"})
+	if err != nil {
+		t.Fatalf("DefaultApplyFingerprintResult: %v", err)
+	}
+	if result.Fingerprint == "" {
+		t.Fatalf("fingerprint is empty")
+	}
+	if len(result.Dependencies) != 1 {
+		t.Fatalf("dependencies = %+v, want one MCPServer dependency", result.Dependencies)
+	}
+	dep := result.Dependencies[0]
+	if dep.Kind != v1alpha1.KindMCPServer || dep.Namespace != "default" || dep.Name != "weather" {
+		t.Fatalf("dependency identity mismatch: %+v", dep)
+	}
+	if dep.UID != "mcp-uid" || dep.Generation != 1 {
+		t.Fatalf("dependency version mismatch: %+v", dep)
+	}
+	if dep.MaterialHash == "" {
+		t.Fatalf("dependency material hash is empty: %+v", dep)
+	}
+}
+
 func testApplyInput() ApplyInput {
 	return ApplyInput{
 		Deployment: &v1alpha1.Deployment{
