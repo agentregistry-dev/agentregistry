@@ -1,4 +1,4 @@
-{{- if .Values.database.postgres.bundled.enabled }}
+{{- if eq .Values.database.postgres.type "bundled" }}
 {{- $pg := .Values.database.postgres.bundled }}
 {{- $fullname := include "agentregistry.postgresql.fullname" . }}
 ---

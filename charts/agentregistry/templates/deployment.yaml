@@ -85,7 +85,7 @@ spec:
       topologySpreadConstraints:
         {{- toYaml .Values.topologySpreadConstraints | nindent 8 }}
       {{- end }}
-      {{- if and .Values.database.postgres.bundled.enabled (eq .Values.database.postgres.url "") }}
+      {{- if eq .Values.database.postgres.type "bundled" }}
       initContainers:
         - name: wait-for-postgres
           image: {{ include "agentregistry.postgresql.image" . }}
@@ -134,16 +134,18 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.config.existingSecret | default (include "agentregistry.fullname" .) }}
                   key: AGENT_REGISTRY_JWT_PRIVATE_KEY
-            {{- if .Values.database.postgres.secretRef.name }}
+            {{- if eq .Values.database.postgres.type "external" }}
+            {{- if .Values.database.postgres.external.secretRef.name }}
             - name: AGENT_REGISTRY_DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.database.postgres.secretRef.name }}
-                  key: {{ .Values.database.postgres.secretRef.key | default "AGENT_REGISTRY_DATABASE_URL" }}
-            {{- else if .Values.database.postgres.url }}
+                  name: {{ .Values.database.postgres.external.secretRef.name }}
+                  key: {{ .Values.database.postgres.external.secretRef.key | default "AGENT_REGISTRY_DATABASE_URL" }}
+            {{- else }}
             - name: AGENT_REGISTRY_DATABASE_URL
-              value: {{ .Values.database.postgres.url | quote }}
-            {{- else if .Values.database.postgres.bundled.enabled }}
+              value: {{ .Values.database.postgres.external.url | quote }}
+            {{- end }}
+            {{- else }}
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -151,8 +153,6 @@ spec:
                   key: POSTGRES_PASSWORD
             - name: AGENT_REGISTRY_DATABASE_URL
               value: {{ printf "postgres://agentregistry:$(POSTGRES_PASSWORD)@%s:5432/agentregistry?sslmode=disable" (include "agentregistry.postgresql.fullname" .) | quote }}
-            {{- else }}
-            {{ fail "No database connection configured. Set database.postgres.url, database.postgres.secretRef.name, or enable database.postgres.bundled." }}
             {{- end }}
             {{- if .Values.extraEnvVars }}
             {{- tpl (toYaml .Values.extraEnvVars) . | nindent 12 }}

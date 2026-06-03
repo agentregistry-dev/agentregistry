@@ -319,15 +319,30 @@ Called from templates/validate.yaml so it fires during helm template/install.
 {{- else if and (not .Values.config.existingSecret) (not (regexMatch "^[0-9a-fA-F]+$" .Values.config.jwtPrivateKey)) }}
 {{- $errors = append $errors "config.jwtPrivateKey must be a valid hex string (e.g. generated with: openssl rand -hex 32)." }}
 {{- end }}
-{{- if and .Values.database.postgres.url .Values.database.postgres.secretRef.name }}
-{{- $errors = append $errors "database.postgres.url and database.postgres.secretRef.name are mutually exclusive: set one, not both." }}
+{{- if hasKey .Values.database.postgres "url" }}
+{{- $errors = append $errors "database.postgres.url has moved: set database.postgres.type=external and database.postgres.external.url instead." }}
 {{- end }}
-{{- if and .Values.database.postgres.bundled.enabled .Values.database.postgres.secretRef.name }}
-{{- $errors = append $errors "database.postgres.secretRef.name is mutually exclusive with database.postgres.bundled.enabled=true: set bundled.enabled=false when sourcing the URL from an external Secret." }}
+{{- if hasKey .Values.database.postgres "secretRef" }}
+{{- $errors = append $errors "database.postgres.secretRef has moved: set database.postgres.type=external and database.postgres.external.secretRef.{name,key} instead." }}
 {{- end }}
-{{- if not .Values.database.postgres.bundled.enabled }}
-{{- if and (not .Values.database.postgres.url) (not .Values.database.postgres.secretRef.name) }}
-{{- $errors = append $errors "Either database.postgres.url or database.postgres.secretRef.name must be set when database.postgres.bundled.enabled=false." }}
+{{- if hasKey .Values.database.postgres.bundled "enabled" }}
+{{- $errors = append $errors "database.postgres.bundled.enabled has been removed: use database.postgres.type (bundled|external) instead." }}
+{{- end }}
+{{- $type := .Values.database.postgres.type }}
+{{- if not (has $type (list "bundled" "external")) }}
+{{- $errors = append $errors (printf "database.postgres.type must be \"bundled\" or \"external\" (got %q)." $type) }}
+{{- end }}
+{{- if eq $type "external" }}
+{{- if and .Values.database.postgres.external.url .Values.database.postgres.external.secretRef.name }}
+{{- $errors = append $errors "database.postgres.external.url and database.postgres.external.secretRef.name are mutually exclusive: set one, not both." }}
+{{- end }}
+{{- if and (not .Values.database.postgres.external.url) (not .Values.database.postgres.external.secretRef.name) }}
+{{- $errors = append $errors "database.postgres.type=external requires either database.postgres.external.url or database.postgres.external.secretRef.name to be set." }}
+{{- end }}
+{{- end }}
+{{- if eq $type "bundled" }}
+{{- if or .Values.database.postgres.external.url .Values.database.postgres.external.secretRef.name }}
+{{- $errors = append $errors "database.postgres.external.* is set but ignored because type=bundled. Set type=external to use these fields, or remove them." }}
 {{- end }}
 {{- end }}
 {{- range $errors }}

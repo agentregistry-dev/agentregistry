@@ -3,13 +3,16 @@ package database
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
-	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/database/legacymigrate"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/database/orchestrator"
 )
 
 // PostgreSQL is the root PostgreSQL-backed store. It owns the connection
@@ -21,9 +24,14 @@ type PostgreSQL struct {
 }
 
 // NewPostgreSQL opens a pool against connectionURI, runs the v1alpha1
-// migrations against it, and returns a *PostgreSQL ready for use by the
-// generic v1alpha1 Store.
-func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authorizer) (*PostgreSQL, error) {
+// migrations against it (unless skipMigrations is true), and returns a
+// *PostgreSQL ready for use by the generic v1alpha1 Store.
+//
+// skipMigrations short-circuits the startup migrator entirely. Used
+// when migrations have been applied out-of-band by `arctl db migrate
+// up`. The pool is still parsed, opened, and pinged so a
+// misconfigured DB fails fast.
+func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authorizer, skipMigrations bool) (*PostgreSQL, error) {
 	config, err := pgxpool.ParseConfig(connectionURI)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse PostgreSQL config: %w", err)
@@ -35,6 +43,24 @@ func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authori
 	config.MaxConnIdleTime = 30 * time.Minute
 	config.MaxConnLifetime = 2 * time.Hour
 
+	// Set search_path on every new connection as a sane default for the
+	// OSS schema. The v1alpha1 stores qualify their tables explicitly
+	// (so they're correct regardless of search_path); this SET only
+	// covers any unqualified query that isn't routed through a Store.
+	//
+	// Startup-order invariant: the pool below is created BEFORE
+	// orchestrator.RunUp creates the schema. Postgres accepts
+	// `SET search_path TO <nonexistent>` without error; unqualified
+	// queries against the search_path would fail at query-time. The
+	// Ping below runs no queries, so it's safe. Any future startup
+	// code that runs a query between pool.Ping and orchestrator.RunUp
+	// must either qualify identifiers or be moved past RunUp.
+	ossSchema := database.MustNewSchema(database.OSSSchema)
+	config.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		_, err := conn.Exec(ctx, "SET search_path TO "+ossSchema.Quoted())
+		return err
+	}
+
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create PostgreSQL pool: %w", err)
@@ -44,22 +70,26 @@ func NewPostgreSQL(ctx context.Context, connectionURI string, authz auth.Authori
 		return nil, fmt.Errorf("failed to ping PostgreSQL: %w", err)
 	}
 
-	conn, err := pool.Acquire(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to acquire connection for migrations: %w", err)
+	if skipMigrations {
+		// The gate can fire from AppOptions.SkipMigrations or the
+		// SKIP_MIGRATIONS env — phrase neutrally so operators searching
+		// for either see the line. Echo the schema name so operators
+		// can see what search_path the pool is talking to without
+		// reading the binary's source.
+		slog.Info("skipping startup migrations (SkipMigrations enabled) — schema must already be applied",
+			"schema", database.OSSSchema)
+		return &PostgreSQL{pool: pool, authz: authz}, nil
 	}
-	defer conn.Release()
 
-	v1alpha1Migrator := database.NewMigrator(conn.Conn(), v1alpha1store.MigratorConfig())
-	if err := v1alpha1Migrator.Migrate(ctx); err != nil {
-		return nil, fmt.Errorf("failed to run v1alpha1 migrations: %w", err)
+	if err := orchestrator.RunUp(ctx, connectionURI, []orchestrator.Source{legacymigrate.OSSSource()}); err != nil {
+		return nil, fmt.Errorf("failed to run startup migrations: %w", err)
 	}
 
 	return &PostgreSQL{pool: pool, authz: authz}, nil
 }
 
-// Pool exposes the underlying pgxpool for callers (v1alpha1 Stores,
-// enterprise extensions) that need direct pgx access.
+// Pool exposes the underlying pgxpool for callers that need direct
+// pgx access.
 func (db *PostgreSQL) Pool() *pgxpool.Pool {
 	return db.pool
 }

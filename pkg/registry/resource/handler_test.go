@@ -75,7 +75,7 @@ func TestResourceRegister_AgentCRUD(t *testing.T) {
 	t.Helper()
 
 	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+	store := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
 
 	_, api := humatest.New(t)
 	registerAgent(api, store)
@@ -195,7 +195,7 @@ spec:
 
 func TestResourceRegister_DeleteTaggedPassesTagToAuthorizer(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+	store := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
 	_, err := store.Upsert(t.Context(), &v1alpha1.Agent{
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "alice", Tag: "stable"},
 		Spec:     v1alpha1.AgentSpec{Title: "Stable Alice"},
@@ -227,7 +227,7 @@ func TestResourceRegister_DeleteTaggedPassesTagToAuthorizer(t *testing.T) {
 
 func TestResourceRegister_DeleteAdmissionCanStageTaggedDelete(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+	store := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
 	_, err := store.Upsert(t.Context(), &v1alpha1.Agent{
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "alice", Tag: "stable"},
 		Spec:     v1alpha1.AgentSpec{Title: "Stable Alice"},
@@ -271,7 +271,7 @@ func TestResourceRegister_DeleteAdmissionCanStageTaggedDelete(t *testing.T) {
 
 func TestResourceRegister_AgentNamespaceIsolation(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+	store := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
 
 	_, api := humatest.New(t)
 	registerAgent(api, store)
@@ -330,7 +330,7 @@ spec:
 
 func TestResourceRegister_AgentListCursorPagination(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+	store := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
 
 	_, api := humatest.New(t)
 	registerAgent(api, store)
@@ -381,7 +381,7 @@ spec:
 // contract: every non-deleted tag row for (namespace, name) is returned.
 func TestResourceRegister_AgentListTags(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+	store := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
 
 	_, api := humatest.New(t)
 	registerAgent(api, store)
@@ -425,7 +425,7 @@ func TestResourceRegister_AgentListTags(t *testing.T) {
 
 func TestResourceRegister_AgentListRejectsInvalidCursor(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+	store := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
 
 	_, api := humatest.New(t)
 	registerAgent(api, store)
@@ -441,7 +441,7 @@ func TestResourceRegister_AgentListRejectsInvalidCursor(t *testing.T) {
 // the filtered list returns just the two matches.
 func TestResourceRegister_ListFilter(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+	store := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
 
 	for _, name := range []string{"ok-one", "ok-two", "blocked-three"} {
 		_, err := store.Upsert(t.Context(), &v1alpha1.Agent{
@@ -500,7 +500,7 @@ func TestResourceRegister_ListFilter(t *testing.T) {
 // confirms PUT is excluded.
 func TestResourceRegister_PutNotRegisteredForContentKinds(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+	store := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
 
 	_, api := humatest.New(t)
 	registerAgent(api, store)
@@ -531,7 +531,7 @@ func TestResourceRegister_PutNotRegisteredForContentKinds(t *testing.T) {
 
 func TestResourceRegister_MutableObjectUsesNameOnlyRoute(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewMutableObjectStore(pool, "v1alpha1.runtimes")
+	store := v1alpha1store.NewMutableObjectStore(pool, v1alpha1store.TestSchema(), "runtimes")
 
 	_, api := humatest.New(t)
 	registerProvider(api, store)
@@ -560,8 +560,8 @@ func TestResourceRegister_MutableObjectUsesNameOnlyRoute(t *testing.T) {
 
 func TestResourceRegister_ResolverDetectsDanglingRef(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	agentStore := v1alpha1store.NewStore(pool, "v1alpha1.agents")
-	mcpStore := v1alpha1store.NewStore(pool, "v1alpha1.mcp_servers")
+	agentStore := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
+	mcpStore := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "mcp_servers")
 
 	// Resolver: only MCPServer "tools" in namespace "default" exists.
 	resolver := func(ctx context.Context, ref v1alpha1.ResourceRef) error {
@@ -627,7 +627,7 @@ spec:
 // for every v1alpha1 kind"); fixed at the Store layer.
 func TestResourceRegister_DeleteHardDeletesFinalizerFree(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+	store := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
 
 	_, api := humatest.New(t)
 	registerAgent(api, store)
@@ -682,7 +682,7 @@ spec:
 // reviewer awareness.
 func TestResourceRegister_PostUpsertFailureLeavesPersistedRow(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewStore(pool, "v1alpha1.agents")
+	store := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
 
 	hookCalls := 0
 	hookErr := fmt.Errorf("simulated type-adapter failure")
@@ -761,7 +761,7 @@ spec:
 // namespace/name is already unique.
 func TestResourceRegister_IncludeTerminatingByDefault(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewMutableObjectStore(pool, "v1alpha1.runtimes")
+	store := v1alpha1store.NewMutableObjectStore(pool, v1alpha1store.TestSchema(), "runtimes")
 	const testNamespace = "terminating-test"
 
 	_, api := humatest.New(t)
@@ -835,7 +835,7 @@ func TestResourceRegister_IncludeTerminatingByDefault(t *testing.T) {
 // lookup so retry scripts get a coherent response shape.
 func TestResourceRegister_DeleteIdempotentOnTerminating(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewMutableObjectStore(pool, "v1alpha1.runtimes")
+	store := v1alpha1store.NewMutableObjectStore(pool, v1alpha1store.TestSchema(), "runtimes")
 	const testNamespace = "delete-idempotent"
 
 	_, api := humatest.New(t)

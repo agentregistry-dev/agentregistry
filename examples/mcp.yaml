@@ -11,7 +11,7 @@ spec:
       identifier: localhost:5001/acme/fetch:1.0.0
       runtimeHint: docker                       # optional: hint for local runtime
       transport:
-        type: stdio                             # stdio | sse | streamable-http
+        type: stdio                             # stdio | http
       # Required for every registryType except mcpb. Must match the
       # identity the publisher embedded into the published artifact
       # (e.g. the io.modelcontextprotocol.server.name OCI label, npm mcpName).

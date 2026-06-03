@@ -60,3 +60,9 @@ jobs:
 
     - name: Run Integration Tests
       run: make test
+
+    - name: Run CLI e2e tests
+      # Builds the arctl binary and exercises it as a subprocess.
+      # The no-DB cases run unconditionally; the DB-required cases
+      # connect to the Postgres started by `make run-docker` above.
+      run: make test-cli-e2e

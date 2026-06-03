@@ -44,3 +44,30 @@ func TestNewConfig_RuntimeDirRespectsEnvOverride(t *testing.T) {
 		t.Fatalf("RuntimeDir should be %q when env var is set, got %q", custom, cfg.RuntimeDir)
 	}
 }
+
+func TestNewConfig_SkipMigrationsEnv(t *testing.T) {
+	cases := []struct {
+		name string
+		bare string // value of SKIP_MIGRATIONS; "" means unset
+		want bool
+	}{
+		{"unset", "", false},
+		{"true", "true", true},
+		{"false explicit", "false", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// The prefixed form is no longer supported; setting it must
+			// have no effect on the gate.
+			t.Setenv("AGENT_REGISTRY_SKIP_MIGRATIONS", "true")
+			os.Unsetenv("SKIP_MIGRATIONS")
+			if tc.bare != "" {
+				t.Setenv("SKIP_MIGRATIONS", tc.bare)
+			}
+			cfg := NewConfig()
+			if cfg.SkipMigrations != tc.want {
+				t.Fatalf("SkipMigrations = %v; want %v (bare=%q)", cfg.SkipMigrations, tc.want, tc.bare)
+			}
+		})
+	}
+}
