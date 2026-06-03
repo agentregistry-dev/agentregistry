@@ -225,7 +225,7 @@ Operators can set `rbac.watchedNamespaces` in the Helm values to restrict the re
 1. **Reproducible builds** — Container images are built via multi-stage Dockerfiles with pinned base image versions and deterministic Go module dependencies (`go.sum`).
 2. **Multi-platform support** — Images are built for linux/amd64 and linux/arm64 using Docker Buildx, ensuring consistent builds across architectures.
 3. **Checksums** — Helm chart releases include a `checksums.txt` file alongside the packaged charts and CLI binaries in the GitHub Release.
-4. **Pinned CI dependencies** — GitHub Actions workflows use pinned versions for all actions (e.g., `actions/checkout@v4`, `actions/setup-go@v6`, `golangci/golangci-lint-action@v7`).
+4. **Pinned CI dependencies** — GitHub Actions workflows use pinned versions for all actions (e.g., `actions/checkout@v6`, `actions/setup-go@v6`).
 5. **Go module integrity** — Dependencies are verified against `go.sum` checksums and the Go module proxy/checksum database.
 6. **Minimal permissions in CI** — Release workflows request only the permissions needed (`contents: read/write`, `packages: write`), following the principle of least privilege for GitHub Actions tokens.
 
