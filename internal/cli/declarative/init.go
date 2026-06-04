@@ -57,6 +57,27 @@ func resolveInitProjectPath(cmd *cobra.Command, projectName string) (string, err
 	return abs, nil
 }
 
+// resolveInitTransport finalizes the MCP transport for `arctl init mcp`:
+// uses the explicit --transport flag if set, otherwise picks via the TUI
+// when stdin is a tty, otherwise defaults to "http". Rejects stdio + --port.
+func resolveInitTransport(cmd *cobra.Command, current string) (string, error) {
+	if current == "" {
+		if !isatty() {
+			current = "http"
+		} else {
+			picked, err := runTransportPicker()
+			if err != nil {
+				return "", err
+			}
+			current = picked
+		}
+	}
+	if current == "stdio" && cmd.Flags().Changed("port") {
+		return "", fmt.Errorf("--port is meaningless with --transport stdio")
+	}
+	return current, nil
+}
+
 // displayPath returns the path the user sees in narration. When projectDir
 // is under cwd, returns a short relative path (`outdirbot`). When elsewhere
 // (e.g. via --output-dir to a sibling tree), returns the absolute path.
@@ -710,8 +731,9 @@ Picks a framework + language interactively (or via --framework / --language).`,
 				return err
 			}
 
-			if initTransport == "stdio" && cmd.Flags().Changed("port") {
-				return fmt.Errorf("--port is meaningless with --transport stdio")
+			initTransport, err = resolveInitTransport(cmd, initTransport)
+			if err != nil {
+				return err
 			}
 
 			r, err := loadFrameworkRegistry(projectDir)
@@ -725,21 +747,6 @@ Picks a framework + language interactively (or via --framework / --language).`,
 			})
 			if err != nil {
 				return err
-			}
-
-			if initTransport == "" {
-				if !isatty() {
-					initTransport = "http"
-				} else {
-					picked, perr := runTransportPicker()
-					if perr != nil {
-						return perr
-					}
-					initTransport = picked
-				}
-				if initTransport == "stdio" && cmd.Flags().Changed("port") {
-					return fmt.Errorf("--port is meaningless with --transport stdio")
-				}
 			}
 
 			image := initImage

@@ -164,58 +164,7 @@ func runProject(ctx context.Context, out io.Writer, projectDir string, extraEnv 
 	}
 
 	if frameworkType == "mcp" && cfg.Transport == "stdio" {
-		if !inspector {
-			fmt.Fprintln(out, "→ stdio MCPs need a connected MCP client to be useful; nothing to run standalone.")
-			fmt.Fprintln(out, "  Pass --inspector to attach MCP Inspector via stdio.")
-			return nil
-		}
-		stdioLaunch := p.Launch
-		if p.LocalLaunch != nil && p.LocalLaunch.Stdio != nil {
-			stdioLaunch = p.LocalLaunch
-		}
-		if stdioLaunch == nil || stdioLaunch.Stdio == nil {
-			return fmt.Errorf("framework %s/%s has no launch.stdio block; cannot run stdio MCP locally", p.Framework, p.Language)
-		}
-		binCmd, binArgs, err := stdioLaunch.Stdio.Render(0)
-		if err != nil {
-			return fmt.Errorf("render stdio launch: %w", err)
-		}
-		if !dryRun {
-			if _, lookErr := exec.LookPath(binCmd); lookErr != nil {
-				return fmt.Errorf("launch command %q not found on PATH; install it before `arctl run`", binCmd)
-			}
-		}
-		dotEnv, err := LoadDotEnv(projectDir)
-		if err != nil {
-			return err
-		}
-		envv := mergeEnv(dotEnv, extraEnv)
-		if p.LocalInstall != nil && (len(p.LocalInstall.Command) > 0 || p.LocalInstall.Script != "") {
-			installVars := map[string]any{
-				"ProjectDir":   projectDir,
-				"FrameworkDir": p.SourceDir,
-			}
-			installRendered, ierr := frameworks.RenderArgs(p.LocalInstall.Command, installVars)
-			if ierr != nil {
-				return fmt.Errorf("render localInstall command: %w", ierr)
-			}
-			fmt.Fprintf(out, "→ %s (install deps): %s\n", p.Name, strings.Join(installRendered, " "))
-			if !dryRun {
-				if err := frameworks.ExecForeground(*p.LocalInstall, projectDir, installVars, envv); err != nil {
-					return fmt.Errorf("framework localInstall: %w", err)
-				}
-			}
-		}
-		fmt.Fprintf(out, "→ MCP Inspector (stdio) → %s %s\n", binCmd, strings.Join(binArgs, " "))
-		if dryRun {
-			fmt.Fprintln(out, "(dry-run; skipping exec)")
-			return nil
-		}
-		insCmd, err := inspectorpkg.LaunchStdio(ctx, projectDir, envv, binCmd, binArgs...)
-		if err != nil {
-			return err
-		}
-		return insCmd.Wait()
+		return runStdioMCP(ctx, out, p, projectDir, inspector, dryRun, extraEnv)
 	}
 
 	name := filepath.Base(projectDir)
@@ -474,6 +423,77 @@ func mergeEnv(dotEnv map[string]string, overrides []string) []string {
 	}
 	out = append(out, overrides...)
 	return out
+}
+
+// runStdioMCP runs an MCP project's stdio transport locally under MCP
+// Inspector. Resolves LocalLaunch.Stdio (falling back to Launch.Stdio),
+// preflights the binary on PATH, runs LocalInstall if declared, then
+// hands off to the inspector subprocess.
+func runStdioMCP(ctx context.Context, out io.Writer, p *frameworks.Framework, projectDir string, inspector, dryRun bool, extraEnv []string) error {
+	if !inspector {
+		fmt.Fprintln(out, "→ stdio MCPs need a connected MCP client to be useful; nothing to run standalone.")
+		fmt.Fprintln(out, "  Pass --inspector to attach MCP Inspector via stdio.")
+		return nil
+	}
+	stdioLaunch := p.Launch
+	if p.LocalLaunch != nil && p.LocalLaunch.Stdio != nil {
+		stdioLaunch = p.LocalLaunch
+	}
+	if stdioLaunch == nil || stdioLaunch.Stdio == nil {
+		return fmt.Errorf("framework %s/%s has no launch.stdio block; cannot run stdio MCP locally", p.Framework, p.Language)
+	}
+	binCmd, binArgs, err := stdioLaunch.Stdio.Render(0)
+	if err != nil {
+		return fmt.Errorf("render stdio launch: %w", err)
+	}
+	if !dryRun {
+		if _, lookErr := exec.LookPath(binCmd); lookErr != nil {
+			return fmt.Errorf("launch command %q not found on PATH; install it before `arctl run`", binCmd)
+		}
+	}
+	dotEnv, err := LoadDotEnv(projectDir)
+	if err != nil {
+		return err
+	}
+	envv := mergeEnv(dotEnv, extraEnv)
+	if err := runLocalInstall(out, p, projectDir, envv, dryRun); err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "→ MCP Inspector (stdio) → %s %s\n", binCmd, strings.Join(binArgs, " "))
+	if dryRun {
+		fmt.Fprintln(out, "(dry-run; skipping exec)")
+		return nil
+	}
+	insCmd, err := inspectorpkg.LaunchStdio(ctx, projectDir, envv, binCmd, binArgs...)
+	if err != nil {
+		return err
+	}
+	return insCmd.Wait()
+}
+
+// runLocalInstall executes the framework's LocalInstall step (e.g. `uv
+// sync`, `go mod tidy`) in projectDir. No-op when LocalInstall is unset or
+// has neither command nor script.
+func runLocalInstall(out io.Writer, p *frameworks.Framework, projectDir string, envv []string, dryRun bool) error {
+	if p.LocalInstall == nil || (len(p.LocalInstall.Command) == 0 && p.LocalInstall.Script == "") {
+		return nil
+	}
+	installVars := map[string]any{
+		"ProjectDir":   projectDir,
+		"FrameworkDir": p.SourceDir,
+	}
+	installRendered, err := frameworks.RenderArgs(p.LocalInstall.Command, installVars)
+	if err != nil {
+		return fmt.Errorf("render localInstall command: %w", err)
+	}
+	fmt.Fprintf(out, "→ %s (install deps): %s\n", p.Name, strings.Join(installRendered, " "))
+	if dryRun {
+		return nil
+	}
+	if err := frameworks.ExecForeground(*p.LocalInstall, projectDir, installVars, envv); err != nil {
+		return fmt.Errorf("framework localInstall: %w", err)
+	}
+	return nil
 }
 
 // loadRemoteOnlyMCP returns (Remote, name) when projectDir's mcp.yaml has
