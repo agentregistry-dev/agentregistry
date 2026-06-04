@@ -21,6 +21,21 @@ launch:
     args:
       - "-http"
       - ":{{.Port}}"
+localLaunch:
+  stdio:
+    command: go
+    args:
+      - run
+      - ./cmd/server
+  http:
+    command: go
+    args:
+      - run
+      - ./cmd/server
+      - "-http"
+      - ":{{.Port}}"
+localInstall:
+  command: ["go", "mod", "tidy"]
 build:
   command: ["docker", "build", "{{if .Platform}}--platform={{.Platform}}{{end}}", "-t", "{{.Image}}", "{{.ProjectDir}}"]
 run:
