@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -231,7 +232,7 @@ func TestE2E_RunWatch_RebuildsOnFileChange(t *testing.T) {
 	for time.Now().Before(deadline) {
 		stdout.Read(buf)
 		got += string(buf)
-		if assert.ObjectsAreEqual(true, contains(got, "Change detected")) {
+		if strings.Contains(got, "Change detected") {
 			return
 		}
 	}
@@ -325,15 +326,4 @@ spec:
 	assert.Contains(t, combined, "remote MCPServer")
 	assert.Contains(t, combined, "npx -y @modelcontextprotocol/inspector")
 	assert.Contains(t, combined, "https://example.test/mcp")
-}
-
-func contains(s, sub string) bool {
-	return len(s) >= len(sub) && (s == sub || (func() bool {
-		for i := 0; i+len(sub) <= len(s); i++ {
-			if s[i:i+len(sub)] == sub {
-				return true
-			}
-		}
-		return false
-	}()))
 }

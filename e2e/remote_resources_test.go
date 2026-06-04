@@ -7,19 +7,8 @@ package e2e
 
 import (
 	"fmt"
-	"net/http"
 	"testing"
 )
-
-// verifyMCPServerExists checks that the MCPServer exists in the registry via HTTP GET.
-func verifyMCPServerExists(t *testing.T, regURL, name, tag string) {
-	t.Helper()
-	resp := RegistryGet(t, resourceURL(regURL, "mcpservers", name, tag))
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("Expected MCPServer %s@%s to exist (HTTP 200) but got %d", name, tag, resp.StatusCode)
-	}
-}
 
 // TestDeclarativeApply_RemoteMCPServer covers apply → get → delete for a
 // remote MCPServer (Spec.Remote set). Verifies the row is created and is
@@ -55,7 +44,7 @@ spec:
 	RequireSuccess(t, result)
 	RequireOutputContains(t, result, "MCPServer/"+name)
 
-	verifyMCPServerExists(t, regURL, name, tag)
+	verifyServerExists(t, regURL, name, tag)
 }
 
 // TestDeclarativeApply_AgentReferencesRemoteMCPServer covers an Agent
@@ -112,6 +101,6 @@ spec:
 	RequireOutputContains(t, result, "MCPServer/"+remoteName)
 	RequireOutputContains(t, result, "Agent/"+agentName)
 
-	verifyMCPServerExists(t, regURL, remoteName, tag)
+	verifyServerExists(t, regURL, remoteName, tag)
 	verifyAgentExists(t, regURL, agentName, tag)
 }
