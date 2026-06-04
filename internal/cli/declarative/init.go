@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 	"sigs.k8s.io/yaml"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/buildconfig"
@@ -591,11 +592,7 @@ func loadFrameworkRegistry(projectRoot string) (*frameworks.Registry, error) {
 }
 
 func isatty() bool {
-	fi, err := os.Stdin.Stat()
-	if err != nil {
-		return false
-	}
-	return (fi.Mode() & os.ModeCharDevice) != 0
+	return term.IsTerminal(int(os.Stdin.Fd()))
 }
 
 // parseNameVersion splits "name@version" into (name, version).
