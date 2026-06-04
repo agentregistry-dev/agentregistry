@@ -59,19 +59,11 @@ func resolveInitProjectPath(cmd *cobra.Command, projectName string) (string, err
 }
 
 // resolveInitTransport finalizes the MCP transport for `arctl init mcp`:
-// uses the explicit --transport flag if set, otherwise picks via the TUI
-// when stdin is a tty, otherwise defaults to "http". Rejects stdio + --port.
+// uses the explicit --transport flag if set, otherwise defaults to "http".
+// Rejects stdio + --port.
 func resolveInitTransport(cmd *cobra.Command, current string) (string, error) {
 	if current == "" {
-		if !isatty() {
-			current = "http"
-		} else {
-			picked, err := runTransportPicker()
-			if err != nil {
-				return "", err
-			}
-			current = picked
-		}
+		current = "http"
 	}
 	if current == "stdio" && cmd.Flags().Changed("port") {
 		return "", fmt.Errorf("--port is meaningless with --transport stdio")
