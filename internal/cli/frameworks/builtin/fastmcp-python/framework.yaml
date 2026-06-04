@@ -15,7 +15,10 @@ env:
 launch:
   stdio:
     command: python3
-    args: [src/main.py]
+    args:
+      - src/main.py
+      - "--transport"
+      - "stdio"
   http:
     command: python3
     args:
@@ -29,7 +32,12 @@ launch:
 localLaunch:
   stdio:
     command: uv
-    args: [run, python, src/main.py]
+    args:
+      - run
+      - python
+      - src/main.py
+      - "--transport"
+      - "stdio"
   http:
     command: uv
     args:

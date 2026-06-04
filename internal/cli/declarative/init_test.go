@@ -279,10 +279,14 @@ func TestInitMCP_StdioTransport_WritesLaunchFromFramework(t *testing.T) {
 
 	args, ok := launch["args"].([]any)
 	require.True(t, ok, "launch.args must be a list")
-	require.Len(t, args, 1)
-	first := args[0].(map[string]any)
-	assert.Equal(t, "positional", first["type"])
-	assert.Equal(t, "src/main.py", first["value"])
+	require.Len(t, args, 3)
+	values := make([]string, 0, len(args))
+	for _, a := range args {
+		entry := a.(map[string]any)
+		assert.Equal(t, "positional", entry["type"])
+		values = append(values, entry["value"].(string))
+	}
+	assert.Equal(t, []string{"src/main.py", "--transport", "stdio"}, values)
 }
 
 // TestInitMCP_HTTPTransport_WritesLaunchFromFramework asserts that http

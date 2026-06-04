@@ -114,7 +114,7 @@ func TestParseDescriptor_BuiltinFastMCP_HasLaunchDefaults(t *testing.T) {
 	require.NotNil(t, fw.Launch)
 	require.NotNil(t, fw.Launch.Stdio)
 	assert.Equal(t, "python3", fw.Launch.Stdio.Command)
-	assert.Equal(t, []string{"src/main.py"}, fw.Launch.Stdio.Args)
+	assert.Equal(t, []string{"src/main.py", "--transport", "stdio"}, fw.Launch.Stdio.Args)
 
 	require.NotNil(t, fw.Launch.HTTP)
 	assert.Equal(t, "python3", fw.Launch.HTTP.Command)
