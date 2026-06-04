@@ -145,7 +145,7 @@ func TestInitMCP_RejectsNonDNSSubdomainName(t *testing.T) {
 	defer func() { _ = os.Chdir(origDir) }()
 
 	cmd := declarative.NewInitCmd()
-	cmd.SetArgs([]string{"mcp", "acme/my-mcp", "--framework", "fastmcp", "--language", "python"})
+	cmd.SetArgs([]string{"mcp", "acme/my-mcp", "--framework", "fastmcp", "--language", "python", "--transport", "http"})
 	require.Error(t, cmd.Execute())
 }
 
@@ -157,7 +157,7 @@ func TestInitMCP_WritesYAMLAndArctl(t *testing.T) {
 	defer func() { _ = os.Chdir(origDir) }()
 
 	cmd := declarative.NewInitCmd()
-	cmd.SetArgs([]string{"mcp", "my-mcp", "--framework", "fastmcp", "--language", "python"})
+	cmd.SetArgs([]string{"mcp", "my-mcp", "--framework", "fastmcp", "--language", "python", "--transport", "http"})
 	require.NoError(t, cmd.Execute())
 
 	projectDir := filepath.Join(tmp, "my-mcp")
@@ -275,7 +275,7 @@ func TestInitMCP_StdioTransport_WritesLaunchFromFramework(t *testing.T) {
 
 	launch, ok := pkg["launch"].(map[string]any)
 	require.True(t, ok, "stdio transport must scaffold spec.source.package.launch")
-	assert.Equal(t, "python", launch["command"])
+	assert.Equal(t, "python3", launch["command"])
 
 	args, ok := launch["args"].([]any)
 	require.True(t, ok, "launch.args must be a list")
@@ -301,6 +301,7 @@ func TestInitMCP_HTTPTransport_WritesLaunchFromFramework(t *testing.T) {
 	cmd.SetArgs([]string{
 		"mcp", "my-http-mcp",
 		"--framework", "fastmcp", "--language", "python",
+		"--transport", "http",
 		"--port", "4321",
 	})
 	require.NoError(t, cmd.Execute())
@@ -311,7 +312,7 @@ func TestInitMCP_HTTPTransport_WritesLaunchFromFramework(t *testing.T) {
 
 	launch, ok := pkg["launch"].(map[string]any)
 	require.True(t, ok, "http transport must scaffold spec.source.package.launch")
-	assert.Equal(t, "python", launch["command"])
+	assert.Equal(t, "python3", launch["command"])
 
 	args, ok := launch["args"].([]any)
 	require.True(t, ok, "launch.args must be a list")

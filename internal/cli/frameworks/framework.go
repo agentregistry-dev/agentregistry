@@ -22,13 +22,17 @@ type Framework struct {
 	Env          EnvSpec `yaml:"env,omitempty"`
 	Build        Command `yaml:"build,omitempty"`
 	Run          Command `yaml:"run,omitempty"`
+	// LocalInstall runs before stdio `arctl run`. nil = no preflight.
+	LocalInstall *Command `yaml:"localInstall,omitempty"`
 
 	// Launch declares per-transport exec defaults for projects scaffolded
 	// from this framework. arctl init writes the block matching the
 	// requested --transport into the scaffolded mcp.yaml's
-	// spec.source.package.launch, so the runtime has a non-empty exec
-	// spec at deploy time for both stdio and http.
+	// spec.source.package.launch.
 	Launch *FrameworkLaunch `yaml:"launch,omitempty" json:"launch,omitempty"`
+
+	// LocalLaunch overrides Launch for `arctl run` only. nil falls back to Launch.
+	LocalLaunch *FrameworkLaunch `yaml:"localLaunch,omitempty" json:"localLaunch,omitempty"`
 
 	// SourceDir is the on-disk root of this framework (its framework.yaml's directory).
 	// Set by the loader, not in YAML.
@@ -137,6 +141,10 @@ func ParseDescriptor(data []byte) (*Framework, error) {
 	if p.Launch != nil && p.Launch.Stdio == nil && p.Launch.HTTP == nil {
 		return nil, fmt.Errorf("framework %q: launch must declare at least one of launch.stdio or launch.http "+
 			"(the legacy single-block shape `launch: {command, args}` is no longer supported)", p.Name)
+	}
+	if p.LocalLaunch != nil && p.LocalLaunch.Stdio == nil && p.LocalLaunch.HTTP == nil {
+		return nil, fmt.Errorf("framework %q: localLaunch must declare at least one of localLaunch.stdio or localLaunch.http "+
+			"(omit the localLaunch block entirely to fall back to launch)", p.Name)
 	}
 	return &p, nil
 }

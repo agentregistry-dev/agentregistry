@@ -83,6 +83,25 @@ launch:
 	assert.Contains(t, err.Error(), "launch.stdio or launch.http")
 }
 
+// TestParseDescriptor_RejectsEmptyLocalLaunch asserts a localLaunch block
+// with neither stdio nor http set is rejected so the error points at the
+// real culprit, not a downstream "no launch.stdio block" message.
+func TestParseDescriptor_RejectsEmptyLocalLaunch(t *testing.T) {
+	yaml := []byte(`apiVersion: arctl.dev/v1
+name: foo
+type: mcp
+framework: foo
+language: go
+launch:
+  stdio:
+    command: /app/server
+localLaunch: {}
+`)
+	_, err := ParseDescriptor(yaml)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "localLaunch.stdio or localLaunch.http")
+}
+
 // TestParseDescriptor_BuiltinFastMCP_HasLaunchDefaults loads the
 // vendored fastmcp-python framework.yaml and asserts both stdio and http
 // launch defaults are populated so arctl init can emit the right block
@@ -94,11 +113,11 @@ func TestParseDescriptor_BuiltinFastMCP_HasLaunchDefaults(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, fw.Launch)
 	require.NotNil(t, fw.Launch.Stdio)
-	assert.Equal(t, "python", fw.Launch.Stdio.Command)
+	assert.Equal(t, "python3", fw.Launch.Stdio.Command)
 	assert.Equal(t, []string{"src/main.py"}, fw.Launch.Stdio.Args)
 
 	require.NotNil(t, fw.Launch.HTTP)
-	assert.Equal(t, "python", fw.Launch.HTTP.Command)
+	assert.Equal(t, "python3", fw.Launch.HTTP.Command)
 	assert.Equal(t, []string{
 		"src/main.py", "--transport", "http", "--host", "0.0.0.0", "--port", "{{.Port}}",
 	}, fw.Launch.HTTP.Args)

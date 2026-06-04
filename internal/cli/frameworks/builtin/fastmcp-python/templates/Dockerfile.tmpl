@@ -60,11 +60,11 @@ EXPOSE 8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import src.main; print('healthy')"
+    CMD python3 -c "import src.main; print('healthy')"
 
 # Set environment variables
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 ENV OTEL_SERVICE_NAME={{.ProjectName}}
 
-ENTRYPOINT ["python", "src/main.py"]
+ENTRYPOINT ["python3", "src/main.py"]

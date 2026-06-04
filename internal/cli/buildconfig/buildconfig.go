@@ -23,6 +23,10 @@ type Config struct {
 	// Port is set for MCPServer projects to expose HTTP transport. arctl run
 	// maps it to the host and the MCP runtime binds 0.0.0.0:<port>.
 	Port int `yaml:"port,omitempty"`
+	// Transport identifies the MCP transport for MCPServer projects:
+	// "http" or "stdio". Empty for agent projects; empty on MCPServer is
+	// treated as "http" for back-compat.
+	Transport string `yaml:"transport,omitempty"`
 }
 
 // Path returns the canonical arctl.yaml path under projectDir.

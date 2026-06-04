@@ -17,6 +17,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/buildconfig"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative/chat"
+	inspectorpkg "github.com/agentregistry-dev/agentregistry/internal/cli/declarative/inspector"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/frameworks"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
@@ -70,7 +71,8 @@ that the framework's required env vars are set.`,
 			if err != nil {
 				return err
 			}
-			return runProject(cmd.Context(), cmd.OutOrStdout(), dir, extraEnv, dryRun, watch, noChat, inspector)
+			inspectorExplicit := cmd.Flags().Changed("inspector")
+			return runProject(cmd.Context(), cmd.OutOrStdout(), dir, extraEnv, dryRun, watch, noChat, inspector, inspectorExplicit)
 		},
 	}
 	cmd.Flags().StringArrayVarP(&extraEnv, "env", "e", nil, "KEY=VALUE env override")
@@ -102,7 +104,7 @@ func resolveProjectDir(args []string) (string, error) {
 	return abs, nil
 }
 
-func runProject(ctx context.Context, out io.Writer, projectDir string, extraEnv []string, dryRun, watch, noChat, inspector bool) error {
+func runProject(ctx context.Context, out io.Writer, projectDir string, extraEnv []string, dryRun, watch, noChat, inspector, inspectorExplicit bool) error {
 	cfg, err := buildconfig.Read(projectDir)
 	if err != nil {
 		return err
@@ -154,6 +156,66 @@ func runProject(ctx context.Context, out io.Writer, projectDir string, extraEnv 
 	}
 	if noChat && frameworkType == "mcp" {
 		return fmt.Errorf("--no-chat is only valid for agent projects; this is an MCP project (MCPs do not open a chat)")
+	}
+
+	// Default --inspector=true for stdio MCPs (stdio needs a connected client).
+	if frameworkType == "mcp" && !inspectorExplicit && cfg.Transport == "stdio" {
+		inspector = true
+	}
+
+	if frameworkType == "mcp" && cfg.Transport == "stdio" {
+		if !inspector {
+			fmt.Fprintln(out, "→ stdio MCPs need a connected MCP client to be useful; nothing to run standalone.")
+			fmt.Fprintln(out, "  Pass --inspector to attach MCP Inspector via stdio.")
+			return nil
+		}
+		stdioLaunch := p.Launch
+		if p.LocalLaunch != nil && p.LocalLaunch.Stdio != nil {
+			stdioLaunch = p.LocalLaunch
+		}
+		if stdioLaunch == nil || stdioLaunch.Stdio == nil {
+			return fmt.Errorf("framework %s/%s has no launch.stdio block; cannot run stdio MCP locally", p.Framework, p.Language)
+		}
+		binCmd, binArgs, err := stdioLaunch.Stdio.Render(0)
+		if err != nil {
+			return fmt.Errorf("render stdio launch: %w", err)
+		}
+		if !dryRun {
+			if _, lookErr := exec.LookPath(binCmd); lookErr != nil {
+				return fmt.Errorf("launch command %q not found on PATH; install it before `arctl run`", binCmd)
+			}
+		}
+		dotEnv, err := LoadDotEnv(projectDir)
+		if err != nil {
+			return err
+		}
+		envv := mergeEnv(dotEnv, extraEnv)
+		if p.LocalInstall != nil && (len(p.LocalInstall.Command) > 0 || p.LocalInstall.Script != "") {
+			installVars := map[string]any{
+				"ProjectDir":   projectDir,
+				"FrameworkDir": p.SourceDir,
+			}
+			installRendered, ierr := frameworks.RenderArgs(p.LocalInstall.Command, installVars)
+			if ierr != nil {
+				return fmt.Errorf("render localInstall command: %w", ierr)
+			}
+			fmt.Fprintf(out, "→ %s (install deps): %s\n", p.Name, strings.Join(installRendered, " "))
+			if !dryRun {
+				if err := frameworks.ExecForeground(*p.LocalInstall, projectDir, installVars, envv); err != nil {
+					return fmt.Errorf("framework localInstall: %w", err)
+				}
+			}
+		}
+		fmt.Fprintf(out, "→ MCP Inspector (stdio) → %s %s\n", binCmd, strings.Join(binArgs, " "))
+		if dryRun {
+			fmt.Fprintln(out, "(dry-run; skipping exec)")
+			return nil
+		}
+		insCmd, err := inspectorpkg.LaunchStdio(ctx, projectDir, envv, binCmd, binArgs...)
+		if err != nil {
+			return err
+		}
+		return insCmd.Wait()
 	}
 
 	name := filepath.Base(projectDir)
