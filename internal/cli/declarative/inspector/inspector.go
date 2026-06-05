@@ -44,7 +44,9 @@ func launchWith(ctx context.Context, serverURL string, makeCmd commandFactory, s
 }
 
 func launchStdioWith(ctx context.Context, dir string, extraEnv []string, binCmd string, binArgs []string, makeCmd commandFactory, start starter) (*exec.Cmd, error) {
-	args := append([]string{"-y", "@modelcontextprotocol/inspector", binCmd}, binArgs...)
+	// `--` keeps commander.js inside the inspector from consuming server-side
+	// flags like `--transport stdio` that overlap with the inspector's own CLI.
+	args := append([]string{"-y", "@modelcontextprotocol/inspector", "--", binCmd}, binArgs...)
 	cmd := makeCmd(ctx, "npx", args...)
 	cmd.Dir = dir
 	if len(extraEnv) > 0 {
