@@ -510,8 +510,16 @@ func TestMCPServerValidate_OpenAPI_RejectsURLWithPathQueryOrScheme(t *testing.T)
 		"url with a query must fail")
 	require.Contains(t, failedFields(t, mcpOpenAPIServer("ftp://host", validOpenAPISchema).Validate()), "spec.openapi.url",
 		"non-http(s) scheme must fail")
+	require.Contains(t, failedFields(t, mcpOpenAPIServer("http://:8080", validOpenAPISchema).Validate()), "spec.openapi.url",
+		"a port with no host must fail")
+	require.Contains(t, failedFields(t, mcpOpenAPIServer("http://user:pass@host", validOpenAPISchema).Validate()), "spec.openapi.url",
+		"userinfo must fail")
 	require.NotContains(t, failedFields(t, mcpOpenAPIServer("http://host:8080/", validOpenAPISchema).Validate()), "spec.openapi.url",
 		"a bare trailing slash is allowed")
+	require.NotContains(t, failedFields(t, mcpOpenAPIServer("https://host", validOpenAPISchema).Validate()), "spec.openapi.url",
+		"a host without a port is allowed")
+	require.NotContains(t, failedFields(t, mcpOpenAPIServer("https://host:8443", validOpenAPISchema).Validate()), "spec.openapi.url",
+		"a host with a port is allowed")
 }
 
 func TestMCPServerValidate_OpenAPI_RejectsBadSchema(t *testing.T) {
@@ -519,6 +527,12 @@ func TestMCPServerValidate_OpenAPI_RejectsBadSchema(t *testing.T) {
 		"non-JSON schema must fail")
 	require.Contains(t, failedFields(t, mcpOpenAPIServer("https://host", `{"paths":{}}`).Validate()), "spec.openapi.schema",
 		"JSON without a top-level openapi field must fail")
+	require.Contains(t, failedFields(t, mcpOpenAPIServer("https://host", `{"openapi":3}`).Validate()), "spec.openapi.schema",
+		"a non-string openapi field must fail")
+	require.Contains(t, failedFields(t, mcpOpenAPIServer("https://host", `{"openapi":"2.0"}`).Validate()), "spec.openapi.schema",
+		"a non-3.x openapi version must fail")
+	require.NotContains(t, failedFields(t, mcpOpenAPIServer("https://host", `{"openapi":"3.1.0"}`).Validate()), "spec.openapi.schema",
+		"an OpenAPI 3.1 document is allowed")
 }
 
 func TestMCPServerValidate_OpenAPI_MutuallyExclusive(t *testing.T) {

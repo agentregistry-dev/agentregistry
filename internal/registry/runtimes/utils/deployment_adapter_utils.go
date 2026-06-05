@@ -56,8 +56,10 @@ type MCPServerRunRequest struct {
 
 // TranslateMCPServer maps a v1alpha1 MCPServerSpec onto the platform-internal
 // MCPServer. Dispatches on Spec.Source (bundled → local transport) vs
-// Spec.Remote (pre-running → remote transport). Validation enforces exactly
-// one of the two is set.
+// Spec.Remote (pre-running → remote transport). Spec.OpenAPI servers are
+// surfaced as MCP by the platform serving the registry and have no runtime
+// target, so they are rejected here. Validation enforces exactly one of
+// source/remote/openapi is set.
 func TranslateMCPServer(ctx context.Context, req *MCPServerRunRequest) (*runtimetypes.MCPServer, error) {
 	if req == nil {
 		return nil, fmt.Errorf("mcp server run request is required")
