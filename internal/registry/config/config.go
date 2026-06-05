@@ -43,6 +43,9 @@ type Config struct {
 	// ControllerRetentionPruneBatchLimit caps rows removed per retention pass so
 	// pruning cannot monopolize the database during startup or repair loops.
 	ControllerRetentionPruneBatchLimit int `env:"CONTROLLER_RETENTION_PRUNE_BATCH_LIMIT" envDefault:"500"`
+	// ControllerSourceCheckInterval is the status-only polling cadence for
+	// Deployment source revisions. It never triggers an automatic redeploy.
+	ControllerSourceCheckInterval time.Duration `env:"CONTROLLER_SOURCE_CHECK_INTERVAL" envDefault:"5m"`
 
 	// SkipMigrations gates the server's Postgres migrator at startup.
 	// Set true when migrations are applied out-of-band (e.g. by

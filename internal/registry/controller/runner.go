@@ -22,6 +22,7 @@ const (
 	// handle normal event-driven scheduling; the minute tick bounds missed
 	// notifications and retention-gap recovery without constantly scanning.
 	defaultControllerResyncInterval = time.Minute
+	defaultSourceCheckInterval      = 5 * time.Minute
 	// defaultWakeupReconnectDelay backs off LISTEN reconnects after transient DB
 	// connection failures so the controller does not hot-loop.
 	defaultWakeupReconnectDelay = 5 * time.Second
@@ -35,7 +36,8 @@ type ControllerHandle struct {
 
 // ControllerConfig controls optional controller maintenance loops.
 type ControllerConfig struct {
-	Retention RetentionPolicy
+	Retention           RetentionPolicy
+	SourceCheckInterval time.Duration
 }
 
 // StartDeploymentController constructs the Deployment controller, runs the
@@ -84,6 +86,17 @@ func StartDeploymentController(
 		go func() {
 			if err := retention.Run(ctx, defaultRetentionPruneInterval); err != nil && !errors.Is(err, context.Canceled) {
 				logger.Error("deployment controller retention pruner stopped", "error", err)
+			}
+		}()
+	}
+	sourceCheckInterval := config.SourceCheckInterval
+	if sourceCheckInterval == 0 {
+		sourceCheckInterval = defaultSourceCheckInterval
+	}
+	if sourceCheckInterval > 0 {
+		go func() {
+			if err := controller.RunSourceMonitor(ctx, sourceCheckInterval); err != nil && !errors.Is(err, context.Canceled) {
+				logger.Error("deployment source monitor stopped", "error", err)
 			}
 		}()
 	}

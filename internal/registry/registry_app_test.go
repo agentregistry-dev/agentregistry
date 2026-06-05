@@ -15,6 +15,7 @@ func TestDeploymentControllerConfigMapsRetentionSettings(t *testing.T) {
 		ControllerEventRetention:           2 * time.Hour,
 		ControllerEventKeepAfterRevision:   42,
 		ControllerRetentionPruneBatchLimit: 17,
+		ControllerSourceCheckInterval:      3 * time.Minute,
 	}
 
 	got := deploymentControllerConfig(cfg)
@@ -22,6 +23,7 @@ func TestDeploymentControllerConfigMapsRetentionSettings(t *testing.T) {
 	require.Equal(t, 2*time.Hour, got.Retention.ControlPlaneEvents)
 	require.Equal(t, int64(42), got.Retention.EventKeepAfterRev)
 	require.Equal(t, 17, got.Retention.BatchLimit)
+	require.Equal(t, 3*time.Minute, got.SourceCheckInterval)
 }
 
 func TestBuildStoresAddsExtraStoreTables(t *testing.T) {

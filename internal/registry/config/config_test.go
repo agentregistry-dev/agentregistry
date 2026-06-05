@@ -51,6 +51,7 @@ func TestNewConfig_ControllerRetentionEnv(t *testing.T) {
 	t.Setenv("AGENT_REGISTRY_CONTROLLER_EVENT_RETENTION", "2h")
 	t.Setenv("AGENT_REGISTRY_CONTROLLER_EVENT_KEEP_AFTER_REVISION", "42")
 	t.Setenv("AGENT_REGISTRY_CONTROLLER_RETENTION_PRUNE_BATCH_LIMIT", "17")
+	t.Setenv("AGENT_REGISTRY_CONTROLLER_SOURCE_CHECK_INTERVAL", "3m")
 
 	cfg := NewConfig()
 
@@ -62,6 +63,9 @@ func TestNewConfig_ControllerRetentionEnv(t *testing.T) {
 	}
 	if cfg.ControllerRetentionPruneBatchLimit != 17 {
 		t.Fatalf("prune batch limit = %d, want 17", cfg.ControllerRetentionPruneBatchLimit)
+	}
+	if cfg.ControllerSourceCheckInterval != 3*time.Minute {
+		t.Fatalf("source check interval = %s, want 3m", cfg.ControllerSourceCheckInterval)
 	}
 }
 

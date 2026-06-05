@@ -246,6 +246,7 @@ func buildStores(pool *pgxpool.Pool, extraStoreTables map[string]string, mutable
 
 func deploymentControllerConfig(cfg *config.Config) controller.ControllerConfig {
 	return controller.ControllerConfig{
+		SourceCheckInterval: cfg.ControllerSourceCheckInterval,
 		Retention: controller.RetentionPolicy{
 			ControlPlaneEvents: cfg.ControllerEventRetention,
 			EventKeepAfterRev:  cfg.ControllerEventKeepAfterRevision,

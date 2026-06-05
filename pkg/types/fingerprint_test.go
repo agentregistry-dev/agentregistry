@@ -64,6 +64,26 @@ func TestDefaultApplyFingerprintIncludesAgentMCPServerDependency(t *testing.T) {
 	}
 }
 
+func TestDefaultApplyFingerprintDoesNotResolveMutableGitBranch(t *testing.T) {
+	in := testApplyInput()
+	in.Deployment.Spec.RuntimeConfig = map[string]any{
+		"gitRepoUrl": "https://github.com/example/weather-agent",
+		"gitBranch":  "main",
+	}
+
+	first, err := DefaultApplyFingerprint(context.Background(), in, ApplyFingerprintOptions{AdapterType: "test"})
+	if err != nil {
+		t.Fatalf("DefaultApplyFingerprint: %v", err)
+	}
+	second, err := DefaultApplyFingerprint(context.Background(), in, ApplyFingerprintOptions{AdapterType: "test"})
+	if err != nil {
+		t.Fatalf("DefaultApplyFingerprint after remote branch movement: %v", err)
+	}
+	if second != first {
+		t.Fatalf("fingerprint changed for the same mutable git branch spec: %s != %s", second, first)
+	}
+}
+
 func testApplyInput() ApplyInput {
 	return ApplyInput{
 		Deployment: &v1alpha1.Deployment{

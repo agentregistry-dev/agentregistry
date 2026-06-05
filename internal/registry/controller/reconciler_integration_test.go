@@ -151,6 +151,50 @@ func TestDeploymentController_ForceAnnotationBypassesUnchangedApplyOnce(t *testi
 	require.Equal(t, "manual-1", details.LastForceToken)
 }
 
+func TestDeploymentController_SourceMonitorReportsChangedWithoutApply(t *testing.T) {
+	ctx := context.Background()
+	stores := newControllerTestStores(t)
+	seedRuntime(t, stores, "local")
+	seedMCPServer(t, stores, "weather")
+	seedDeployment(t, stores, "weather-source", v1alpha1.DesiredStateDeployed)
+
+	adapter := &recordingDeploymentAdapter{
+		sourceObservation: &types.DeploymentSourceObservation{
+			Platform: "test",
+			SourceRef: types.DeploymentSourceRef{
+				Type:          "git",
+				RepositoryURL: "https://github.com/example/weather",
+				Branch:        "main",
+			},
+			AppliedRevision: "abc123",
+			LatestRevision:  "def456",
+		},
+	}
+	controller := newDeploymentTestController(stores, adapter)
+
+	patched, err := controller.CheckDeploymentSources(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, patched)
+	require.Equal(t, int32(1), adapter.sourceCalls.Load())
+	require.Equal(t, int32(0), adapter.applyCalls.Load(), "source status checks must not call adapter.Apply")
+	require.Equal(t, 0, controller.workQueue().Len(), "source status checks must not enqueue reconcile work")
+
+	got := loadDeployment(t, stores, "weather-source")
+	source := got.Status.GetCondition(types.ConditionTypeSourceOutOfSync)
+	require.NotNil(t, source)
+	require.Equal(t, v1alpha1.ConditionTrue, source.Status)
+	require.Equal(t, types.ReasonSourceRevisionChanged, source.Reason)
+
+	var details types.DeploymentSourceRevisionDetails
+	ok, err := got.Status.GetDetailsKey(types.StatusDetailsKeySourceRevision, &details)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, "test", details.Platform)
+	require.Equal(t, "abc123", details.AppliedRevision)
+	require.Equal(t, "def456", details.LatestRevision)
+	require.Equal(t, "https://github.com/example/weather", details.SourceRef.RepositoryURL)
+}
+
 func TestDeploymentController_BlocksMissingTargetWithoutAdapterCall(t *testing.T) {
 	ctx := context.Background()
 	stores := newControllerTestStores(t)
@@ -536,9 +580,12 @@ func loadDeploymentFinalizers(t *testing.T, stores map[string]*v1alpha1store.Sto
 type recordingDeploymentAdapter struct {
 	applyCalls          atomic.Int32
 	removeCalls         atomic.Int32
+	sourceCalls         atomic.Int32
 	lastApplyGeneration atomic.Int64
 	applyErr            error
 	removeErr           error
+	sourceObservation   *types.DeploymentSourceObservation
+	sourceErr           error
 }
 
 func (a *recordingDeploymentAdapter) Type() string { return "Local" }
@@ -587,4 +634,9 @@ func (a *recordingDeploymentAdapter) Logs(context.Context, types.LogsInput) (<-c
 
 func (a *recordingDeploymentAdapter) Discover(context.Context, types.DiscoverInput) ([]types.DiscoveryResult, error) {
 	return nil, nil
+}
+
+func (a *recordingDeploymentAdapter) ObserveDeploymentSource(context.Context, types.ApplyInput) (*types.DeploymentSourceObservation, error) {
+	a.sourceCalls.Add(1)
+	return a.sourceObservation, a.sourceErr
 }
