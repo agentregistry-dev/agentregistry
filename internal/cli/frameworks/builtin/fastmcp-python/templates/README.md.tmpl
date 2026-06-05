@@ -89,21 +89,19 @@ tests/                  # Generated tests
    arctl build
    ```
 
-## HTTP Transport Mode
+## Transport Modes
 
-The server supports running in HTTP mode for development and integration purposes.
-
-### Starting in HTTP Mode
+The server defaults to HTTP. Use `--transport stdio` to switch.
 
 ```bash
-# Command line flag
-python src/main.py --http
+# HTTP (default; binds 0.0.0.0:3000)
+python src/main.py
 
-# Environment variable
-MCP_TRANSPORT_MODE=http python src/main.py
+# Stdio
+python src/main.py --transport stdio
 
 # Custom host and port
-python src/main.py --http --host localhost --port 8080
+python src/main.py --host localhost --port 8080
 ```
 
 ## Creating Tools

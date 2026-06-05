@@ -290,10 +290,9 @@ func TestInitMCP_StdioTransport_WritesLaunchFromFramework(t *testing.T) {
 }
 
 // TestInitMCP_HTTPTransport_WritesLaunchFromFramework asserts that http
-// transport also gets a launch block populated from the framework's
-// http defaults — so the deployed container runs with the right flags
-// (--transport http --host 0.0.0.0 --port N for fastmcp) rather than
-// defaulting to stdio per the image ENTRYPOINT.
+// transport gets a launch block populated from the framework's http
+// defaults — so the deployed container runs with the right flags
+// (--transport http --host 0.0.0.0 --port N for fastmcp).
 func TestInitMCP_HTTPTransport_WritesLaunchFromFramework(t *testing.T) {
 	tmp := t.TempDir()
 	origDir, err := os.Getwd()

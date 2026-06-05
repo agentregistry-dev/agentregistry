@@ -28,8 +28,8 @@ def main() -> None:
     parser.add_argument(
         "--transport",
         choices=["stdio", "http"],
-        default="stdio",
-        help="Transport mode: stdio, or http"
+        default="http",
+        help="Transport mode: stdio, or http (default: http)"
     )
     parser.add_argument(
         "--host",

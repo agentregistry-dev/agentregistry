@@ -332,7 +332,6 @@ func translateLocalMCPServerToServiceConfig(server *runtimetypes.MCPServer) (*co
 	}
 	if server.Local.TransportType == runtimetypes.TransportTypeStdio && !canRunInsideLocalAgentGateway(server.Local.Deployment.Cmd) {
 		envValues = append(envValues, "HOST=0.0.0.0")
-		envValues = append(envValues, "MCP_TRANSPORT_MODE=http")
 		envValues = append(envValues, fmt.Sprintf("PORT=%d", localOCIServerPort))
 	}
 	slices.SortStableFunc(envValues, func(a, b string) int { return cmp.Compare(a, b) })
