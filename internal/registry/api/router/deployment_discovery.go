@@ -80,9 +80,38 @@ func discoveredDeploymentSeenSets(existing []*v1alpha1.RawObject) (map[string]st
 		if len(raw.Spec) == 0 || json.Unmarshal(raw.Spec, &spec) != nil {
 			continue
 		}
-		targets[managedDeploymentTargetKey(ns, spec.RuntimeRef.Name, spec.TargetRef.Kind, spec.TargetRef.Name)] = struct{}{}
+		targetNames := []string{spec.TargetRef.Name}
+		targetNames = append(targetNames, managedDeploymentRemoteNames(raw.Metadata.Annotations)...)
+		seenTargetNames := map[string]struct{}{}
+		for _, targetName := range targetNames {
+			targetName = strings.TrimSpace(targetName)
+			if targetName == "" {
+				continue
+			}
+			if _, ok := seenTargetNames[targetName]; ok {
+				continue
+			}
+			seenTargetNames[targetName] = struct{}{}
+			targets[managedDeploymentTargetKey(ns, spec.RuntimeRef.Name, spec.TargetRef.Kind, targetName)] = struct{}{}
+		}
 	}
 	return names, targets
+}
+
+func managedDeploymentRemoteNames(annotations map[string]string) []string {
+	if len(annotations) == 0 {
+		return nil
+	}
+	names := make([]string, 0, 2)
+	for key, value := range annotations {
+		key = strings.TrimSpace(key)
+		if strings.HasSuffix(key, "/remoteName") || strings.HasSuffix(key, "/remoteId") {
+			if value = strings.TrimSpace(value); value != "" {
+				names = append(names, value)
+			}
+		}
+	}
+	return names
 }
 
 func discoveredDeploymentRaw(

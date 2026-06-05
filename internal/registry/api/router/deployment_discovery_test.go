@@ -32,7 +32,13 @@ func TestDeploymentListMergesDiscoveredRows(t *testing.T) {
 	})
 	require.NoError(t, err)
 	_, err = stores[v1alpha1.KindDeployment].Upsert(ctx, &v1alpha1.Deployment{
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "managed-agent"},
+		Metadata: v1alpha1.ObjectMeta{
+			Namespace: "default",
+			Name:      "managed-agent",
+			Annotations: map[string]string{
+				"runtimes.agentregistry.solo.io/discoverytest/remoteName": "managed-agent-sanitized",
+			},
+		},
 		Spec: v1alpha1.DeploymentSpec{
 			TargetRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindAgent, Name: "managed-agent", Tag: "latest"},
 			RuntimeRef: v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "field-runtime"},
@@ -48,6 +54,14 @@ func TestDeploymentListMergesDiscoveredRows(t *testing.T) {
 				Tag:        "latest",
 				RuntimeMetadata: map[string]string{
 					"remoteId": "managed-remote",
+				},
+			},
+			{
+				TargetKind: v1alpha1.KindAgent,
+				Name:       "managed-agent-sanitized",
+				Tag:        "latest",
+				RuntimeMetadata: map[string]string{
+					"remoteId": "managed-agent-sanitized",
 				},
 			},
 			{
