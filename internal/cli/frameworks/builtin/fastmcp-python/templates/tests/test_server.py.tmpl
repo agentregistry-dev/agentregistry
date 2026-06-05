@@ -65,11 +65,22 @@ class TestDynamicMCPServer:
             assert empty_config == {}
 
     def test_run_method_default_mode(self) -> None:
-        """Test that run method defaults to stdio mode."""
+        """Test that run method defaults to http mode."""
+        server = DynamicMCPServer(name="Test Server", tools_dir="src/tools")
+
+        fake_app = MagicMock()
+        fake_app.router.redirect_slashes = True
+        with patch.object(server.mcp, 'http_app', return_value=fake_app), \
+                patch('uvicorn.run') as mock_uvicorn_run:
+            server.run()
+            mock_uvicorn_run.assert_called_once()
+
+    def test_run_method_stdio_mode(self) -> None:
+        """Test that run(transport_mode="stdio") delegates to FastMCP.run()."""
         server = DynamicMCPServer(name="Test Server", tools_dir="src/tools")
 
         with patch.object(server.mcp, 'run') as mock_run:
-            server.run()
+            server.run(transport_mode="stdio")
             mock_run.assert_called_once()
 
     def test_run_method_http_mode(self) -> None:

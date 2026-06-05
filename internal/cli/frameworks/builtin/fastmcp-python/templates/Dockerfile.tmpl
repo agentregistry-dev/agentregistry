@@ -66,5 +66,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 ENV OTEL_SERVICE_NAME={{.ProjectName}}
+# Bind 0.0.0.0 so the http default is reachable from outside the container.
+ENV HOST=0.0.0.0
 
 ENTRYPOINT ["python3", "src/main.py"]

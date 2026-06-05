@@ -175,12 +175,12 @@ class DynamicMCPServer:
         tools_list = asyncio.run(self.mcp.list_tools())
         return {t.name: t for t in tools_list}
 
-    def run(self, transport_mode: str = "stdio", host: str = "localhost",
+    def run(self, transport_mode: str = "http", host: str = "localhost",
             port: int = 3000, stateless_http: bool = False) -> None:
         """Run the FastMCP server.
 
         Args:
-            transport_mode: Transport mode - "stdio", or "http"
+            transport_mode: Transport mode - "stdio", or "http" (default: http)
             host: Host to bind to in HTTP mode
             port: Port to bind to in HTTP mode
             stateless_http: Enable stateless HTTP mode
@@ -204,5 +204,4 @@ class DynamicMCPServer:
             app = _StripTrailingSlashASGI(app, "/mcp")
             uvicorn.run(app, host=host, port=port)
         elif transport_mode == "stdio":
-            # Default to stdio mode
             self.mcp.run()
