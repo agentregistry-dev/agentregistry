@@ -1052,6 +1052,13 @@ paths:
         schema:
           description: Include rows with a deletionTimestamp.
           type: boolean
+      - description: 'Deployment origin filter: managed or discovered.'
+        explode: false
+        in: query
+        name: origin
+        schema:
+          description: 'Deployment origin filter: managed or discovered.'
+          type: string
       responses:
         "200":
           content:

@@ -164,6 +164,17 @@ type Config struct {
 	// new caller.
 	ListFilter func(ctx context.Context, in AuthorizeInput) (extraWhere string, extraArgs []any, err error)
 
+	// ListAugmenter is optional; when set, list handlers call it after
+	// reading stored rows and before decoding response envelopes. It is
+	// intended for read-only synthetic rows such as discovered Deployment
+	// workloads that are not persisted in the primary Store.
+	ListAugmenter func(ctx context.Context, in ListAugmentInput) ([]*v1alpha1.RawObject, error)
+
+	// EnableOriginFilter exposes ?origin=managed|discovered on list routes
+	// for kinds that distinguish persisted rows from synthetic discovered
+	// rows. Leave false for regular resource lists.
+	EnableOriginFilter bool
+
 	// IncludeTerminatingByDefault, when true, makes the list handler
 	// surface rows with deletion_timestamp set even if the caller
 	// hasn't passed ?includeTerminating=true. Used by kinds whose
@@ -269,6 +280,35 @@ type listInput struct {
 	IncludeTerminating bool `query:"includeTerminating" doc:"Include rows with a deletionTimestamp."`
 }
 
+type listWithOriginInput struct {
+	// Namespace scopes the list. Empty / missing → "default";
+	// literal "all" → cross-namespace.
+	Namespace  string `query:"namespace" doc:"Namespace (defaults to 'default'; 'all' lists across all namespaces)."`
+	Limit      int    `query:"limit" doc:"Max items to return (default 50)." default:"50"`
+	Cursor     string `query:"cursor" doc:"Opaque pagination cursor."`
+	Labels     string `query:"labels" doc:"Label selector: key=value,key2=value2."`
+	Tag        string `query:"tag" doc:"Restrict the result set to one tag value (tagged artifact kinds only)."`
+	LatestOnly bool   `query:"latestOnly" doc:"Only return the literal latest tag per (namespace, name). Equivalent to tag=latest for tagged kinds."`
+	// IncludeTerminating surfaces soft-deleted rows (deletionTimestamp != nil)
+	// which are hidden by default.
+	IncludeTerminating bool `query:"includeTerminating" doc:"Include rows with a deletionTimestamp."`
+	// Origin filters Deployment-like resources by their source. Empty includes
+	// both managed and synthetic discovered rows where the route supports them.
+	Origin string `query:"origin" doc:"Deployment origin filter: managed or discovered."`
+}
+
+func (in listWithOriginInput) listInput() listInput {
+	return listInput{
+		Namespace:          in.Namespace,
+		Limit:              in.Limit,
+		Cursor:             in.Cursor,
+		Labels:             in.Labels,
+		Tag:                in.Tag,
+		LatestOnly:         in.LatestOnly,
+		IncludeTerminating: in.IncludeTerminating,
+	}
+}
+
 type bodyOutput[T v1alpha1.Object] struct {
 	Body T
 }
@@ -307,28 +347,21 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 	itemTagPath := itemPath + "/{tag}"
 
 	// List: `/v0/{plural}?namespace=default` (or ?namespace=all).
-	huma.Register(api, huma.Operation{
+	listOperation := huma.Operation{
 		OperationID: "list-" + plural,
 		Method:      http.MethodGet,
 		Path:        listPath,
 		Summary:     fmt.Sprintf("List %s (scoped by ?namespace)", kind),
-	}, func(ctx context.Context, in *listInput) (*listOutput[T], error) {
-		ns := resolveNamespace(in.Namespace, true)
-		if cfg.Authorize != nil {
-			if err := cfg.Authorize(ctx, AuthorizeInput{Verb: "list", Kind: kind, Namespace: ns}); err != nil {
-				return nil, err
-			}
-		}
-		return runList(ctx, cfg, newObj, listParams{
-			Namespace:          ns,
-			Labels:             in.Labels,
-			Limit:              in.Limit,
-			Cursor:             in.Cursor,
-			Tag:                in.Tag,
-			LatestOnly:         in.LatestOnly,
-			IncludeTerminating: in.IncludeTerminating,
+	}
+	if cfg.EnableOriginFilter {
+		huma.Register(api, listOperation, func(ctx context.Context, in *listWithOriginInput) (*listOutput[T], error) {
+			return handleList(ctx, cfg, newObj, in.listInput(), in.Origin)
 		})
-	})
+	} else {
+		huma.Register(api, listOperation, func(ctx context.Context, in *listInput) (*listOutput[T], error) {
+			return handleList(ctx, cfg, newObj, *in, "")
+		})
+	}
 
 	// Get latest (name only; namespace via query).
 	huma.Register(api, huma.Operation{
@@ -680,6 +713,42 @@ type listParams struct {
 	Tag                string
 	LatestOnly         bool
 	IncludeTerminating bool
+	Origin             string
+}
+
+// ListAugmentInput describes a list call being augmented plus the already-read
+// stored rows. Namespace == "" means cross-namespace.
+type ListAugmentInput struct {
+	Namespace          string
+	Labels             string
+	Limit              int
+	Cursor             string
+	Tag                string
+	LatestOnly         bool
+	IncludeTerminating bool
+	Origin             string
+	Existing           []*v1alpha1.RawObject
+}
+
+func handleList[T v1alpha1.Object](
+	ctx context.Context, cfg Config, newObj func() T, in listInput, origin string,
+) (*listOutput[T], error) {
+	ns := resolveNamespace(in.Namespace, true)
+	if cfg.Authorize != nil {
+		if err := cfg.Authorize(ctx, AuthorizeInput{Verb: "list", Kind: cfg.Kind, Namespace: ns}); err != nil {
+			return nil, err
+		}
+	}
+	return runList(ctx, cfg, newObj, listParams{
+		Namespace:          ns,
+		Labels:             in.Labels,
+		Limit:              in.Limit,
+		Cursor:             in.Cursor,
+		Tag:                in.Tag,
+		LatestOnly:         in.LatestOnly,
+		IncludeTerminating: in.IncludeTerminating,
+		Origin:             origin,
+	})
 }
 
 // runList is the shared list body used by both the cross-namespace and
@@ -687,6 +756,12 @@ type listParams struct {
 func runList[T v1alpha1.Object](
 	ctx context.Context, cfg Config, newObj func() T, p listParams,
 ) (*listOutput[T], error) {
+	switch p.Origin {
+	case "", "managed", "discovered":
+	default:
+		return nil, huma.Error400BadRequest("invalid origin filter: expected managed or discovered")
+	}
+
 	opts := v1alpha1store.ListOpts{
 		Namespace:          p.Namespace,
 		Limit:              p.Limit,
@@ -716,6 +791,30 @@ func runList[T v1alpha1.Object](
 			return nil, huma.Error400BadRequest("invalid cursor")
 		}
 		return nil, huma.Error500InternalServerError("list "+cfg.Kind, err)
+	}
+	if cfg.ListAugmenter != nil && p.Origin != "managed" {
+		extra, err := cfg.ListAugmenter(ctx, ListAugmentInput{
+			Namespace:          p.Namespace,
+			Labels:             p.Labels,
+			Limit:              p.Limit,
+			Cursor:             p.Cursor,
+			Tag:                p.Tag,
+			LatestOnly:         p.LatestOnly,
+			IncludeTerminating: p.IncludeTerminating,
+			Origin:             p.Origin,
+			Existing:           rows,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if p.Origin == "discovered" {
+			rows = extra
+		} else {
+			rows = append(rows, extra...)
+		}
+	}
+	if p.Origin == "discovered" {
+		nextCursor = ""
 	}
 	items := make([]T, 0, len(rows))
 	for _, row := range rows {

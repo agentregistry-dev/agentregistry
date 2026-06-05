@@ -272,10 +272,12 @@ func buildRouteOptions(
 	}
 
 	if stores != nil {
-		routeOpts.DeploymentLogResolver = deploymentsvc.NewAdapterResolver(deploymentsvc.ResolverDependencies{
+		adapterResolver := deploymentsvc.NewAdapterResolver(deploymentsvc.ResolverDependencies{
 			Adapters: adapters,
 			Getter:   internaldb.NewGetter(stores),
 		})
+		routeOpts.DeploymentLogResolver = adapterResolver
+		routeOpts.DeploymentDiscoverer = adapterResolver
 	}
 
 	return routeOpts

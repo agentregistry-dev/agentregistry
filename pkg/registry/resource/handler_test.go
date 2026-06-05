@@ -435,6 +435,48 @@ func TestResourceRegister_AgentListRejectsInvalidCursor(t *testing.T) {
 	require.Contains(t, resp.Body.String(), "invalid cursor")
 }
 
+func TestResourceRegister_OriginFilterIsOptIn(t *testing.T) {
+	pool := v1alpha1store.NewTestPool(t)
+	agents := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
+	deployments := v1alpha1store.NewMutableObjectStore(pool, v1alpha1store.TestSchema(), "deployments")
+
+	_, plainAPI := humatest.New(t)
+	resource.Register[*v1alpha1.Agent](plainAPI, resource.Config{
+		Kind:       v1alpha1.KindAgent,
+		BasePrefix: "/v0",
+		Store:      agents,
+	}, func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
+	requireListQueryParam(t, plainAPI, "/v0/agents", "origin", false)
+	resp := plainAPI.Get("/v0/agents?origin=bogus")
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+
+	_, originAPI := humatest.New(t)
+	resource.Register[*v1alpha1.Deployment](originAPI, resource.Config{
+		Kind:               v1alpha1.KindDeployment,
+		BasePrefix:         "/v0",
+		Store:              deployments,
+		EnableOriginFilter: true,
+	}, func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} })
+	requireListQueryParam(t, originAPI, "/v0/deployments", "origin", true)
+	resp = originAPI.Get("/v0/deployments?origin=bogus")
+	require.Equal(t, http.StatusBadRequest, resp.Code, resp.Body.String())
+	require.Contains(t, resp.Body.String(), "invalid origin filter")
+}
+
+func requireListQueryParam(t *testing.T, api humatest.TestAPI, path, name string, want bool) {
+	t.Helper()
+	pathItem := api.OpenAPI().Paths[path]
+	require.NotNil(t, pathItem, "missing OpenAPI path %s", path)
+	require.NotNil(t, pathItem.Get, "missing OpenAPI GET operation for %s", path)
+	for _, param := range pathItem.Get.Parameters {
+		if param.In == "query" && param.Name == name {
+			require.True(t, want, "OpenAPI path %s unexpectedly exposes query param %s", path, name)
+			return
+		}
+	}
+	require.False(t, want, "OpenAPI path %s does not expose query param %s", path, name)
+}
+
 // TestResourceRegister_ListFilter exercises the per-row authz hook by
 // wiring a ListFilter that only returns rows whose name starts with
 // "ok-". Three rows are seeded; the unfiltered list returns all three,

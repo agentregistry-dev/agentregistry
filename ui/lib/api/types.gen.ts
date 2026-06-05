@@ -632,6 +632,10 @@ export type ListDeploymentsData = {
          * Include rows with a deletionTimestamp.
          */
         includeTerminating?: boolean;
+        /**
+         * Deployment origin filter: managed or discovered.
+         */
+        origin?: string;
     };
     url: '/v0/deployments';
 };
