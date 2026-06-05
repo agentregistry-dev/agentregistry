@@ -164,6 +164,12 @@ type Config struct {
 	// new caller.
 	ListFilter func(ctx context.Context, in AuthorizeInput) (extraWhere string, extraArgs []any, err error)
 
+	// ListAugmenter is optional; when set, list handlers call it after
+	// reading stored rows and before decoding response envelopes. It is
+	// intended for read-only synthetic rows such as discovered Deployment
+	// workloads that are not persisted in the primary Store.
+	ListAugmenter func(ctx context.Context, in ListAugmentInput) ([]*v1alpha1.RawObject, error)
+
 	// IncludeTerminatingByDefault, when true, makes the list handler
 	// surface rows with deletion_timestamp set even if the caller
 	// hasn't passed ?includeTerminating=true. Used by kinds whose
@@ -267,6 +273,9 @@ type listInput struct {
 	// IncludeTerminating surfaces soft-deleted rows (deletionTimestamp != nil)
 	// which are hidden by default.
 	IncludeTerminating bool `query:"includeTerminating" doc:"Include rows with a deletionTimestamp."`
+	// Origin filters Deployment-like resources by their source. Empty includes
+	// both managed and synthetic discovered rows where the route supports them.
+	Origin string `query:"origin" doc:"Deployment origin filter: managed or discovered."`
 }
 
 type bodyOutput[T v1alpha1.Object] struct {
@@ -327,6 +336,7 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 			Tag:                in.Tag,
 			LatestOnly:         in.LatestOnly,
 			IncludeTerminating: in.IncludeTerminating,
+			Origin:             in.Origin,
 		})
 	})
 
@@ -680,6 +690,21 @@ type listParams struct {
 	Tag                string
 	LatestOnly         bool
 	IncludeTerminating bool
+	Origin             string
+}
+
+// ListAugmentInput describes a list call being augmented plus the already-read
+// stored rows. Namespace == "" means cross-namespace.
+type ListAugmentInput struct {
+	Namespace          string
+	Labels             string
+	Limit              int
+	Cursor             string
+	Tag                string
+	LatestOnly         bool
+	IncludeTerminating bool
+	Origin             string
+	Existing           []*v1alpha1.RawObject
 }
 
 // runList is the shared list body used by both the cross-namespace and
@@ -687,6 +712,12 @@ type listParams struct {
 func runList[T v1alpha1.Object](
 	ctx context.Context, cfg Config, newObj func() T, p listParams,
 ) (*listOutput[T], error) {
+	switch p.Origin {
+	case "", "managed", "discovered":
+	default:
+		return nil, huma.Error400BadRequest("invalid origin filter: expected managed or discovered")
+	}
+
 	opts := v1alpha1store.ListOpts{
 		Namespace:          p.Namespace,
 		Limit:              p.Limit,
@@ -716,6 +747,27 @@ func runList[T v1alpha1.Object](
 			return nil, huma.Error400BadRequest("invalid cursor")
 		}
 		return nil, huma.Error500InternalServerError("list "+cfg.Kind, err)
+	}
+	if p.Origin == "discovered" {
+		rows = nil
+		nextCursor = ""
+	}
+	if cfg.ListAugmenter != nil && p.Origin != "managed" {
+		extra, err := cfg.ListAugmenter(ctx, ListAugmentInput{
+			Namespace:          p.Namespace,
+			Labels:             p.Labels,
+			Limit:              p.Limit,
+			Cursor:             p.Cursor,
+			Tag:                p.Tag,
+			LatestOnly:         p.LatestOnly,
+			IncludeTerminating: p.IncludeTerminating,
+			Origin:             p.Origin,
+			Existing:           rows,
+		})
+		if err != nil {
+			return nil, err
+		}
+		rows = append(rows, extra...)
 	}
 	items := make([]T, 0, len(rows))
 	for _, row := range rows {
