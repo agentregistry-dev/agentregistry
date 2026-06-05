@@ -481,6 +481,52 @@ func TestMCPServerValidate_HTTPPortRange(t *testing.T) {
 	require.NotContains(t, failedFields(t, mk(8080).Validate()), portPath, "http with a valid port must pass the port check")
 }
 
+func mcpOpenAPIServer(url, schema string) *MCPServer {
+	return &MCPServer{
+		Metadata: ObjectMeta{Namespace: "default", Name: "petstore", Tag: "v1"},
+		Spec: MCPServerSpec{
+			OpenAPI: &MCPServerOpenAPI{URL: url, Schema: schema},
+		},
+	}
+}
+
+const validOpenAPISchema = `{"openapi":"3.0.0","info":{"title":"x","version":"1.0.0"},"paths":{}}`
+
+func TestMCPServerValidate_OpenAPI_OK(t *testing.T) {
+	m := mcpOpenAPIServer("https://petstore.default.svc.cluster.local:8443", validOpenAPISchema)
+	require.NoError(t, m.Validate())
+}
+
+func TestMCPServerValidate_OpenAPI_RequiresURLAndSchema(t *testing.T) {
+	paths := failedFields(t, mcpOpenAPIServer("", "").Validate())
+	require.Contains(t, paths, "spec.openapi.url")
+	require.Contains(t, paths, "spec.openapi.schema")
+}
+
+func TestMCPServerValidate_OpenAPI_RejectsURLWithPathQueryOrScheme(t *testing.T) {
+	require.Contains(t, failedFields(t, mcpOpenAPIServer("https://host:8443/v1", validOpenAPISchema).Validate()), "spec.openapi.url",
+		"url with a path must fail")
+	require.Contains(t, failedFields(t, mcpOpenAPIServer("https://host:8443?a=b", validOpenAPISchema).Validate()), "spec.openapi.url",
+		"url with a query must fail")
+	require.Contains(t, failedFields(t, mcpOpenAPIServer("ftp://host", validOpenAPISchema).Validate()), "spec.openapi.url",
+		"non-http(s) scheme must fail")
+	require.NotContains(t, failedFields(t, mcpOpenAPIServer("http://host:8080/", validOpenAPISchema).Validate()), "spec.openapi.url",
+		"a bare trailing slash is allowed")
+}
+
+func TestMCPServerValidate_OpenAPI_RejectsBadSchema(t *testing.T) {
+	require.Contains(t, failedFields(t, mcpOpenAPIServer("https://host", "not json").Validate()), "spec.openapi.schema",
+		"non-JSON schema must fail")
+	require.Contains(t, failedFields(t, mcpOpenAPIServer("https://host", `{"paths":{}}`).Validate()), "spec.openapi.schema",
+		"JSON without a top-level openapi field must fail")
+}
+
+func TestMCPServerValidate_OpenAPI_MutuallyExclusive(t *testing.T) {
+	m := mcpOpenAPIServer("https://host", validOpenAPISchema)
+	m.Spec.Remote = &MCPRemote{Type: "streamable-http", URL: "https://example.test/mcp"}
+	require.Contains(t, failedFields(t, m.Validate()), "spec")
+}
+
 func TestValidateNameField(t *testing.T) {
 	maxLabelLen := strings.Repeat("a", 63) // single segment at max label length
 	tooLongSegment := strings.Repeat("a", 64)

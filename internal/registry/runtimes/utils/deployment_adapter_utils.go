@@ -62,6 +62,12 @@ func TranslateMCPServer(ctx context.Context, req *MCPServerRunRequest) (*runtime
 	if req == nil {
 		return nil, fmt.Errorf("mcp server run request is required")
 	}
+	if req.Spec.OpenAPI != nil {
+		// An openapi MCPServer is a REST API surfaced as MCP by the platform
+		// serving the registry; it has no runtime workload to deploy and no
+		// MCP endpoint to dial, so it cannot be projected onto a runtime target.
+		return nil, fmt.Errorf("openapi mcp server %s is exposed by the serving platform and cannot be translated to a runtime target", req.Name)
+	}
 	if req.Spec.Remote != nil {
 		return translateRemoteMCPServer(req.Name, req.Spec.Remote, req.DeploymentID, req.HeaderValues)
 	}
