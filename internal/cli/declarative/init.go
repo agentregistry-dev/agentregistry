@@ -677,9 +677,9 @@ Picks a framework + language interactively (or via --framework / --language).`,
 		Args:         cobra.MaximumNArgs(1),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Flag-format sanity: --port range is checked here (independent of
-			// transport). Transport-shape checks happen after the transport
-			// picker, below.
+			// Flag-format sanity. Fail fast before any side-effecting work
+			// (project-dir creation, framework lookup, overwrite prompt) so
+			// users with bad flags don't waste interactive prompts first.
 			if initPort < 1 || initPort > 65535 {
 				return fmt.Errorf("--port must be between 1 and 65535, got %d", initPort)
 			}
@@ -690,6 +690,9 @@ Picks a framework + language interactively (or via --framework / --language).`,
 				default:
 					return fmt.Errorf("--transport: must be \"http\" or \"stdio\" (got %q)", initTransport)
 				}
+			}
+			if initTransport == "stdio" && cmd.Flags().Changed("port") {
+				return fmt.Errorf("--port is meaningless with --transport stdio")
 			}
 			var name string
 			if len(args) == 1 {
@@ -797,7 +800,7 @@ Picks a framework + language interactively (or via --framework / --language).`,
 	cmd.Flags().StringVar(&initFramework, "framework", "", "Framework. Skips picker.")
 	cmd.Flags().StringVar(&initLanguage, "language", "", "Language. Skips picker.")
 	cmd.Flags().IntVar(&initPort, "port", 3000, "HTTP port the MCP server binds to (and that arctl run maps)")
-	cmd.Flags().StringVar(&initTransport, "transport", "", "MCP transport: \"http\" (Streamable HTTP, listens on --port) or \"stdio\" (stdin/stdout). Omit to pick interactively.")
+	cmd.Flags().StringVar(&initTransport, "transport", "", "MCP transport: \"http\" (Streamable HTTP, listens on --port) or \"stdio\" (stdin/stdout). Defaults to http when omitted.")
 	return cmd
 }
 
