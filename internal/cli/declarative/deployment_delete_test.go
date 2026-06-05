@@ -82,10 +82,9 @@ func setupClientForServer(t *testing.T, srv *httptest.Server) {
 	t.Cleanup(func() { declarative.SetAPIClient(nil) })
 }
 
-// (1) Target-name delete fans out across every runtime variant AND every tag
-// for that target — deployments don't carry a tag of their own, so the CLI
-// can't (and shouldn't) narrow the cut by target tag here. Unrelated targets
-// are left alone.
+// (1) Deployment delete addresses the Deployment metadata.name. Deployments do
+// not carry a tag of their own, so the CLI must reject tag narrowing and leave
+// same-target variants alone unless they are named explicitly.
 func TestDeploymentDelete_RemovesNamedDeployment(t *testing.T) {
 	deployments := []v1alpha1.Deployment{
 		deploymentFixture("aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "pending"),
@@ -101,10 +100,10 @@ func TestDeploymentDelete_RemovesNamedDeployment(t *testing.T) {
 	require.NoError(t, cmd.Execute())
 
 	assert.ElementsMatch(t, []string{"aws-v1"}, *deleted,
-		"every deployment targeting summarizer should be deleted; unrelated targets untouched")
+		"only the named Deployment should be deleted; same-target variants stay untouched")
 }
 
-// (2) When no deployment matches the target name, returns a not-found error.
+// (2) When no Deployment metadata.name matches, returns a not-found error.
 func TestDeploymentDelete_NotFound(t *testing.T) {
 	deployments := []v1alpha1.Deployment{
 		deploymentFixture("aws-v2", "other-target", "2.0.0", "my-aws", "agent", "pending"),

@@ -150,13 +150,10 @@ func init() {
 		},
 	})
 
-	// Deployment is registered manually because its Get/Delete dispatch
-	// does NOT key on the v1alpha1 metadata identity (namespace/name/
-	// tag). Users address deployments by the underlying target's name
-	// — `arctl get deployment <agent-or-mcp-name>` — and the CLI walks the
-	// /v0/deployments listing to find the matching row. The typed
-	// helper assumes (kind, namespace, name, tag) lookup, which is
-	// the wrong shape for this dispatch.
+	// Deployment is registered manually because it is a mutable object with
+	// no tag identity. Users address deployments by metadata.name; the typed
+	// helper handles the matching route shape once tag pinning is rejected by
+	// the delete command.
 	scheme.Register(&scheme.Kind{
 		Kind:    "deployment",
 		Plural:  "deployments",
