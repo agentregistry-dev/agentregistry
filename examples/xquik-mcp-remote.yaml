@@ -1,0 +1,19 @@
+# xquik-mcp-remote.yaml
+#
+# Register Xquik as a pre-deployed remote MCP server.
+# Apply with: arctl apply -f xquik-mcp-remote.yaml
+#
+# The endpoint accepts OAuth bearer tokens or Xquik API keys at call time.
+apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: xquik
+spec:
+  title: Xquik MCP Server
+  description: "Remote MCP server for X/Twitter data, search, monitoring, media, and confirmed write workflows."
+  remote:
+    type: streamable-http
+    url: https://xquik.com/mcp
+    # headers:
+    #   - name: X-API-Key
+    #     value: "YOUR_XQUIK_API_KEY"
