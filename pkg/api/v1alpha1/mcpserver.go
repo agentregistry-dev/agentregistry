@@ -24,6 +24,26 @@ type MCPServerSpec struct {
 	// Remote declares a remote MCP server instead of a bundled one. These are pre-existing
 	// MCP servers that the registry does not deploy but can be referenced by Agents.
 	Remote *MCPRemote `json:"remote,omitempty" yaml:"remote,omitempty"`
+
+	// OpenAPI declares a REST API described by an OpenAPI 3.0 schema. The
+	// registry does not deploy it; its endpoints are surfaced as MCP tools by
+	// the platform serving the registry. The URL is the REST base, not an MCP
+	// endpoint.
+	OpenAPI *MCPServerOpenAPI `json:"openapi,omitempty" yaml:"openapi,omitempty"`
+}
+
+// MCPServerOpenAPI describes a REST API surfaced as an MCP server from its
+// OpenAPI 3.0 schema. The endpoints declared in the schema are exposed as MCP
+// tools by the platform serving the registry; the registry itself does not
+// deploy the API.
+type MCPServerOpenAPI struct {
+	// URL is the REST API base (scheme://host[:port]). The scheme selects
+	// whether requests use TLS. Must not carry a path, query, or fragment -
+	// endpoint paths come from the schema.
+	URL string `json:"url" yaml:"url"`
+
+	// Schema is the inline OpenAPI 3.0 JSON schema.
+	Schema string `json:"schema" yaml:"schema"`
 }
 
 // MCPRemote describes a pre-running remote MCP server that the registry
