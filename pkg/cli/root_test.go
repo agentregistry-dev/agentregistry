@@ -3,8 +3,9 @@ package cli
 import (
 	"testing"
 
-	dbmigrate "github.com/agentregistry-dev/agentregistry/pkg/cli/db/migrate"
 	"github.com/spf13/cobra"
+
+	dbmigrate "github.com/agentregistry-dev/agentregistry/pkg/cli/db/migrate"
 )
 
 func TestRootDisabledCommandPathsPruneBuiltInsBeforeExtraCommands(t *testing.T) {

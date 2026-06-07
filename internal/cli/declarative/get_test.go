@@ -20,7 +20,6 @@ import (
 )
 
 func TestGetCmd_RejectsUnknownType(t *testing.T) {
-
 	cmd := declarative.NewGetCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"unknowntype"})
 	err := cmd.Execute()

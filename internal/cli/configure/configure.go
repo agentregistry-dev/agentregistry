@@ -41,7 +41,7 @@ func NewCommand(deps cliruntime.Deps) *cobra.Command {
 			clientName := args[0]
 			configurer, ok := clientConfigurers[clientName]
 			if !ok {
-				return fmt.Errorf("client '%s' is not supported. Run 'arctl configure' to see supported clients.", clientName)
+				return fmt.Errorf("client %q is not supported; run 'arctl configure' to see supported clients", clientName)
 			}
 
 			url := fmt.Sprintf("http://localhost:%s/mcp", configurePort)

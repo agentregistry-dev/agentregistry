@@ -70,23 +70,11 @@ func runGet(cmd *cobra.Command, deps cliruntime.Deps, args []string) error {
 	}
 
 	if args[0] == "all" {
-		if allTags {
-			return fmt.Errorf("%s cannot be used with `get all`", allTagsFlag)
-		}
-		if tag != "" {
-			return fmt.Errorf("%s cannot be used with `get all`", tagFlag)
-		}
-		if latest {
-			return fmt.Errorf("%s cannot be used with `get all`", latestFlag)
-		}
-		if deps.Runtime == nil {
-			return fmt.Errorf("registry runtime not configured")
-		}
-		c, err := deps.Runtime.RegistryClient(cmd.Context())
-		if err != nil {
-			return fmt.Errorf("resolving registry client: %w", err)
-		}
-		return runGetAll(cmd, kinds, c, outputFormat)
+		return runGetAllArg(cmd, deps, kinds, outputFormat, getFlags{
+			allTags: allTags,
+			latest:  latest,
+			tag:     tag,
+		})
 	}
 
 	typeName := args[0]
@@ -97,29 +85,7 @@ func runGet(cmd *cobra.Command, deps cliruntime.Deps, args []string) error {
 	}
 
 	if allTags {
-		if len(args) != 2 {
-			return fmt.Errorf("%s requires NAME", allTagsFlag)
-		}
-		if k.ListTags == nil {
-			return fmt.Errorf("%s not supported for kind %q (resource is not taggable)", allTagsFlag, k.Kind)
-		}
-		if deps.Runtime == nil {
-			return fmt.Errorf("registry runtime not configured")
-		}
-		c, err := deps.Runtime.RegistryClient(cmd.Context())
-		if err != nil {
-			return fmt.Errorf("resolving registry client: %w", err)
-		}
-		name := args[1]
-		items, err := listTags(cmd.Context(), c, k, name)
-		if err != nil {
-			return fmt.Errorf("listing tags of %s %q: %w", k.Kind, name, err)
-		}
-		if len(items) == 0 {
-			fmt.Fprintf(cmd.OutOrStdout(), "No tags of %s %q found.\n", k.Kind, name)
-			return nil
-		}
-		return printItems(cmd, k, items, outputFormat)
+		return runGetAllTags(cmd, deps, k, args, outputFormat)
 	}
 
 	// --tag / --latest are only meaningful for tagged content-registry kinds.
@@ -163,6 +129,63 @@ func runGet(cmd *cobra.Command, deps cliruntime.Deps, args []string) error {
 		return nil
 	}
 	return printItems(cmd, k, items, outputFormat)
+}
+
+type getFlags struct {
+	allTags bool
+	latest  bool
+	tag     string
+}
+
+func runGetAllArg(cmd *cobra.Command, deps cliruntime.Deps, kinds *scheme.Registry, outputFormat string, flags getFlags) error {
+	if flags.allTags {
+		return fmt.Errorf("--all-tags cannot be used with `get all`")
+	}
+	if flags.tag != "" {
+		return fmt.Errorf("--tag cannot be used with `get all`")
+	}
+	if flags.latest {
+		return fmt.Errorf("--latest cannot be used with `get all`")
+	}
+	c, err := registryClient(cmd, deps)
+	if err != nil {
+		return err
+	}
+	return runGetAll(cmd, kinds, c, outputFormat)
+}
+
+func runGetAllTags(cmd *cobra.Command, deps cliruntime.Deps, k *scheme.Kind, args []string, outputFormat string) error {
+	if len(args) != 2 {
+		return fmt.Errorf("--all-tags requires NAME")
+	}
+	if k.ListTags == nil {
+		return fmt.Errorf("--all-tags not supported for kind %q (resource is not taggable)", k.Kind)
+	}
+	c, err := registryClient(cmd, deps)
+	if err != nil {
+		return err
+	}
+	name := args[1]
+	items, err := listTags(cmd.Context(), c, k, name)
+	if err != nil {
+		return fmt.Errorf("listing tags of %s %q: %w", k.Kind, name, err)
+	}
+	if len(items) == 0 {
+		fmt.Fprintf(cmd.OutOrStdout(), "No tags of %s %q found.\n", k.Kind, name)
+		return nil
+	}
+	return printItems(cmd, k, items, outputFormat)
+}
+
+func registryClient(cmd *cobra.Command, deps cliruntime.Deps) (*client.Client, error) {
+	if deps.Runtime == nil {
+		return nil, fmt.Errorf("registry runtime not configured")
+	}
+	c, err := deps.Runtime.RegistryClient(cmd.Context())
+	if err != nil {
+		return nil, fmt.Errorf("resolving registry client: %w", err)
+	}
+	return c, nil
 }
 
 func runGetAll(cmd *cobra.Command, kinds *scheme.Registry, c *client.Client, outputFormat string) error {
