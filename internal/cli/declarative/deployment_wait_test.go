@@ -66,7 +66,7 @@ func TestDeploymentWait_DeployedReturnsImmediately(t *testing.T) {
 	setupClientForServer(t, srv)
 
 	out := &bytes.Buffer{}
-	cmd := declarative.NewWaitCmd()
+	cmd := declarative.NewWaitCmd(declarativeTestDeps(nil))
 	cmd.SetOut(out)
 	cmd.SetArgs([]string{"deployment", "aws-v1", "--timeout=1s"})
 
@@ -82,7 +82,7 @@ func TestDeploymentWait_FailedSurfacesError(t *testing.T) {
 	})
 	setupClientForServer(t, srv)
 
-	cmd := declarative.NewWaitCmd()
+	cmd := declarative.NewWaitCmd(declarativeTestDeps(nil))
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
 	cmd.SetArgs([]string{"deployment", "aws-v1", "--timeout=1s"})
@@ -100,7 +100,7 @@ func TestDeploymentWait_ForFailedSucceedsOnFailed(t *testing.T) {
 	setupClientForServer(t, srv)
 
 	out := &bytes.Buffer{}
-	cmd := declarative.NewWaitCmd()
+	cmd := declarative.NewWaitCmd(declarativeTestDeps(nil))
 	cmd.SetOut(out)
 	cmd.SetArgs([]string{"deployment", "aws-v1", "--for=failed", "--timeout=1s"})
 
@@ -116,7 +116,7 @@ func TestDeploymentWait_ForDeleteSucceedsWhenAbsent(t *testing.T) {
 	setupClientForServer(t, srv)
 
 	out := &bytes.Buffer{}
-	cmd := declarative.NewWaitCmd()
+	cmd := declarative.NewWaitCmd(declarativeTestDeps(nil))
 	cmd.SetOut(out)
 	cmd.SetArgs([]string{"deployment", "aws-v1", "--for=delete", "--timeout=1s"})
 
@@ -131,7 +131,7 @@ func TestDeploymentWait_NotFound(t *testing.T) {
 	})
 	setupClientForServer(t, srv)
 
-	cmd := declarative.NewWaitCmd()
+	cmd := declarative.NewWaitCmd(declarativeTestDeps(nil))
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
 	cmd.SetArgs([]string{"deployment", "aws-v1", "--timeout=1s"})
@@ -148,7 +148,7 @@ func TestDeploymentWait_RejectsUnknownForValue(t *testing.T) {
 	})
 	setupClientForServer(t, srv)
 
-	cmd := declarative.NewWaitCmd()
+	cmd := declarative.NewWaitCmd(declarativeTestDeps(nil))
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
 	cmd.SetArgs([]string{"deployment", "aws-v1", "--for=garbage", "--timeout=1s"})
@@ -163,7 +163,7 @@ func TestDeploymentWait_RejectsNonDeploymentKinds(t *testing.T) {
 	srv := deploymentWaitTestServer(t, nil)
 	setupClientForServer(t, srv)
 
-	cmd := declarative.NewWaitCmd()
+	cmd := declarative.NewWaitCmd(declarativeTestDeps(nil))
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
 	cmd.SetArgs([]string{"agent", "summarizer"})

@@ -11,21 +11,13 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common/gitutil"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	cliruntime "github.com/agentregistry-dev/agentregistry/pkg/cli/runtime"
 )
 
-// PullCmd is the cobra command for "pull".
-// Tests should use NewPullCmd() for a fresh instance.
-var PullCmd = newPullCmd()
-
-// NewPullCmd returns a new "pull" cobra command.
-func NewPullCmd() *cobra.Command {
-	return newPullCmd()
-}
-
-func newPullCmd() *cobra.Command {
+func NewPullCmd(deps cliruntime.Deps) *cobra.Command {
 	var tag string
 	cmd := &cobra.Command{
-		Use:   "pull TYPE NAME [DIRECTORY]",
+		Use:   cliruntime.CommandPull + " TYPE NAME [DIRECTORY]",
 		Short: "Fetch a registry resource's source repo to local",
 		Long: `Fetch a registry resource's source repository to a local directory.
 
@@ -47,28 +39,32 @@ Spec.Source.Repository.URL from the registry and clones it into DIRECTORY
 			if err != nil {
 				return err
 			}
-			return pullResource(cmd.Context(), typ, name, tag, abs)
+			return pullResource(cmd.Context(), deps, typ, name, tag, abs)
 		},
 	}
 	cmd.Flags().StringVar(&tag, "tag", "", "Specific tag to pull")
 	return cmd
 }
 
-func pullResource(ctx context.Context, typ, name, tag, outDir string) error {
+func pullResource(ctx context.Context, deps cliruntime.Deps, typ, name, tag, outDir string) error {
 	switch typ {
 	case "agent", "mcp", "skill":
 	default:
 		return fmt.Errorf("unknown type %q (want one of: agent, mcp, skill)", typ)
 	}
 
-	if apiClient == nil {
-		return fmt.Errorf("API client not initialized")
+	if deps.Runtime == nil {
+		return fmt.Errorf("registry runtime not configured")
+	}
+	c, err := deps.Runtime.RegistryClient(ctx)
+	if err != nil {
+		return fmt.Errorf("resolving registry client: %w", err)
 	}
 
 	var repo *v1alpha1.Repository
 	switch typ {
 	case "agent":
-		obj, err := client.GetTyped(ctx, apiClient, v1alpha1.KindAgent, v1alpha1.DefaultNamespace, name, tag,
+		obj, err := client.GetTyped(ctx, c, v1alpha1.KindAgent, v1alpha1.DefaultNamespace, name, tag,
 			func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
 		if err != nil || obj == nil {
 			return fmt.Errorf("fetch agent %q: %w", name, err)
@@ -78,7 +74,7 @@ func pullResource(ctx context.Context, typ, name, tag, outDir string) error {
 		}
 		repo = obj.Spec.Source.Repository
 	case "mcp":
-		obj, err := client.GetTyped(ctx, apiClient, v1alpha1.KindMCPServer, v1alpha1.DefaultNamespace, name, tag,
+		obj, err := client.GetTyped(ctx, c, v1alpha1.KindMCPServer, v1alpha1.DefaultNamespace, name, tag,
 			func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} })
 		if err != nil || obj == nil {
 			return fmt.Errorf("fetch mcp %q: %w", name, err)
@@ -88,7 +84,7 @@ func pullResource(ctx context.Context, typ, name, tag, outDir string) error {
 		}
 		repo = obj.Spec.Source.Repository
 	case "skill":
-		obj, err := client.GetTyped(ctx, apiClient, v1alpha1.KindSkill, v1alpha1.DefaultNamespace, name, tag,
+		obj, err := client.GetTyped(ctx, c, v1alpha1.KindSkill, v1alpha1.DefaultNamespace, name, tag,
 			func() *v1alpha1.Skill { return &v1alpha1.Skill{} })
 		if err != nil || obj == nil {
 			return fmt.Errorf("fetch skill %q: %w", name, err)

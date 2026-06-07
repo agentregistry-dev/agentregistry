@@ -108,7 +108,7 @@ func TestDeploymentGet_ReturnsMatchByName(t *testing.T) {
 	setupClientForServer(t, srv)
 
 	out := &bytes.Buffer{}
-	cmd := declarative.NewGetCmd()
+	cmd := declarative.NewGetCmd(declarativeTestDeps(nil))
 	cmd.SetOut(out)
 	cmd.SetArgs([]string{"deployment", "aws-v1"})
 	require.NoError(t, cmd.Execute())
@@ -130,7 +130,7 @@ func TestDeploymentGet_NotFoundError(t *testing.T) {
 	setupClientForServer(t, srv)
 
 	out := &bytes.Buffer{}
-	cmd := declarative.NewGetCmd()
+	cmd := declarative.NewGetCmd(declarativeTestDeps(nil))
 	cmd.SetOut(out)
 	cmd.SetArgs([]string{"deployment", "does-not-exist"})
 	err := cmd.Execute()
@@ -150,7 +150,7 @@ func TestDeploymentGet_ListReturnsAll(t *testing.T) {
 	setupClientForServer(t, srv)
 
 	out := &bytes.Buffer{}
-	cmd := declarative.NewGetCmd()
+	cmd := declarative.NewGetCmd(declarativeTestDeps(nil))
 	cmd.SetOut(out)
 	cmd.SetArgs([]string{"deployments"})
 	require.NoError(t, cmd.Execute())
@@ -173,7 +173,7 @@ func TestDeploymentGet_YAMLOutputIncludesStatus(t *testing.T) {
 	setupClientForServer(t, srv)
 
 	out := &bytes.Buffer{}
-	cmd := declarative.NewGetCmd()
+	cmd := declarative.NewGetCmd(declarativeTestDeps(nil))
 	cmd.SetOut(out)
 	cmd.SetArgs([]string{"deployment", "aws-v1", "-o", "yaml"})
 	require.NoError(t, cmd.Execute())

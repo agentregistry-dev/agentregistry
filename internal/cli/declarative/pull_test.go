@@ -9,7 +9,7 @@ import (
 )
 
 func TestPull_RejectsUnknownType(t *testing.T) {
-	cmd := declarative.NewPullCmd()
+	cmd := declarative.NewPullCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"unknown", "foo"})
 	require.Error(t, cmd.Execute())
 }

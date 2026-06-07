@@ -42,10 +42,9 @@ func TestDeploymentApply_InvalidTemplateRefSurfaces(t *testing.T) {
 		},
 	}
 	srv, _ := newApplyTestServer(t, results)
-	setupApplyClient(t, srv)
 
 	var out bytes.Buffer
-	cmd := declarative.NewApplyCmd()
+	cmd := declarative.NewApplyCmd(applyDeps(t, srv))
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 	cmd.SetArgs([]string{"-f", writeTempYAML(t, deploymentYAMLBadTemplate)})

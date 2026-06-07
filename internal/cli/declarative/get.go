@@ -10,19 +10,13 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
+	"github.com/agentregistry-dev/agentregistry/internal/client"
+	cliruntime "github.com/agentregistry-dev/agentregistry/pkg/cli/runtime"
 	"github.com/agentregistry-dev/agentregistry/pkg/printer"
 )
 
-// GetCmd is the cobra command for "get".
-// Tests should use NewGetCmd() for a fresh instance.
-var GetCmd = newGetCmd()
-
 // NewGetCmd returns a new "get" cobra command.
-func NewGetCmd() *cobra.Command {
-	return newGetCmd()
-}
-
-func newGetCmd() *cobra.Command {
+func NewGetCmd(deps cliruntime.Deps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "get TYPE [NAME]",
 		Short: "List or retrieve registry resources",
@@ -44,7 +38,9 @@ Examples:
   arctl get skills -o json`,
 		Args:         cobra.RangeArgs(1, 2),
 		SilenceUsage: true,
-		RunE:         runGet,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runGet(cmd, deps, args)
+		},
 	}
 	cmd.Flags().StringP("output", "o", "table", "Output format: table, yaml, json")
 	cmd.Flags().String("tag", "", "Tagged kinds only. With NAME: fetch one tag (defaults to latest). Without NAME: filter the list to this tag.")
@@ -53,7 +49,8 @@ Examples:
 	return cmd
 }
 
-func runGet(cmd *cobra.Command, args []string) error {
+func runGet(cmd *cobra.Command, deps cliruntime.Deps, args []string) error {
+	kinds := kindRegistry(deps)
 	outputFormat, _ := cmd.Flags().GetString("output")
 	allTags, _ := cmd.Flags().GetBool("all-tags")
 	latest, _ := cmd.Flags().GetBool("latest")
@@ -82,26 +79,39 @@ func runGet(cmd *cobra.Command, args []string) error {
 		if latest {
 			return fmt.Errorf("%s cannot be used with `get all`", latestFlag)
 		}
-		return runGetAll(cmd, outputFormat)
+		if deps.Runtime == nil {
+			return fmt.Errorf("registry runtime not configured")
+		}
+		c, err := deps.Runtime.RegistryClient(cmd.Context())
+		if err != nil {
+			return fmt.Errorf("resolving registry client: %w", err)
+		}
+		return runGetAll(cmd, kinds, c, outputFormat)
 	}
 
 	typeName := args[0]
 
-	k, err := scheme.Lookup(typeName)
+	k, err := kinds.Lookup(typeName)
 	if err != nil {
 		return err
-	}
-
-	if apiClient == nil {
-		return fmt.Errorf("API client not initialized")
 	}
 
 	if allTags {
 		if len(args) != 2 {
 			return fmt.Errorf("%s requires NAME", allTagsFlag)
 		}
+		if k.ListTags == nil {
+			return fmt.Errorf("%s not supported for kind %q (resource is not taggable)", allTagsFlag, k.Kind)
+		}
+		if deps.Runtime == nil {
+			return fmt.Errorf("registry runtime not configured")
+		}
+		c, err := deps.Runtime.RegistryClient(cmd.Context())
+		if err != nil {
+			return fmt.Errorf("resolving registry client: %w", err)
+		}
 		name := args[1]
-		items, err := listTags(k, name)
+		items, err := listTags(cmd.Context(), c, k, name)
 		if err != nil {
 			return fmt.Errorf("listing tags of %s %q: %w", k.Kind, name, err)
 		}
@@ -122,9 +132,17 @@ func runGet(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("%s not supported for kind %q (resource is not tagged)", latestFlag, k.Kind)
 	}
 
+	if deps.Runtime == nil {
+		return fmt.Errorf("registry runtime not configured")
+	}
+	c, err := deps.Runtime.RegistryClient(cmd.Context())
+	if err != nil {
+		return fmt.Errorf("resolving registry client: %w", err)
+	}
+
 	if len(args) == 2 {
 		name := args[1]
-		item, err := getItem(k, name, tag)
+		item, err := getItem(cmd.Context(), c, k, name, tag)
 		if err != nil {
 			return fmt.Errorf("getting %s %q: %w", k.Kind, name, err)
 		}
@@ -136,7 +154,7 @@ func runGet(cmd *cobra.Command, args []string) error {
 	}
 
 	listOpts := scheme.ListOpts{Tag: tag, LatestOnly: latest}
-	items, err := listItems(k, listOpts)
+	items, err := listItems(cmd.Context(), c, k, listOpts)
 	if err != nil {
 		return fmt.Errorf("listing %s: %w", kindPlural(k), err)
 	}
@@ -147,15 +165,11 @@ func runGet(cmd *cobra.Command, args []string) error {
 	return printItems(cmd, k, items, outputFormat)
 }
 
-func runGetAll(cmd *cobra.Command, outputFormat string) error {
-	if apiClient == nil {
-		return fmt.Errorf("API client not initialized")
-	}
-
-	allKinds := scheme.All()
+func runGetAll(cmd *cobra.Command, kinds *scheme.Registry, c *client.Client, outputFormat string) error {
+	allKinds := kinds.All()
 	first := true
 	for _, k := range allKinds {
-		items, err := listItems(k, scheme.ListOpts{})
+		items, err := listItems(cmd.Context(), c, k, scheme.ListOpts{})
 		if errors.Is(err, errNotListable) {
 			continue
 		}

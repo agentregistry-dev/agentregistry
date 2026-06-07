@@ -13,6 +13,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
+	cliruntime "github.com/agentregistry-dev/agentregistry/pkg/cli/runtime"
 )
 
 // batchDeleteResponse builds a JSON body matching the DELETE /v0/apply response shape.
@@ -39,9 +40,7 @@ func newDeleteTestServer(t *testing.T, results []arv0.ApplyResult) (*httptest.Se
 // setupDeleteClient wires a client pointing at srv into the declarative package.
 func setupDeleteClient(t *testing.T, srv *httptest.Server) {
 	t.Helper()
-	c := client.NewClient(srv.URL, "")
-	declarative.SetAPIClient(c)
-	t.Cleanup(func() { declarative.SetAPIClient(nil) })
+	setDeclarativeTestClient(t, client.NewClient(srv.URL, ""))
 }
 
 // TestDeleteFileModeUsesDeleteApplyEndpoint verifies that -f sends DELETE to /v0/apply.
@@ -53,7 +52,7 @@ func TestDeleteFileModeUsesDeleteApplyEndpoint(t *testing.T) {
 	setupDeleteClient(t, srv)
 
 	var buf bytes.Buffer
-	cmd := declarative.NewDeleteCmd()
+	cmd := declarative.NewDeleteCmd(declarativeTestDeps(nil))
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)
 	cmd.SetArgs([]string{"-f", writeTempYAML(t, agentYAML)})
@@ -72,7 +71,7 @@ func TestDeleteFileModeReportsResults(t *testing.T) {
 	setupDeleteClient(t, srv)
 
 	var out bytes.Buffer
-	cmd := declarative.NewDeleteCmd()
+	cmd := declarative.NewDeleteCmd(declarativeTestDeps(nil))
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 	cmd.SetArgs([]string{"-f", writeTempYAML(t, agentYAML)})
@@ -89,7 +88,7 @@ func TestDeleteFileModeFailedResultsReturnError(t *testing.T) {
 	srv, _ := newDeleteTestServer(t, results)
 	setupDeleteClient(t, srv)
 
-	cmd := declarative.NewDeleteCmd()
+	cmd := declarative.NewDeleteCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"-f", writeTempYAML(t, agentYAML)})
 	err := cmd.Execute()
 	require.Error(t, err)
@@ -98,9 +97,6 @@ func TestDeleteFileModeFailedResultsReturnError(t *testing.T) {
 
 // TestDeleteFileModeRejectsUnknownKind verifies that an unknown kind fails before sending.
 func TestDeleteFileModeRejectsUnknownKind(t *testing.T) {
-	declarative.SetAPIClient(nil)
-	defer declarative.SetAPIClient(nil)
-
 	badYAML := `apiVersion: ar.dev/v1alpha1
 kind: UnknownKind
 metadata:
@@ -108,7 +104,7 @@ metadata:
 spec:
   description: "test"
 `
-	cmd := declarative.NewDeleteCmd()
+	cmd := declarative.NewDeleteCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"-f", writeTempYAML(t, badYAML)})
 	err := cmd.Execute()
 	require.Error(t, err)
@@ -117,20 +113,17 @@ spec:
 
 // TestDeleteFileModeNoAPIClient verifies that a missing API client returns an error.
 func TestDeleteFileModeNoAPIClient(t *testing.T) {
-	declarative.SetAPIClient(nil)
-	defer declarative.SetAPIClient(nil)
-
-	cmd := declarative.NewDeleteCmd()
+	cmd := declarative.NewDeleteCmd(cliruntime.Deps{})
 	cmd.SetArgs([]string{"-f", writeTempYAML(t, agentYAML)})
 	err := cmd.Execute()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "API client not initialized")
+	assert.Contains(t, err.Error(), "registry runtime not configured")
 }
 
 // TestDeleteExplicitModeWithoutTag verifies that --tag is optional
 // (runtimes don't use tags; the server validates if needed).
 func TestDeleteExplicitModeWithoutTag(t *testing.T) {
-	cmd := declarative.NewDeleteCmd()
+	cmd := declarative.NewDeleteCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"runtime", "my-aws"})
 	err := cmd.Execute()
 	// Fails because no API client is set, but NOT because of missing tag.
@@ -140,7 +133,7 @@ func TestDeleteExplicitModeWithoutTag(t *testing.T) {
 
 // TestDeleteExplicitModeRequiresTwoArgs verifies that explicit mode without two args errors.
 func TestDeleteExplicitModeRequiresTwoArgs(t *testing.T) {
-	cmd := declarative.NewDeleteCmd()
+	cmd := declarative.NewDeleteCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"agent"})
 	err := cmd.Execute()
 	require.Error(t, err)

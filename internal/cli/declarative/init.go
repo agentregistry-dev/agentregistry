@@ -19,15 +19,12 @@ import (
 	skilltemplates "github.com/agentregistry-dev/agentregistry/internal/cli/skill/templates"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	cliruntime "github.com/agentregistry-dev/agentregistry/pkg/cli/runtime"
 	"github.com/agentregistry-dev/agentregistry/pkg/validators"
 )
 
-// InitCmd is the cobra command for "init".
-// Tests should use NewInitCmd() for a fresh instance.
-var InitCmd = newInitCmd()
-
 // mcpFetcherForTest is the indirection point unit tests use to inject a
-// fake registry. Nil in production; the RunE substitutes apiClientMCPFetcher.
+// fake registry. Nil in production; the RunE substitutes registryClientMCPFetcher.
 var mcpFetcherForTest mcpresolve.Fetcher
 
 // lookupOutputDir resolves --output-dir from the parent init command for
@@ -73,13 +70,9 @@ func displayPath(projectDir string) string {
 }
 
 // NewInitCmd returns a new "init" cobra command.
-func NewInitCmd() *cobra.Command {
-	return newInitCmd()
-}
-
-func newInitCmd() *cobra.Command {
+func NewInitCmd(deps cliruntime.Deps) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "init TYPE ...",
+		Use:   cliruntime.CommandInit + " TYPE ...",
 		Short: "Scaffold a new resource project with declarative YAML",
 		Long: `Scaffold a new project. The generated YAML uses the ar.dev/v1alpha1
 declarative format and can be applied directly with 'arctl apply'.
@@ -120,7 +113,7 @@ Examples:
 		},
 	}
 	cmd.PersistentFlags().String("output-dir", "", "Parent directory under which the project is created. Defaults to the current directory.")
-	cmd.AddCommand(newInitAgentCmd())
+	cmd.AddCommand(newInitAgentCmd(deps))
 	cmd.AddCommand(newInitMCPCmd())
 	cmd.AddCommand(newInitSkillCmd())
 	cmd.AddCommand(newInitPromptCmd())
@@ -131,7 +124,7 @@ Examples:
 	return cmd
 }
 
-func newInitAgentCmd() *cobra.Command {
+func newInitAgentCmd(deps cliruntime.Deps) *cobra.Command {
 	var (
 		initDescription   string
 		initModelProvider string
@@ -200,7 +193,7 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 			// files, so a registry failure leaves no partial state.
 			fetcher := mcpFetcherForTest
 			if fetcher == nil {
-				fetcher = apiClientMCPFetcher{cmd: cmd}
+				fetcher = registryClientMCPFetcher{cmd: cmd, runtime: deps.Runtime}
 			}
 			var remoteEntries []mcpEnvEntry
 			var resolvedRefs []*mcpresolve.ResolvedMCP

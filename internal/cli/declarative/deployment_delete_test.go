@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative"
-	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
@@ -75,13 +74,6 @@ func deploymentTestServer(t *testing.T, list []v1alpha1.Deployment, failIDs map[
 	return srv, &deleted, &capturedQuery
 }
 
-func setupClientForServer(t *testing.T, srv *httptest.Server) {
-	t.Helper()
-	c := client.NewClient(srv.URL, "")
-	declarative.SetAPIClient(c)
-	t.Cleanup(func() { declarative.SetAPIClient(nil) })
-}
-
 // (1) Target-name delete fans out across every runtime variant AND every tag
 // for that target — deployments don't carry a tag of their own, so the CLI
 // can't (and shouldn't) narrow the cut by target tag here. Unrelated targets
@@ -96,7 +88,7 @@ func TestDeploymentDelete_RemovesNamedDeployment(t *testing.T) {
 	srv, deleted, _ := deploymentTestServer(t, deployments, nil)
 	setupClientForServer(t, srv)
 
-	cmd := declarative.NewDeleteCmd()
+	cmd := declarative.NewDeleteCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"deployment", "aws-v1"})
 	require.NoError(t, cmd.Execute())
 
@@ -112,7 +104,7 @@ func TestDeploymentDelete_NotFound(t *testing.T) {
 	srv, deleted, _ := deploymentTestServer(t, deployments, nil)
 	setupClientForServer(t, srv)
 
-	cmd := declarative.NewDeleteCmd()
+	cmd := declarative.NewDeleteCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"deployment", "summarizer"})
 	err := cmd.Execute()
 	require.Error(t, err)
@@ -130,7 +122,7 @@ func TestDeploymentDelete_ServerFailure(t *testing.T) {
 	srv, deleted, _ := deploymentTestServer(t, deployments, map[string]bool{"gcp-v1": true})
 	setupClientForServer(t, srv)
 
-	cmd := declarative.NewDeleteCmd()
+	cmd := declarative.NewDeleteCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"deployment", "gcp-v1"})
 	err := cmd.Execute()
 	require.Error(t, err, "failure must propagate")
@@ -146,7 +138,7 @@ func TestDeploymentDelete_ServerFailure(t *testing.T) {
 func TestDelete_RejectsTagForDeploymentAndRuntime(t *testing.T) {
 	for _, kind := range []string{"deployment", "runtime"} {
 		t.Run(kind, func(t *testing.T) {
-			cmd := declarative.NewDeleteCmd()
+			cmd := declarative.NewDeleteCmd(declarativeTestDeps(nil))
 			cmd.SetArgs([]string{kind, "anything", "--tag", "1.0.0"})
 			err := cmd.Execute()
 			require.Error(t, err)
@@ -165,7 +157,7 @@ func TestDeploymentDelete_OmitsLegacyForceQueryParam(t *testing.T) {
 	srv, _, capturedQuery := deploymentTestServer(t, deployments, map[string]bool{"gcp-v1": true})
 	setupClientForServer(t, srv)
 
-	cmd := declarative.NewDeleteCmd()
+	cmd := declarative.NewDeleteCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"deployment", "aws-v1"})
 	require.NoError(t, cmd.Execute())
 

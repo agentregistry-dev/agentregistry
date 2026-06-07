@@ -1,7 +1,7 @@
 // Package scheme is the CLI dispatch layer over v1alpha1: it owns the
 // alias-flexible Kind lookup table (so `arctl get mcp` and `arctl get
 // mcpserver` both resolve), per-kind table-render metadata, and the
-// per-kind cobra→apiClient closures (`Get`, `List`, `Delete`,
+// per-kind cobra→registry-client callbacks (`Get`, `List`, `Delete`,
 // `ToYAMLFunc`). YAML decode itself flows through pkg/api/v1alpha1.Scheme
 // — this package holds only CLI-specific concerns.
 //
@@ -15,6 +15,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
+	"github.com/agentregistry-dev/agentregistry/internal/client"
 )
 
 type Column struct {
@@ -33,24 +35,24 @@ type ListOpts struct {
 	LatestOnly bool
 }
 
-type ListFunc func(context.Context, ListOpts) ([]any, error)
+type ListFunc func(context.Context, *client.Client, ListOpts) ([]any, error)
 type RowFunc func(any) []string
 type ToYAMLFunc func(any) any
-type GetFunc func(ctx context.Context, name, tag string) (any, error)
+type GetFunc func(ctx context.Context, c *client.Client, name, tag string) (any, error)
 
 // DeleteFunc deletes a single (name, tag) of the kind.
-type DeleteFunc func(ctx context.Context, name, tag string) error
+type DeleteFunc func(ctx context.Context, c *client.Client, name, tag string) error
 
 // ListTagsFunc returns every live tag row for a single (name).
 // Set only on taggable artifact kinds (Agent, MCPServer, Skill, etc.).
 // Nil for kinds whose identity is not tagged (Deployment, Runtime) —
 // callers must check for nil and reject `--all-tags` cleanly.
-type ListTagsFunc func(ctx context.Context, name string) ([]any, error)
+type ListTagsFunc func(ctx context.Context, c *client.Client, name string) ([]any, error)
 
 // DeleteAllTagsFunc soft-deletes every live tag of a single (name) in one
 // server round-trip. Set only on taggable artifact kinds. Nil for kinds whose
 // identity is not tagged.
-type DeleteAllTagsFunc func(ctx context.Context, name string) error
+type DeleteAllTagsFunc func(ctx context.Context, c *client.Client, name string) error
 
 type Kind struct {
 	Kind          string
@@ -72,11 +74,45 @@ var (
 	kindsOrdered []*Kind
 )
 
+// Registry is an isolated Kind lookup table.
+type Registry struct {
+	kindsByAlias map[string]*Kind
+	kindsOrdered []*Kind
+}
+
+// NewRegistry returns an isolated registry populated with the given kinds.
+func NewRegistry(kinds ...*Kind) *Registry {
+	r := &Registry{
+		kindsByAlias: map[string]*Kind{},
+		kindsOrdered: []*Kind{},
+	}
+	for _, k := range kinds {
+		r.Register(k)
+	}
+	return r
+}
+
 // Register adds a Kind to the global lookup table. Panics if any of
 // Kind / Plural / Aliases collides with an already-registered entry —
 // callers are expected to register at package init, where a panic is
 // the right fail-fast behavior.
 func Register(k *Kind) {
+	r := defaultRegistry()
+	r.Register(k)
+	kindsByAlias = r.kindsByAlias
+	kindsOrdered = r.kindsOrdered
+}
+
+func defaultRegistry() *Registry {
+	return &Registry{
+		kindsByAlias: kindsByAlias,
+		kindsOrdered: kindsOrdered,
+	}
+}
+
+// Register adds a Kind to the registry. Panics if any of Kind / Plural /
+// Aliases collides with an already-registered entry.
+func (r *Registry) Register(k *Kind) {
 	if k == nil || k.Kind == "" {
 		panic("scheme.Register: kind is required")
 	}
@@ -97,16 +133,16 @@ func Register(k *Kind) {
 		if _, dup := seen[key]; dup {
 			continue
 		}
-		if _, exists := kindsByAlias[key]; exists {
+		if _, exists := r.kindsByAlias[key]; exists {
 			panic(fmt.Sprintf("scheme.Register: %q already registered", name))
 		}
 		seen[key] = struct{}{}
 	}
 
 	for name := range seen {
-		kindsByAlias[name] = k
+		r.kindsByAlias[name] = k
 	}
-	kindsOrdered = append(kindsOrdered, k)
+	r.kindsOrdered = append(r.kindsOrdered, k)
 }
 
 // ErrUnknownKind is returned by Lookup when no Kind is registered
@@ -116,7 +152,12 @@ var ErrUnknownKind = errors.New("unknown kind")
 // Lookup resolves a user-typed name (canonical Kind, plural, or alias —
 // case-insensitive) to its registered *Kind, or ErrUnknownKind.
 func Lookup(name string) (*Kind, error) {
-	if k, ok := kindsByAlias[kindAliasKey(name)]; ok {
+	return defaultRegistry().Lookup(name)
+}
+
+// Lookup resolves a user-typed name in this registry.
+func (r *Registry) Lookup(name string) (*Kind, error) {
+	if k, ok := r.kindsByAlias[kindAliasKey(name)]; ok {
 		return k, nil
 	}
 	return nil, fmt.Errorf("%w %q", ErrUnknownKind, name)
@@ -124,7 +165,12 @@ func Lookup(name string) (*Kind, error) {
 
 // All returns every registered Kind in registration order.
 func All() []*Kind {
-	out := make([]*Kind, len(kindsOrdered))
-	copy(out, kindsOrdered)
+	return defaultRegistry().All()
+}
+
+// All returns every Kind in registration order.
+func (r *Registry) All() []*Kind {
+	out := make([]*Kind, len(r.kindsOrdered))
+	copy(out, r.kindsOrdered)
 	return out
 }

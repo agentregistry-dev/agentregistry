@@ -20,7 +20,7 @@ func TestRun_DispatchesToFrameworkRunCommand(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(cwd) })
 
 	require.NoError(t, os.Chdir(tmp))
-	initCmd := declarative.NewInitCmd()
+	initCmd := declarative.NewInitCmd(declarativeTestDeps(nil))
 	initCmd.SetArgs([]string{"agent", "myagent", "--framework", "adk", "--language", "python"})
 	require.NoError(t, initCmd.Execute())
 
@@ -30,7 +30,7 @@ func TestRun_DispatchesToFrameworkRunCommand(t *testing.T) {
 	// Run command should locate arctl.yaml, look up the framework, and reach
 	// framework.Run.Command. We stop short of actually exec'ing docker by using
 	// a NoExec mode (--dry-run) added in this task.
-	cmd := declarative.NewRunCmd()
+	cmd := declarative.NewRunCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"--dry-run"})
 	require.NoError(t, cmd.Execute())
 }
@@ -47,14 +47,14 @@ func TestRun_ChatDefault_DryRunNarratesFullLifecycle(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(cwd) })
 
 	require.NoError(t, os.Chdir(tmp))
-	initCmd := declarative.NewInitCmd()
+	initCmd := declarative.NewInitCmd(declarativeTestDeps(nil))
 	initCmd.SetArgs([]string{"agent", "chatdefault", "--framework", "adk", "--language", "python"})
 	require.NoError(t, initCmd.Execute())
 
 	projectDir := filepath.Join(tmp, "chatdefault")
 	require.NoError(t, os.Chdir(projectDir))
 
-	cmd := declarative.NewRunCmd()
+	cmd := declarative.NewRunCmd(declarativeTestDeps(nil))
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)
@@ -86,12 +86,12 @@ func TestRun_InspectorOnAgentErrors(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(cwd) })
 
 	require.NoError(t, os.Chdir(tmp))
-	initCmd := declarative.NewInitCmd()
+	initCmd := declarative.NewInitCmd(declarativeTestDeps(nil))
 	initCmd.SetArgs([]string{"agent", "agentproj", "--framework", "adk", "--language", "python"})
 	require.NoError(t, initCmd.Execute())
 
 	require.NoError(t, os.Chdir(filepath.Join(tmp, "agentproj")))
-	cmd := declarative.NewRunCmd()
+	cmd := declarative.NewRunCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"--inspector", "--dry-run"})
 	err = cmd.Execute()
 	require.Error(t, err)
@@ -108,12 +108,12 @@ func TestRun_InspectorDryRunNarratesURL(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(cwd) })
 
 	require.NoError(t, os.Chdir(tmp))
-	initCmd := declarative.NewInitCmd()
+	initCmd := declarative.NewInitCmd(declarativeTestDeps(nil))
 	initCmd.SetArgs([]string{"mcp", "acme-inspmcp", "--framework", "fastmcp", "--language", "python"})
 	require.NoError(t, initCmd.Execute())
 
 	require.NoError(t, os.Chdir(filepath.Join(tmp, "acme-inspmcp")))
-	cmd := declarative.NewRunCmd()
+	cmd := declarative.NewRunCmd(declarativeTestDeps(nil))
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)
@@ -135,12 +135,12 @@ func TestRun_NoChatOnMCPErrors(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(cwd) })
 
 	require.NoError(t, os.Chdir(tmp))
-	initCmd := declarative.NewInitCmd()
+	initCmd := declarative.NewInitCmd(declarativeTestDeps(nil))
 	initCmd.SetArgs([]string{"mcp", "acme-mcpproj", "--framework", "fastmcp", "--language", "python"})
 	require.NoError(t, initCmd.Execute())
 
 	require.NoError(t, os.Chdir(filepath.Join(tmp, "acme-mcpproj")))
-	cmd := declarative.NewRunCmd()
+	cmd := declarative.NewRunCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"--no-chat", "--dry-run"})
 	err = cmd.Execute()
 	require.Error(t, err)
@@ -158,7 +158,7 @@ func TestRun_DoesNotRequireAgentYAML(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(cwd) })
 
 	require.NoError(t, os.Chdir(tmp))
-	initCmd := declarative.NewInitCmd()
+	initCmd := declarative.NewInitCmd(declarativeTestDeps(nil))
 	initCmd.SetArgs([]string{"agent", "noyaml", "--framework", "adk", "--language", "python"})
 	require.NoError(t, initCmd.Execute())
 
@@ -166,7 +166,7 @@ func TestRun_DoesNotRequireAgentYAML(t *testing.T) {
 	require.NoError(t, os.Remove(filepath.Join(projectDir, "agent.yaml")))
 	require.NoError(t, os.Chdir(projectDir))
 
-	cmd := declarative.NewRunCmd()
+	cmd := declarative.NewRunCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"--dry-run"})
 	require.NoError(t, cmd.Execute())
 }
@@ -182,12 +182,12 @@ func TestRun_AgentWatch_DryRunNarratesSignpost(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(cwd) })
 
 	require.NoError(t, os.Chdir(tmp))
-	initCmd := declarative.NewInitCmd()
+	initCmd := declarative.NewInitCmd(declarativeTestDeps(nil))
 	initCmd.SetArgs([]string{"agent", "watchagent", "--framework", "adk", "--language", "python"})
 	require.NoError(t, initCmd.Execute())
 
 	require.NoError(t, os.Chdir(filepath.Join(tmp, "watchagent")))
-	cmd := declarative.NewRunCmd()
+	cmd := declarative.NewRunCmd(declarativeTestDeps(nil))
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)
@@ -218,12 +218,12 @@ func TestRun_AgentWatchNoChat_DryRunSuppressesChatHint(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(cwd) })
 
 	require.NoError(t, os.Chdir(tmp))
-	initCmd := declarative.NewInitCmd()
+	initCmd := declarative.NewInitCmd(declarativeTestDeps(nil))
 	initCmd.SetArgs([]string{"agent", "watchquiet", "--framework", "adk", "--language", "python"})
 	require.NoError(t, initCmd.Execute())
 
 	require.NoError(t, os.Chdir(filepath.Join(tmp, "watchquiet")))
-	cmd := declarative.NewRunCmd()
+	cmd := declarative.NewRunCmd(declarativeTestDeps(nil))
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)

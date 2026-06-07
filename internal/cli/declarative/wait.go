@@ -10,25 +10,17 @@ import (
 	"github.com/spf13/cobra"
 
 	cliCommon "github.com/agentregistry-dev/agentregistry/internal/cli/common"
-	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	cliruntime "github.com/agentregistry-dev/agentregistry/pkg/cli/runtime"
 )
 
-// errAPIClientNotInitialized is returned when the CLI's API client was never
-// constructed (typically because PersistentPreRunE did not run).
-var errAPIClientNotInitialized = errors.New("API client not initialized")
-
-// WaitCmd is the cobra command for "wait".
-// Tests should use NewWaitCmd() for a fresh instance.
-var WaitCmd = newWaitCmd()
+var errRegistryRuntimeNotConfigured = errors.New("registry runtime not configured")
 
 // NewWaitCmd returns a new "wait" cobra command.
-func NewWaitCmd() *cobra.Command { return newWaitCmd() }
-
-func newWaitCmd() *cobra.Command {
+func NewWaitCmd(deps cliruntime.Deps) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "wait TYPE NAME",
+		Use:   cliruntime.CommandWait + " TYPE NAME",
 		Short: "Wait for a registry resource to reach a target state",
 		Long: `Wait for a registry resource to reach a target state.
 
@@ -48,7 +40,9 @@ Timeout regimes:
   arctl wait deployment aws-v1 --for=delete --timeout=10m`,
 		Args:         cobra.ExactArgs(2),
 		SilenceUsage: true,
-		RunE:         runDeclarativeWait,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runDeclarativeWait(cmd, deps, args)
+		},
 	}
 	cmd.Flags().String("for", "deployed", "Target state to wait for: deployed, failed, undeployed, delete")
 	cmd.Flags().Duration("timeout", cliCommon.DefaultWaitTimeout,
@@ -56,17 +50,21 @@ Timeout regimes:
 	return cmd
 }
 
-func runDeclarativeWait(cmd *cobra.Command, args []string) error {
+func runDeclarativeWait(cmd *cobra.Command, deps cliruntime.Deps, args []string) error {
 	typeName, name := args[0], args[1]
-	k, err := scheme.Lookup(typeName)
+	k, err := kindRegistry(deps).Lookup(typeName)
 	if err != nil {
 		return err
 	}
 	if k.Kind != "deployment" {
 		return fmt.Errorf("wait is only supported for deployments (got %q)", k.Kind)
 	}
-	if apiClient == nil {
-		return errAPIClientNotInitialized
+	if deps.Runtime == nil {
+		return errRegistryRuntimeNotConfigured
+	}
+	c, err := deps.Runtime.RegistryClient(cmd.Context())
+	if err != nil {
+		return fmt.Errorf("resolving registry client: %w", err)
 	}
 
 	forFlag, _ := cmd.Flags().GetString("for")
@@ -92,7 +90,7 @@ func runDeclarativeWait(cmd *cobra.Command, args []string) error {
 	}
 
 	resolve := func(ctx context.Context) (*cliCommon.DeploymentRecord, error) {
-		return resolveDeploymentForWait(ctx, name)
+		return resolveDeploymentForWait(ctx, c, name)
 	}
 
 	if err := cliCommon.WaitForDeployment(cmd.Context(), resolve, opts); err != nil {
@@ -107,8 +105,8 @@ func runDeclarativeWait(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func resolveDeploymentForWait(ctx context.Context, name string) (*cliCommon.DeploymentRecord, error) {
-	dep, err := client.GetTyped(ctx, apiClient, v1alpha1.KindDeployment,
+func resolveDeploymentForWait(ctx context.Context, c *client.Client, name string) (*cliCommon.DeploymentRecord, error) {
+	dep, err := client.GetTyped(ctx, c, v1alpha1.KindDeployment,
 		v1alpha1.DefaultNamespace, name, "",
 		func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} })
 	if err != nil {

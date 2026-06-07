@@ -1,7 +1,8 @@
 // Package migrate exposes the `arctl db migrate` subcommand and a
 // package-private registry that lets the binary stack one or more
 // migration sources behind a single CLI. Downstream distributions
-// register additional sources alongside the OSS one via Register.
+// register additional sources alongside the OSS one via Register before
+// constructing the db command.
 //
 // Each source owns its own Postgres schema (set via
 // `golang-migrate`'s `migratepgx.Config{SchemaName: ...}`), so adding a
@@ -35,16 +36,13 @@ var (
 	sources   []Source
 )
 
-// Register adds a migration source to the package registry. Intended
-// to be called from init() in the binary's root command package.
+// Register adds a migration source to the package registry.
 //
-// Validates Name against ^[a-z][a-z0-9_]*$. Both panics (invalid
-// charset, duplicate Name) fire at process start because Register is
-// expected from init() — failing fast surfaces misconfiguration.
+// Validates Name against ^[a-z][a-z0-9_]*$. Panics on invalid charset
+// and duplicate Name so source misconfiguration fails fast.
 //
 // The mutex is defense-in-depth so a contract-violating caller running
-// Register outside init() doesn't trigger a silent data race against
-// Sources().
+// Register concurrently doesn't trigger a silent data race against Sources().
 func Register(s Source) {
 	if !sourceNameRE.MatchString(s.Name) {
 		panic(fmt.Sprintf("migrate.Register: source Name=%q must match %s", s.Name, sourceNameRE.String()))

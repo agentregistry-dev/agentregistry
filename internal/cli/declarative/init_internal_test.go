@@ -11,8 +11,31 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	cliruntime "github.com/agentregistry-dev/agentregistry/pkg/cli/runtime"
 )
+
+func internalDeclarativeTestDeps(c *client.Client) cliruntime.Deps {
+	if c == nil {
+		c = client.NewClient("http://127.0.0.1:1", "")
+	}
+	cfg := cliruntime.Config{
+		Env: internalDeclarativeTestEnv{"ARCTL_API_BASE_URL": c.BaseURL},
+	}
+	cfg = cfg.WithDefaults()
+	rt := cliruntime.New(cfg)
+	return cliruntime.Deps{
+		Runtime: rt,
+		Auth:    cfg.Auth,
+	}
+}
+
+type internalDeclarativeTestEnv map[string]string
+
+func (e internalDeclarativeTestEnv) Getenv(key string) string {
+	return e[key]
+}
 
 func TestWriteMCPServersConfig_MergesEntries(t *testing.T) {
 	dir := t.TempDir()
@@ -85,7 +108,7 @@ func TestInitAgent_MCP_RemoteRef_WritesEnv(t *testing.T) {
 	}}
 	t.Cleanup(func() { mcpFetcherForTest = prev })
 
-	cmd := NewInitCmd()
+	cmd := NewInitCmd(internalDeclarativeTestDeps(nil))
 	cmd.SetArgs([]string{"agent", "myagent", "--framework", "adk", "--language", "python", "--mcp", "acme-fetch", "--output-dir", dir})
 	require.NoError(t, cmd.Execute())
 
@@ -111,7 +134,7 @@ func TestInitAgent_MCP_SourceRef_NoEnvWrite(t *testing.T) {
 	}}
 	t.Cleanup(func() { mcpFetcherForTest = prev })
 
-	cmd := NewInitCmd()
+	cmd := NewInitCmd(internalDeclarativeTestDeps(nil))
 	cmd.SetArgs([]string{"agent", "myagent", "--framework", "adk", "--language", "python", "--mcp", "acme-source", "--output-dir", dir})
 	require.NoError(t, cmd.Execute())
 
@@ -130,7 +153,7 @@ func TestInitAgent_MCP_RegistryFailure_NoPartialWrites(t *testing.T) {
 	mcpFetcherForTest = &fakeMCPFetcher{} // empty → all lookups fail
 	t.Cleanup(func() { mcpFetcherForTest = prev })
 
-	cmd := NewInitCmd()
+	cmd := NewInitCmd(internalDeclarativeTestDeps(nil))
 	cmd.SetArgs([]string{"agent", "myagent", "--framework", "adk", "--language", "python", "--mcp", "acme-missing", "--output-dir", dir})
 	require.Error(t, cmd.Execute())
 

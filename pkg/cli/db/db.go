@@ -11,7 +11,21 @@ import (
 )
 
 // NewCommand returns the `db` parent command with `migrate` attached.
-func NewCommand() *cobra.Command {
+// Each source is registered before the migrate subcommand is built.
+func NewCommand(sources ...migrate.Source) *cobra.Command {
+	for _, source := range sources {
+		registered := false
+		for _, existing := range migrate.Sources() {
+			if existing.Name == source.Name {
+				registered = true
+				break
+			}
+		}
+		if !registered {
+			migrate.Register(source)
+		}
+	}
+
 	cmd := &cobra.Command{
 		Use:   "db",
 		Short: "Database operations (migrations, inspection)",
@@ -19,14 +33,8 @@ func NewCommand() *cobra.Command {
 	cmd.AddCommand(migrate.NewCommand())
 
 	// Hide --registry-url and --registry-token from help across the
-	// entire `db` subtree. They're persistent flags on the arctl root
-	// (pkg/cli/root.go:133), so cobra inherits them onto every
-	// subcommand. The db commands talk to Postgres directly via
-	// --db-url; pkg/cli/root.go's preRunSkipCommands maps
-	// "arctl"->"db"->true, which short-circuits the PersistentPreRunE
-	// that would otherwise resolve a registry token. The flags are
-	// accepted by cobra and ignored at runtime — hiding them in
-	// --help removes the misleading affordance.
+	// entire `db` subtree. They are persistent flags on the arctl root,
+	// but db commands talk to Postgres directly via --db-url.
 	//
 	// Hidden is a property of the flag itself (shared across the
 	// whole tree), so we can't flip it permanently. The HelpFunc
