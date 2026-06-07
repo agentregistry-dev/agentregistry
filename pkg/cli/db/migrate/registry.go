@@ -1,8 +1,7 @@
-// Package migrate exposes the `arctl db migrate` subcommand and a
-// package-private registry that lets the binary stack one or more
-// migration sources behind a single CLI. Downstream distributions
-// register additional sources alongside the OSS one via Register before
-// constructing the db command.
+// Package migrate exposes the `arctl db migrate` subcommand. The root
+// CLI normally passes migration sources directly to NewCommand; the
+// package registry remains for lower-level callers that construct the
+// migrate command without explicit sources.
 //
 // Each source owns its own Postgres schema (set via
 // `golang-migrate`'s `migratepgx.Config{SchemaName: ...}`), so adding a
@@ -68,11 +67,9 @@ func Sources() []Source {
 	return out
 }
 
-// ResetForTesting clears the source registry and the cached
-// migrate-parent reference. Test-only.
+// ResetForTesting clears the source registry. Test-only.
 func ResetForTesting() {
 	sourcesMu.Lock()
 	defer sourcesMu.Unlock()
 	sources = nil
-	migrateCmd = nil
 }

@@ -11,26 +11,12 @@ import (
 )
 
 // NewCommand returns the `db` parent command with `migrate` attached.
-// Each source is registered before the migrate subcommand is built.
 func NewCommand(sources ...migrate.Source) *cobra.Command {
-	for _, source := range sources {
-		registered := false
-		for _, existing := range migrate.Sources() {
-			if existing.Name == source.Name {
-				registered = true
-				break
-			}
-		}
-		if !registered {
-			migrate.Register(source)
-		}
-	}
-
 	cmd := &cobra.Command{
 		Use:   "db",
 		Short: "Database operations (migrations, inspection)",
 	}
-	cmd.AddCommand(migrate.NewCommand())
+	cmd.AddCommand(migrate.NewCommand(sources...))
 
 	// Hide --registry-url and --registry-token from help across the
 	// entire `db` subtree. They are persistent flags on the arctl root,

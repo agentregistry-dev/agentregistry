@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"strings"
+
 	"github.com/spf13/cobra"
 
 	internalcli "github.com/agentregistry-dev/agentregistry/internal/cli"
@@ -8,8 +10,10 @@ import (
 	clidaemon "github.com/agentregistry-dev/agentregistry/internal/cli/daemon"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
+	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/cli/db"
+	"github.com/agentregistry-dev/agentregistry/pkg/cli/db/migrate"
 	cliruntime "github.com/agentregistry-dev/agentregistry/pkg/cli/runtime"
 	"github.com/agentregistry-dev/agentregistry/pkg/daemon/dockercompose"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database/legacymigrate"
@@ -26,9 +30,10 @@ func Root(cfg Config) *cobra.Command {
 	cfg = cfg.withDefaults()
 
 	root := &cobra.Command{
-		Use:   cfg.Use,
-		Short: cfg.Short,
-		Long:  cfg.Long,
+		Use:     cfg.Use,
+		Short:   cfg.Short,
+		Long:    cfg.Long,
+		Version: cfg.Version,
 	}
 	var registryURL string
 	var registryToken string
@@ -67,25 +72,21 @@ func Root(cfg Config) *cobra.Command {
 		Auth:    cfg.Auth,
 		Kinds:   kinds,
 	}
-	addCommand := func(id string, cmd *cobra.Command) {
-		if cfg.Disabled[id] || cmd == nil {
-			return
-		}
-		root.AddCommand(cmd)
-	}
+	root.AddCommand(configure.NewCommand(deps))
+	root.AddCommand(internalcli.NewVersionCommand(deps))
+	root.AddCommand(clidaemon.NewCommand(dockercompose.NewManager(dockercompose.DefaultConfig())))
+	root.AddCommand(declarative.NewApplyCmd(deps))
+	root.AddCommand(declarative.NewGetCmd(deps))
+	root.AddCommand(declarative.NewDeleteCmd(deps))
+	root.AddCommand(declarative.NewInitCmd(deps))
+	root.AddCommand(declarative.NewBuildCmd(deps))
+	root.AddCommand(declarative.NewRunCmd(deps))
+	root.AddCommand(declarative.NewPullCmd(deps))
+	root.AddCommand(declarative.NewWaitCmd(deps))
+	migrationSources := append([]migrate.Source{legacymigrate.OSSSource()}, cfg.ExtraMigrationSources...)
+	root.AddCommand(db.NewCommand(migrationSources...))
 
-	addCommand(cliruntime.CommandConfigure, configure.NewCommand(deps))
-	addCommand(cliruntime.CommandVersion, internalcli.NewVersionCommand(deps))
-	addCommand(cliruntime.CommandDaemon, clidaemon.NewCommand(dockercompose.NewManager(dockercompose.DefaultConfig())))
-	addCommand(cliruntime.CommandApply, declarative.NewApplyCmd(deps))
-	addCommand(cliruntime.CommandGet, declarative.NewGetCmd(deps))
-	addCommand(cliruntime.CommandDelete, declarative.NewDeleteCmd(deps))
-	addCommand(cliruntime.CommandInit, declarative.NewInitCmd(deps))
-	addCommand(cliruntime.CommandBuild, declarative.NewBuildCmd(deps))
-	addCommand(cliruntime.CommandRun, declarative.NewRunCmd(deps))
-	addCommand(cliruntime.CommandPull, declarative.NewPullCmd(deps))
-	addCommand(cliruntime.CommandWait, declarative.NewWaitCmd(deps))
-	addCommand(cliruntime.CommandDB, db.NewCommand(legacymigrate.OSSSource()))
+	removeDisabledCommands(root, cfg.Disabled)
 
 	for _, cmd := range cfg.ExtraCommands {
 		if cmd == nil {
@@ -97,19 +98,52 @@ func Root(cfg Config) *cobra.Command {
 	return root
 }
 
+func removeDisabledCommands(root *cobra.Command, disabled map[string]bool) {
+	for path, disabled := range disabled {
+		if !disabled {
+			continue
+		}
+		parts := strings.Fields(path)
+		if len(parts) == 0 {
+			continue
+		}
+
+		parent := root
+		for i, part := range parts {
+			var match *cobra.Command
+			for _, cmd := range parent.Commands() {
+				if cmd.Name() == part {
+					match = cmd
+					break
+				}
+			}
+			if match == nil {
+				break
+			}
+			if i == len(parts)-1 {
+				parent.RemoveCommand(match)
+				break
+			}
+			parent = match
+		}
+	}
+}
+
 // Config describes one CLI instance.
 type Config struct {
-	Use   string
-	Short string
-	Long  string
+	Use     string
+	Short   string
+	Long    string
+	Version string
 
 	Env  cliruntime.Env
 	Auth cliruntime.AuthProvider
 
 	ExtraCommands []*cobra.Command
-	Disabled      map[string]bool
+	Disabled      map[string]bool // command paths to remove, such as "daemon" or "db migrate goto"
 
-	DeclarativeKinds []DeclarativeKind
+	ExtraMigrationSources []migrate.Source
+	DeclarativeKinds      []DeclarativeKind
 
 	OnTokenResolved func(token string) error
 }
@@ -131,6 +165,7 @@ func DefaultConfig() Config {
 		Use:      defaultUse,
 		Short:    defaultShort,
 		Long:     defaultLong,
+		Version:  version.Version,
 		Env:      cliruntime.OSEnv{},
 		Auth:     cliruntime.NoopAuthProvider{},
 		Disabled: map[string]bool{},
@@ -146,6 +181,9 @@ func (c Config) withDefaults() Config {
 	}
 	if c.Long == "" {
 		c.Long = defaultLong
+	}
+	if c.Version == "" {
+		c.Version = version.Version
 	}
 	if c.Env == nil {
 		c.Env = cliruntime.OSEnv{}
