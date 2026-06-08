@@ -2,11 +2,13 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
 
 	"github.com/agentregistry-dev/agentregistry/internal/client"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
 // RegistryTarget is the resolved registry address and bearer token for a
@@ -72,10 +74,16 @@ func (r *runtime) RegistryClient(ctx context.Context) (*client.Client, error) {
 	r.clientOnce.Do(func() {
 		target := r.RegistryTarget()
 		if target.Token == "" {
-			target.Token, r.clientErr = r.cfg.Auth.Token(ctx)
-			if r.clientErr != nil {
+			token, err := r.cfg.Auth.Token(ctx)
+			if errors.Is(err, types.ErrCLINoStoredToken) {
+				token = ""
+				err = nil
+			}
+			if err != nil {
+				r.clientErr = err
 				return
 			}
+			target.Token = token
 		}
 
 		if r.cfg.OnTokenResolved != nil {
