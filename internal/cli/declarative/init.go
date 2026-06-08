@@ -58,19 +58,6 @@ func resolveInitProjectPath(cmd *cobra.Command, projectName string) (string, err
 	return abs, nil
 }
 
-// resolveInitTransport finalizes the MCP transport for `arctl init mcp`:
-// uses the explicit --transport flag if set, otherwise defaults to "http".
-// Rejects stdio + --port.
-func resolveInitTransport(cmd *cobra.Command, current string) (string, error) {
-	if current == "" {
-		current = "http"
-	}
-	if current == "stdio" && cmd.Flags().Changed("port") {
-		return "", fmt.Errorf("--port is meaningless with --transport stdio")
-	}
-	return current, nil
-}
-
 // displayPath returns the path the user sees in narration. When projectDir
 // is under cwd, returns a short relative path (`outdirbot`). When elsewhere
 // (e.g. via --output-dir to a sibling tree), returns the absolute path.
@@ -450,8 +437,8 @@ func stripMCPServersConfigLines(env string) string {
 }
 
 // localMCPEntries resolves sibling MCP project paths into mcpEnvEntries.
-// Extracted from the old appendLocalMCPsToDotEnv so the caller can mix
-// local entries with --mcp-derived remote entries before writing once.
+// Siblings must be http-transport MCPs with a port set in arctl.yaml; stdio
+// siblings are rejected because --local-mcp wires them via an HTTP URL.
 func localMCPEntries(paths []string) ([]mcpEnvEntry, error) {
 	var entries []mcpEnvEntry
 	for _, p := range paths {
@@ -477,12 +464,11 @@ func localMCPEntries(paths []string) ([]mcpEnvEntry, error) {
 			return nil, fmt.Errorf("sibling MCP at %s has no port in arctl.yaml; "+
 				"re-scaffold with `arctl init mcp --transport http --port <PORT>`", abs)
 		}
-		siblingName, err := readMCPName(abs)
-		if err != nil {
-			return nil, err
+		if doc == nil || doc.Metadata.Name == "" {
+			return nil, fmt.Errorf("sibling mcp.yaml at %s missing metadata.name", abs)
 		}
 		entries = append(entries, mcpEnvEntry{
-			Name: siblingName,
+			Name: doc.Metadata.Name,
 			Type: "remote",
 			URL:  fmt.Sprintf("http://host.docker.internal:%d/mcp", port),
 		})
@@ -506,19 +492,6 @@ func readMCPYAML(projectDir string) (*v1alpha1.MCPServer, error) {
 		return nil, fmt.Errorf("parse mcp.yaml: %w", err)
 	}
 	return &doc, nil
-}
-
-// readMCPName pulls metadata.name out of a sibling mcp.yaml. Used to label
-// entries in MCP_SERVERS_CONFIG.
-func readMCPName(projectDir string) (string, error) {
-	doc, err := readMCPYAML(projectDir)
-	if err != nil {
-		return "", err
-	}
-	if doc == nil || doc.Metadata.Name == "" {
-		return "", fmt.Errorf("sibling mcp.yaml missing metadata.name")
-	}
-	return doc.Metadata.Name, nil
 }
 
 // defaultInitModelName returns the default model name for a provider when
@@ -691,9 +664,6 @@ Picks a framework + language interactively (or via --framework / --language).`,
 					return fmt.Errorf("--transport: must be \"http\" or \"stdio\" (got %q)", initTransport)
 				}
 			}
-			if initTransport == "stdio" && cmd.Flags().Changed("port") {
-				return fmt.Errorf("--port is meaningless with --transport stdio")
-			}
 			var name string
 			if len(args) == 1 {
 				name = args[0]
@@ -723,9 +693,11 @@ Picks a framework + language interactively (or via --framework / --language).`,
 				return err
 			}
 
-			initTransport, err = resolveInitTransport(cmd, initTransport)
-			if err != nil {
-				return err
+			if initTransport == "" {
+				initTransport = "http"
+			}
+			if initTransport == "stdio" && cmd.Flags().Changed("port") {
+				return fmt.Errorf("--port is meaningless with --transport stdio")
 			}
 
 			r, err := loadFrameworkRegistry(projectDir)
@@ -750,7 +722,7 @@ Picks a framework + language interactively (or via --framework / --language).`,
 				image = fmt.Sprintf("%s/%s:latest", registry, projectName)
 			}
 
-			vars := mcpTemplateVars(name, projectName, initDescription, image, framework.SourceDir, projectDir)
+			vars := mcpTemplateVars(name, projectName, initDescription, image, framework.SourceDir, projectDir, initPort)
 			if err := frameworks.RenderTemplates(framework, projectDir, vars); err != nil {
 				return err
 			}
@@ -808,7 +780,7 @@ Picks a framework + language interactively (or via --framework / --language).`,
 // templates. The vendored fastmcp-python and mcp-go templates reference fields
 // beyond the canonical Phase-5 set, so we supply safe defaults for those here.
 // Phase 12 simplifies the templates and trims this.
-func mcpTemplateVars(name, baseName, description, image, frameworkDir, projectDir string) map[string]any {
+func mcpTemplateVars(name, baseName, description, image, frameworkDir, projectDir string, port int) map[string]any {
 	desc := description
 	if desc == "" {
 		desc = fmt.Sprintf("%s MCP server", baseName)
@@ -829,6 +801,7 @@ func mcpTemplateVars(name, baseName, description, image, frameworkDir, projectDi
 		"GoModuleName":  "github.com/example/" + baseName,
 		"Author":        "",
 		"Email":         "",
+		"Port":          port,
 	}
 }
 

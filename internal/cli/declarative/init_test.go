@@ -328,6 +328,12 @@ func TestInitMCP_HTTPTransport_WritesLaunchFromFramework(t *testing.T) {
 	assert.Equal(t, []string{
 		"src/main.py", "--transport", "http", "--host", "0.0.0.0", "--port", "4321",
 	}, values, "http launch.args must carry --transport/--host/--port with the user's --port substituted")
+
+	// Dockerfile EXPOSE must template to the user's --port so the image's
+	// metadata stays consistent with what the launcher binds.
+	dockerfile, err := os.ReadFile(filepath.Join(projectDir, "Dockerfile"))
+	require.NoError(t, err)
+	assert.Contains(t, string(dockerfile), "EXPOSE 4321", "Dockerfile EXPOSE must reflect --port")
 }
 
 // TestInitMCP_PortIncompatibleWithStdio rejects --port + --transport stdio

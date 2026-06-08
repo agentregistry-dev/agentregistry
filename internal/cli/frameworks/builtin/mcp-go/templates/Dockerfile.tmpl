@@ -23,6 +23,6 @@ WORKDIR /app
 
 COPY --from=builder /app/server /app/server
 
-EXPOSE 8080
+EXPOSE {{.Port}}
 
 ENTRYPOINT ["/app/server"] 
