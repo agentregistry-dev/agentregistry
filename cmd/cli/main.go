@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	if err := cli.Root().Execute(); err != nil {
+	if err := cli.Root(cli.DefaultConfig()).Execute(); err != nil {
 		os.Exit(1)
 	}
 }

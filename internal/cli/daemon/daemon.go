@@ -7,16 +7,12 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
-// New creates the daemon command tree with the given manager.
-func New(dm types.DaemonManager) *cobra.Command {
+// NewCommand creates the daemon command tree with the given manager.
+func NewCommand(dm types.DaemonManager) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "daemon",
 		Short: "Manage the local registry daemon",
 		Long:  "Start, stop, and check the status of the local AgentRegistry daemon (Docker Compose).",
-		// Override root PersistentPreRunE — daemon commands don't need an API client.
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			return nil
-		},
 	}
 
 	cmd.AddCommand(newStartCmd(dm))

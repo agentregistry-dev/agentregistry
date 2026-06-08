@@ -17,18 +17,11 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	cliruntime "github.com/agentregistry-dev/agentregistry/pkg/cli/runtime"
 )
 
-// BuildCmd is the cobra command for "build".
-// Tests should use NewBuildCmd() for a fresh instance.
-var BuildCmd = newBuildCmd()
-
 // NewBuildCmd returns a new "build" cobra command.
-func NewBuildCmd() *cobra.Command {
-	return newBuildCmd()
-}
-
-func newBuildCmd() *cobra.Command {
+func NewBuildCmd(deps cliruntime.Deps) *cobra.Command {
 	var (
 		buildImage    string
 		buildPush     bool
@@ -36,7 +29,7 @@ func newBuildCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "build DIRECTORY",
+		Use:   cliruntime.CommandBuild + " DIRECTORY",
 		Short: "Build a Docker image for a declarative resource project",
 		Long: `Build the Docker image for a project created with 'arctl init'.
 
@@ -73,7 +66,7 @@ Examples:
 			kind := obj.GetKind()
 			// Validate the kind against the CLI dispatch table, then
 			// dispatch by canonical kind name.
-			if _, kerr := scheme.Lookup(kind); kerr != nil {
+			if _, kerr := kindRegistry(deps).Lookup(kind); kerr != nil {
 				return fmt.Errorf("unknown kind %q in %s", kind, yamlFile)
 			}
 

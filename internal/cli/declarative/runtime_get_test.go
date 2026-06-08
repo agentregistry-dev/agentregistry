@@ -72,7 +72,7 @@ func TestRuntimeGet_YAMLOutputRoundTrips(t *testing.T) {
 	setupClientForServer(t, srv)
 
 	out := &bytes.Buffer{}
-	cmd := declarative.NewGetCmd()
+	cmd := declarative.NewGetCmd(declarativeTestDeps(nil))
 	cmd.SetOut(out)
 	cmd.SetArgs([]string{"runtime", "my-kagent", "-o", "yaml"})
 	require.NoError(t, cmd.Execute())
@@ -100,7 +100,7 @@ func TestRuntimeGet_TableOutput(t *testing.T) {
 	setupClientForServer(t, srv)
 
 	out := &bytes.Buffer{}
-	cmd := declarative.NewGetCmd()
+	cmd := declarative.NewGetCmd(declarativeTestDeps(nil))
 	cmd.SetOut(out)
 	cmd.SetArgs([]string{"runtime", "my-kagent"})
 	require.NoError(t, cmd.Execute())

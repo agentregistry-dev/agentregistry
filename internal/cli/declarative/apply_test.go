@@ -15,8 +15,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative"
-	"github.com/agentregistry-dev/agentregistry/internal/client"
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
+	cliruntime "github.com/agentregistry-dev/agentregistry/pkg/cli/runtime"
 )
 
 // agentYAML is a minimal valid Agent document used across apply tests.
@@ -55,12 +55,15 @@ func newApplyTestServer(t *testing.T, results []arv0.ApplyResult) (*httptest.Ser
 	return srv, captured
 }
 
-// setupApplyClient wires a client pointing at srv into the declarative package.
-func setupApplyClient(t *testing.T, srv *httptest.Server) {
+// applyDeps returns command deps with a client pointing at srv.
+func applyDeps(t *testing.T, srv *httptest.Server) cliruntime.Deps {
 	t.Helper()
-	c := client.NewClient(srv.URL, "")
-	declarative.SetAPIClient(c)
-	t.Cleanup(func() { declarative.SetAPIClient(nil) })
+	cfg := cliruntime.Config{
+		Env: declarativeTestEnv{"ARCTL_API_BASE_URL": srv.URL},
+	}
+	cfg = cfg.WithDefaults()
+	rt := cliruntime.New(cfg)
+	return cliruntime.Deps{Runtime: rt, Auth: cfg.Auth}
 }
 
 // writeTempYAML writes content to a temp file and returns its path.
@@ -78,10 +81,9 @@ func TestApplyPostsToBatchEndpoint(t *testing.T) {
 		{Kind: "agent", Name: "acme-bot", Tag: "1.0.0", Status: arv0.ApplyStatusConfigured},
 	}
 	srv, captured := newApplyTestServer(t, results)
-	setupApplyClient(t, srv)
 
 	var buf bytes.Buffer
-	cmd := declarative.NewApplyCmd()
+	cmd := declarative.NewApplyCmd(applyDeps(t, srv))
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)
 	cmd.SetArgs([]string{"-f", writeTempYAML(t, agentYAML)})
@@ -98,10 +100,9 @@ func TestApplyPrintsPerResourceStatus(t *testing.T) {
 		{Kind: "deployment", Name: "x", Status: arv0.ApplyStatusFailed, Error: "drift detected"},
 	}
 	srv, _ := newApplyTestServer(t, results)
-	setupApplyClient(t, srv)
 
 	var out bytes.Buffer
-	cmd := declarative.NewApplyCmd()
+	cmd := declarative.NewApplyCmd(applyDeps(t, srv))
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 	cmd.SetArgs([]string{"-f", writeTempYAML(t, agentYAML)})
@@ -120,9 +121,8 @@ func TestApplyReturnsErrorOnAnyFailure(t *testing.T) {
 		{Kind: "skill", Name: "my-skill", Status: arv0.ApplyStatusFailed, Error: "internal error"},
 	}
 	srv, _ := newApplyTestServer(t, results)
-	setupApplyClient(t, srv)
 
-	cmd := declarative.NewApplyCmd()
+	cmd := declarative.NewApplyCmd(applyDeps(t, srv))
 	cmd.SetArgs([]string{"-f", writeTempYAML(t, agentYAML)})
 	err := cmd.Execute()
 	require.Error(t, err)
@@ -135,10 +135,9 @@ func TestApplyDryRunFlag(t *testing.T) {
 		{Kind: "agent", Name: "acme-bot", Tag: "1.0.0", Status: arv0.ApplyStatusDryRun},
 	}
 	srv, captured := newApplyTestServer(t, results)
-	setupApplyClient(t, srv)
 
 	var buf bytes.Buffer
-	cmd := declarative.NewApplyCmd()
+	cmd := declarative.NewApplyCmd(applyDeps(t, srv))
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)
 	cmd.SetArgs([]string{"-f", writeTempYAML(t, agentYAML), "--dry-run"})
@@ -155,9 +154,8 @@ func TestApplyNoQueryNoise(t *testing.T) {
 		{Kind: "agent", Name: "acme-bot", Status: arv0.ApplyStatusConfigured},
 	}
 	srv, captured := newApplyTestServer(t, results)
-	setupApplyClient(t, srv)
 
-	cmd := declarative.NewApplyCmd()
+	cmd := declarative.NewApplyCmd(applyDeps(t, srv))
 	cmd.SetArgs([]string{"-f", writeTempYAML(t, agentYAML)})
 	require.NoError(t, cmd.Execute())
 	assert.Empty(t, captured.URL.RawQuery, "expected no query params when dryRun is false")
@@ -165,9 +163,6 @@ func TestApplyNoQueryNoise(t *testing.T) {
 
 // TestApplyRejectsUnknownKind verifies that an unknown kind fails before hitting the server.
 func TestApplyRejectsUnknownKind(t *testing.T) {
-	declarative.SetAPIClient(nil)
-	defer declarative.SetAPIClient(nil)
-
 	badYAML := `apiVersion: ar.dev/v1alpha1
 kind: UnknownKind
 metadata:
@@ -175,7 +170,7 @@ metadata:
 spec:
   description: "test"
 `
-	cmd := declarative.NewApplyCmd()
+	cmd := declarative.NewApplyCmd(cliruntime.Deps{})
 	cmd.SetArgs([]string{"-f", writeTempYAML(t, badYAML)})
 	err := cmd.Execute()
 	require.Error(t, err)
@@ -191,10 +186,9 @@ func TestApplyDryRunOutputAnnotated(t *testing.T) {
 		{Kind: "skill", Name: "my-skill", Tag: "2.0.0", Status: arv0.ApplyStatusConfigured},
 	}
 	srv, _ := newApplyTestServer(t, results)
-	setupApplyClient(t, srv)
 
 	var out bytes.Buffer
-	cmd := declarative.NewApplyCmd()
+	cmd := declarative.NewApplyCmd(applyDeps(t, srv))
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 	cmd.SetArgs([]string{"-f", writeTempYAML(t, agentYAML), "--dry-run"})
@@ -210,10 +204,7 @@ func TestApplyDryRunOutputAnnotated(t *testing.T) {
 
 // TestApplyNoAPIClient verifies that a missing API client returns an error.
 func TestApplyNoAPIClient(t *testing.T) {
-	declarative.SetAPIClient(nil)
-	defer declarative.SetAPIClient(nil)
-
-	cmd := declarative.NewApplyCmd()
+	cmd := declarative.NewApplyCmd(cliruntime.Deps{})
 	cmd.SetArgs([]string{"-f", writeTempYAML(t, agentYAML)})
 	err := cmd.Execute()
 	require.Error(t, err)

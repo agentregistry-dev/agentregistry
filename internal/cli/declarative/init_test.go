@@ -32,7 +32,7 @@ func TestInitAgent_WritesYAMLAndArctlAndDotEnv(t *testing.T) {
 	require.NoError(t, os.Chdir(tmp))
 	defer func() { _ = os.Chdir(origDir) }()
 
-	cmd := declarative.NewInitCmd()
+	cmd := declarative.NewInitCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"agent", "myagent", "--framework", "adk", "--language", "python"})
 	require.NoError(t, cmd.Execute())
 
@@ -71,7 +71,7 @@ func TestInitAgent_MCPToolsHasNamePrefix(t *testing.T) {
 	require.NoError(t, os.Chdir(tmp))
 	defer func() { _ = os.Chdir(origDir) }()
 
-	cmd := declarative.NewInitCmd()
+	cmd := declarative.NewInitCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"agent", "myagent", "--framework", "adk", "--language", "python"})
 	require.NoError(t, cmd.Execute())
 
@@ -91,7 +91,7 @@ func TestInitAgent_OutputDirFlag(t *testing.T) {
 	require.NoError(t, os.Chdir(tmp))
 	defer func() { _ = os.Chdir(origDir) }()
 
-	cmd := declarative.NewInitCmd()
+	cmd := declarative.NewInitCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{
 		"agent", "outdirbot",
 		"--framework", "adk", "--language", "python",
@@ -113,7 +113,7 @@ func TestInitAgent_ModelProviderFlagFlowsToArctlYAML(t *testing.T) {
 	require.NoError(t, os.Chdir(tmp))
 	defer func() { _ = os.Chdir(origDir) }()
 
-	cmd := declarative.NewInitCmd()
+	cmd := declarative.NewInitCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{
 		"agent", "openaibot",
 		"--framework", "adk", "--language", "python",
@@ -144,7 +144,7 @@ func TestInitMCP_RejectsNonDNSSubdomainName(t *testing.T) {
 	require.NoError(t, os.Chdir(tmp))
 	defer func() { _ = os.Chdir(origDir) }()
 
-	cmd := declarative.NewInitCmd()
+	cmd := declarative.NewInitCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"mcp", "acme/my-mcp", "--framework", "fastmcp", "--language", "python", "--transport", "http"})
 	require.Error(t, cmd.Execute())
 }
@@ -156,7 +156,7 @@ func TestInitMCP_WritesYAMLAndArctl(t *testing.T) {
 	require.NoError(t, os.Chdir(tmp))
 	defer func() { _ = os.Chdir(origDir) }()
 
-	cmd := declarative.NewInitCmd()
+	cmd := declarative.NewInitCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"mcp", "my-mcp", "--framework", "fastmcp", "--language", "python", "--transport", "http"})
 	require.NoError(t, cmd.Execute())
 
@@ -190,7 +190,7 @@ func TestInitMCP_StdioTransport(t *testing.T) {
 	require.NoError(t, os.Chdir(tmp))
 	defer func() { _ = os.Chdir(origDir) }()
 
-	cmd := declarative.NewInitCmd()
+	cmd := declarative.NewInitCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{
 		"mcp", "my-stdio-mcp",
 		"--framework", "fastmcp", "--language", "python",
@@ -237,7 +237,7 @@ func TestInitMCP_StdioTransport_OmitsPortFromArctlYAML(t *testing.T) {
 	require.NoError(t, os.Chdir(tmp))
 	defer func() { _ = os.Chdir(origDir) }()
 
-	cmd := declarative.NewInitCmd()
+	cmd := declarative.NewInitCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{
 		"mcp", "my-stdio-mcp",
 		"--framework", "fastmcp", "--language", "python",
@@ -261,7 +261,7 @@ func TestInitMCP_StdioTransport_WritesLaunchFromFramework(t *testing.T) {
 	require.NoError(t, os.Chdir(tmp))
 	defer func() { _ = os.Chdir(origDir) }()
 
-	cmd := declarative.NewInitCmd()
+	cmd := declarative.NewInitCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{
 		"mcp", "my-stdio-mcp",
 		"--framework", "fastmcp", "--language", "python",
@@ -300,7 +300,7 @@ func TestInitMCP_HTTPTransport_WritesLaunchFromFramework(t *testing.T) {
 	require.NoError(t, os.Chdir(tmp))
 	defer func() { _ = os.Chdir(origDir) }()
 
-	cmd := declarative.NewInitCmd()
+	cmd := declarative.NewInitCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{
 		"mcp", "my-http-mcp",
 		"--framework", "fastmcp", "--language", "python",
@@ -346,7 +346,7 @@ func TestInitMCP_PortIncompatibleWithStdio(t *testing.T) {
 	require.NoError(t, os.Chdir(tmp))
 	defer func() { _ = os.Chdir(origDir) }()
 
-	cmd := declarative.NewInitCmd()
+	cmd := declarative.NewInitCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{
 		"mcp", "my-mcp",
 		"--framework", "fastmcp", "--language", "python",
@@ -367,7 +367,7 @@ func TestInitMCP_InvalidTransport(t *testing.T) {
 	require.NoError(t, os.Chdir(tmp))
 	defer func() { _ = os.Chdir(origDir) }()
 
-	cmd := declarative.NewInitCmd()
+	cmd := declarative.NewInitCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{
 		"mcp", "my-mcp",
 		"--framework", "fastmcp", "--language", "python",
@@ -387,7 +387,7 @@ func TestInitSkill_StillWorks(t *testing.T) {
 	require.NoError(t, os.Chdir(tmp))
 	defer func() { _ = os.Chdir(origDir) }()
 
-	cmd := declarative.NewInitCmd()
+	cmd := declarative.NewInitCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"skill", "my-skill"})
 	require.NoError(t, cmd.Execute())
 
@@ -404,7 +404,7 @@ func TestInitPrompt_StillWorks(t *testing.T) {
 	require.NoError(t, os.Chdir(tmp))
 	defer func() { _ = os.Chdir(origDir) }()
 
-	cmd := declarative.NewInitCmd()
+	cmd := declarative.NewInitCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"prompt", "my-prompt"})
 	require.NoError(t, cmd.Execute())
 
@@ -419,7 +419,7 @@ func TestInitSkillCmd_BasicScaffold(t *testing.T) {
 	require.NoError(t, os.Chdir(tmpDir))
 	defer func() { _ = os.Chdir(origDir) }()
 
-	cmd := declarative.NewInitCmd()
+	cmd := declarative.NewInitCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"skill", "myskill"})
 	require.NoError(t, cmd.Execute())
 
@@ -445,7 +445,7 @@ func TestInitSkillCmd_CustomFlags(t *testing.T) {
 	require.NoError(t, os.Chdir(tmpDir))
 	defer func() { _ = os.Chdir(origDir) }()
 
-	cmd := declarative.NewInitCmd()
+	cmd := declarative.NewInitCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{
 		"skill", "myskill",
 		"--description", "Text summarizer",
@@ -464,7 +464,7 @@ func TestInitSkillCmd_ProjectFilesCreated(t *testing.T) {
 	require.NoError(t, os.Chdir(tmpDir))
 	defer func() { _ = os.Chdir(origDir) }()
 
-	cmd := declarative.NewInitCmd()
+	cmd := declarative.NewInitCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"skill", "myskill"})
 	require.NoError(t, cmd.Execute())
 
@@ -483,7 +483,7 @@ func TestInitPromptCmd_BasicScaffold(t *testing.T) {
 	require.NoError(t, os.Chdir(tmpDir))
 	defer func() { _ = os.Chdir(origDir) }()
 
-	cmd := declarative.NewInitCmd()
+	cmd := declarative.NewInitCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"prompt", "myprompt"})
 	require.NoError(t, cmd.Execute())
 
@@ -508,7 +508,7 @@ func TestInitPromptCmd_CustomContent(t *testing.T) {
 	require.NoError(t, os.Chdir(tmpDir))
 	defer func() { _ = os.Chdir(origDir) }()
 
-	cmd := declarative.NewInitCmd()
+	cmd := declarative.NewInitCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{
 		"prompt", "summarizer",
 		"--description", "Summarize text",
@@ -529,7 +529,7 @@ func TestInitPromptCmd_WritesFileNotDirectory(t *testing.T) {
 	require.NoError(t, os.Chdir(tmpDir))
 	defer func() { _ = os.Chdir(origDir) }()
 
-	cmd := declarative.NewInitCmd()
+	cmd := declarative.NewInitCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"prompt", "myprompt"})
 	require.NoError(t, cmd.Execute())
 

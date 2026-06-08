@@ -25,6 +25,12 @@ type ExtensionKind struct {
 // v1alpha1.Default scheme registration; this hook covers explicit CLI
 // commands like `arctl get accesspolicy NAME`.
 func RegisterExtensionKind(k ExtensionKind) {
+	scheme.Register(NewExtensionKind(k))
+}
+
+// NewExtensionKind converts a downstream extension kind into CLI dispatch
+// metadata without mutating the package-global kind registry.
+func NewExtensionKind(k ExtensionKind) *scheme.Kind {
 	if k.Name == "" {
 		panic("declarative.RegisterExtensionKind: name is required")
 	}
@@ -38,7 +44,7 @@ func RegisterExtensionKind(k ExtensionKind) {
 		k.TableColumns = []scheme.Column{{Header: "NAME"}}
 	}
 
-	scheme.Register(&scheme.Kind{
+	return &scheme.Kind{
 		Kind:         k.Name,
 		Plural:       k.Plural,
 		Aliases:      k.Aliases,
@@ -55,16 +61,16 @@ func RegisterExtensionKind(k ExtensionKind) {
 			meta := obj.GetMetadata()
 			return []string{meta.Name}
 		},
-		Get: func(ctx context.Context, name, _ string) (any, error) {
-			return client.GetTyped(ctx, apiClient, k.CanonicalKind, v1alpha1.DefaultNamespace, name, "", k.NewObject)
+		Get: func(ctx context.Context, c *client.Client, name, _ string) (any, error) {
+			return client.GetTyped(ctx, c, k.CanonicalKind, v1alpha1.DefaultNamespace, name, "", k.NewObject)
 		},
-		ListFunc: func(ctx context.Context, opts scheme.ListOpts) ([]any, error) {
-			return listAny(ctx, k.CanonicalKind, opts, k.NewObject)
+		ListFunc: func(ctx context.Context, c *client.Client, opts scheme.ListOpts) ([]any, error) {
+			return listAny(ctx, c, k.CanonicalKind, opts, k.NewObject)
 		},
-		Delete: func(ctx context.Context, name, tag string) error {
-			return deleteAny(ctx, k.CanonicalKind, name, tag, k.NewObject)
+		Delete: func(ctx context.Context, c *client.Client, name, tag string) error {
+			return deleteAny(ctx, c, k.CanonicalKind, name, tag, k.NewObject)
 		},
-	})
+	}
 }
 
 func newSchemeObject(kind string) func() v1alpha1.Object {

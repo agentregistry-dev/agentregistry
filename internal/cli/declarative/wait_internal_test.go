@@ -7,23 +7,21 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	cliruntime "github.com/agentregistry-dev/agentregistry/pkg/cli/runtime"
 )
 
-// When apiClient is nil, runDeclarativeWait returns the typed sentinel so
+// When the registry runtime is missing, runDeclarativeWait returns the typed sentinel so
 // callers can errors.Is against it.
 func TestRunDeclarativeWait_APIClientNotInitializedIsTyped(t *testing.T) {
-	prev := apiClient
-	apiClient = nil
-	t.Cleanup(func() { apiClient = prev })
-
-	cmd := newWaitCmd()
+	cmd := NewWaitCmd(cliruntime.Deps{})
 	cmd.SetContext(context.Background())
 	cmd.SetArgs([]string{"deployment", "summarizer"})
 
-	err := runDeclarativeWait(cmd, []string{"deployment", "summarizer"})
+	err := runDeclarativeWait(cmd, cliruntime.Deps{}, []string{"deployment", "summarizer"})
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errAPIClientNotInitialized)
+	assert.ErrorIs(t, err, errRegistryRuntimeNotConfigured)
 }
 
-// Compile-time check that runDeclarativeWait still matches the cobra RunE signature.
-var _ func(*cobra.Command, []string) error = runDeclarativeWait
+// Compile-time check that NewWaitCmd still returns a cobra command with RunE set.
+var _ func(*cobra.Command, []string) error = NewWaitCmd(internalDeclarativeTestDeps(nil)).RunE

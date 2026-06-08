@@ -26,23 +26,31 @@ const (
 	sourceFlag = "source"
 )
 
-var flags struct {
-	dbURL  string
-	source string
+type commandState struct {
+	dbURL   string
+	source  string
+	sources []Source
 }
 
-// migrateCmd holds the parent cobra.Command after NewCommand
-// constructs it. EnableSourceSelection writes additional flags onto
-// this reference for downstream multi-source binaries; nil before
-// NewCommand has been called.
-var migrateCmd *cobra.Command
-
 // NewCommand returns the `migrate` parent command with all
-// subcommands attached. The `--source` flag is intentionally NOT
-// wired by default — single-source binaries never need it. Downstream
-// binaries that register a second migration source call
-// EnableSourceSelection after Register to expose the flag.
-func NewCommand() *cobra.Command {
+// subcommands attached. The `--source` flag is wired only when more
+// than one source is configured.
+func NewCommand(sources ...Source) *cobra.Command {
+	if len(sources) == 0 {
+		sources = Sources()
+	}
+	seen := map[string]bool{}
+	for _, source := range sources {
+		if !sourceNameRE.MatchString(source.Name) {
+			panic(fmt.Sprintf("migrate.NewCommand: source Name=%q must match %s", source.Name, sourceNameRE.String()))
+		}
+		if seen[source.Name] {
+			panic(fmt.Sprintf("migrate.NewCommand: source %q already configured; each source must have a unique Name", source.Name))
+		}
+		seen[source.Name] = true
+	}
+	state := &commandState{sources: append([]Source(nil), sources...)}
+
 	cmd := &cobra.Command{
 		Use:   "migrate",
 		Short: "Apply, roll back, and inspect database migrations",
@@ -53,44 +61,24 @@ of server startup. Reads ` + dbURLEnv + ` from the environment when
 			annotations.AnnotationSkipTokenResolution: "true",
 		},
 	}
-	cmd.PersistentFlags().StringVar(&flags.dbURL, "db-url", "",
+	cmd.PersistentFlags().StringVar(&state.dbURL, "db-url", "",
 		"PostgreSQL connection URL (defaults to value of "+dbURLEnv+" env var)")
+	if len(state.sources) > 1 {
+		cmd.PersistentFlags().StringVar(&state.source, sourceFlag, "",
+			"Migration source name for per-source ops (down/goto/force/version); inferred when only one source is registered. Not applicable to up or status — those aggregate across every registered source.")
+	}
 
-	cmd.AddCommand(newUpCmd())
-	cmd.AddCommand(newDownCmd())
-	cmd.AddCommand(newStatusCmd())
-	cmd.AddCommand(newVersionCmd())
-	cmd.AddCommand(newGotoCmd())
-	cmd.AddCommand(newForceCmd())
-	migrateCmd = cmd
+	cmd.AddCommand(newUpCmd(state))
+	cmd.AddCommand(newDownCmd(state))
+	cmd.AddCommand(newStatusCmd(state))
+	cmd.AddCommand(newVersionCmd(state))
+	cmd.AddCommand(newGotoCmd(state))
+	cmd.AddCommand(newForceCmd(state))
 	return cmd
 }
 
-// EnableSourceSelection wires the `--source` persistent flag onto the
-// `migrate` parent command, for downstream binaries that register more
-// than one source. Single-source binaries leave it off and let
-// resolveSource infer the sole source.
-//
-// With the flag wired: `up`/`status` reject --source (they aggregate
-// across all sources); `down`/`goto`/`force` require it when more than
-// one source is registered (else infer the sole one); `version` takes
-// it as an optional filter.
-//
-// Call after NewCommand (panics otherwise) and after all Register calls.
-// Idempotent: a repeat call once the flag is wired is a no-op.
-func EnableSourceSelection() {
-	if migrateCmd == nil {
-		panic("migrate.EnableSourceSelection: called before NewCommand")
-	}
-	if migrateCmd.PersistentFlags().Lookup(sourceFlag) != nil {
-		return
-	}
-	migrateCmd.PersistentFlags().StringVar(&flags.source, sourceFlag, "",
-		"Migration source name for per-source ops (down/goto/force/version); inferred when only one source is registered. Not applicable to up or status — those aggregate across every registered source.")
-}
-
-func resolveDSN() (string, error) {
-	dsn := strings.TrimSpace(flags.dbURL)
+func (s *commandState) resolveDSN() (string, error) {
+	dsn := strings.TrimSpace(s.dbURL)
 	if dsn == "" {
 		dsn = os.Getenv(dbURLEnv)
 	}
@@ -104,26 +92,26 @@ func resolveDSN() (string, error) {
 // source registered it's returned directly; with more than one the
 // operator must pass --source and we report the registered set when
 // they don't.
-func resolveSource() (Source, error) {
-	srcs := Sources()
+func (s *commandState) resolveSource() (Source, error) {
+	srcs := s.sources
 	if len(srcs) == 0 {
 		return Source{}, errors.New("no migration sources registered")
 	}
 	if len(srcs) == 1 {
-		if flags.source != "" && flags.source != srcs[0].Name {
-			return Source{}, fmt.Errorf("--source %q not registered; registered source: %s", flags.source, srcs[0].Name)
+		if s.source != "" && s.source != srcs[0].Name {
+			return Source{}, fmt.Errorf("--source %q not registered; registered source: %s", s.source, srcs[0].Name)
 		}
 		return srcs[0], nil
 	}
-	if flags.source == "" {
+	if s.source == "" {
 		return Source{}, fmt.Errorf("registered sources: %s; pass --source", sourceNames(srcs))
 	}
-	for _, s := range srcs {
-		if s.Name == flags.source {
-			return s, nil
+	for _, src := range srcs {
+		if src.Name == s.source {
+			return src, nil
 		}
 	}
-	return Source{}, fmt.Errorf("--source %q not registered; registered sources: %s", flags.source, sourceNames(srcs))
+	return Source{}, fmt.Errorf("--source %q not registered; registered sources: %s", s.source, sourceNames(srcs))
 }
 
 func sourceNames(srcs []Source) string {
@@ -221,7 +209,7 @@ type lineRow struct {
 	dirty      bool // mid-failed-migration; surfaced as a (dirty) annotation
 }
 
-func newUpCmd() *cobra.Command {
+func newUpCmd(state *commandState) *cobra.Command {
 	return &cobra.Command{
 		Use:   "up",
 		Short: "Apply all pending migrations across every registered source",
@@ -230,18 +218,18 @@ registration order. Per source, the orchestrator acquires a
 pg_advisory_lock so concurrent pods serialize, then runs
 Steps(1) → LegacyRun (if defined) → Up().
 
-The --source flag is intentionally not applicable to up; pass it only
+		The --source flag is intentionally not applicable to up; pass it only
 on the per-source subcommands (down/goto/force).`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if flags.source != "" {
+			if state.source != "" {
 				return errors.New("up aggregates across all registered sources; --source is not applicable")
 			}
-			dsn, err := resolveDSN()
+			dsn, err := state.resolveDSN()
 			if err != nil {
 				return err
 			}
-			srcs := Sources()
+			srcs := state.sources
 			if len(srcs) == 0 {
 				return errors.New("no migration sources registered")
 			}
@@ -300,7 +288,7 @@ func pendingCount(ctx context.Context, src Source, dsn string) (int, error) {
 	return pending, nil
 }
 
-func newDownCmd() *cobra.Command {
+func newDownCmd(state *commandState) *cobra.Command {
 	return &cobra.Command{
 		Use:   "down N",
 		Short: "Roll back the N most-recent applied migrations for the selected source",
@@ -317,11 +305,11 @@ the version named in the failure message.`,
 			if err != nil || n < 1 {
 				return fmt.Errorf("expected a positive integer for N, got %q", args[0])
 			}
-			dsn, err := resolveDSN()
+			dsn, err := state.resolveDSN()
 			if err != nil {
 				return err
 			}
-			src, err := resolveSource()
+			src, err := state.resolveSource()
 			if err != nil {
 				return err
 			}
@@ -349,26 +337,24 @@ the version named in the failure message.`,
 	}
 }
 
-func newStatusCmd() *cobra.Command {
+func newStatusCmd(state *commandState) *cobra.Command {
 	var output string
 	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Show how many migrations are applied vs pending across all sources",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			// Unreachable until EnableSourceSelection wires --source for
-			// a multi-source build (see newUpCmd).
-			if flags.source != "" {
+			if state.source != "" {
 				return errors.New("status aggregates across all registered sources; --source is not applicable")
 			}
 			if output != "text" && output != "json" {
 				return fmt.Errorf("invalid --output %q; supported: text, json", output)
 			}
-			dsn, err := resolveDSN()
+			dsn, err := state.resolveDSN()
 			if err != nil {
 				return err
 			}
-			srcs := Sources()
+			srcs := state.sources
 			if len(srcs) == 0 {
 				return errors.New("no migration sources registered")
 			}
@@ -526,7 +512,7 @@ func versionAnnotation(v uint, dirty bool) string {
 	return ""
 }
 
-func newVersionCmd() *cobra.Command {
+func newVersionCmd(state *commandState) *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
 		Short: "Print the highest applied migration version",
@@ -536,26 +522,26 @@ binaries print one line per source. When multiple sources are
 registered, --source filters to a single track.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			dsn, err := resolveDSN()
+			dsn, err := state.resolveDSN()
 			if err != nil {
 				return err
 			}
-			srcs := Sources()
+			srcs := state.sources
 			if len(srcs) == 0 {
 				return errors.New("no migration sources registered")
 			}
 			// --source filters the output even though version is
 			// otherwise an aggregate op. Empty flag = print all.
-			if flags.source != "" {
+			if state.source != "" {
 				picked := -1
 				for i, s := range srcs {
-					if s.Name == flags.source {
+					if s.Name == state.source {
 						picked = i
 						break
 					}
 				}
 				if picked < 0 {
-					return fmt.Errorf("--source %q not registered; registered sources: %s", flags.source, sourceNames(srcs))
+					return fmt.Errorf("--source %q not registered; registered sources: %s", state.source, sourceNames(srcs))
 				}
 				srcs = []Source{srcs[picked]}
 			}
@@ -587,7 +573,7 @@ registered, --source filters to a single track.`,
 	}
 }
 
-func newGotoCmd() *cobra.Command {
+func newGotoCmd(state *commandState) *cobra.Command {
 	return &cobra.Command{
 		Use:   "goto V",
 		Short: "Move the selected source's schema to version V",
@@ -600,11 +586,11 @@ the source is rolled back.`,
 			if err != nil || v < 0 {
 				return fmt.Errorf("expected a non-negative integer for V, got %q", args[0])
 			}
-			dsn, err := resolveDSN()
+			dsn, err := state.resolveDSN()
 			if err != nil {
 				return err
 			}
-			src, err := resolveSource()
+			src, err := state.resolveSource()
 			if err != nil {
 				return err
 			}
@@ -630,7 +616,7 @@ the source is rolled back.`,
 	}
 }
 
-func newForceCmd() *cobra.Command {
+func newForceCmd(state *commandState) *cobra.Command {
 	return &cobra.Command{
 		Use:   "force V",
 		Short: "Mark version V as applied without running its SQL",
@@ -645,11 +631,11 @@ at a version the binary cannot apply or roll back to, wedging the DB.`,
 			if err != nil || v < 1 {
 				return fmt.Errorf("expected a positive integer for V, got %q", args[0])
 			}
-			dsn, err := resolveDSN()
+			dsn, err := state.resolveDSN()
 			if err != nil {
 				return err
 			}
-			src, err := resolveSource()
+			src, err := state.resolveSource()
 			if err != nil {
 				return err
 			}

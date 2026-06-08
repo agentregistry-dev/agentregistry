@@ -9,21 +9,14 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
+	"github.com/agentregistry-dev/agentregistry/internal/client"
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
+	cliruntime "github.com/agentregistry-dev/agentregistry/pkg/cli/runtime"
 )
 
-// DeleteCmd is the cobra command for "delete".
-// Tests should use NewDeleteCmd() for a fresh instance.
-var DeleteCmd = newDeleteCmd()
-
-// NewDeleteCmd returns a new "delete" cobra command.
-func NewDeleteCmd() *cobra.Command {
-	return newDeleteCmd()
-}
-
-func newDeleteCmd() *cobra.Command {
+func NewDeleteCmd(deps cliruntime.Deps) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "delete (TYPE NAME | -f FILE)",
+		Use:   cliruntime.CommandDelete + " (TYPE NAME | -f FILE)",
 		Short: "Delete a registry resource",
 		Long: `Delete a registry resource.
 
@@ -43,7 +36,9 @@ TYPE must be one of: agent, mcp, skill, prompt, deployment
   arctl delete mcp acme-fetch --tag stable
   arctl delete deployment my-agent`,
 		SilenceUsage: true,
-		RunE:         runDeclarativeDelete,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runDeclarativeDelete(cmd, deps, args)
+		},
 	}
 	cmd.Flags().StringP("filename", "f", "", "YAML file to read resources from")
 	cmd.Flags().String("tag", "", "Specific tag to delete (taggable artifact kinds only; defaults to latest)")
@@ -51,18 +46,27 @@ TYPE must be one of: agent, mcp, skill, prompt, deployment
 	return cmd
 }
 
-func runDeclarativeDelete(cmd *cobra.Command, args []string) error {
+func runDeclarativeDelete(cmd *cobra.Command, deps cliruntime.Deps, args []string) error {
+	kinds := kindRegistry(deps)
 	filename, _ := cmd.Flags().GetString("filename")
 	allTags, _ := cmd.Flags().GetBool("all-tags")
 	tag, _ := cmd.Flags().GetString("tag")
 	allTagsFlag := "--all-tags"
 	tagFlag := "--tag"
 
+	if deps.Runtime == nil {
+		return fmt.Errorf("registry runtime not configured")
+	}
+	c, err := deps.Runtime.RegistryClient(cmd.Context())
+	if err != nil {
+		return fmt.Errorf("resolving registry client: %w", err)
+	}
+
 	if filename != "" {
 		if allTags {
 			return fmt.Errorf("%s cannot be used with -f", allTagsFlag)
 		}
-		return deleteFromFile(cmd, filename)
+		return deleteFromFile(cmd, c, filename)
 	}
 
 	// Explicit mode: TYPE NAME [--tag TAG | --all-tags]
@@ -73,24 +77,22 @@ func runDeclarativeDelete(cmd *cobra.Command, args []string) error {
 		if tag != "" {
 			return fmt.Errorf("%s and %s are mutually exclusive", tagFlag, allTagsFlag)
 		}
-		return deleteAllTagsResource(cmd, args[0], args[1])
+		return deleteAllTagsResource(cmd, kinds, c, args[0], args[1])
 	}
-	return deleteResource(cmd, args[0], args[1], tag)
+
+	return deleteResource(cmd, kinds, c, args[0], args[1], tag)
 }
 
 // deleteAllTagsResource removes every live tag of (kind, name).
 // Errors cleanly when the kind is not a taggable artifact.
-func deleteAllTagsResource(cmd *cobra.Command, typeName, name string) error {
-	k, err := scheme.Lookup(typeName)
+func deleteAllTagsResource(cmd *cobra.Command, kinds *scheme.Registry, c *client.Client, typeName, name string) error {
+	k, err := kinds.Lookup(typeName)
 	if err != nil {
 		return err
 	}
-	if apiClient == nil {
-		return fmt.Errorf("API client not initialized")
-	}
 
 	fmt.Fprintf(cmd.OutOrStdout(), "Deleting all tags of %s %s...\n", k.Kind, name)
-	if err := deleteAllTags(k, name); err != nil {
+	if err := deleteAllTags(cmd.Context(), c, k, name); err != nil {
 		return fmt.Errorf("failed to delete all tags of %s %q: %w", k.Kind, name, err)
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "Deleted: %s/%s (all tags)\n", strings.ToLower(k.Kind), name)
@@ -99,7 +101,7 @@ func deleteAllTagsResource(cmd *cobra.Command, typeName, name string) error {
 
 // deleteFromFile reads a YAML file and sends a single DELETE /v0/apply request.
 // Per-resource results are printed; non-zero exit if any failed.
-func deleteFromFile(cmd *cobra.Command, filename string) error {
+func deleteFromFile(cmd *cobra.Command, c *client.Client, filename string) error {
 	var data []byte
 	var err error
 	if filename == "-" {
@@ -119,11 +121,7 @@ func deleteFromFile(cmd *cobra.Command, filename string) error {
 		return fmt.Errorf("parsing %s: %w", filename, err)
 	}
 
-	if apiClient == nil {
-		return fmt.Errorf("API client not initialized")
-	}
-
-	results, err := apiClient.DeleteViaApply(cmd.Context(), data)
+	results, err := c.DeleteViaApply(cmd.Context(), data)
 	if err != nil {
 		return fmt.Errorf("DELETE /v0/apply: %w", err)
 	}
@@ -139,8 +137,8 @@ func deleteFromFile(cmd *cobra.Command, filename string) error {
 }
 
 // deleteResource performs an explicit per-kind delete using the registry to resolve the kind.
-func deleteResource(cmd *cobra.Command, typeName, name, tag string) error {
-	k, err := scheme.Lookup(typeName)
+func deleteResource(cmd *cobra.Command, kinds *scheme.Registry, c *client.Client, typeName, name, tag string) error {
+	k, err := kinds.Lookup(typeName)
 	if err != nil {
 		return err
 	}
@@ -152,16 +150,12 @@ func deleteResource(cmd *cobra.Command, typeName, name, tag string) error {
 		return fmt.Errorf("--tag is not supported for %s", k.Kind)
 	}
 
-	if apiClient == nil {
-		return fmt.Errorf("API client not initialized")
-	}
-
 	if tag != "" {
 		fmt.Fprintf(cmd.OutOrStdout(), "Deleting %s %s tag %s...\n", k.Kind, name, tag)
 	} else {
 		fmt.Fprintf(cmd.OutOrStdout(), "Deleting %s %s...\n", k.Kind, name)
 	}
-	if err := deleteItem(k, name, tag); err != nil {
+	if err := deleteItem(cmd.Context(), c, k, name, tag); err != nil {
 		if tag != "" {
 			return fmt.Errorf("failed to delete %s %q tag %s: %w", k.Kind, name, tag, err)
 		}

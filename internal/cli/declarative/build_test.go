@@ -21,7 +21,7 @@ func writeBuildYAML(t *testing.T, projectDir, filename, content string) {
 
 // TestBuildCmd_NoDirectory verifies the command fails when the directory doesn't exist.
 func TestBuildCmd_NoDirectory(t *testing.T) {
-	cmd := declarative.NewBuildCmd()
+	cmd := declarative.NewBuildCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"/tmp/nonexistent-declarative-build-dir-xyz"})
 	err := cmd.Execute()
 	require.Error(t, err)
@@ -35,7 +35,7 @@ func TestBuildCmd_FileInsteadOfDirectory(t *testing.T) {
 	yamlFile := filepath.Join(tmpDir, "my-prompt.yaml")
 	require.NoError(t, os.WriteFile(yamlFile, []byte("apiVersion: ar.dev/v1alpha1\nkind: Prompt\n"), 0o644))
 
-	cmd := declarative.NewBuildCmd()
+	cmd := declarative.NewBuildCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{yamlFile})
 	err := cmd.Execute()
 	require.Error(t, err)
@@ -48,7 +48,7 @@ func TestBuildCmd_SkillFileInsteadOfDirectory(t *testing.T) {
 	yamlFile := filepath.Join(tmpDir, "my-skill.yaml")
 	require.NoError(t, os.WriteFile(yamlFile, []byte("apiVersion: ar.dev/v1alpha1\nkind: Skill\n"), 0o644))
 
-	cmd := declarative.NewBuildCmd()
+	cmd := declarative.NewBuildCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{yamlFile})
 	err := cmd.Execute()
 	require.Error(t, err)
@@ -58,7 +58,7 @@ func TestBuildCmd_SkillFileInsteadOfDirectory(t *testing.T) {
 // TestBuildCmd_NoYAML verifies the command fails when no declarative YAML is present.
 func TestBuildCmd_NoYAML(t *testing.T) {
 	tmpDir := t.TempDir()
-	cmd := declarative.NewBuildCmd()
+	cmd := declarative.NewBuildCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{tmpDir})
 	err := cmd.Execute()
 	require.Error(t, err)
@@ -79,7 +79,7 @@ spec:
   content: You are a helpful assistant.
 `)
 
-	cmd := declarative.NewBuildCmd()
+	cmd := declarative.NewBuildCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{tmpDir})
 	err := cmd.Execute()
 	require.Error(t, err)
@@ -99,7 +99,7 @@ spec:
   description: Unknown
 `)
 
-	cmd := declarative.NewBuildCmd()
+	cmd := declarative.NewBuildCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{tmpDir})
 	err := cmd.Execute()
 	require.Error(t, err)
@@ -125,7 +125,7 @@ spec:
   modelName: gemini-2.0-flash
   description: test agent
 `)
-	cmd := declarative.NewBuildCmd()
+	cmd := declarative.NewBuildCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{tmpDir})
 	err := cmd.Execute()
 	require.Error(t, err)
@@ -147,7 +147,7 @@ spec:
   description: a test skill
 `)
 
-	cmd := declarative.NewBuildCmd()
+	cmd := declarative.NewBuildCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{tmpDir})
 	err := cmd.Execute()
 	require.Error(t, err)
@@ -166,7 +166,7 @@ func TestBuild_DispatchesViaFramework(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(cwd) })
 	require.NoError(t, os.Chdir(tmp))
 
-	initCmd := declarative.NewInitCmd()
+	initCmd := declarative.NewInitCmd(declarativeTestDeps(nil))
 	initCmd.SetArgs([]string{"agent", "myagent", "--framework", "adk", "--language", "python"})
 	require.NoError(t, initCmd.Execute())
 
