@@ -112,21 +112,7 @@ type MCPPackage struct {
 	EnvironmentVariables []MCPKeyValueInput `json:"environmentVariables,omitempty" yaml:"environmentVariables,omitempty"`
 }
 
-// MCPInputVariable describes a parameterizable value referenced from
-// MCPArgument.Variables or MCPKeyValueInput.Variables.
-type MCPInputVariable struct {
-	Description string   `json:"description,omitempty" yaml:"description,omitempty"`
-	IsRequired  bool     `json:"isRequired,omitempty" yaml:"isRequired,omitempty"`
-	Format      string   `json:"format,omitempty" yaml:"format,omitempty"`
-	Value       string   `json:"value,omitempty" yaml:"value,omitempty"`
-	IsSecret    bool     `json:"isSecret,omitempty" yaml:"isSecret,omitempty"`
-	Default     string   `json:"default,omitempty" yaml:"default,omitempty"`
-	Placeholder string   `json:"placeholder,omitempty" yaml:"placeholder,omitempty"`
-	Choices     []string `json:"choices,omitempty" yaml:"choices,omitempty"`
-}
-
-// MCPArgument.Type values. Kept as string literals to match the YAML wire
-// format; platform translators compare against these.
+// MCPArgument.Type values.
 const (
 	MCPArgumentTypePositional = "positional"
 	MCPArgumentTypeNamed      = "named"
@@ -134,31 +120,16 @@ const (
 
 // MCPArgument is a positional or named argument passed to a package's runtime.
 type MCPArgument struct {
-	Type        string                      `json:"type" yaml:"type"`
-	Name        string                      `json:"name,omitempty" yaml:"name,omitempty"`
-	ValueHint   string                      `json:"valueHint,omitempty" yaml:"valueHint,omitempty"`
-	IsRepeated  bool                        `json:"isRepeated,omitempty" yaml:"isRepeated,omitempty"`
-	Description string                      `json:"description,omitempty" yaml:"description,omitempty"`
-	IsRequired  bool                        `json:"isRequired,omitempty" yaml:"isRequired,omitempty"`
-	Format      string                      `json:"format,omitempty" yaml:"format,omitempty"`
-	Value       string                      `json:"value,omitempty" yaml:"value,omitempty"`
-	IsSecret    bool                        `json:"isSecret,omitempty" yaml:"isSecret,omitempty"`
-	Default     string                      `json:"default,omitempty" yaml:"default,omitempty"`
-	Placeholder string                      `json:"placeholder,omitempty" yaml:"placeholder,omitempty"`
-	Choices     []string                    `json:"choices,omitempty" yaml:"choices,omitempty"`
-	Variables   map[string]MCPInputVariable `json:"variables,omitempty" yaml:"variables,omitempty"`
+	Type    string `json:"type" yaml:"type"`
+	Name    string `json:"name,omitempty" yaml:"name,omitempty"`
+	Value   string `json:"value,omitempty" yaml:"value,omitempty"`
+	Default string `json:"default,omitempty" yaml:"default,omitempty"`
 }
 
 // MCPKeyValueInput represents an environment variable or HTTP header input.
 type MCPKeyValueInput struct {
-	Name        string                      `json:"name" yaml:"name"`
-	Description string                      `json:"description,omitempty" yaml:"description,omitempty"`
-	IsRequired  bool                        `json:"isRequired,omitempty" yaml:"isRequired,omitempty"`
-	Format      string                      `json:"format,omitempty" yaml:"format,omitempty"`
-	Value       string                      `json:"value,omitempty" yaml:"value,omitempty"`
-	IsSecret    bool                        `json:"isSecret,omitempty" yaml:"isSecret,omitempty"`
-	Default     string                      `json:"default,omitempty" yaml:"default,omitempty"`
-	Placeholder string                      `json:"placeholder,omitempty" yaml:"placeholder,omitempty"`
-	Choices     []string                    `json:"choices,omitempty" yaml:"choices,omitempty"`
-	Variables   map[string]MCPInputVariable `json:"variables,omitempty" yaml:"variables,omitempty"`
+	Name       string `json:"name" yaml:"name"`
+	IsRequired bool   `json:"isRequired,omitempty" yaml:"isRequired,omitempty"`
+	Value      string `json:"value,omitempty" yaml:"value,omitempty"`
+	Default    string `json:"default,omitempty" yaml:"default,omitempty"`
 }

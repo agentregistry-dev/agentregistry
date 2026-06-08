@@ -324,94 +324,28 @@ components:
     MCPArgument:
       additionalProperties: false
       properties:
-        choices:
-          items:
-            type: string
-          type:
-          - array
-          - "null"
         default:
           type: string
-        description:
-          type: string
-        format:
-          type: string
-        isRepeated:
-          type: boolean
-        isRequired:
-          type: boolean
-        isSecret:
-          type: boolean
         name:
-          type: string
-        placeholder:
           type: string
         type:
           type: string
         value:
           type: string
-        valueHint:
-          type: string
-        variables:
-          additionalProperties:
-            $ref: '#/components/schemas/MCPInputVariable'
-          type: object
       required:
       - type
-      type: object
-    MCPInputVariable:
-      additionalProperties: false
-      properties:
-        choices:
-          items:
-            type: string
-          type:
-          - array
-          - "null"
-        default:
-          type: string
-        description:
-          type: string
-        format:
-          type: string
-        isRequired:
-          type: boolean
-        isSecret:
-          type: boolean
-        placeholder:
-          type: string
-        value:
-          type: string
       type: object
     MCPKeyValueInput:
       additionalProperties: false
       properties:
-        choices:
-          items:
-            type: string
-          type:
-          - array
-          - "null"
         default:
-          type: string
-        description:
-          type: string
-        format:
           type: string
         isRequired:
           type: boolean
-        isSecret:
-          type: boolean
         name:
-          type: string
-        placeholder:
           type: string
         value:
           type: string
-        variables:
-          additionalProperties:
-            $ref: '#/components/schemas/MCPInputVariable'
-          type: object
       required:
       - name
       type: object

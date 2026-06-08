@@ -163,47 +163,17 @@ export type ListOutputSkillBody = {
 };
 
 export type McpArgument = {
-    choices?: Array<string> | null;
     default?: string;
-    description?: string;
-    format?: string;
-    isRepeated?: boolean;
-    isRequired?: boolean;
-    isSecret?: boolean;
     name?: string;
-    placeholder?: string;
     type: string;
-    value?: string;
-    valueHint?: string;
-    variables?: {
-        [key: string]: McpInputVariable;
-    };
-};
-
-export type McpInputVariable = {
-    choices?: Array<string> | null;
-    default?: string;
-    description?: string;
-    format?: string;
-    isRequired?: boolean;
-    isSecret?: boolean;
-    placeholder?: string;
     value?: string;
 };
 
 export type McpKeyValueInput = {
-    choices?: Array<string> | null;
     default?: string;
-    description?: string;
-    format?: string;
     isRequired?: boolean;
-    isSecret?: boolean;
     name: string;
-    placeholder?: string;
     value?: string;
-    variables?: {
-        [key: string]: McpInputVariable;
-    };
 };
 
 export type McpPackage = {
