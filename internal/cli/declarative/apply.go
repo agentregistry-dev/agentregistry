@@ -14,31 +14,16 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
+	cliruntime "github.com/agentregistry-dev/agentregistry/pkg/cli/runtime"
 )
-
-// labelInjectableKinds is the set of envelope kinds that participate in
-// arctl.dev/* label auto-injection during `arctl apply`. Skills, prompts, and
-// other resources are not buildable artefacts and are therefore unaffected.
-var labelInjectableKinds = map[string]struct{}{
-	"Agent":     {},
-	"MCPServer": {},
-}
-
-// ApplyCmd is the cobra command for "apply". It is initialized by newApplyCmd.
-// Tests should use NewApplyCmd() to obtain a fresh command instance.
-var ApplyCmd = newApplyCmd()
 
 // NewApplyCmd returns a new "apply" cobra command. Each call creates an
 // independent command with its own flag state, which is required for testing
 // since cobra flags accumulate across Execute() calls on the same command instance.
-func NewApplyCmd() *cobra.Command {
-	return newApplyCmd()
-}
-
-func newApplyCmd() *cobra.Command {
+func NewApplyCmd(deps cliruntime.Deps) *cobra.Command {
 	var dryRun bool
 	cmd := &cobra.Command{
-		Use:   "apply -f FILE",
+		Use:   cliruntime.CommandApply + " -f FILE",
 		Short: "Apply one or more resources from a YAML file",
 		Long: `Apply reads a YAML file (or stdin with -f -) containing one or more resource
 documents and applies them via POST /v0/apply.
@@ -52,7 +37,7 @@ Examples:
   cat stack.yaml | arctl apply -f -`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runApply(cmd, dryRun)
+			return runApply(cmd, deps, dryRun)
 		},
 	}
 	cmd.Flags().StringArrayP("filename", "f", nil,
@@ -63,7 +48,7 @@ Examples:
 	return cmd
 }
 
-func runApply(cmd *cobra.Command, dryRun bool) error {
+func runApply(cmd *cobra.Command, deps cliruntime.Deps, dryRun bool) error {
 	filePaths, err := cmd.Flags().GetStringArray("filename")
 	if err != nil {
 		return fmt.Errorf("getting filename flag: %w", err)
@@ -92,16 +77,18 @@ func runApply(cmd *cobra.Command, dryRun bool) error {
 		allData = append(allData, data)
 	}
 
-	// 2. Dry-run with --dry-run uses the server-side dryRun flag.
-	// We still need an API client for the batch endpoint (unlike the old per-resource dry-run).
-	if apiClient == nil {
+	if deps.Runtime == nil {
+		return fmt.Errorf("API client not initialized")
+	}
+	c, err := deps.Runtime.RegistryClient(cmd.Context())
+	if err != nil {
 		return fmt.Errorf("API client not initialized")
 	}
 
 	// 3. Send each file as a separate batch call (preserves document separation).
 	var anyFailure bool
 	for i, data := range allData {
-		results, err := apiClient.Apply(cmd.Context(), data, client.ApplyOpts{
+		results, err := c.Apply(cmd.Context(), data, client.ApplyOpts{
 			DryRun: dryRun,
 		})
 		if err != nil {
@@ -149,6 +136,13 @@ func InjectArctlLabels(yamlPath string) ([]byte, error) {
 	}
 
 	var injected bool
+	// labelInjectableKinds is the set of envelope kinds that participate in
+	// arctl.dev/* label auto-injection during `arctl apply`. Skills, prompts, and
+	// other resources are not buildable artefacts and are therefore unaffected.
+	var labelInjectableKinds = map[string]struct{}{
+		"Agent":     {},
+		"MCPServer": {},
+	}
 	for _, doc := range docs {
 		if len(doc.Content) == 0 {
 			continue

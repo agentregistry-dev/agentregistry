@@ -19,18 +19,11 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative/chat"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/frameworks"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	cliruntime "github.com/agentregistry-dev/agentregistry/pkg/cli/runtime"
 )
 
-// RunCmd is the cobra command for "run".
-// Tests should use NewRunCmd() for a fresh instance.
-var RunCmd = newRunCmd()
-
 // NewRunCmd returns a new "run" cobra command.
-func NewRunCmd() *cobra.Command {
-	return newRunCmd()
-}
-
-func newRunCmd() *cobra.Command {
+func NewRunCmd(_ cliruntime.Deps) *cobra.Command {
 	var (
 		extraEnv  []string
 		dryRun    bool
@@ -39,7 +32,7 @@ func newRunCmd() *cobra.Command {
 		inspector bool
 	)
 	cmd := &cobra.Command{
-		Use:   "run [DIRECTORY]",
+		Use:   cliruntime.CommandRun + " [DIRECTORY]",
 		Short: "Run the agent or MCP server in the current directory",
 		Long: `Run the agent or MCP server defined by the declarative YAML in the
 project directory (defaults to ".").

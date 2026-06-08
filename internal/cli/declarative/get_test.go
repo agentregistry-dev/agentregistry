@@ -16,11 +16,11 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	cliruntime "github.com/agentregistry-dev/agentregistry/pkg/cli/runtime"
 )
 
 func TestGetCmd_RejectsUnknownType(t *testing.T) {
-	declarative.SetAPIClient(nil)
-	cmd := declarative.NewGetCmd()
+	cmd := declarative.NewGetCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"unknowntype"})
 	err := cmd.Execute()
 	require.Error(t, err)
@@ -28,19 +28,18 @@ func TestGetCmd_RejectsUnknownType(t *testing.T) {
 }
 
 func TestGetCmd_RequiresTypeArg(t *testing.T) {
-	cmd := declarative.NewGetCmd()
+	cmd := declarative.NewGetCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{})
 	err := cmd.Execute()
 	assert.Error(t, err)
 }
 
 func TestGetCmd_NoAPIClientErrors(t *testing.T) {
-	declarative.SetAPIClient(nil)
-	cmd := declarative.NewGetCmd()
+	cmd := declarative.NewGetCmd(cliruntime.Deps{})
 	cmd.SetArgs([]string{"agents"})
 	err := cmd.Execute()
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "API client not initialized")
+	assert.ErrorContains(t, err, "registry runtime not configured")
 }
 
 // TestGetCmd_RegistryDrivenColumnLookup verifies the package-level scheme
@@ -52,15 +51,13 @@ func TestGetCmd_RegistryDrivenColumnLookup(t *testing.T) {
 	require.NoError(t, err, "agents alias should resolve via declarative's init() registration")
 	assert.NotEmpty(t, k.TableColumns, "expected TableColumns on the agent kind")
 
-	declarative.SetAPIClient(nil)
-
 	// Looking up a valid kind should get past kind validation and fail
-	// only at "API client not initialized" — confirming the dispatch ran.
-	cmd := declarative.NewGetCmd()
+	// only at runtime setup — confirming the dispatch ran.
+	cmd := declarative.NewGetCmd(cliruntime.Deps{})
 	cmd.SetArgs([]string{"agents"})
 	err = cmd.Execute()
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "API client not initialized",
+	assert.ErrorContains(t, err, "registry runtime not configured",
 		"should fail at API client check, not kind lookup")
 }
 
@@ -130,7 +127,7 @@ func TestGet_Tag_FetchesSpecificTag(t *testing.T) {
 	setupClientForServer(t, srv)
 
 	out := &bytes.Buffer{}
-	cmd := declarative.NewGetCmd()
+	cmd := declarative.NewGetCmd(declarativeTestDeps(nil))
 	cmd.SetOut(out)
 	cmd.SetErr(out)
 	cmd.SetArgs([]string{"agent", "acme-bot", "--tag", "1", "-o", "json"})
@@ -162,7 +159,7 @@ func TestGet_Tag_DefaultsToLatest(t *testing.T) {
 	setupClientForServer(t, srv)
 
 	out := &bytes.Buffer{}
-	cmd := declarative.NewGetCmd()
+	cmd := declarative.NewGetCmd(declarativeTestDeps(nil))
 	cmd.SetOut(out)
 	cmd.SetErr(out)
 	cmd.SetArgs([]string{"agent", "acme-bot", "-o", "json"})
@@ -182,10 +179,9 @@ func TestGet_Tag_DefaultsToLatest(t *testing.T) {
 // TestGet_Tag_MutuallyExclusiveWithAllTags pins the flag-validation
 // guard on runGet.
 func TestGet_Tag_MutuallyExclusiveWithAllTags(t *testing.T) {
-	declarative.SetAPIClient(client.NewClient("http://127.0.0.1:1", ""))
-	t.Cleanup(func() { declarative.SetAPIClient(nil) })
+	setDeclarativeTestClient(t, client.NewClient("http://127.0.0.1:1", ""))
 
-	cmd := declarative.NewGetCmd()
+	cmd := declarative.NewGetCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"agent", "acme-bot", "--tag", "1", "--all-tags"})
 	err := cmd.Execute()
 	require.Error(t, err)
@@ -196,10 +192,9 @@ func TestGet_Tag_MutuallyExclusiveWithAllTags(t *testing.T) {
 // for mutable namespace/name kinds (Runtime, Deployment) before any client
 // dispatch happens.
 func TestGet_Tag_NotSupportedForProvider(t *testing.T) {
-	declarative.SetAPIClient(client.NewClient("http://127.0.0.1:1", ""))
-	t.Cleanup(func() { declarative.SetAPIClient(nil) })
+	setDeclarativeTestClient(t, client.NewClient("http://127.0.0.1:1", ""))
 
-	cmd := declarative.NewGetCmd()
+	cmd := declarative.NewGetCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"runtime", "my-kagent", "--tag", "1"})
 	err := cmd.Execute()
 	require.Error(t, err)
@@ -210,10 +205,9 @@ func TestGet_Tag_NotSupportedForProvider(t *testing.T) {
 // TestGet_Tag_NotSupportedForDeployment is the symmetric assertion
 // for Deployment.
 func TestGet_Tag_NotSupportedForDeployment(t *testing.T) {
-	declarative.SetAPIClient(client.NewClient("http://127.0.0.1:1", ""))
-	t.Cleanup(func() { declarative.SetAPIClient(nil) })
+	setDeclarativeTestClient(t, client.NewClient("http://127.0.0.1:1", ""))
 
-	cmd := declarative.NewGetCmd()
+	cmd := declarative.NewGetCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"deployment", "summarizer", "--tag", "1"})
 	err := cmd.Execute()
 	require.Error(t, err)
@@ -241,7 +235,7 @@ func TestGet_Tag_ListModeFiltersByTag(t *testing.T) {
 	t.Cleanup(srv.Close)
 	setupClientForServer(t, srv)
 
-	cmd := declarative.NewGetCmd()
+	cmd := declarative.NewGetCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"agents", "--tag", "0.1.0"})
 	require.NoError(t, cmd.Execute())
 
@@ -270,7 +264,7 @@ func TestGet_Latest_ListModeFiltersByLatestOnly(t *testing.T) {
 	t.Cleanup(srv.Close)
 	setupClientForServer(t, srv)
 
-	cmd := declarative.NewGetCmd()
+	cmd := declarative.NewGetCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"agents", "--latest"})
 	require.NoError(t, cmd.Execute())
 
@@ -300,7 +294,7 @@ func TestGet_ListModeDefault_NoTagFilter(t *testing.T) {
 	t.Cleanup(srv.Close)
 	setupClientForServer(t, srv)
 
-	cmd := declarative.NewGetCmd()
+	cmd := declarative.NewGetCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"agents"})
 	require.NoError(t, cmd.Execute())
 
@@ -315,10 +309,9 @@ func TestGet_ListModeDefault_NoTagFilter(t *testing.T) {
 
 // TestGet_TagAndLatest_MutuallyExclusive pins the flag-validation guard.
 func TestGet_TagAndLatest_MutuallyExclusive(t *testing.T) {
-	declarative.SetAPIClient(client.NewClient("http://127.0.0.1:1", ""))
-	t.Cleanup(func() { declarative.SetAPIClient(nil) })
+	setDeclarativeTestClient(t, client.NewClient("http://127.0.0.1:1", ""))
 
-	cmd := declarative.NewGetCmd()
+	cmd := declarative.NewGetCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"agents", "--tag", "1", "--latest"})
 	err := cmd.Execute()
 	require.Error(t, err)
@@ -329,10 +322,9 @@ func TestGet_TagAndLatest_MutuallyExclusive(t *testing.T) {
 // is also a tag-shaped filter and should be rejected for mutable kinds
 // before any dispatch.
 func TestGet_Latest_NotSupportedForProvider(t *testing.T) {
-	declarative.SetAPIClient(client.NewClient("http://127.0.0.1:1", ""))
-	t.Cleanup(func() { declarative.SetAPIClient(nil) })
+	setDeclarativeTestClient(t, client.NewClient("http://127.0.0.1:1", ""))
 
-	cmd := declarative.NewGetCmd()
+	cmd := declarative.NewGetCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"runtime", "--latest"})
 	err := cmd.Execute()
 	require.Error(t, err)
@@ -343,7 +335,7 @@ func TestGet_Latest_NotSupportedForProvider(t *testing.T) {
 // TestGet_Tag_RejectsGetAll pins that --tag is rejected for
 // `arctl get all` (cross-kind list flow).
 func TestGet_Tag_RejectsGetAll(t *testing.T) {
-	cmd := declarative.NewGetCmd()
+	cmd := declarative.NewGetCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"all", "--tag", "1"})
 	err := cmd.Execute()
 	require.Error(t, err)
@@ -353,7 +345,7 @@ func TestGet_Tag_RejectsGetAll(t *testing.T) {
 // TestGet_Latest_RejectsGetAll is the symmetric guard for --latest on
 // cross-kind list.
 func TestGet_Latest_RejectsGetAll(t *testing.T) {
-	cmd := declarative.NewGetCmd()
+	cmd := declarative.NewGetCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"all", "--latest"})
 	err := cmd.Execute()
 	require.Error(t, err)

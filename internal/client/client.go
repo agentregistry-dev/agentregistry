@@ -186,6 +186,9 @@ type ListOpts struct {
 	Labels    string
 	Limit     int
 	Cursor    string
+	// Origin, when set, forwards the Deployment origin filter
+	// ("managed" or "discovered"). Empty leaves the server default intact.
+	Origin string
 	// Tag, when set, restricts results to one tag value on tagged-artifact
 	// kinds. Empty means "every tag of every name".
 	Tag string
@@ -285,6 +288,9 @@ func (c *Client) List(ctx context.Context, kind string, opts ListOpts) ([]v1alph
 	}
 	if opts.Labels != "" {
 		q.Set("labels", opts.Labels)
+	}
+	if opts.Origin != "" {
+		q.Set("origin", opts.Origin)
 	}
 	if opts.Tag != "" {
 		q.Set("tag", opts.Tag)

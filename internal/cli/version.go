@@ -7,93 +7,76 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/mod/semver"
 
-	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
-	"github.com/agentregistry-dev/agentregistry/pkg/cli/annotations"
+	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
+	cliruntime "github.com/agentregistry-dev/agentregistry/pkg/cli/runtime"
 )
 
-var apiClient *client.Client
+func NewVersionCommand(deps cliruntime.Deps) *cobra.Command {
+	var jsonOutput bool
 
-func SetAPIClient(client *client.Client) {
-	apiClient = client
-}
+	cmd := &cobra.Command{
+		Use:   cliruntime.CommandVersion,
+		Short: "Show version information",
+		Long:  `Displays the version of arctl.`,
+		Run: func(cmd *cobra.Command, args []string) {
+			output := struct {
+				CLI                  arv0.VersionBody  `json:"cli"`
+				Server               *arv0.VersionBody `json:"server,omitempty"`
+				UpdateRecommendation string            `json:"update_recommendation,omitempty"`
+			}{
+				CLI: arv0.VersionBody{
+					Version:   version.Version,
+					GitCommit: version.GitCommit,
+					BuildTime: version.BuildDate,
+				},
+			}
 
-type versionOutput struct {
-	ArctlVersion         string `json:"arctl_version"`
-	GitCommit            string `json:"git_commit"`
-	BuildDate            string `json:"build_date"`
-	ServerVersion        string `json:"server_version,omitempty"`
-	ServerGitCommit      string `json:"server_git_commit,omitempty"`
-	ServerBuildDate      string `json:"server_build_date,omitempty"`
-	UpdateRecommendation string `json:"update_recommendation,omitempty"`
-}
-
-var jsonOutput bool
-
-var VersionCmd = &cobra.Command{
-	Use:   "version",
-	Short: "Show version information",
-	Long:  `Displays the version of arctl.`,
-	Annotations: map[string]string{
-		// the registry server information is optional
-		annotations.AnnotationOptionalRegistry: "true",
-		// the /version endpoint is public
-		annotations.AnnotationSkipTokenResolution: "true",
-	},
-	Run: func(cmd *cobra.Command, args []string) {
-		output := versionOutput{
-			ArctlVersion: version.Version,
-			GitCommit:    version.GitCommit,
-			BuildDate:    version.BuildDate,
-		}
-
-		serverVersion, err := apiClient.GetVersion()
-		if err == nil {
-			output.ServerVersion = serverVersion.Version
-			output.ServerGitCommit = serverVersion.GitCommit
-			output.ServerBuildDate = serverVersion.BuildTime
-
-			if semver.IsValid(version.EnsureVPrefix(serverVersion.Version)) && semver.IsValid(version.EnsureVPrefix(version.Version)) {
-				compare := semver.Compare(version.EnsureVPrefix(version.Version), version.EnsureVPrefix(serverVersion.Version))
-				switch compare {
-				case 1:
-					output.UpdateRecommendation = "CLI version is newer than server version. Consider updating the server."
-				case -1:
-					output.UpdateRecommendation = "Server version is newer than CLI version. Consider updating the CLI."
+			c, err := deps.Runtime.RegistryClient(cmd.Context())
+			if err == nil {
+				if serverVersion, serverErr := c.GetVersion(); serverErr == nil {
+					output.Server = serverVersion
+					if semver.IsValid(version.EnsureVPrefix(serverVersion.Version)) && semver.IsValid(version.EnsureVPrefix(output.CLI.Version)) {
+						switch semver.Compare(version.EnsureVPrefix(output.CLI.Version), version.EnsureVPrefix(serverVersion.Version)) {
+						case 1:
+							output.UpdateRecommendation = "CLI version is newer than server version. Consider updating the server."
+						case -1:
+							output.UpdateRecommendation = "Server version is newer than CLI version. Consider updating the CLI."
+						}
+					}
 				}
 			}
-		}
 
-		if jsonOutput {
-			jsonBytes, jsonErr := json.MarshalIndent(output, "", "  ")
-			if jsonErr != nil {
-				fmt.Printf("Error marshaling JSON: %v\n", jsonErr)
+			if jsonOutput {
+				jsonBytes, jsonErr := json.MarshalIndent(output, "", "  ")
+				if jsonErr != nil {
+					fmt.Fprintf(cmd.OutOrStdout(), "Error marshaling JSON: %v\n", jsonErr)
+					return
+				}
+				fmt.Fprintln(cmd.OutOrStdout(), string(jsonBytes))
 				return
 			}
-			fmt.Println(string(jsonBytes))
-			return
-		}
 
-		fmt.Printf("arctl version %s\n", output.ArctlVersion)
-		fmt.Printf("Git commit: %s\n", output.GitCommit)
-		fmt.Printf("Build date: %s\n", output.BuildDate)
+			fmt.Fprintf(cmd.OutOrStdout(), "arctl version %s\n", output.CLI.Version)
+			fmt.Fprintf(cmd.OutOrStdout(), "Git commit: %s\n", output.CLI.GitCommit)
+			fmt.Fprintf(cmd.OutOrStdout(), "Build date: %s\n", output.CLI.BuildTime)
 
-		if err != nil {
-			fmt.Printf("Error getting server version: %v\n", err)
-			return
-		}
+			if output.Server == nil {
+				return
+			}
 
-		fmt.Printf("Server version: %s\n", output.ServerVersion)
-		fmt.Printf("Server git commit: %s\n", output.ServerGitCommit)
-		fmt.Printf("Server build date: %s\n", output.ServerBuildDate)
+			fmt.Fprintf(cmd.OutOrStdout(), "Server version: %s\n", output.Server.Version)
+			fmt.Fprintf(cmd.OutOrStdout(), "Server git commit: %s\n", output.Server.GitCommit)
+			fmt.Fprintf(cmd.OutOrStdout(), "Server build date: %s\n", output.Server.BuildTime)
 
-		if output.UpdateRecommendation != "" {
-			fmt.Println("\n-------------------------------")
-			fmt.Println(output.UpdateRecommendation)
-		}
-	},
-}
+			if output.UpdateRecommendation != "" {
+				fmt.Fprintln(cmd.OutOrStdout(), "\n-------------------------------")
+				fmt.Fprintln(cmd.OutOrStdout(), output.UpdateRecommendation)
+			}
+		},
+	}
 
-func init() {
-	VersionCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output version information in JSON format")
+	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output version information in JSON format")
+
+	return cmd
 }

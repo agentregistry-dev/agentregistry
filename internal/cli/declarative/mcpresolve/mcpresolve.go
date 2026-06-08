@@ -1,7 +1,7 @@
 // Package mcpresolve turns a catalog MCPServer ref (name + tag) into a
 // ResolvedMCP describing the URL and headers (if remote) the caller should
 // wire into local-dev .env. Sits behind a Fetcher interface so init code
-// can drive it from the live apiClient while tests inject a fake.
+// can drive it from the root registry client while tests inject a fake.
 package mcpresolve
 
 import (
@@ -13,8 +13,7 @@ import (
 
 // Fetcher abstracts the one registry call this package needs: given a
 // catalog ref, return the MCPServer record. The concrete implementation
-// (in init.go) delegates to client.GetTyped against the package-level
-// apiClient.
+// delegates to client.GetTyped with the root registry client.
 type Fetcher interface {
 	Fetch(ctx context.Context, name, tag string) (*v1alpha1.MCPServer, error)
 }

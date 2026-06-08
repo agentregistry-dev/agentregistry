@@ -40,10 +40,10 @@ type deploymentStatus struct {
 // nothing for resources published with explicit version tags, even
 // though they existed in the registry. List now matches the natural
 // "show me what's there" expectation.
-func listAny[T v1alpha1.Object](ctx context.Context, kind string, opts scheme.ListOpts, newObj func() T) ([]any, error) {
+func listAny[T v1alpha1.Object](ctx context.Context, c *client.Client, kind string, opts scheme.ListOpts, newObj func() T) ([]any, error) {
 	items, err := client.ListAllTyped(
 		ctx,
-		apiClient,
+		c,
 		kind,
 		client.ListOpts{
 			Namespace:  v1alpha1.DefaultNamespace,
@@ -66,8 +66,8 @@ func listAny[T v1alpha1.Object](ctx context.Context, kind string, opts scheme.Li
 
 // listTagsAny lists artifact tags and erases the concrete envelope type so the
 // table printer can format the rows.
-func listTagsAny[T v1alpha1.Object](ctx context.Context, kind, name string, newObj func() T) ([]any, error) {
-	items, err := client.ListTagsOfName(ctx, apiClient, kind, v1alpha1.DefaultNamespace, name, newObj)
+func listTagsAny[T v1alpha1.Object](ctx context.Context, c *client.Client, kind, name string, newObj func() T) ([]any, error) {
+	items, err := client.ListTagsOfName(ctx, c, kind, v1alpha1.DefaultNamespace, name, newObj)
 	if err != nil {
 		return nil, err
 	}
@@ -81,8 +81,8 @@ func listTagsAny[T v1alpha1.Object](ctx context.Context, kind, name string, newO
 // deleteAllTagsAny lists every live tag and deletes each exact tag so the
 // imperative command can report tag-scoped failures while preserving the
 // declarative DELETE /v0/apply contract for file input.
-func deleteAllTagsAny[T v1alpha1.Object](ctx context.Context, kind, name string, newObj func() T) error {
-	items, err := listTagsAny(ctx, kind, name, newObj)
+func deleteAllTagsAny[T v1alpha1.Object](ctx context.Context, c *client.Client, kind, name string, newObj func() T) error {
+	items, err := listTagsAny(ctx, c, kind, name, newObj)
 	if err != nil {
 		return err
 	}
@@ -98,27 +98,27 @@ func deleteAllTagsAny[T v1alpha1.Object](ctx context.Context, kind, name string,
 			errs = append(errs, fmt.Errorf("%s/%s: listed tag row has empty metadata.tag", kind, name))
 			continue
 		}
-		if err := apiClient.Delete(ctx, kind, v1alpha1.DefaultNamespace, name, tag); err != nil {
+		if err := c.Delete(ctx, kind, v1alpha1.DefaultNamespace, name, tag); err != nil {
 			errs = append(errs, fmt.Errorf("%s/%s@%s: %w", kind, name, tag, err))
 		}
 	}
 	return errorsJoin(errs)
 }
 
-func deleteAny[T v1alpha1.Object](ctx context.Context, kind, name, tag string, newObj func() T) error {
+func deleteAny[T v1alpha1.Object](ctx context.Context, c *client.Client, kind, name, tag string, newObj func() T) error {
 	targetTag := tag
 	if targetTag == "" {
-		obj, err := client.GetTyped(ctx, apiClient, kind, v1alpha1.DefaultNamespace, name, "", newObj)
+		obj, err := client.GetTyped(ctx, c, kind, v1alpha1.DefaultNamespace, name, "", newObj)
 		if err != nil {
 			return err
 		}
 		targetTag = obj.GetMetadata().Tag
 	}
-	return apiClient.Delete(ctx, kind, v1alpha1.DefaultNamespace, name, targetTag)
+	return c.Delete(ctx, kind, v1alpha1.DefaultNamespace, name, targetTag)
 }
 
-func listDeploymentAny(ctx context.Context) ([]any, error) {
-	deployments, err := cliCommon.ListDeployments(ctx, apiClient)
+func listDeploymentAny(ctx context.Context, c *client.Client) ([]any, error) {
+	deployments, err := cliCommon.ListDeployments(ctx, c)
 	if err != nil {
 		return nil, err
 	}

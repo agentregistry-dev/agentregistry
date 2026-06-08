@@ -1,287 +1,198 @@
 package cli
 
 import (
-	"context"
-	"errors"
-	"fmt"
-	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
 
-	"github.com/agentregistry-dev/agentregistry/internal/cli"
+	internalcli "github.com/agentregistry-dev/agentregistry/internal/cli"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/configure"
 	clidaemon "github.com/agentregistry-dev/agentregistry/internal/cli/daemon"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
-	"github.com/agentregistry-dev/agentregistry/internal/client"
+	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
-	"github.com/agentregistry-dev/agentregistry/pkg/cli/annotations"
 	"github.com/agentregistry-dev/agentregistry/pkg/cli/db"
 	"github.com/agentregistry-dev/agentregistry/pkg/cli/db/migrate"
+	cliruntime "github.com/agentregistry-dev/agentregistry/pkg/cli/runtime"
 	"github.com/agentregistry-dev/agentregistry/pkg/daemon/dockercompose"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database/legacymigrate"
-	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
-// ClientFactory creates an API client for the given base URL and token.
-// Used for testing when nil; production uses client.NewClientWithConfig.
-type ClientFactory func(ctx context.Context, baseURL, token string) (*client.Client, error)
-
-// DeclarativeKind describes a downstream v1alpha1 kind that should be exposed
-// through the generic declarative CLI commands: get, list, and delete.
-type DeclarativeKind struct {
-	// Name is the singular CLI spelling, for example "accesspolicy".
-	Name string
-	// Plural is the plural CLI spelling and route plural, for example
-	// "accesspolicies".
-	Plural string
-	// CanonicalKind is the v1alpha1 kind, for example "AccessPolicy".
-	CanonicalKind string
-	// Aliases are additional accepted CLI spellings.
-	Aliases []string
-	// TableColumns names the columns used by table output. Defaults to
-	// NAME/VERSION when omitted.
-	TableColumns []string
-	// NewObject constructs the concrete v1alpha1 envelope. If omitted, the
-	// object is resolved from v1alpha1.Default using CanonicalKind.
-	NewObject func() v1alpha1.Object
-	// Row renders table output for one object. JSON/YAML output still receives
-	// the typed object directly.
-	Row func(v1alpha1.Object) []string
-}
-
-// CLIOptions configures the CLI behavior.
-// Can be extended for more options (e.g. client factory).
-type CLIOptions struct {
-	// TokenProviderFactory allows for extensions to provide tokens to CLI.
-	TokenProviderFactory types.CLITokenProviderFactory
-
-	// OnTokenResolved is called when a token is resolved.
-	// This allows extensions to perform additional actions when a token is resolved (e.g. storing locally).
-	OnTokenResolved func(token string) error
-
-	// ClientFactory creates the API client. If nil, uses client.NewClientWithConfig (requires network).
-	ClientFactory ClientFactory
-
-	// DeclarativeKinds registers downstream v1alpha1 kinds with generic CLI
-	// get/list/delete dispatch.
-	DeclarativeKinds []DeclarativeKind
-}
-
-var (
-	cliOptions    CLIOptions
-	registryURL   string
-	registryToken string
+const (
+	defaultUse   = "arctl"
+	defaultShort = "Agent Registry CLI"
+	defaultLong  = "arctl is a CLI tool for managing agents, MCP servers, skills, and prompts."
 )
 
-// Configure applies options to the root command (e.g. for tests or alternate entry points).
-func Configure(opts CLIOptions) {
-	cliOptions = opts
-	for _, kind := range opts.DeclarativeKinds {
-		declarative.RegisterExtensionKind(declarative.ExtensionKind{
+// Root creates a fresh arctl root command from Config.
+func Root(cfg Config) *cobra.Command {
+	cfg = cfg.withDefaults()
+
+	root := &cobra.Command{
+		Use:     cfg.Use,
+		Short:   cfg.Short,
+		Long:    cfg.Long,
+		Version: cfg.Version,
+	}
+	var registryURL string
+	var registryToken string
+	rt := cliruntime.New(cliruntime.Config{
+		Env:             cfg.Env,
+		Auth:            cfg.Auth,
+		RegistryURL:     &registryURL,
+		RegistryToken:   &registryToken,
+		OnTokenResolved: cfg.OnTokenResolved,
+	})
+	root.PersistentFlags().StringVar(&registryURL, "registry-url", cfg.Env.Getenv("ARCTL_API_BASE_URL"), "Registry URL (overrides ARCTL_API_BASE_URL env var; defaults to http://localhost:12121)")
+	root.PersistentFlags().StringVar(&registryToken, "registry-token", "", "Registry bearer token (defaults to value of ARCTL_API_TOKEN env var)")
+
+	kinds := scheme.NewRegistry(scheme.All()...)
+	for _, kind := range cfg.DeclarativeKinds {
+		if kind.Name == "" {
+			panic("registering declarative kind: name is required")
+		}
+		columns := make([]scheme.Column, 0, len(kind.TableColumns))
+		for _, header := range kind.TableColumns {
+			columns = append(columns, scheme.Column{Header: header})
+		}
+		kinds.Register(declarative.NewExtensionKind(declarative.ExtensionKind{
 			Name:          kind.Name,
 			Plural:        kind.Plural,
 			CanonicalKind: kind.CanonicalKind,
 			Aliases:       kind.Aliases,
-			TableColumns:  declarativeColumns(kind.TableColumns),
+			TableColumns:  columns,
 			NewObject:     kind.NewObject,
 			Row:           kind.Row,
-		})
+		}))
+	}
+
+	deps := cliruntime.Deps{
+		Runtime: rt,
+		Auth:    cfg.Auth,
+		Kinds:   kinds,
+	}
+	root.AddCommand(configure.NewCommand(deps))
+	root.AddCommand(internalcli.NewVersionCommand(deps))
+	root.AddCommand(clidaemon.NewCommand(dockercompose.NewManager(dockercompose.DefaultConfig())))
+	root.AddCommand(declarative.NewApplyCmd(deps))
+	root.AddCommand(declarative.NewGetCmd(deps))
+	root.AddCommand(declarative.NewDeleteCmd(deps))
+	root.AddCommand(declarative.NewInitCmd(deps))
+	root.AddCommand(declarative.NewBuildCmd(deps))
+	root.AddCommand(declarative.NewRunCmd(deps))
+	root.AddCommand(declarative.NewPullCmd(deps))
+	root.AddCommand(declarative.NewWaitCmd(deps))
+	migrationSources := append([]migrate.Source{legacymigrate.OSSSource()}, cfg.ExtraMigrationSources...)
+	root.AddCommand(db.NewCommand(migrationSources...))
+
+	removeDisabledCommands(root, cfg.Disabled)
+
+	for _, cmd := range cfg.ExtraCommands {
+		if cmd == nil {
+			continue
+		}
+		root.AddCommand(cmd)
+	}
+
+	return root
+}
+
+func removeDisabledCommands(root *cobra.Command, disabled map[string]bool) {
+	for path, disabled := range disabled {
+		if !disabled {
+			continue
+		}
+		parts := strings.Fields(path)
+		if len(parts) == 0 {
+			continue
+		}
+
+		parent := root
+		for i, part := range parts {
+			var match *cobra.Command
+			for _, cmd := range parent.Commands() {
+				if cmd.Name() == part {
+					match = cmd
+					break
+				}
+			}
+			if match == nil {
+				break
+			}
+			if i == len(parts)-1 {
+				parent.RemoveCommand(match)
+				break
+			}
+			parent = match
+		}
 	}
 }
 
-func declarativeColumns(headers []string) []scheme.Column {
-	if len(headers) == 0 {
-		return nil
-	}
-	columns := make([]scheme.Column, 0, len(headers))
-	for _, header := range headers {
-		columns = append(columns, scheme.Column{Header: header})
-	}
-	return columns
+// Config describes one CLI instance.
+type Config struct {
+	Use     string
+	Short   string
+	Long    string
+	Version string
+
+	Env  cliruntime.Env
+	Auth cliruntime.AuthProvider
+
+	ExtraCommands []*cobra.Command
+	Disabled      map[string]bool // command paths to remove, such as "daemon" or "db migrate goto"
+
+	ExtraMigrationSources []migrate.Source
+	DeclarativeKinds      []DeclarativeKind
+
+	OnTokenResolved func(token string) error
 }
 
-// Root returns the root cobra command. Used by main and tests.
-func Root() *cobra.Command {
-	return rootCmd
+// DeclarativeKind describes a downstream v1alpha1 kind exposed through generic
+// get, list, and delete dispatch.
+type DeclarativeKind struct {
+	Name          string
+	Plural        string
+	CanonicalKind string
+	Aliases       []string
+	TableColumns  []string
+	NewObject     func() v1alpha1.Object
+	Row           func(v1alpha1.Object) []string
 }
 
-var rootCmd = &cobra.Command{
-	Use:   "arctl",
-	Short: "Agent Registry CLI",
-	Long:  `arctl is a CLI tool for managing agents, MCP servers, skills, and prompts.`,
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		baseURL, token := resolveRegistryTarget(os.Getenv)
-		if preRunBehavior(cmd) {
-			return nil
-		}
-
-		c, err := preRunSetup(cmd.Context(), cmd, baseURL, token)
-		if err != nil {
-			return err
-		}
-
-		cli.SetAPIClient(c)
-		declarative.SetAPIClient(c)
-		return nil
-	},
+func DefaultConfig() Config {
+	return Config{
+		Use:      defaultUse,
+		Short:    defaultShort,
+		Long:     defaultLong,
+		Version:  version.Version,
+		Env:      cliruntime.OSEnv{},
+		Auth:     cliruntime.NoopAuthProvider{},
+		Disabled: map[string]bool{},
+	}
 }
 
-func init() {
-	rootCmd.PersistentFlags().StringVar(&registryURL, "registry-url", os.Getenv("ARCTL_API_BASE_URL"), "Registry URL (overrides ARCTL_API_BASE_URL env var; defaults to http://localhost:12121)")
-	// Don't use the default value from the env var here as the CLI help text would print it and this is a sensitive credential to access the API
-	rootCmd.PersistentFlags().StringVar(&registryToken, "registry-token", "", "Registry bearer token (defaults to value of ARCTL_API_TOKEN env var)")
-
-	rootCmd.AddCommand(configure.ConfigureCmd)
-	rootCmd.AddCommand(cli.VersionCmd)
-	rootCmd.AddCommand(clidaemon.New(dockercompose.NewManager(dockercompose.DefaultConfig())))
-	rootCmd.AddCommand(declarative.ApplyCmd)
-	rootCmd.AddCommand(declarative.GetCmd)
-	rootCmd.AddCommand(declarative.DeleteCmd)
-	rootCmd.AddCommand(declarative.InitCmd)
-	rootCmd.AddCommand(declarative.BuildCmd)
-	rootCmd.AddCommand(declarative.RunCmd)
-	rootCmd.AddCommand(declarative.PullCmd)
-	rootCmd.AddCommand(declarative.WaitCmd)
-	rootCmd.AddCommand(db.NewCommand())
-
-	// Register the OSS migration source. The source's LegacyRun
-	// bridges legacy v1alpha1.* data into the orchestrator-owned
-	// schema; the orchestrator gates the bridge to fresh-upgrade boots.
-	migrate.Register(legacymigrate.OSSSource())
-}
-
-// resolveRegistryTarget returns base URL and token from flags and env.
-// getEnv is typically os.Getenv; injected for tests.
-func resolveRegistryTarget(getEnv func(string) string) (baseURL, token string) {
-	base := strings.TrimSpace(registryURL)
-	if base == "" {
-		base = strings.TrimSpace(getEnv("ARCTL_API_BASE_URL"))
+func (c Config) withDefaults() Config {
+	if c.Use == "" {
+		c.Use = defaultUse
 	}
-	base = normalizeBaseURL(base)
-
-	token = registryToken
-	if token == "" {
-		token = getEnv("ARCTL_API_TOKEN")
+	if c.Short == "" {
+		c.Short = defaultShort
 	}
-	return base, token
-}
-
-// resolveAuthToken resolves the authentication token from the CLI token provider.
-func resolveAuthToken(ctx context.Context, cmd *cobra.Command, factory types.CLITokenProviderFactory) (string, error) {
-	provider, err := factory(cmd.Root())
-	if err != nil {
-		if errors.Is(err, types.ErrNoOIDCDefined) {
-			return "", nil // non-blocking, user may be running a command that does not require authentication
-		}
-		return "", fmt.Errorf("failed to create CLI authentication provider: %w", err)
+	if c.Long == "" {
+		c.Long = defaultLong
 	}
-	if provider == nil {
-		return "", nil // non-blocking, user may be running a command that does not require authentication
+	if c.Version == "" {
+		c.Version = version.Version
 	}
-
-	token, err := provider.Token(ctx)
-	if err != nil {
-		if errors.Is(err, types.ErrCLINoStoredToken) {
-			return "", nil // non-blocking, user may be running a command that does not require authentication
-		}
-		return "", fmt.Errorf("CLI authentication failed: %w", err)
+	if c.Env == nil {
+		c.Env = cliruntime.OSEnv{}
 	}
-	return token, nil
-}
-
-func normalizeBaseURL(raw string) string {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return client.DefaultBaseURL
+	if c.Auth == nil {
+		c.Auth = cliruntime.NoopAuthProvider{}
 	}
-	if strings.HasPrefix(trimmed, "http://") || strings.HasPrefix(trimmed, "https://") {
-		return trimmed
+	if c.Disabled == nil {
+		c.Disabled = map[string]bool{}
 	}
-	return "http://" + trimmed
-}
-
-// preRunSkipCommands defines which commands skip pre-run setup entirely.
-// For commands that should only skip segments of the pre-run, use the
-// annotations in [annotations.go](/pkg/cli/annotations/annotations.go) instead.
-// Key: parent name; value: set of subcommand names that skip setup.
-var preRunSkipCommands = map[string]map[string]bool{
-	"arctl": {
-		"completion": true,
-		"configure":  true,
-		"init":       true,
-		"build":      true,
-		"help":       true,
-		// db subcommands talk to Postgres directly via --db-url / env
-		// and never call the registry API. Skipping pre-run lets
-		// operators run `arctl db migrate up` before the server is
-		// reachable (the canonical pre-rollout workflow).
-		"db": true,
-	},
-}
-
-// preRunBehavior returns whether to skip pre-run setup (e.g. init/build, which run locally).
-func preRunBehavior(cmd *cobra.Command) (skipSetup bool) {
-	if cmd == nil {
-		return false
-	}
-	for c := cmd; c != nil; c = c.Parent() {
-		parent := c.Parent()
-		if parent == nil {
-			break
-		}
-		if subcommands, ok := preRunSkipCommands[parent.Name()]; ok && subcommands[c.Name()] {
-			return true
-		}
-	}
-	return false
-}
-
-// hasAnnotation returns true if the command or any of its ancestors has the given
-// annotation key set to "true" (case-insensitive).
-// The nearest (most specific) annotation wins, so a child can override a parent's
-// setting. Returns false if cmd is nil.
-func hasAnnotation(cmd *cobra.Command, key string) bool {
-	for c := cmd; c != nil; c = c.Parent() {
-		if v, ok := c.Annotations[key]; ok {
-			return strings.ToLower(v) == "true"
-		}
-	}
-	return false
-}
-
-// preRunSetup resolves the API token and creates the API client.
-func preRunSetup(ctx context.Context, cmd *cobra.Command, baseURL, token string) (*client.Client, error) {
-	// Get authentication token if no token override was provided
-	if token == "" && cliOptions.TokenProviderFactory != nil && !hasAnnotation(cmd, annotations.AnnotationSkipTokenResolution) {
-		resolvedToken, err := resolveAuthToken(ctx, cmd, cliOptions.TokenProviderFactory)
-		if err != nil {
-			return nil, err
-		}
-		token = resolvedToken
-	}
-
-	if cliOptions.OnTokenResolved != nil {
-		if err := cliOptions.OnTokenResolved(token); err != nil {
-			return nil, fmt.Errorf("failed to call resolve token callback: %w", err)
-		}
-	}
-
-	factory := cliOptions.ClientFactory
-	if factory == nil {
-		factory = func(_ context.Context, u, tok string) (*client.Client, error) {
-			return client.NewClientWithConfig(u, tok)
-		}
-	}
-	c, err := factory(ctx, baseURL, token)
-	if err != nil {
-		if hasAnnotation(cmd, annotations.AnnotationOptionalRegistry) {
-			// Soft-fail: skip the connectivity check and return an
-			// unverified client.
-			return client.NewClient(baseURL, token), nil
-		}
-		return nil, fmt.Errorf("registry unreachable at %s: %w", baseURL, err)
-	}
-	return c, nil
+	return c
 }

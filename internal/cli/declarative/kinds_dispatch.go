@@ -11,6 +11,8 @@ import (
 	"fmt"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
+	"github.com/agentregistry-dev/agentregistry/internal/client"
+	cliruntime "github.com/agentregistry-dev/agentregistry/pkg/cli/runtime"
 )
 
 // errNotListable is returned by listItems for kinds that do not support list operations.
@@ -18,48 +20,55 @@ import (
 // than treating it as an error.
 var errNotListable = errors.New("list not supported for this kind")
 
+func kindRegistry(deps cliruntime.Deps) *scheme.Registry {
+	if deps.Kinds != nil {
+		return deps.Kinds
+	}
+	return scheme.NewRegistry(scheme.All()...)
+}
+
 // listItems fetches items for the given kind using its registered ListFunc.
 // opts may be the zero value to list every row.
-func listItems(k *scheme.Kind, opts scheme.ListOpts) ([]any, error) {
+func listItems(ctx context.Context, c *client.Client, k *scheme.Kind, opts scheme.ListOpts) ([]any, error) {
 	if k.ListFunc == nil {
 		return nil, fmt.Errorf("%w: %q", errNotListable, k.Kind)
 	}
-	return k.ListFunc(context.Background(), opts)
+	return k.ListFunc(ctx, c, opts)
 }
 
 // getItem fetches a single item by name for the given kind. Empty tag resolves
 // the latest tag; non-empty tag selects an exact tag on taggable artifacts.
-func getItem(k *scheme.Kind, name, tag string) (any, error) {
+func getItem(ctx context.Context, c *client.Client, k *scheme.Kind, name, tag string) (any, error) {
 	if k.Get == nil {
 		return nil, fmt.Errorf("get not supported for kind %q", k.Kind)
 	}
-	return k.Get(context.Background(), name, tag)
+	return k.Get(ctx, c, name, tag)
 }
 
 // deleteItem deletes a single item by (name, tag) for the given kind.
-func deleteItem(k *scheme.Kind, name, tag string) error {
+func deleteItem(ctx context.Context, c *client.Client, k *scheme.Kind, name, tag string) error {
 	if k.Delete == nil {
 		return fmt.Errorf("delete not supported for kind %q", k.Kind)
 	}
-	return k.Delete(context.Background(), name, tag)
+	return k.Delete(ctx, c, name, tag)
 }
 
 // listTags returns every live tag for (kind, name). Errors when the kind is not
 // a taggable artifact (e.g. mutable Deployment/Provider).
-func listTags(k *scheme.Kind, name string) ([]any, error) {
+func listTags(ctx context.Context, c *client.Client, k *scheme.Kind, name string) ([]any, error) {
 	if k.ListTags == nil {
 		return nil, fmt.Errorf("--all-tags not supported for kind %q (resource is not taggable)", k.Kind)
 	}
-	return k.ListTags(context.Background(), name)
+	return k.ListTags(ctx, c, name)
 }
 
 // deleteAllTags soft-deletes every live tag for (kind, name). Errors when the
 // kind is not a taggable artifact.
-func deleteAllTags(k *scheme.Kind, name string) error {
+func deleteAllTags(ctx context.Context, c *client.Client, k *scheme.Kind, name string) error {
 	if k.DeleteAllTags == nil {
 		return fmt.Errorf("--all-tags not supported for kind %q (resource is not taggable)", k.Kind)
 	}
-	return k.DeleteAllTags(context.Background(), name)
+	return k.DeleteAllTags(ctx, c, name)
 }
 
 // tableRow returns a []string row for the given item, matching the TableColumns

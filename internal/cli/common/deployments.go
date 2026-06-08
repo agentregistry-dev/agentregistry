@@ -13,6 +13,7 @@ import (
 )
 
 const runtimeMetadataPrefix = "runtimes.agentregistry.solo.io/"
+const deploymentOriginManaged = "managed"
 
 // DeploymentRecord is the CLI-friendly projection of a v1alpha1 Deployment.
 type DeploymentRecord struct {
@@ -43,7 +44,7 @@ type DeploymentRecord struct {
 	Details json.RawMessage `json:"details,omitempty"`
 }
 
-// ListDeployments returns every Deployment row visible from the default namespace.
+// ListDeployments returns managed Deployment rows visible from the default namespace.
 func ListDeployments(ctx context.Context, c *client.Client) ([]*DeploymentRecord, error) {
 	deployments, err := client.ListAllTyped(
 		ctx,
@@ -53,6 +54,7 @@ func ListDeployments(ctx context.Context, c *client.Client) ([]*DeploymentRecord
 			Namespace:          v1alpha1.DefaultNamespace,
 			IncludeTerminating: true,
 			Limit:              200,
+			Origin:             deploymentOriginManaged,
 		},
 		func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} },
 	)
