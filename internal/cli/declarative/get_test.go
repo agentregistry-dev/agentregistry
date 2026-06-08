@@ -96,8 +96,12 @@ func tagGetServer(t *testing.T, latest, specific v1alpha1.Agent) (*httptest.Serv
 		captured []string
 	)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		if r.URL.RawQuery != "" {
+			path += "?" + r.URL.RawQuery
+		}
 		mu.Lock()
-		captured = append(captured, r.Method+" "+r.URL.Path)
+		captured = append(captured, r.Method+" "+path)
 		mu.Unlock()
 		if r.Method != http.MethodGet {
 			http.Error(w, `{"error":"method"}`, http.StatusMethodNotAllowed)
@@ -148,6 +152,22 @@ func TestGet_Tag_FetchesSpecificTag(t *testing.T) {
 		}
 	}
 	assert.True(t, hitSpecific, "expected GET to exact-tag path, got %v", *captured)
+}
+
+func TestGet_Tag_FetchesSpecificTagByNamespaceName(t *testing.T) {
+	v1 := agentTagFixture("acme-bot", "1")
+	v2 := agentTagFixture("acme-bot", "2")
+	srv, captured := tagGetServer(t, v2, v1)
+	setupClientForServer(t, srv)
+
+	out := &bytes.Buffer{}
+	cmd := declarative.NewGetCmd(declarativeTestDeps(nil))
+	cmd.SetOut(out)
+	cmd.SetErr(out)
+	cmd.SetArgs([]string{"agent", "team-a/acme-bot", "--tag", "1", "-o", "json"})
+	require.NoError(t, cmd.Execute())
+
+	require.Contains(t, *captured, "GET /v0/agents/acme-bot/1?namespace=team-a")
 }
 
 // TestGet_Tag_DefaultsToLatest verifies that omitting --tag still

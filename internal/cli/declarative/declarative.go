@@ -3,7 +3,6 @@ package declarative
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -106,7 +105,11 @@ func init() {
 			return runtimeRow(runtime)
 		},
 		Get: func(ctx context.Context, c *client.Client, name, _ string) (any, error) {
-			return client.GetTyped(ctx, c, v1alpha1.KindRuntime, v1alpha1.DefaultNamespace, name, "", func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} })
+			ref, err := parseResourceLookupRef(name)
+			if err != nil {
+				return nil, err
+			}
+			return client.GetTyped(ctx, c, v1alpha1.KindRuntime, ref.Namespace, ref.Name, "", func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} })
 		},
 		ListFunc: func(ctx context.Context, c *client.Client, opts scheme.ListOpts) ([]any, error) {
 			return listAny(ctx, c, v1alpha1.KindRuntime, opts, func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} })
@@ -118,19 +121,19 @@ func init() {
 
 	// Deployment is registered manually because it is a mutable namespace/name
 	// object: the server's deployment store does not expose /tags or
-	// DeleteAllTags endpoints. Get accepts either NAME or NAMESPACE/NAME;
-	// ListTags / DeleteAllTags are intentionally omitted so the dispatch layer
-	// rejects --all-tags cleanly.
+	// DeleteAllTags endpoints. Explicit get/delete accept either NAME or
+	// NAMESPACE/NAME; ListTags / DeleteAllTags are intentionally omitted so
+	// the dispatch layer rejects --all-tags cleanly.
 	scheme.Register(&scheme.Kind{
 		Kind:    "deployment",
 		Plural:  "deployments",
 		Aliases: []string{"Deployment"},
 		Get: func(ctx context.Context, c *client.Client, name, _ string) (any, error) {
-			namespace, deploymentName, err := deploymentLookupRef(name)
+			ref, err := parseResourceLookupRef(name)
 			if err != nil {
 				return nil, err
 			}
-			deployment, err := client.GetTyped(ctx, c, v1alpha1.KindDeployment, namespace, deploymentName, "", func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} })
+			deployment, err := client.GetTyped(ctx, c, v1alpha1.KindDeployment, ref.Namespace, ref.Name, "", func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} })
 			if err != nil {
 				return nil, err
 			}
@@ -163,16 +166,6 @@ func init() {
 	})
 }
 
-func deploymentLookupRef(arg string) (namespace, name string, err error) {
-	if namespace, name, ok := strings.Cut(arg, "/"); ok {
-		if namespace == "" || name == "" || strings.Contains(name, "/") {
-			return "", "", fmt.Errorf("deployment reference must be NAME or NAMESPACE/NAME")
-		}
-		return namespace, name, nil
-	}
-	return v1alpha1.DefaultNamespace, arg, nil
-}
-
 // typedKind builds a scheme.Kind whose Get / List / Delete dispatch
 // closures all wire through the typed v1alpha1 client helpers
 // (client.GetTyped[T] / client.ListAllTyped[T] / client.Delete) for
@@ -202,7 +195,11 @@ func typedKind[T v1alpha1.Object](
 			return row(t)
 		},
 		Get: func(ctx context.Context, c *client.Client, name, tag string) (any, error) {
-			return client.GetTyped(ctx, c, canonicalKind, v1alpha1.DefaultNamespace, name, tag, newObj)
+			ref, err := parseResourceLookupRef(name)
+			if err != nil {
+				return nil, err
+			}
+			return client.GetTyped(ctx, c, canonicalKind, ref.Namespace, ref.Name, tag, newObj)
 		},
 		ListFunc: func(ctx context.Context, c *client.Client, opts scheme.ListOpts) ([]any, error) {
 			return listAny(ctx, c, canonicalKind, opts, newObj)

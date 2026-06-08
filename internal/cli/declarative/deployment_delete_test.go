@@ -45,10 +45,14 @@ func deploymentTestServer(t *testing.T, list []v1alpha1.Deployment, failIDs map[
 		}
 		switch r.Method {
 		case http.MethodGet:
+			namespace := r.URL.Query().Get("namespace")
+			if namespace == "" {
+				namespace = v1alpha1.DefaultNamespace
+			}
 			mu.Lock()
 			defer mu.Unlock()
 			for _, d := range list {
-				if d.Metadata.Name == parts[0] {
+				if d.Metadata.Name == parts[0] && d.Metadata.NamespaceOrDefault() == namespace {
 					_ = json.NewEncoder(w).Encode(d)
 					return
 				}
@@ -94,6 +98,22 @@ func TestDeploymentDelete_RemovesNamedDeployment(t *testing.T) {
 
 	assert.ElementsMatch(t, []string{"aws-v1"}, *deleted,
 		"every deployment targeting summarizer should be deleted; unrelated targets untouched")
+}
+
+func TestDeploymentDelete_RemovesMatchByNamespaceName(t *testing.T) {
+	defaultDeployment := deploymentFixture("aws-v1", "default-summarizer", "1.0.0", "my-aws", "agent", "pending")
+	teamDeployment := deploymentFixture("aws-v1", "team-summarizer", "1.0.0", "my-aws", "agent", "pending")
+	teamDeployment.Metadata.Namespace = "team-a"
+	srv, deleted, capturedQuery := deploymentTestServer(t, []v1alpha1.Deployment{defaultDeployment, teamDeployment}, nil)
+	setupClientForServer(t, srv)
+
+	cmd := declarative.NewDeleteCmd(declarativeTestDeps(nil))
+	cmd.SetArgs([]string{"deployment", "team-a/aws-v1"})
+	require.NoError(t, cmd.Execute())
+
+	assert.ElementsMatch(t, []string{"aws-v1"}, *deleted)
+	require.Len(t, *capturedQuery, 1)
+	assert.Equal(t, "namespace=team-a", (*capturedQuery)[0])
 }
 
 // (2) When no deployment matches the target name, returns a not-found error.

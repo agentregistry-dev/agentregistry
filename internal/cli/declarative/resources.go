@@ -67,7 +67,11 @@ func listAny[T v1alpha1.Object](ctx context.Context, c *client.Client, kind stri
 // listTagsAny lists artifact tags and erases the concrete envelope type so the
 // table printer can format the rows.
 func listTagsAny[T v1alpha1.Object](ctx context.Context, c *client.Client, kind, name string, newObj func() T) ([]any, error) {
-	items, err := client.ListTagsOfName(ctx, c, kind, v1alpha1.DefaultNamespace, name, newObj)
+	ref, err := parseResourceLookupRef(name)
+	if err != nil {
+		return nil, err
+	}
+	items, err := client.ListTagsOfName(ctx, c, kind, ref.Namespace, ref.Name, newObj)
 	if err != nil {
 		return nil, err
 	}
@@ -82,23 +86,22 @@ func listTagsAny[T v1alpha1.Object](ctx context.Context, c *client.Client, kind,
 // imperative command can report tag-scoped failures while preserving the
 // declarative DELETE /v0/apply contract for file input.
 func deleteAllTagsAny[T v1alpha1.Object](ctx context.Context, c *client.Client, kind, name string, newObj func() T) error {
-	items, err := listTagsAny(ctx, c, kind, name, newObj)
+	ref, err := parseResourceLookupRef(name)
+	if err != nil {
+		return err
+	}
+	items, err := client.ListTagsOfName(ctx, c, kind, ref.Namespace, ref.Name, newObj)
 	if err != nil {
 		return err
 	}
 	var errs []error
 	for _, item := range items {
-		obj, ok := item.(v1alpha1.Object)
-		if !ok {
-			errs = append(errs, fmt.Errorf("%s/%s: unexpected tag list item type %T", kind, name, item))
-			continue
-		}
-		tag := obj.GetMetadata().Tag
+		tag := item.GetMetadata().Tag
 		if tag == "" {
 			errs = append(errs, fmt.Errorf("%s/%s: listed tag row has empty metadata.tag", kind, name))
 			continue
 		}
-		if err := c.Delete(ctx, kind, v1alpha1.DefaultNamespace, name, tag); err != nil {
+		if err := c.Delete(ctx, kind, ref.Namespace, ref.Name, tag); err != nil {
 			errs = append(errs, fmt.Errorf("%s/%s@%s: %w", kind, name, tag, err))
 		}
 	}
@@ -106,15 +109,19 @@ func deleteAllTagsAny[T v1alpha1.Object](ctx context.Context, c *client.Client, 
 }
 
 func deleteAny[T v1alpha1.Object](ctx context.Context, c *client.Client, kind, name, tag string, newObj func() T) error {
+	ref, err := parseResourceLookupRef(name)
+	if err != nil {
+		return err
+	}
 	targetTag := tag
 	if targetTag == "" {
-		obj, err := client.GetTyped(ctx, c, kind, v1alpha1.DefaultNamespace, name, "", newObj)
+		obj, err := client.GetTyped(ctx, c, kind, ref.Namespace, ref.Name, "", newObj)
 		if err != nil {
 			return err
 		}
 		targetTag = obj.GetMetadata().Tag
 	}
-	return c.Delete(ctx, kind, v1alpha1.DefaultNamespace, name, targetTag)
+	return c.Delete(ctx, kind, ref.Namespace, ref.Name, targetTag)
 }
 
 func listDeploymentAny(ctx context.Context, c *client.Client) ([]any, error) {

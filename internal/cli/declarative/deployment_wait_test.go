@@ -43,10 +43,14 @@ func deploymentWaitTestServer(t *testing.T, deployments []v1alpha1.Deployment) *
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
+		namespace := r.URL.Query().Get("namespace")
+		if namespace == "" {
+			namespace = v1alpha1.DefaultNamespace
+		}
 		mu.Lock()
 		defer mu.Unlock()
 		for _, d := range deployments {
-			if d.Metadata.Name == parts[0] {
+			if d.Metadata.Name == parts[0] && d.Metadata.NamespaceOrDefault() == namespace {
 				_ = json.NewEncoder(w).Encode(d)
 				return
 			}
@@ -72,6 +76,22 @@ func TestDeploymentWait_DeployedReturnsImmediately(t *testing.T) {
 
 	require.NoError(t, cmd.Execute())
 	assert.Contains(t, out.String(), "deployment/aws-v1 deployed")
+}
+
+func TestDeploymentWait_ReturnsMatchByNamespaceName(t *testing.T) {
+	defaultDeployment := deploymentFixture("aws-v1", "default-summarizer", "1.0.0", "my-aws", "agent", "failed")
+	teamDeployment := deploymentFixture("aws-v1", "team-summarizer", "1.0.0", "my-aws", "agent", "deployed")
+	teamDeployment.Metadata.Namespace = "team-a"
+	srv := deploymentWaitTestServer(t, []v1alpha1.Deployment{defaultDeployment, teamDeployment})
+	setupClientForServer(t, srv)
+
+	out := &bytes.Buffer{}
+	cmd := declarative.NewWaitCmd(declarativeTestDeps(nil))
+	cmd.SetOut(out)
+	cmd.SetArgs([]string{"deployment", "team-a/aws-v1", "--timeout=1s"})
+
+	require.NoError(t, cmd.Execute())
+	assert.Contains(t, out.String(), "deployment/team-a/aws-v1 deployed")
 }
 
 // Terminal failure when waiting for "deployed" surfaces an error rather than

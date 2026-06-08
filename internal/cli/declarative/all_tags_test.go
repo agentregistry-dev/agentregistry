@@ -87,8 +87,12 @@ func tagsListServer(t *testing.T, rows []v1alpha1.Agent) (*httptest.Server, *[]s
 		captured []string
 	)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		if r.URL.RawQuery != "" {
+			path += "?" + r.URL.RawQuery
+		}
 		mu.Lock()
-		captured = append(captured, r.Method+" "+r.URL.Path)
+		captured = append(captured, r.Method+" "+path)
 		mu.Unlock()
 		if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/tags") {
 			w.Header().Set("Content-Type", "application/json")
@@ -127,6 +131,23 @@ func TestGet_AllTags_Agent_PrintsAllRows(t *testing.T) {
 	for _, line := range []string{"acme-bot   2", "acme-bot   1"} {
 		assert.Contains(t, got, line, "expected %q in output:\n%s", line, got)
 	}
+}
+
+func TestGet_AllTags_Agent_PrintsAllRowsByNamespaceName(t *testing.T) {
+	rows := []v1alpha1.Agent{
+		agentTagFixture("acme-bot", "2"),
+		agentTagFixture("acme-bot", "1"),
+	}
+	srv, paths := tagsListServer(t, rows)
+	setupClientForServer(t, srv)
+
+	cmd := declarative.NewGetCmd(declarativeTestDeps(nil))
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+	cmd.SetArgs([]string{"agent", "team-a/acme-bot", "--all-tags"})
+	require.NoError(t, cmd.Execute())
+
+	require.Contains(t, *paths, "GET /v0/agents/acme-bot/tags?namespace=team-a")
 }
 
 // (2) `arctl get agent NAME --all-tags -o json` emits a JSON array of
@@ -212,8 +233,12 @@ func deleteAllTagsServer(t *testing.T, rows []v1alpha1.Agent, failTag string) (*
 		captured []string
 	)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		if r.URL.RawQuery != "" {
+			path += "?" + r.URL.RawQuery
+		}
 		mu.Lock()
-		captured = append(captured, r.Method+" "+r.URL.Path)
+		captured = append(captured, r.Method+" "+path)
 		mu.Unlock()
 		switch {
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/tags"):
@@ -254,6 +279,25 @@ func TestDelete_AllTags_Agent_DeletesEveryListedTag(t *testing.T) {
 	require.Contains(t, *paths, "DELETE /v0/agents/acme-bot/stable")
 	require.Contains(t, *paths, "DELETE /v0/agents/acme-bot/latest")
 	assert.Contains(t, out.String(), "all tags")
+}
+
+func TestDelete_AllTags_Agent_DeletesEveryListedTagByNamespaceName(t *testing.T) {
+	rows := []v1alpha1.Agent{
+		agentTagFixture("acme-bot", "stable"),
+		agentTagFixture("acme-bot", "latest"),
+	}
+	srv, paths := deleteAllTagsServer(t, rows, "")
+	setupClientForServer(t, srv)
+
+	cmd := declarative.NewDeleteCmd(declarativeTestDeps(nil))
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+	cmd.SetArgs([]string{"agent", "team-a/acme-bot", "--all-tags"})
+	require.NoError(t, cmd.Execute())
+
+	require.Contains(t, *paths, "GET /v0/agents/acme-bot/tags?namespace=team-a")
+	require.Contains(t, *paths, "DELETE /v0/agents/acme-bot/stable?namespace=team-a")
+	require.Contains(t, *paths, "DELETE /v0/agents/acme-bot/latest?namespace=team-a")
 }
 
 // (7) `arctl delete deployment NAME --all-tags` errors cleanly.
