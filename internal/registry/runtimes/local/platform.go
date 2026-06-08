@@ -17,7 +17,6 @@ import (
 
 	runtimetypes "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
 	runtimeutils "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/utils"
-	"github.com/agentregistry-dev/agentregistry/internal/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 )
 
@@ -364,7 +363,7 @@ func translateLocalAgentToServiceConfig(runtimeDir string, agent *runtimetypes.A
 
 	var agentConfigDir string
 	if agent.Tag != "" {
-		sanitizedTag := utils.SanitizeVersion(agent.Tag)
+		sanitizedTag := sanitizeVersion(agent.Tag)
 		agentConfigDir = filepath.Join(runtimeDir, agent.Name, sanitizedTag)
 	} else {
 		agentConfigDir = filepath.Join(runtimeDir, agent.Name)
@@ -385,6 +384,27 @@ func translateLocalAgentToServiceConfig(runtimeDir string, agent *runtimetypes.A
 			Target: "/config",
 		}},
 	}, nil
+}
+
+func sanitizeVersion(version string) string {
+	if version == "" {
+		return ""
+	}
+
+	sanitized := strings.ReplaceAll(version, "/", "-")
+	sanitized = strings.ReplaceAll(sanitized, "\\", "-")
+	sanitized = strings.ReplaceAll(sanitized, ":", "-")
+	sanitized = strings.ReplaceAll(sanitized, "*", "-")
+	sanitized = strings.ReplaceAll(sanitized, "?", "-")
+	sanitized = strings.ReplaceAll(sanitized, "\"", "-")
+	sanitized = strings.ReplaceAll(sanitized, "<", "-")
+	sanitized = strings.ReplaceAll(sanitized, ">", "-")
+	sanitized = strings.ReplaceAll(sanitized, "|", "-")
+	sanitized = strings.Trim(sanitized, ". ")
+	for strings.Contains(sanitized, "--") {
+		sanitized = strings.ReplaceAll(sanitized, "--", "-")
+	}
+	return sanitized
 }
 
 func translateLocalAgentGatewayConfig(agentGatewayPort uint16, servers []*runtimetypes.MCPServer, agents []*runtimetypes.Agent) (*runtimetypes.AgentGatewayConfig, error) {
