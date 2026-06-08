@@ -35,6 +35,7 @@ Examples:
   arctl get agent acme-summarizer -o yaml
   arctl get agent acme-summarizer --tag stable
   arctl get agent acme-summarizer --all-tags
+  arctl get deployment team-a/acme-summarizer
   arctl get skills -o json`,
 		Args:         cobra.RangeArgs(1, 2),
 		SilenceUsage: true,

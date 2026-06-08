@@ -3,6 +3,7 @@ package declarative
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -115,19 +116,21 @@ func init() {
 		},
 	})
 
-	// Deployment is registered manually because its Get/Delete dispatch
-	// does NOT key on the v1alpha1 metadata identity (namespace/name/
-	// tag). Users address deployments by the underlying target's name
-	// — `arctl get deployment <agent-or-mcp-name>` — and the CLI walks the
-	// /v0/deployments listing to find the matching row. The typed
-	// helper assumes (kind, namespace, name, tag) lookup, which is
-	// the wrong shape for this dispatch.
+	// Deployment is registered manually because it is a mutable namespace/name
+	// object: the server's deployment store does not expose /tags or
+	// DeleteAllTags endpoints. Get accepts either NAME or NAMESPACE/NAME;
+	// ListTags / DeleteAllTags are intentionally omitted so the dispatch layer
+	// rejects --all-tags cleanly.
 	scheme.Register(&scheme.Kind{
 		Kind:    "deployment",
 		Plural:  "deployments",
 		Aliases: []string{"Deployment"},
 		Get: func(ctx context.Context, c *client.Client, name, _ string) (any, error) {
-			deployment, err := client.GetTyped(ctx, c, v1alpha1.KindDeployment, v1alpha1.DefaultNamespace, name, "", func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} })
+			namespace, deploymentName, err := deploymentLookupRef(name)
+			if err != nil {
+				return nil, err
+			}
+			deployment, err := client.GetTyped(ctx, c, v1alpha1.KindDeployment, namespace, deploymentName, "", func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} })
 			if err != nil {
 				return nil, err
 			}
@@ -158,6 +161,16 @@ func init() {
 			{Header: "TYPE"}, {Header: "RUNTIME"}, {Header: "STATUS"},
 		},
 	})
+}
+
+func deploymentLookupRef(arg string) (namespace, name string, err error) {
+	if namespace, name, ok := strings.Cut(arg, "/"); ok {
+		if namespace == "" || name == "" || strings.Contains(name, "/") {
+			return "", "", fmt.Errorf("deployment reference must be NAME or NAMESPACE/NAME")
+		}
+		return namespace, name, nil
+	}
+	return v1alpha1.DefaultNamespace, arg, nil
 }
 
 // typedKind builds a scheme.Kind whose Get / List / Delete dispatch
