@@ -13,7 +13,6 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	internaldaemon "github.com/agentregistry-dev/agentregistry/internal/daemon"
-	"github.com/agentregistry-dev/agentregistry/internal/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/daemon"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
@@ -69,7 +68,7 @@ func (m *Manager) IsRunning() bool {
 }
 
 func (m *Manager) Start() error {
-	if !utils.IsDockerComposeAvailable() {
+	if !isDockerComposeAvailable() {
 		fmt.Println("Docker compose is not available. Please install docker compose and try again.")
 		fmt.Println("See https://docs.docker.com/compose/install/ for installation instructions.")
 		fmt.Println("Agent Registry uses docker compose to start the server and the agent gateway.")
@@ -119,6 +118,12 @@ func (m *Manager) isContainerRunning() bool {
 		return false
 	}
 	return strings.Contains(string(output), m.config.ContainerName)
+}
+
+func isDockerComposeAvailable() bool {
+	cmd := exec.Command("docker", "compose", "version")
+	_, err := cmd.CombinedOutput()
+	return err == nil
 }
 
 // composeCmd builds an exec.Cmd for docker compose with the project's

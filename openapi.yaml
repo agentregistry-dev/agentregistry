@@ -493,6 +493,17 @@ components:
       - apiVersion
       - kind
       type: object
+    MCPServerOpenAPI:
+      additionalProperties: false
+      properties:
+        schema:
+          type: string
+        url:
+          type: string
+      required:
+      - url
+      - schema
+      type: object
     MCPServerSource:
       additionalProperties: false
       properties:
@@ -506,6 +517,8 @@ components:
       properties:
         description:
           type: string
+        openapi:
+          $ref: '#/components/schemas/MCPServerOpenAPI'
         remote:
           $ref: '#/components/schemas/MCPRemote'
         source:

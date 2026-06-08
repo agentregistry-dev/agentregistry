@@ -56,11 +56,19 @@ type MCPServerRunRequest struct {
 
 // TranslateMCPServer maps a v1alpha1 MCPServerSpec onto the platform-internal
 // MCPServer. Dispatches on Spec.Source (bundled → local transport) vs
-// Spec.Remote (pre-running → remote transport). Validation enforces exactly
-// one of the two is set.
+// Spec.Remote (pre-running → remote transport). Spec.OpenAPI servers are
+// surfaced as MCP by the platform serving the registry and have no runtime
+// target, so they are rejected here. Validation enforces exactly one of
+// source/remote/openapi is set.
 func TranslateMCPServer(ctx context.Context, req *MCPServerRunRequest) (*runtimetypes.MCPServer, error) {
 	if req == nil {
 		return nil, fmt.Errorf("mcp server run request is required")
+	}
+	if req.Spec.OpenAPI != nil {
+		// An openapi MCPServer is a REST API surfaced as MCP by the platform
+		// serving the registry; it has no runtime workload to deploy and no
+		// MCP endpoint to dial, so it cannot be projected onto a runtime target.
+		return nil, fmt.Errorf("openapi mcp server %s is exposed by the serving platform and cannot be translated to a runtime target", req.Name)
 	}
 	if req.Spec.Remote != nil {
 		return translateRemoteMCPServer(req.Name, req.Spec.Remote, req.DeploymentID, req.HeaderValues)
