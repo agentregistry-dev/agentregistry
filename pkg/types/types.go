@@ -4,11 +4,12 @@
 // into the registry app lives here.
 //
 // The types are split by domain across files:
-//   - types.go     — AppOptions, Server, HTTPServerFactory,
+//   - types.go         — AppOptions, Server, HTTPServerFactory,
 //     Response/EmptyResponse wrappers
-//   - adapter.go   — deployment + runtime adapter surfaces
+//   - adapter.go       — deployment + runtime adapter surfaces
 //     (DeploymentAdapter, RuntimeAdapter)
-//   - daemon.go    — CLI-side daemon + token provider hooks
+//   - daemon.go        — CLI-side daemon + token provider hooks
+//   - runner_images.go — default runner image refs for non-OCI origins
 package types
 
 import (
@@ -292,7 +293,7 @@ type AppOptions struct {
 
 	// RegistryValidator overrides the per-package registry
 	// validator (the dispatcher consulted on apply to confirm
-	// each declared package — npm / pypi / oci / nuget / mcpb — exists
+	// each declared package — npm / pypi / oci — exists
 	// and (for OCI) carries the
 	// `LABEL io.modelcontextprotocol.server.name` ownership annotation
 	// proving the publisher controls the OCI namespace).
@@ -310,9 +311,9 @@ type AppOptions struct {
 	//   - synthetic test names mean no public image can satisfy the
 	//     annotation match.
 	//
-	// Pass a custom RegistryValidatorFunc to filter out registry types
+	// Pass a custom RegistryValidatorFunc to filter out origin types
 	// the build doesn't want enforced (e.g. wrap registries.Dispatcher
-	// and short-circuit RegistryTypeOCI to nil), or pass an explicit
+	// and short-circuit when origin.OCI != nil), or pass an explicit
 	// no-op (`func(...) error { return nil }`) to disable per-package
 	// registry validation entirely. Cross-kind ResourceRef checks still
 	// run regardless.

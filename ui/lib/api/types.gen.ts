@@ -163,61 +163,51 @@ export type ListOutputSkillBody = {
 };
 
 export type McpArgument = {
-    choices?: Array<string> | null;
-    default?: string;
-    description?: string;
-    format?: string;
-    isRepeated?: boolean;
-    isRequired?: boolean;
-    isSecret?: boolean;
     name?: string;
-    placeholder?: string;
     type: string;
-    value?: string;
-    valueHint?: string;
-    variables?: {
-        [key: string]: McpInputVariable;
-    };
-};
-
-export type McpInputVariable = {
-    choices?: Array<string> | null;
-    default?: string;
-    description?: string;
-    format?: string;
-    isRequired?: boolean;
-    isSecret?: boolean;
-    placeholder?: string;
     value?: string;
 };
 
 export type McpKeyValueInput = {
-    choices?: Array<string> | null;
-    default?: string;
-    description?: string;
-    format?: string;
     isRequired?: boolean;
-    isSecret?: boolean;
     name: string;
-    placeholder?: string;
     value?: string;
-    variables?: {
-        [key: string]: McpInputVariable;
-    };
 };
 
 export type McpPackage = {
-    environmentVariables?: Array<McpKeyValueInput> | null;
-    fileSha256?: string;
-    identifier: string;
-    packageArguments?: Array<McpArgument> | null;
-    registryBaseUrl?: string;
-    registryType: string;
-    runtimeArguments?: Array<McpArgument> | null;
-    runtimeHint?: string;
-    serverName?: string;
+    launch?: McpPackageLaunch;
+    origin: McpPackageOrigin;
     transport: McpTransport;
-    version?: string;
+};
+
+export type McpPackageLaunch = {
+    args?: Array<McpArgument> | null;
+    command?: string;
+    env?: Array<McpKeyValueInput> | null;
+};
+
+export type McpPackageOrigin = {
+    identifier: string;
+    npm?: McpPackageOriginNpm;
+    oci?: McpPackageOriginOci;
+    pypi?: McpPackageOriginPyPi;
+    type: string;
+};
+
+export type McpPackageOriginNpm = {
+    mirror?: string;
+    serverName: string;
+    version: string;
+};
+
+export type McpPackageOriginOci = {
+    serverName: string;
+};
+
+export type McpPackageOriginPyPi = {
+    mirror?: string;
+    serverName: string;
+    version: string;
 };
 
 export type McpRemote = {
@@ -234,11 +224,6 @@ export type McpServer = {
     status?: Status;
 };
 
-export type McpServerOpenApi = {
-    schema: string;
-    url: string;
-};
-
 export type McpServerSource = {
     package?: McpPackage;
     repository?: Repository;
@@ -246,7 +231,6 @@ export type McpServerSource = {
 
 export type McpServerSpec = {
     description?: string;
-    openapi?: McpServerOpenApi;
     remote?: McpRemote;
     source?: McpServerSource;
     title?: string;

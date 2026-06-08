@@ -1,13 +1,8 @@
-// Package utils hosts shared helpers used by both the local and kubernetes
-// platform adapters. The primary surface is TranslateMCPServer, which takes
-// a v1alpha1.MCPServerSpec plus runtime overrides and projects it onto the
-// platform-internal *runtimetypes.MCPServer that adapters then dispatch.
-//
-// Historically this translator operated on the upstream
-// modelcontextprotocol/registry apiv0.ServerJSON shape, with a projection
-// layer that converted v1alpha1 → ServerJSON. That projection was removed
-// when the refactor landed Scott's directive "everything should be v1alpha1";
-// the translator now speaks v1alpha1 types directly.
+// Package utils hosts shared helpers used by both the local and
+// kubernetes platform adapters. The primary surface is
+// TranslateMCPServer, which takes a v1alpha1.MCPServerSpec plus
+// per-deployment runtime overrides and projects it onto the
+// platform-internal *runtimetypes.MCPServer that adapters dispatch.
 package utils
 
 import (
@@ -21,6 +16,7 @@ import (
 
 	runtimetypes "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
 // DefaultLocalAgentPort is the port kagent-runtime listens on inside the
@@ -56,19 +52,11 @@ type MCPServerRunRequest struct {
 
 // TranslateMCPServer maps a v1alpha1 MCPServerSpec onto the platform-internal
 // MCPServer. Dispatches on Spec.Source (bundled → local transport) vs
-// Spec.Remote (pre-running → remote transport). Spec.OpenAPI servers are
-// surfaced as MCP by the platform serving the registry and have no runtime
-// target, so they are rejected here. Validation enforces exactly one of
-// source/remote/openapi is set.
+// Spec.Remote (pre-running → remote transport). Validation enforces exactly
+// one of the two is set.
 func TranslateMCPServer(ctx context.Context, req *MCPServerRunRequest) (*runtimetypes.MCPServer, error) {
 	if req == nil {
 		return nil, fmt.Errorf("mcp server run request is required")
-	}
-	if req.Spec.OpenAPI != nil {
-		// An openapi MCPServer is a REST API surfaced as MCP by the platform
-		// serving the registry; it has no runtime workload to deploy and no
-		// MCP endpoint to dial, so it cannot be projected onto a runtime target.
-		return nil, fmt.Errorf("openapi mcp server %s is exposed by the serving platform and cannot be translated to a runtime target", req.Name)
 	}
 	if req.Spec.Remote != nil {
 		return translateRemoteMCPServer(req.Name, req.Spec.Remote, req.DeploymentID, req.HeaderValues)
@@ -113,12 +101,13 @@ func translateRemoteMCPServer(name string, remote *v1alpha1.MCPRemote, deploymen
 	}, nil
 }
 
-// translateLocalMCPServer emits a runtimetypes.MCPServer for package-based
-// local execution. Registry-type dispatch (npm / pypi / oci) picks the base
-// image and command; runtime + package arguments merge with overrides;
-// environment variables resolve required/default values. The transport
-// field inside the package controls whether the runner speaks stdio or
-// http on the far side.
+// translateLocalMCPServer emits a runtimetypes.MCPServer for
+// package-based local execution. Origin selects the runner image; if
+// Launch is set, the manifest owns Cmd/Args verbatim (with override
+// merging by arg name); if Launch is nil, the resolver derives
+// per-type defaults (npm: "npx -y <id>@<ver>", pypi: "uvx <id>==<ver>",
+// oci: image entrypoint). The transport field controls whether the
+// runner speaks stdio or http on the far side.
 func translateLocalMCPServer(
 	_ context.Context,
 	serverName string,
@@ -129,49 +118,29 @@ func translateLocalMCPServer(
 ) (*runtimetypes.MCPServer, error) {
 	pkg := *spec.Source.Package
 
-	var args []string
-	processedArgs := make(map[string]bool)
-	addProcessedArgs := func(in []v1alpha1.MCPArgument) {
-		for _, arg := range in {
-			processedArgs[arg.Name] = true
-		}
+	if envValues == nil {
+		envValues = make(map[string]string)
 	}
 
-	args = processArguments(args, pkg.RuntimeArguments, argValues)
-	addProcessedArgs(pkg.RuntimeArguments)
-
-	config, args, err := GetRegistryConfig(pkg, args)
+	config, defaultArgs, err := GetRegistryConfig(pkg.Origin)
 	if err != nil {
 		return nil, err
 	}
 
-	args = processArguments(args, pkg.PackageArguments, argValues)
-	addProcessedArgs(pkg.PackageArguments)
+	var (
+		cmd  string
+		args []string
+	)
 
-	// Any override the spec doesn't declare gets appended at the end as a
-	// raw (name, value) pair so callers can inject one-off flags without
-	// editing the manifest. Ordered deterministically.
-	var extraArgNames []string
-	for argName := range argValues {
-		if !processedArgs[argName] {
-			extraArgNames = append(extraArgNames, argName)
-		}
-	}
-	slices.Sort(extraArgNames)
-	for _, argName := range extraArgNames {
-		args = append(args, argName)
-		if argValue := argValues[argName]; argValue != "" {
-			args = append(args, argValue)
-		}
-	}
-
-	processedEnvVars, err := processEnvironmentVariables(pkg.EnvironmentVariables, envValues)
-	if err != nil {
-		return nil, err
-	}
-	for key, value := range processedEnvVars {
-		if _, exists := envValues[key]; !exists {
-			envValues[key] = value
+	if pkg.Launch == nil {
+		// Resolver-defaults path: derive Command + Args from Origin.Type.
+		cmd = config.Command
+		args = defaultArgs
+	} else {
+		var err error
+		cmd, args, err = applyManifestLaunch(pkg.Launch, argValues, envValues)
+		if err != nil {
+			return nil, err
 		}
 	}
 
@@ -197,7 +166,7 @@ func translateLocalMCPServer(
 		Local: &runtimetypes.LocalMCPServer{
 			Deployment: runtimetypes.MCPServerDeployment{
 				Image: config.Image,
-				Cmd:   config.Command,
+				Cmd:   cmd,
 				Args:  args,
 				Env:   envValues,
 			},
@@ -217,6 +186,50 @@ type parsedURL struct {
 
 // parseURL enforces http/https-only and normalizes missing ports to the
 // protocol default.
+// applyManifestLaunch implements the manifest-owned Cmd/Args/Env path for
+// translateLocalMCPServer. Empty Command is allowed only for OCI (image
+// ENTRYPOINT runs); the resolver doesn't enforce this — the validator's
+// job — but we leave cmd empty rather than falling back to the default to
+// preserve manifest intent. Mutates envValues in place: spec-declared
+// values back-populate keys the caller didn't override.
+func applyManifestLaunch(
+	launch *v1alpha1.MCPPackageLaunch,
+	argValues map[string]string,
+	envValues map[string]string,
+) (string, []string, error) {
+	cmd := launch.Command
+	args := processArguments(nil, launch.Args, argValues)
+
+	processedArgNames := make(map[string]bool, len(launch.Args))
+	for _, a := range launch.Args {
+		processedArgNames[a.Name] = true
+	}
+	var extraArgNames []string
+	for argName := range argValues {
+		if !processedArgNames[argName] {
+			extraArgNames = append(extraArgNames, argName)
+		}
+	}
+	slices.Sort(extraArgNames)
+	for _, argName := range extraArgNames {
+		args = append(args, argName)
+		if argValue := argValues[argName]; argValue != "" {
+			args = append(args, argValue)
+		}
+	}
+
+	processedEnvVars, err := processEnvironmentVariables(launch.Env, envValues)
+	if err != nil {
+		return "", nil, err
+	}
+	for key, value := range processedEnvVars {
+		if _, exists := envValues[key]; !exists {
+			envValues[key] = value
+		}
+	}
+	return cmd, args, nil
+}
+
 func parseURL(rawURL string) (*parsedURL, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
@@ -300,11 +313,9 @@ func generateInternalName(server string) string {
 	name = strings.ReplaceAll(name, "}", "-")
 	name = strings.ReplaceAll(name, "|", "-")
 	name = strings.ReplaceAll(name, "\\", "-")
-	name = strings.ReplaceAll(name, ".", "-")
 	name = strings.ReplaceAll(name, ",", "-")
 	name = strings.ReplaceAll(name, "!", "-")
 	name = strings.ReplaceAll(name, "?", "-")
-	name = strings.ReplaceAll(name, " ", "-")
 	return name
 }
 
@@ -320,19 +331,22 @@ func GenerateInternalNameForDeployment(name, deploymentID string) string {
 	return fmt.Sprintf("%s-%s", base, generateInternalName(deploymentID))
 }
 
-// RegistryConfig captures what runtime image + command a package dispatches
-// to. IsOCI toggles container-passthrough (Command is a hint for the runner,
-// Image IS the server).
+// RegistryConfig captures what runtime image + default launch command a
+// package's Origin dispatches to. IsOCI toggles container-passthrough
+// (Command is a hint for the runner, Image IS the server).
 type RegistryConfig struct {
 	Image   string
 	Command string
 	IsOCI   bool
 }
 
-// processArguments appends a package's argument list onto the running args
-// slice, resolving overrides by name. Positional args come first, then named
-// args; the caller later appends any extras the override map carries that
-// the spec didn't declare.
+// processArguments appends a package's argument list onto the running
+// args slice, resolving overrides by name. Positional args come first,
+// then named args.
+//
+// Per-arg value resolution: argOverrides[arg.Name] → arg.Value → "".
+// (The historical arg.Default fallback was dropped when MCPArgument
+// was trimmed to {Type, Name, Value}.)
 func processArguments(
 	args []string,
 	modelArgs []v1alpha1.MCPArgument,
@@ -344,16 +358,12 @@ func processArguments(
 				return v
 			}
 		}
-		if arg.Value != "" {
-			return arg.Value
-		}
-		return arg.Default
+		return arg.Value
 	}
 
 	for _, arg := range modelArgs {
 		if arg.Type == v1alpha1.MCPArgumentTypePositional {
-			value := getArgValue(arg)
-			if value != "" {
+			if value := getArgValue(arg); value != "" {
 				args = append(args, value)
 			}
 		}
@@ -361,8 +371,7 @@ func processArguments(
 	for _, arg := range modelArgs {
 		if arg.Type == v1alpha1.MCPArgumentTypeNamed {
 			args = append(args, arg.Name)
-			value := getArgValue(arg)
-			if value != "" {
+			if value := getArgValue(arg); value != "" {
 				args = append(args, value)
 			}
 		}
@@ -370,11 +379,15 @@ func processArguments(
 	return args
 }
 
-// processEnvironmentVariables resolves the package's env-var list against
-// supplied overrides. Required env vars with no value anywhere (override,
-// spec value, spec default) surface as an aggregate error listing all
-// missing names. Overrides for env vars the spec didn't declare pass
-// through as-is.
+// processEnvironmentVariables resolves the package's env-var list
+// against supplied overrides. Required env vars with no value
+// anywhere (override, spec value) surface as an aggregate error
+// listing all missing names. Overrides for env vars the spec didn't
+// declare pass through as-is.
+//
+// Per-key resolution: overrides[env.Name] → env.Value → "".
+// (The historical env.Default fallback was dropped when
+// MCPKeyValueInput was trimmed to {Name, Value, IsRequired}.)
 func processEnvironmentVariables(
 	envVars []v1alpha1.MCPKeyValueInput,
 	overrides map[string]string,
@@ -388,8 +401,6 @@ func processEnvironmentVariables(
 			value = override
 		} else if env.Value != "" {
 			value = env.Value
-		} else if env.Default != "" {
-			value = env.Default
 		}
 		if env.IsRequired && value == "" {
 			missingRequired = append(missingRequired, env.Name)
@@ -439,57 +450,39 @@ func processHeaders(
 	return result
 }
 
-// GetRegistryConfig picks the base image + command for a package based on
-// its registry type:
-//   - npm  → node:24-alpine3.21 + `npx -y <id>[@ver]`
-//   - pypi → ghcr.io/astral-sh/uv:debian + `uvx <id>[==ver]`
-//   - oci  → the image is the package identifier itself; the runtime hint
-//     becomes the command if set
-//
-// RuntimeHint on the package overrides the default command if specified.
-// Unsupported registry types return an error.
-func GetRegistryConfig(
-	pkg v1alpha1.MCPPackage,
-	args []string,
-) (RegistryConfig, []string, error) {
-	var config RegistryConfig
-	normalizedType := strings.ToLower(strings.TrimSpace(pkg.RegistryType))
-
-	switch normalizedType {
-	case v1alpha1.RegistryTypeNPM:
-		config.Image = "node:24-alpine3.21"
-		config.Command = pkg.RuntimeHint
-		if config.Command == "" {
-			config.Command = "npx"
+// GetRegistryConfig returns the runner image and the resolver's
+// derived-default Command + Args for an Origin. These defaults apply
+// when MCPPackage.Launch is nil — Launch sets the wire-level
+// {Command, Args} and bypasses these defaults entirely. Unsupported
+// Origin (no sub-struct set) returns an error.
+func GetRegistryConfig(origin v1alpha1.MCPPackageOrigin) (RegistryConfig, []string, error) {
+	switch {
+	case origin.NPM != nil:
+		ref := origin.Identifier
+		if origin.NPM.Version != "" {
+			ref = ref + "@" + origin.NPM.Version
 		}
-		if !slices.Contains(args, "-y") {
-			args = append(args, "-y")
+		return RegistryConfig{
+			Image:   types.DefaultNPMRunnerImage,
+			Command: "npx",
+		}, []string{"-y", ref}, nil
+	case origin.PyPI != nil:
+		ref := origin.Identifier
+		if origin.PyPI.Version != "" {
+			ref = ref + "==" + origin.PyPI.Version
 		}
-		if pkg.Version != "" {
-			args = append(args, pkg.Identifier+"@"+pkg.Version)
-		} else {
-			args = append(args, pkg.Identifier)
-		}
-	case v1alpha1.RegistryTypePyPI:
-		config.Image = "ghcr.io/astral-sh/uv:debian"
-		config.Command = pkg.RuntimeHint
-		if config.Command == "" {
-			config.Command = "uvx"
-		}
-		if pkg.Version != "" {
-			args = append(args, pkg.Identifier+"=="+pkg.Version)
-		} else {
-			args = append(args, pkg.Identifier)
-		}
-	case v1alpha1.RegistryTypeOCI:
-		config.Image = pkg.Identifier
-		config.Command = pkg.RuntimeHint
-		config.IsOCI = true
+		return RegistryConfig{
+			Image:   types.DefaultPyPIRunnerImage,
+			Command: "uvx",
+		}, []string{ref}, nil
+	case origin.OCI != nil:
+		return RegistryConfig{
+			Image: origin.Identifier,
+			IsOCI: true,
+		}, nil, nil
 	default:
-		return RegistryConfig{}, nil, fmt.Errorf("unsupported package registry type: %s", pkg.RegistryType)
+		return RegistryConfig{}, nil, fmt.Errorf("unsupported MCPPackage origin: no sub-struct (NPM/PyPI/OCI) is set; Origin.Type=%q", origin.Type)
 	}
-
-	return config, args, nil
 }
 
 // EnvMapToStringSlice renders an env map as a sorted ["K=V"] slice —

@@ -449,9 +449,12 @@ func seedMCPServerWithIdentifier(t *testing.T, stores map[string]*v1alpha1store.
 			Description: "test",
 			Source: &v1alpha1.MCPServerSource{
 				Package: &v1alpha1.MCPPackage{
-					RegistryType: v1alpha1.RegistryTypeOCI,
-					Identifier:   identifier,
-					Transport:    v1alpha1.MCPTransport{Type: "stdio"},
+					Origin: v1alpha1.MCPPackageOrigin{
+						Type:       v1alpha1.MCPPackageOriginTypeOCI,
+						Identifier: identifier,
+						OCI:        &v1alpha1.MCPPackageOriginOCI{ServerName: name},
+					},
+					Transport: v1alpha1.MCPTransport{Type: "stdio"},
 				},
 			},
 		},

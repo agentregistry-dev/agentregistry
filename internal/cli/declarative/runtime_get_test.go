@@ -28,8 +28,12 @@ func runtimeTestServer(t *testing.T, runtimes []v1alpha1.Runtime) *httptest.Serv
 			return
 		}
 		name := strings.TrimPrefix(r.URL.Path, "/v0/runtimes/")
+		namespace := r.URL.Query().Get("namespace")
+		if namespace == "" {
+			namespace = v1alpha1.DefaultNamespace
+		}
 		for _, rt := range runtimes {
-			if rt.Metadata.Name == name {
+			if rt.Metadata.Name == name && rt.Metadata.NamespaceOrDefault() == namespace {
 				w.Header().Set("Content-Type", "application/json")
 				_ = json.NewEncoder(w).Encode(rt)
 				return
@@ -108,4 +112,24 @@ func TestRuntimeGet_TableOutput(t *testing.T) {
 	got := out.String()
 	assert.Contains(t, got, "my-kagent")
 	assert.Contains(t, got, "Kagent")
+}
+
+func TestRuntimeGet_ReturnsMatchByNamespaceName(t *testing.T) {
+	defaultRuntime := runtimeFixture("my-kagent", "Local", nil)
+	teamRuntime := runtimeFixture("my-kagent", "Kagent", map[string]any{"namespace": "team-kagent"})
+	teamRuntime.Metadata.Namespace = "team-a"
+	runtimes := []v1alpha1.Runtime{defaultRuntime, teamRuntime}
+	srv := runtimeTestServer(t, runtimes)
+	setupClientForServer(t, srv)
+
+	out := &bytes.Buffer{}
+	cmd := declarative.NewGetCmd(declarativeTestDeps(nil))
+	cmd.SetOut(out)
+	cmd.SetArgs([]string{"runtime", "team-a/my-kagent"})
+	require.NoError(t, cmd.Execute())
+
+	got := out.String()
+	assert.Contains(t, got, "my-kagent")
+	assert.Contains(t, got, "Kagent")
+	assert.NotContains(t, got, "Local")
 }

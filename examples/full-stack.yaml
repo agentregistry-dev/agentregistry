@@ -17,12 +17,13 @@ spec:
   description: "Fetches and extracts content from URLs"
   source:
     package:
-      registryType: oci
-      identifier: localhost:5001/acme/fetch:1.0.0
-      runtimeHint: docker
+      origin:
+        type: oci
+        identifier: localhost:5001/acme/fetch:1.0.0
+        oci:
+          serverName: acme-fetch
       transport:
         type: stdio
-      serverName: acme-fetch
 ---
 apiVersion: ar.dev/v1alpha1
 kind: Skill

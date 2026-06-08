@@ -15,8 +15,11 @@ const mockServer: ServerResponse = {
         url: "https://github.com/acme/database-server",
       },
       package: {
-        registryType: "npm",
-        identifier: "@acme/database-server",
+        origin: {
+          type: "npm",
+          identifier: "@acme/database-server",
+          npm: { version: "3.2.1", serverName: "@acme/database-server" },
+        },
         transport: { type: "stdio" },
       },
     },

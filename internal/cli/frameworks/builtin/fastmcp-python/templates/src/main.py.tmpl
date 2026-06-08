@@ -4,21 +4,9 @@
 This server automatically discovers and loads tools from the src/tools/ directory.
 Each tool file should contain a function decorated with @mcp.tool().
 
-Usage Examples:
-  # Stdio mode (default MCP transport)
-  python src/main.py
-
-  # HTTP mode with MCP protocol over HTTP
-  python src/main.py --transport http
-
-  # Custom host/port
-  python src/main.py --transport http --host localhost --port 8080
-
-  # Stateless HTTP mode
-  python src/main.py --transport http --stateless-http
-
-  # Environment variable mode
-  MCP_TRANSPORT_MODE=http python src/main.py
+Usage:
+  python src/main.py --transport stdio
+  python src/main.py --transport http --host 0.0.0.0 --port 3000 [--stateless-http]
 """
 
 import argparse
@@ -40,8 +28,8 @@ def main() -> None:
     parser.add_argument(
         "--transport",
         choices=["stdio", "http"],
-        default="stdio",
-        help="Transport mode: stdio, or http"
+        default="http",
+        help="Transport mode: stdio, or http (default: http)"
     )
     parser.add_argument(
         "--host",
@@ -64,9 +52,6 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    # Check environment variable for transport mode
-    transport_mode = os.getenv("MCP_TRANSPORT_MODE", args.transport)
-
     # Configure logging
     logging.basicConfig(
         level=logging.INFO,
@@ -86,10 +71,7 @@ def main() -> None:
         # Load tools and start server
         server.load_tools()
 
-        if transport_mode not in ["http", "stdio"]:
-            raise ValueError(f"Invalid transport mode: {transport_mode}. Must be one of: http, or stdio")
-
-        server.run(transport_mode=transport_mode,
+        server.run(transport_mode=args.transport,
                    host=args.host,
                    port=args.port,
                    stateless_http=args.stateless_http)

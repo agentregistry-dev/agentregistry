@@ -53,3 +53,34 @@ func TestLaunch_ReturnsErrorWhenStartFails(t *testing.T) {
 
 // fakeStarter returns nil so Launch treats it as a successful start.
 func fakeStarter(_ *exec.Cmd) error { return nil }
+
+// `--` must appear between the inspector package name and the spawned server
+// command so commander.js inside the inspector stops parsing flags and treats
+// server-side flags (e.g. `--transport stdio`) as positional. Without it the
+// inspector consumes overlapping flags as its own.
+func TestLaunchStdio_BuildsExpectedArgv(t *testing.T) {
+	var gotName string
+	var gotArgs []string
+	fakeFactory := func(ctx context.Context, name string, args ...string) *exec.Cmd {
+		gotName = name
+		gotArgs = args
+		return exec.CommandContext(ctx, "echo")
+	}
+
+	_, err := launchStdioWith(context.Background(), "/tmp", nil, "uv", []string{"run", "python", "src/main.py", "--transport", "stdio"}, fakeFactory, fakeStarter)
+	if err != nil {
+		t.Fatalf("launchStdioWith returned error: %v", err)
+	}
+	if gotName != "npx" {
+		t.Errorf("expected npx, got %q", gotName)
+	}
+	want := []string{"-y", "@modelcontextprotocol/inspector", "--", "uv", "run", "python", "src/main.py", "--transport", "stdio"}
+	if len(gotArgs) != len(want) {
+		t.Fatalf("argv length: got %d want %d (%v)", len(gotArgs), len(want), gotArgs)
+	}
+	for i := range want {
+		if gotArgs[i] != want[i] {
+			t.Errorf("argv[%d]: got %q want %q", i, gotArgs[i], want[i])
+		}
+	}
+}

@@ -106,9 +106,12 @@ func testMCPServer(identifier string) *v1alpha1.MCPServer {
 		Spec: v1alpha1.MCPServerSpec{
 			Source: &v1alpha1.MCPServerSource{
 				Package: &v1alpha1.MCPPackage{
-					RegistryType: v1alpha1.RegistryTypeOCI,
-					Identifier:   identifier,
-					Transport:    v1alpha1.MCPTransport{Type: "stdio"},
+					Origin: v1alpha1.MCPPackageOrigin{
+						Type:       v1alpha1.MCPPackageOriginTypeOCI,
+						Identifier: identifier,
+						OCI:        &v1alpha1.MCPPackageOriginOCI{ServerName: "weather"},
+					},
+					Transport: v1alpha1.MCPTransport{Type: "stdio"},
 				},
 			},
 		},

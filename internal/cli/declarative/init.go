@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 	"sigs.k8s.io/yaml"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/buildconfig"
@@ -429,8 +430,8 @@ func stripMCPServersConfigLines(env string) string {
 }
 
 // localMCPEntries resolves sibling MCP project paths into mcpEnvEntries.
-// Extracted from the old appendLocalMCPsToDotEnv so the caller can mix
-// local entries with --mcp-derived remote entries before writing once.
+// Siblings must be http-transport MCPs with a port set in arctl.yaml; stdio
+// siblings are rejected because --local-mcp wires them via an HTTP URL.
 func localMCPEntries(paths []string) ([]mcpEnvEntry, error) {
 	var entries []mcpEnvEntry
 	for _, p := range paths {
@@ -442,16 +443,25 @@ func localMCPEntries(paths []string) ([]mcpEnvEntry, error) {
 		if err != nil {
 			return nil, fmt.Errorf("read sibling arctl.yaml at %s: %w", abs, err)
 		}
-		port := cfg.Port
-		if port == 0 {
-			port = 3000
-		}
-		siblingName, err := readMCPName(abs)
+		doc, err := readMCPYAML(abs)
 		if err != nil {
 			return nil, err
 		}
+		if doc != nil && doc.Spec.Source != nil && doc.Spec.Source.Package != nil &&
+			doc.Spec.Source.Package.Transport.Type == "stdio" {
+			return nil, fmt.Errorf("sibling MCP at %s declares transport.type=stdio; "+
+				"--local-mcp wires siblings via an HTTP URL, so only http-transport MCPs are supported", abs)
+		}
+		port := cfg.Port
+		if port == 0 {
+			return nil, fmt.Errorf("sibling MCP at %s has no port in arctl.yaml; "+
+				"re-scaffold with `arctl init mcp --transport http --port <PORT>`", abs)
+		}
+		if doc == nil || doc.Metadata.Name == "" {
+			return nil, fmt.Errorf("sibling mcp.yaml at %s missing metadata.name", abs)
+		}
 		entries = append(entries, mcpEnvEntry{
-			Name: siblingName,
+			Name: doc.Metadata.Name,
 			Type: "remote",
 			URL:  fmt.Sprintf("http://host.docker.internal:%d/mcp", port),
 		})
@@ -475,19 +485,6 @@ func readMCPYAML(projectDir string) (*v1alpha1.MCPServer, error) {
 		return nil, fmt.Errorf("parse mcp.yaml: %w", err)
 	}
 	return &doc, nil
-}
-
-// readMCPName pulls metadata.name out of a sibling mcp.yaml. Used to label
-// entries in MCP_SERVERS_CONFIG.
-func readMCPName(projectDir string) (string, error) {
-	doc, err := readMCPYAML(projectDir)
-	if err != nil {
-		return "", err
-	}
-	if doc == nil || doc.Metadata.Name == "" {
-		return "", fmt.Errorf("sibling mcp.yaml missing metadata.name")
-	}
-	return doc.Metadata.Name, nil
 }
 
 // defaultInitModelName returns the default model name for a provider when
@@ -553,11 +550,7 @@ func loadFrameworkRegistry(projectRoot string) (*frameworks.Registry, error) {
 }
 
 func isatty() bool {
-	fi, err := os.Stdin.Stat()
-	if err != nil {
-		return false
-	}
-	return (fi.Mode() & os.ModeCharDevice) != 0
+	return term.IsTerminal(int(os.Stdin.Fd()))
 }
 
 // parseNameVersion splits "name@version" into (name, version).
@@ -633,6 +626,7 @@ func newInitMCPCmd() *cobra.Command {
 		initFramework   string
 		initLanguage    string
 		initPort        int
+		initTransport   string
 	)
 
 	cmd := &cobra.Command{
@@ -644,12 +638,24 @@ NAME must be DNS-1123 subdomain: lowercase alphanumeric, hyphens, and dots; max 
 each dot-separated segment must start and end with alphanumeric (max 63 chars per segment).
 Picks a framework + language interactively (or via --framework / --language).`,
 		Example: `  arctl init mcp my-mcp
-  arctl init mcp my-mcp --framework fastmcp --language python`,
+  arctl init mcp my-mcp --framework fastmcp --language python
+  arctl init mcp my-stdio --framework fastmcp --language python --transport stdio`,
 		Args:         cobra.MaximumNArgs(1),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Flag-format sanity. Fail fast before any side-effecting work
+			// (project-dir creation, framework lookup, overwrite prompt) so
+			// users with bad flags don't waste interactive prompts first.
 			if initPort < 1 || initPort > 65535 {
 				return fmt.Errorf("--port must be between 1 and 65535, got %d", initPort)
+			}
+			if initTransport != "" {
+				switch initTransport {
+				case "http", "stdio":
+					// valid
+				default:
+					return fmt.Errorf("--transport: must be \"http\" or \"stdio\" (got %q)", initTransport)
+				}
 			}
 			var name string
 			if len(args) == 1 {
@@ -680,6 +686,13 @@ Picks a framework + language interactively (or via --framework / --language).`,
 				return err
 			}
 
+			if initTransport == "" {
+				initTransport = "http"
+			}
+			if initTransport == "stdio" && cmd.Flags().Changed("port") {
+				return fmt.Errorf("--port is meaningless with --transport stdio")
+			}
+
 			r, err := loadFrameworkRegistry(projectDir)
 			if err != nil {
 				return err
@@ -702,15 +715,19 @@ Picks a framework + language interactively (or via --framework / --language).`,
 				image = fmt.Sprintf("%s/%s:latest", registry, projectName)
 			}
 
-			vars := mcpTemplateVars(name, projectName, initDescription, image, framework.SourceDir, projectDir)
+			vars := mcpTemplateVars(name, projectName, initDescription, image, framework.SourceDir, projectDir, initPort)
 			if err := frameworks.RenderTemplates(framework, projectDir, vars); err != nil {
 				return err
 			}
-			if err := buildconfig.Write(projectDir, &buildconfig.Config{
+			cfg := &buildconfig.Config{
 				Framework: framework.Framework,
 				Language:  framework.Language,
-				Port:      initPort,
-			}); err != nil {
+				Transport: initTransport,
+			}
+			if initTransport == "http" {
+				cfg.Port = initPort
+			}
+			if err := buildconfig.Write(projectDir, cfg); err != nil {
 				return err
 			}
 			if err := buildconfig.WriteDotEnv(projectDir, framework.Env.Required, framework.Env.Optional); err != nil {
@@ -721,12 +738,16 @@ Picks a framework + language interactively (or via --framework / --language).`,
 					return fmt.Errorf("update .gitignore: %w", err)
 				}
 			}
-			if err := writeDeclarativeMCPYAML(projectDir, name, image, initDescription, initPort); err != nil {
+			if err := writeDeclarativeMCPYAML(projectDir, name, image, initDescription, initPort, initTransport, framework.Launch); err != nil {
 				return err
 			}
 
 			disp := displayPath(projectDir)
-			fmt.Fprintf(cmd.OutOrStdout(), "✓ Created MCP server: %s (framework: %s, language: %s, port: %d)\n", name, framework.Framework, framework.Language, initPort)
+			transportDesc := fmt.Sprintf("transport: %s", initTransport)
+			if initTransport == "http" {
+				transportDesc = fmt.Sprintf("transport: http, port: %d", initPort)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "✓ Created MCP server: %s (framework: %s, language: %s, %s)\n", name, framework.Framework, framework.Language, transportDesc)
 			fmt.Fprintf(cmd.OutOrStdout(), "\n🚀 Next steps:\n")
 			fmt.Fprintf(cmd.OutOrStdout(), "  1. Run locally (optional):\n")
 			fmt.Fprintf(cmd.OutOrStdout(), "     arctl run %s\n", disp)
@@ -744,6 +765,7 @@ Picks a framework + language interactively (or via --framework / --language).`,
 	cmd.Flags().StringVar(&initFramework, "framework", "", "Framework. Skips picker.")
 	cmd.Flags().StringVar(&initLanguage, "language", "", "Language. Skips picker.")
 	cmd.Flags().IntVar(&initPort, "port", 3000, "HTTP port the MCP server binds to (and that arctl run maps)")
+	cmd.Flags().StringVar(&initTransport, "transport", "", "MCP transport: \"http\" (Streamable HTTP, listens on --port) or \"stdio\" (stdin/stdout). Defaults to http when omitted.")
 	return cmd
 }
 
@@ -751,7 +773,7 @@ Picks a framework + language interactively (or via --framework / --language).`,
 // templates. The vendored fastmcp-python and mcp-go templates reference fields
 // beyond the canonical Phase-5 set, so we supply safe defaults for those here.
 // Phase 12 simplifies the templates and trims this.
-func mcpTemplateVars(name, baseName, description, image, frameworkDir, projectDir string) map[string]any {
+func mcpTemplateVars(name, baseName, description, image, frameworkDir, projectDir string, port int) map[string]any {
 	desc := description
 	if desc == "" {
 		desc = fmt.Sprintf("%s MCP server", baseName)
@@ -772,20 +794,77 @@ func mcpTemplateVars(name, baseName, description, image, frameworkDir, projectDi
 		"GoModuleName":  "github.com/example/" + baseName,
 		"Author":        "",
 		"Email":         "",
+		"Port":          port,
 	}
 }
 
-func writeDeclarativeMCPYAML(projectDir, name, image, description string, port int) error {
+const generatedMCPYAMLHeader = `# Generated by ` + "`arctl init mcp`" + `.
+# NOTE: spec.source.package.origin.oci.serverName must match the
+# image's io.modelcontextprotocol.server.name OCI label. Edit before
+# applying against a public registry. (The private-registry exemption
+# applies to localhost:* / 127.0.0.1 / [::1].)
+#
+# For http transport: spec.source.package.transport.port and the --port
+# value inside spec.source.package.launch.args reference the same port.
+# If you change one, change the other.
+`
+
+func writeDeclarativeMCPYAML(projectDir, name, image, description string, port int, transport string, launchSpec *frameworks.FrameworkLaunch) error {
 	desc := description
 	if desc == "" {
 		desc = fmt.Sprintf("%s MCP server", name)
 	}
 
-	// Declare the transport that matches the scaffolded server: arctl init's
-	// fastmcp template serves Streamable HTTP on the chosen --port at /mcp
-	// (the same port `arctl run` maps and the deploy path wires to the
-	// Service + container). Generating it here means the manifest is
-	// deployable as-is — no manual transport/port edit before apply.
+	// Declare the transport that matches the scaffolded server. Both framework
+	// binaries (fastmcp-python, mcp-go) accept a runtime CLI flag picking the
+	// transport, so the manifest is deployable as-is — no manual edit before
+	// apply. http listens on the chosen --port at /mcp (the same port
+	// `arctl run` maps and the deploy path wires to the Service + container);
+	// stdio runs the server over stdin/stdout (no port/path).
+	var transportBlock v1alpha1.MCPTransport
+	switch transport {
+	case "stdio":
+		transportBlock = v1alpha1.MCPTransport{Type: "stdio"}
+	case "http", "":
+		transportBlock = v1alpha1.MCPTransport{
+			Type: "http",
+			Port: uint16(port),
+			Path: "/mcp",
+		}
+	}
+
+	// Resolve per-transport launch defaults from the framework. Each
+	// transport gets its own command + args (e.g. http needs --transport
+	// http --host 0.0.0.0 --port N for fastmcp), so the manifest carries
+	// the right exec spec regardless of which transport the user picked.
+	// A framework without defaults for the requested transport leaves
+	// launch nil; the user can hand-edit mcp.yaml.
+	//
+	// Only http goes through Render — port substitution is meaningful
+	// only inside http's transport context. Stdio uses verbatim
+	// command/args (no port exists for stdio).
+	var launchBlock *v1alpha1.MCPPackageLaunch
+	if defaults := launchSpec.ForTransport(transport); defaults != nil {
+		var cmd string
+		var args []string
+		switch transport {
+		case "http":
+			rendered, renderedArgs, err := defaults.Render(port)
+			if err != nil {
+				return fmt.Errorf("render http launch defaults: %w", err)
+			}
+			cmd, args = rendered, renderedArgs
+		case "stdio":
+			cmd, args = defaults.Command, defaults.Args
+		default:
+			return fmt.Errorf("unsupported transport %q for launch defaults", transport)
+		}
+		launchBlock = &v1alpha1.MCPPackageLaunch{
+			Command: cmd,
+			Args:    frameworks.ToMCPArguments(args),
+		}
+	}
+
 	server := v1alpha1.MCPServer{
 		TypeMeta: v1alpha1.TypeMeta{
 			APIVersion: scheme.APIVersion,
@@ -799,14 +878,15 @@ func writeDeclarativeMCPYAML(projectDir, name, image, description string, port i
 			Description: desc,
 			Source: &v1alpha1.MCPServerSource{
 				Package: &v1alpha1.MCPPackage{
-					RegistryType: "oci",
-					Identifier:   image,
-					Transport: v1alpha1.MCPTransport{
-						Type: "http",
-						Port: uint16(port),
-						Path: "/mcp",
+					Origin: v1alpha1.MCPPackageOrigin{
+						Type:       v1alpha1.MCPPackageOriginTypeOCI,
+						Identifier: image,
+						OCI: &v1alpha1.MCPPackageOriginOCI{
+							ServerName: name,
+						},
 					},
-					ServerName: name,
+					Launch:    launchBlock,
+					Transport: transportBlock,
 				},
 			},
 		},
@@ -817,7 +897,7 @@ func writeDeclarativeMCPYAML(projectDir, name, image, description string, port i
 		return err
 	}
 
-	return os.WriteFile(filepath.Join(projectDir, "mcp.yaml"), b, 0o644)
+	return os.WriteFile(filepath.Join(projectDir, "mcp.yaml"), append([]byte(generatedMCPYAMLHeader), b...), 0o644)
 }
 
 // --- init skill ---

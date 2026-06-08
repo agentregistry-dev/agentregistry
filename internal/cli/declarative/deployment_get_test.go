@@ -83,10 +83,14 @@ func deploymentTestServerV1Alpha1(t *testing.T, deployments []v1alpha1.Deploymen
 			http.Error(w, `{"error":"bad get path"}`, http.StatusBadRequest)
 			return
 		}
+		namespace := r.URL.Query().Get("namespace")
+		if namespace == "" {
+			namespace = v1alpha1.DefaultNamespace
+		}
 		mu.Lock()
 		defer mu.Unlock()
 		for _, d := range deployments {
-			if d.Metadata.Name == parts[0] {
+			if d.Metadata.Name == parts[0] && d.Metadata.NamespaceOrDefault() == namespace {
 				_ = json.NewEncoder(w).Encode(d)
 				return
 			}
@@ -117,6 +121,25 @@ func TestDeploymentGet_ReturnsMatchByName(t *testing.T) {
 		"get should render the matching deployment's name in the table output "+out.String())
 	assert.NotContains(t, out.String(), "unrelated",
 		"unrelated deployments must not appear")
+}
+
+func TestDeploymentGet_ReturnsMatchByNamespaceName(t *testing.T) {
+	defaultDeployment := deploymentFixture("aws-v1", "default-summarizer", "1.0.0", "my-aws", "agent", "deployed")
+	teamDeployment := deploymentFixture("aws-v1", "team-summarizer", "1.0.0", "my-aws", "agent", "deployed")
+	teamDeployment.Metadata.Namespace = "team-a"
+
+	srv := deploymentTestServerV1Alpha1(t, []v1alpha1.Deployment{defaultDeployment, teamDeployment})
+	setupClientForServer(t, srv)
+
+	out := &bytes.Buffer{}
+	cmd := declarative.NewGetCmd(declarativeTestDeps(nil))
+	cmd.SetOut(out)
+	cmd.SetArgs([]string{"deployment", "team-a/aws-v1"})
+	require.NoError(t, cmd.Execute())
+
+	assert.Contains(t, out.String(), "team-a/aws-v1")
+	assert.Contains(t, out.String(), "team-summarizer")
+	assert.NotContains(t, out.String(), "default-summarizer")
 }
 
 // (3) Get surfaces the registry's not-found sentinel when no deployment matches.

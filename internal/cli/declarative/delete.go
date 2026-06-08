@@ -34,7 +34,7 @@ TYPE must be one of: agent, mcp, skill, prompt, deployment
   arctl delete agent acme-summarizer --tag stable
   arctl delete agent acme-summarizer --all-tags
   arctl delete mcp acme-fetch --tag stable
-  arctl delete deployment my-agent`,
+  arctl delete deployment team-a/my-agent`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runDeclarativeDelete(cmd, deps, args)

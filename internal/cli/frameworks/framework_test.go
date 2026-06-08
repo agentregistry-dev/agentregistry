@@ -1,10 +1,14 @@
 package frameworks
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
 func TestParseDescriptor_OK(t *testing.T) {
@@ -58,4 +62,143 @@ type: agent
 `) // missing framework, language
 	_, err := ParseDescriptor(yaml)
 	require.Error(t, err)
+}
+
+// TestParseDescriptor_RejectsLegacyLaunchShape asserts the pre-redesign
+// `launch: {command, args}` shape is rejected with a clear error so
+// external framework authors get a loud signal at parse time rather
+// than silently producing a manifest with no Launch block.
+func TestParseDescriptor_RejectsLegacyLaunchShape(t *testing.T) {
+	yaml := []byte(`apiVersion: arctl.dev/v1
+name: foo
+type: agent
+framework: foo
+language: python
+launch:
+  command: python
+  args: [src/main.py]
+`)
+	_, err := ParseDescriptor(yaml)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "launch.stdio or launch.http")
+}
+
+// TestParseDescriptor_RejectsEmptyLocalLaunch asserts a localLaunch block
+// with neither stdio nor http set is rejected so the error points at the
+// real culprit, not a downstream "no launch.stdio block" message.
+func TestParseDescriptor_RejectsEmptyLocalLaunch(t *testing.T) {
+	yaml := []byte(`apiVersion: arctl.dev/v1
+name: foo
+type: mcp
+framework: foo
+language: go
+launch:
+  stdio:
+    command: /app/server
+localLaunch: {}
+`)
+	_, err := ParseDescriptor(yaml)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "localLaunch.stdio or localLaunch.http")
+}
+
+// TestParseDescriptor_BuiltinFastMCP_HasLaunchDefaults loads the
+// vendored fastmcp-python framework.yaml and asserts both stdio and http
+// launch defaults are populated so arctl init can emit the right block
+// per --transport.
+func TestParseDescriptor_BuiltinFastMCP_HasLaunchDefaults(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("builtin", "fastmcp-python", "framework.yaml"))
+	require.NoError(t, err)
+	fw, err := ParseDescriptor(data)
+	require.NoError(t, err)
+	require.NotNil(t, fw.Launch)
+	require.NotNil(t, fw.Launch.Stdio)
+	assert.Equal(t, "python3", fw.Launch.Stdio.Command)
+	assert.Equal(t, []string{"src/main.py", "--transport", "stdio"}, fw.Launch.Stdio.Args)
+
+	require.NotNil(t, fw.Launch.HTTP)
+	assert.Equal(t, "python3", fw.Launch.HTTP.Command)
+	assert.Equal(t, []string{
+		"src/main.py", "--transport", "http", "--host", "0.0.0.0", "--port", "{{.Port}}",
+	}, fw.Launch.HTTP.Args)
+}
+
+// TestParseDescriptor_BuiltinMCPGo_HasLaunchDefaults confirms the Go
+// framework declares both transports — stdio is bare /app/server, http
+// adds -http :{{.Port}}.
+func TestParseDescriptor_BuiltinMCPGo_HasLaunchDefaults(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("builtin", "mcp-go", "framework.yaml"))
+	require.NoError(t, err)
+	fw, err := ParseDescriptor(data)
+	require.NoError(t, err)
+	require.NotNil(t, fw.Launch)
+	require.NotNil(t, fw.Launch.Stdio)
+	assert.Equal(t, "/app/server", fw.Launch.Stdio.Command)
+	assert.Empty(t, fw.Launch.Stdio.Args)
+
+	require.NotNil(t, fw.Launch.HTTP)
+	assert.Equal(t, "/app/server", fw.Launch.HTTP.Command)
+	assert.Equal(t, []string{"-http", ":{{.Port}}"}, fw.Launch.HTTP.Args)
+}
+
+// TestFrameworkLaunch_ForTransport covers the dispatch logic including
+// the nil-receiver path so callers can pipe an unset Launch through.
+func TestFrameworkLaunch_ForTransport(t *testing.T) {
+	var nilLaunch *FrameworkLaunch
+	assert.Nil(t, nilLaunch.ForTransport("stdio"))
+
+	full := &FrameworkLaunch{
+		Stdio: &MCPLaunch{Command: "s"},
+		HTTP:  &MCPLaunch{Command: "h"},
+	}
+	assert.Equal(t, "s", full.ForTransport("stdio").Command)
+	assert.Equal(t, "h", full.ForTransport("http").Command)
+	assert.Nil(t, full.ForTransport("sse"))
+	assert.Nil(t, full.ForTransport(""))
+
+	stdioOnly := &FrameworkLaunch{Stdio: &MCPLaunch{Command: "s"}}
+	assert.Nil(t, stdioOnly.ForTransport("http"))
+}
+
+// TestMCPLaunch_Render_TemplatesPort confirms {{.Port}} substitution
+// matches the existing build/run command pattern.
+func TestMCPLaunch_Render_TemplatesPort(t *testing.T) {
+	l := &MCPLaunch{
+		Command: "/app/server",
+		Args:    []string{"-http", ":{{.Port}}"},
+	}
+	cmd, args, err := l.Render(8080)
+	require.NoError(t, err)
+	assert.Equal(t, "/app/server", cmd)
+	assert.Equal(t, []string{"-http", ":8080"}, args)
+}
+
+// TestMCPLaunch_Render_NoTemplateVar passes args through verbatim when
+// no template var appears.
+func TestMCPLaunch_Render_NoTemplateVar(t *testing.T) {
+	l := &MCPLaunch{Command: "python", Args: []string{"src/main.py"}}
+	cmd, args, err := l.Render(3000)
+	require.NoError(t, err)
+	assert.Equal(t, "python", cmd)
+	assert.Equal(t, []string{"src/main.py"}, args)
+}
+
+// TestMCPLaunch_Render_NilReceiver guards the nil-safe path so callers
+// can pass a missing-transport launch through unchecked.
+func TestMCPLaunch_Render_NilReceiver(t *testing.T) {
+	var l *MCPLaunch
+	cmd, args, err := l.Render(3000)
+	require.NoError(t, err)
+	assert.Empty(t, cmd)
+	assert.Nil(t, args)
+}
+
+// TestToMCPArguments_Positional confirms the flat list converts into
+// all-positional MCPArgument entries.
+func TestToMCPArguments_Positional(t *testing.T) {
+	args := ToMCPArguments([]string{"a", "b"})
+	assert.Equal(t, []v1alpha1.MCPArgument{
+		{Type: v1alpha1.MCPArgumentTypePositional, Value: "a"},
+		{Type: v1alpha1.MCPArgumentTypePositional, Value: "b"},
+	}, args)
 }

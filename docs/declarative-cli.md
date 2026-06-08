@@ -70,9 +70,11 @@ arctl delete mcp my-server --tag stable
 
 ### Registering public-catalogue MCP packages
 
-Public MCP packages on npm / PyPI / OCI / NuGet declare their identity by embedding a name into the published artifact (`io.modelcontextprotocol.server.name` OCI label, `mcpName` in npm `package.json`, or `mcp-name:` marker in PyPI/NuGet README). The registry's ownership validator compares `spec.source.package.serverName` against that embedded value.
+Public MCP packages on npm / PyPI / OCI declare their identity by embedding a name into the published artifact (`io.modelcontextprotocol.server.name` OCI label, `mcpName` in npm `package.json`, or `mcp-name:` marker in PyPI README). The registry's ownership validator compares the upstream `serverName` against that embedded value.
 
-`serverName` is **required for every registryType except `mcpb`** (which has no ownership concept). Set it to whatever the publisher embedded — single-segment (`my-mcp`), reverse-DNS (`io.example.mcp`), or `namespace/name` form are all accepted.
+`spec.source.package` is polymorphic over the registry: `origin.type` is `npm`, `pypi`, or `oci`, and the per-type sub-object (`origin.npm`, `origin.pypi`, or `origin.oci`) carries the registry-specific fields (most notably `serverName`, plus `version` for npm/PyPI). `origin.identifier` is the canonical address for the artifact (image ref for OCI, package name for npm/PyPI).
+
+`spec.source.package.launch` (`command` / `args` / `env`) is optional — omit it and the deployment resolver derives sensible defaults from the origin (e.g. `npx -y <pkg>@<ver>` for npm, `uvx <pkg>==<ver>` for PyPI, the OCI image's `ENTRYPOINT`/`CMD` for OCI). Provide `launch` only when you need to override those defaults.
 
 For simple cases where the upstream identity matches your `metadata.name`, write the same value in both. This is what `arctl init mcp` scaffolds by default:
 
@@ -84,14 +86,16 @@ metadata:
 spec:
   source:
     package:
-      registryType: oci
-      identifier: ghcr.io/example/my-weather-mcp:1.0.0
+      origin:
+        type: oci
+        identifier: ghcr.io/example/my-weather-mcp:1.0.0
+        oci:
+          serverName: my-weather-mcp     # matches LABEL io.modelcontextprotocol.server.name in the image
       transport:
         type: stdio
-      serverName: my-weather-mcp     # matches LABEL io.modelcontextprotocol.server.name in the image
 ```
 
-For packages whose upstream identity uses a shape `metadata.name` can't represent (e.g. the reverse-DNS `namespace/name` form), `serverName` carries the upstream value while `metadata.name` keeps a DNS-1123-subdomain local catalog name:
+For packages whose upstream identity uses a shape `metadata.name` can't represent (e.g. the reverse-DNS `namespace/name` form), the per-type `serverName` carries the upstream value while `metadata.name` keeps a DNS-1123-subdomain local catalog name:
 
 ```yaml
 apiVersion: ar.dev/v1alpha1
@@ -101,12 +105,14 @@ metadata:
 spec:
   source:
     package:
-      registryType: npm
-      identifier: "@modelcontextprotocol/server-fetch"
-      version: 0.1.0
+      origin:
+        type: npm
+        identifier: "@modelcontextprotocol/server-fetch"
+        npm:
+          version: 0.1.0
+          serverName: io.github.modelcontextprotocol/server-fetch  # upstream catalogue identity
       transport:
         type: stdio
-      serverName: io.github.modelcontextprotocol/server-fetch    # upstream catalogue identity
 ```
 
 ## Skills & Prompts

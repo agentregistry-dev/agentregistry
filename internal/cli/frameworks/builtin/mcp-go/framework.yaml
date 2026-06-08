@@ -8,6 +8,34 @@ templatesDir: ./templates
 env:
   optional:
     - LOG_LEVEL
+# Per-transport exec defaults. arctl init writes the block matching the
+# requested --transport into spec.source.package.launch in the scaffolded
+# mcp.yaml. {{.Port}} is templated from the --port flag at scaffold time
+# (same Go text/template syntax used by build.command and run.command).
+launch:
+  stdio:
+    command: /app/server
+    args: []
+  http:
+    command: /app/server
+    args:
+      - "-http"
+      - ":{{.Port}}"
+localLaunch:
+  stdio:
+    command: go
+    args:
+      - run
+      - ./cmd/server
+  http:
+    command: go
+    args:
+      - run
+      - ./cmd/server
+      - "-http"
+      - ":{{.Port}}"
+localInstall:
+  command: ["go", "mod", "tidy"]
 build:
   command: ["docker", "build", "{{if .Platform}}--platform={{.Platform}}{{end}}", "-t", "{{.Image}}", "{{.ProjectDir}}"]
 run:

@@ -84,7 +84,7 @@ Examples:
 		},
 	}
 
-	cmd.Flags().StringVar(&buildImage, "image", "", "Docker image tag override (default: from spec.source.image / spec.packages[0].identifier)")
+	cmd.Flags().StringVar(&buildImage, "image", "", "Docker image tag override (default: from spec.source.image / spec.source.package.origin.identifier)")
 	cmd.Flags().BoolVar(&buildPush, "push", false, "Push the image after building")
 	cmd.Flags().StringVar(&buildPlatform, "platform", "", "Target platform (e.g. linux/amd64, linux/arm64)")
 
@@ -148,10 +148,10 @@ func agentSpecImage(obj v1alpha1.Object) string {
 	return ""
 }
 
-// mcpSpecPackageIdentifier extracts spec.source.package.identifier for an MCPServer resource.
+// mcpSpecPackageIdentifier extracts spec.source.package.origin.identifier for an MCPServer resource.
 func mcpSpecPackageIdentifier(obj v1alpha1.Object) string {
 	if s, ok := obj.(*v1alpha1.MCPServer); ok && s.Spec.Source != nil && s.Spec.Source.Package != nil {
-		return s.Spec.Source.Package.Identifier
+		return s.Spec.Source.Package.Origin.Identifier
 	}
 	return ""
 }

@@ -36,6 +36,7 @@ Timeout regimes:
   --timeout=0    poll once and return the current state
   --timeout=-1   wait forever`,
 		Example: `  arctl wait deployment aws-v1
+  arctl wait deployment team-a/aws-v1
   arctl wait deployment aws-v1 --for=failed
   arctl wait deployment aws-v1 --for=delete --timeout=10m`,
 		Args:         cobra.ExactArgs(2),
@@ -52,6 +53,10 @@ Timeout regimes:
 
 func runDeclarativeWait(cmd *cobra.Command, deps cliruntime.Deps, args []string) error {
 	typeName, name := args[0], args[1]
+	ref, err := parseResourceLookupRef(name)
+	if err != nil {
+		return err
+	}
 	k, err := kindRegistry(deps).Lookup(typeName)
 	if err != nil {
 		return err
@@ -90,7 +95,7 @@ func runDeclarativeWait(cmd *cobra.Command, deps cliruntime.Deps, args []string)
 	}
 
 	resolve := func(ctx context.Context) (*cliCommon.DeploymentRecord, error) {
-		return resolveDeploymentForWait(ctx, c, name)
+		return resolveDeploymentForWait(ctx, c, ref)
 	}
 
 	if err := cliCommon.WaitForDeployment(cmd.Context(), resolve, opts); err != nil {
@@ -105,9 +110,9 @@ func runDeclarativeWait(cmd *cobra.Command, deps cliruntime.Deps, args []string)
 	return nil
 }
 
-func resolveDeploymentForWait(ctx context.Context, c *client.Client, name string) (*cliCommon.DeploymentRecord, error) {
+func resolveDeploymentForWait(ctx context.Context, c *client.Client, ref resourceLookupRef) (*cliCommon.DeploymentRecord, error) {
 	dep, err := client.GetTyped(ctx, c, v1alpha1.KindDeployment,
-		v1alpha1.DefaultNamespace, name, "",
+		ref.Namespace, ref.Name, "",
 		func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} })
 	if err != nil {
 		return nil, err

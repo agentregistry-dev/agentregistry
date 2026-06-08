@@ -14,11 +14,10 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1/registries"
 )
 
-// TestValidatePyPI_RegistryBaseURLOverride mirrors the NPM override
-// test for PyPI. A package supplying its own RegistryBaseURL routes
-// the JSON-API probe to that mirror without the validator rejecting
-// it for being non-canonical.
-func TestValidatePyPI_RegistryBaseURLOverride(t *testing.T) {
+// TestValidatePyPI_MirrorOverride mirrors the NPM override test for PyPI.
+// A package supplying its own Mirror routes the JSON-API probe to that
+// mirror without the validator rejecting it for being non-canonical.
+func TestValidatePyPI_MirrorOverride(t *testing.T) {
 	const serverName = "io.example/private-server"
 	var probedPath string
 	mirror := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -29,15 +28,18 @@ func TestValidatePyPI_RegistryBaseURLOverride(t *testing.T) {
 	defer mirror.Close()
 
 	err := registries.ValidatePyPI(context.Background(),
-		v1alpha1.RegistryPackage{
-			RegistryType:    v1alpha1.RegistryTypePyPI,
-			Identifier:      "my-pkg",
-			Version:         "1.0.0",
-			RegistryBaseURL: mirror.URL,
+		v1alpha1.MCPPackageOrigin{
+			Type:       v1alpha1.MCPPackageOriginTypePyPI,
+			Identifier: "my-pkg",
+			PyPI: &v1alpha1.MCPPackageOriginPyPI{
+				Version:    "1.0.0",
+				Mirror:     mirror.URL,
+				ServerName: serverName,
+			},
 		},
 		serverName,
 	)
-	require.NoError(t, err, "non-canonical RegistryBaseURL must be honored as override")
+	require.NoError(t, err, "non-canonical Mirror must be honored as override")
 	require.Equal(t, "/pypi/my-pkg/1.0.0/json", probedPath, "validator must route HTTP probe to the override URL")
 }
 
@@ -110,13 +112,13 @@ func TestValidatePyPI_RealPackages(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pkg := v1alpha1.RegistryPackage{
-				RegistryType: v1alpha1.RegistryTypePyPI,
-				Identifier:   tt.packageName,
-				Version:      tt.version,
+			origin := v1alpha1.MCPPackageOrigin{
+				Type:       v1alpha1.MCPPackageOriginTypePyPI,
+				Identifier: tt.packageName,
+				PyPI:       &v1alpha1.MCPPackageOriginPyPI{Version: tt.version},
 			}
 
-			err := registries.ValidatePyPI(ctx, pkg, tt.serverName)
+			err := registries.ValidatePyPI(ctx, origin, tt.serverName)
 
 			if tt.expectError {
 				require.Error(t, err)

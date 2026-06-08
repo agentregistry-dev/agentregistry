@@ -59,6 +59,30 @@ func TestInitAgent_WritesYAMLAndArctlAndDotEnv(t *testing.T) {
 	assert.Contains(t, string(gi), ".env")
 }
 
+// TestInitAgent_MCPToolsHasNamePrefix asserts the scaffolded mcp_tools.py
+// constructs each MCPToolset with tool_name_prefix set. Without this, two
+// MCP servers exposing the same tool name (e.g. `echo`) merge into a single
+// flat list and the LLM API rejects with "tools: Tool names must be
+// unique." See google-adk's MCPToolset tool_name_prefix parameter.
+func TestInitAgent_MCPToolsHasNamePrefix(t *testing.T) {
+	tmp := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmp))
+	defer func() { _ = os.Chdir(origDir) }()
+
+	cmd := declarative.NewInitCmd(declarativeTestDeps(nil))
+	cmd.SetArgs([]string{"agent", "myagent", "--framework", "adk", "--language", "python"})
+	require.NoError(t, cmd.Execute())
+
+	body, err := os.ReadFile(filepath.Join(tmp, "myagent", "myagent", "mcp_tools.py"))
+	require.NoError(t, err)
+	src := string(body)
+
+	assert.Contains(t, src, "tool_name_prefix",
+		"mcp_tools.py must pass tool_name_prefix to MCPToolset; without it, two MCPs exposing the same tool name collide at the LLM API")
+}
+
 func TestInitAgent_OutputDirFlag(t *testing.T) {
 	tmp := t.TempDir()
 	out := t.TempDir() // separate from cwd
@@ -121,7 +145,7 @@ func TestInitMCP_RejectsNonDNSSubdomainName(t *testing.T) {
 	defer func() { _ = os.Chdir(origDir) }()
 
 	cmd := declarative.NewInitCmd(declarativeTestDeps(nil))
-	cmd.SetArgs([]string{"mcp", "acme/my-mcp", "--framework", "fastmcp", "--language", "python"})
+	cmd.SetArgs([]string{"mcp", "acme/my-mcp", "--framework", "fastmcp", "--language", "python", "--transport", "http"})
 	require.Error(t, cmd.Execute())
 }
 
@@ -133,7 +157,7 @@ func TestInitMCP_WritesYAMLAndArctl(t *testing.T) {
 	defer func() { _ = os.Chdir(origDir) }()
 
 	cmd := declarative.NewInitCmd(declarativeTestDeps(nil))
-	cmd.SetArgs([]string{"mcp", "my-mcp", "--framework", "fastmcp", "--language", "python"})
+	cmd.SetArgs([]string{"mcp", "my-mcp", "--framework", "fastmcp", "--language", "python", "--transport", "http"})
 	require.NoError(t, cmd.Execute())
 
 	projectDir := filepath.Join(tmp, "my-mcp")
@@ -153,6 +177,205 @@ func TestInitMCP_WritesYAMLAndArctl(t *testing.T) {
 	cfg, err := buildconfig.Read(projectDir)
 	require.NoError(t, err)
 	assert.Equal(t, "fastmcp", cfg.Framework)
+}
+
+// TestInitMCP_StdioTransport runs the command with --transport stdio and
+// asserts the manifest declares stdio (no port/path) while the OCI origin
+// and arctl.yaml are intact — the runtime/framework binary handles the
+// stdio loop, so no template changes are needed.
+func TestInitMCP_StdioTransport(t *testing.T) {
+	tmp := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmp))
+	defer func() { _ = os.Chdir(origDir) }()
+
+	cmd := declarative.NewInitCmd(declarativeTestDeps(nil))
+	cmd.SetArgs([]string{
+		"mcp", "my-stdio-mcp",
+		"--framework", "fastmcp", "--language", "python",
+		"--transport", "stdio",
+	})
+	require.NoError(t, cmd.Execute())
+
+	projectDir := filepath.Join(tmp, "my-stdio-mcp")
+	_, err = os.Stat(filepath.Join(projectDir, "mcp.yaml"))
+	require.NoError(t, err)
+
+	mcpSpec := readYAMLFile(t, filepath.Join(projectDir, "mcp.yaml"))["spec"].(map[string]any)
+	pkg := mcpSpec["source"].(map[string]any)["package"].(map[string]any)
+	transport := pkg["transport"].(map[string]any)
+	assert.Equal(t, "stdio", transport["type"])
+	// port/path use omitempty in the API type, so a stdio transport must
+	// not emit them.
+	assert.NotContains(t, transport, "port", "stdio transport should not emit port")
+	assert.NotContains(t, transport, "path", "stdio transport should not emit path")
+
+	// Origin block intact: type=oci, identifier=image, oci.serverName=name.
+	origin := pkg["origin"].(map[string]any)
+	assert.Equal(t, "oci", origin["type"])
+	assert.NotEmpty(t, origin["identifier"])
+	oci := origin["oci"].(map[string]any)
+	assert.Equal(t, "my-stdio-mcp", oci["serverName"])
+
+	// arctl.yaml unchanged by transport choice — framework/language still
+	// land in the build config the same way.
+	cfg, err := buildconfig.Read(projectDir)
+	require.NoError(t, err)
+	assert.Equal(t, "fastmcp", cfg.Framework)
+	assert.Equal(t, "python", cfg.Language)
+}
+
+// TestInitMCP_StdioTransport_OmitsPortFromArctlYAML asserts the scaffolded
+// arctl.yaml has no `port` field for stdio projects. The cobra default
+// (3000) used to leak into arctl.yaml regardless of transport, which made
+// `arctl run` and --local-mcp wiring point at a non-existent HTTP server.
+func TestInitMCP_StdioTransport_OmitsPortFromArctlYAML(t *testing.T) {
+	tmp := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmp))
+	defer func() { _ = os.Chdir(origDir) }()
+
+	cmd := declarative.NewInitCmd(declarativeTestDeps(nil))
+	cmd.SetArgs([]string{
+		"mcp", "my-stdio-mcp",
+		"--framework", "fastmcp", "--language", "python",
+		"--transport", "stdio",
+	})
+	require.NoError(t, cmd.Execute())
+
+	cfg, err := buildconfig.Read(filepath.Join(tmp, "my-stdio-mcp"))
+	require.NoError(t, err)
+	assert.Equal(t, 0, cfg.Port, "stdio scaffold must not write a port (HTTP-only semantic)")
+}
+
+// TestInitMCP_StdioTransport_WritesLaunchFromFramework asserts that for
+// stdio transport the framework's launch defaults land in
+// spec.source.package.launch in structured form so the runtime has a
+// non-empty Cmd at deploy time.
+func TestInitMCP_StdioTransport_WritesLaunchFromFramework(t *testing.T) {
+	tmp := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmp))
+	defer func() { _ = os.Chdir(origDir) }()
+
+	cmd := declarative.NewInitCmd(declarativeTestDeps(nil))
+	cmd.SetArgs([]string{
+		"mcp", "my-stdio-mcp",
+		"--framework", "fastmcp", "--language", "python",
+		"--transport", "stdio",
+	})
+	require.NoError(t, cmd.Execute())
+
+	projectDir := filepath.Join(tmp, "my-stdio-mcp")
+	mcpSpec := readYAMLFile(t, filepath.Join(projectDir, "mcp.yaml"))["spec"].(map[string]any)
+	pkg := mcpSpec["source"].(map[string]any)["package"].(map[string]any)
+
+	launch, ok := pkg["launch"].(map[string]any)
+	require.True(t, ok, "stdio transport must scaffold spec.source.package.launch")
+	assert.Equal(t, "python3", launch["command"])
+
+	args, ok := launch["args"].([]any)
+	require.True(t, ok, "launch.args must be a list")
+	require.Len(t, args, 3)
+	values := make([]string, 0, len(args))
+	for _, a := range args {
+		entry := a.(map[string]any)
+		assert.Equal(t, "positional", entry["type"])
+		values = append(values, entry["value"].(string))
+	}
+	assert.Equal(t, []string{"src/main.py", "--transport", "stdio"}, values)
+}
+
+// TestInitMCP_HTTPTransport_WritesLaunchFromFramework asserts that http
+// transport gets a launch block populated from the framework's http
+// defaults — so the deployed container runs with the right flags
+// (--transport http --host 0.0.0.0 --port N for fastmcp).
+func TestInitMCP_HTTPTransport_WritesLaunchFromFramework(t *testing.T) {
+	tmp := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmp))
+	defer func() { _ = os.Chdir(origDir) }()
+
+	cmd := declarative.NewInitCmd(declarativeTestDeps(nil))
+	cmd.SetArgs([]string{
+		"mcp", "my-http-mcp",
+		"--framework", "fastmcp", "--language", "python",
+		"--transport", "http",
+		"--port", "4321",
+	})
+	require.NoError(t, cmd.Execute())
+
+	projectDir := filepath.Join(tmp, "my-http-mcp")
+	mcpSpec := readYAMLFile(t, filepath.Join(projectDir, "mcp.yaml"))["spec"].(map[string]any)
+	pkg := mcpSpec["source"].(map[string]any)["package"].(map[string]any)
+
+	launch, ok := pkg["launch"].(map[string]any)
+	require.True(t, ok, "http transport must scaffold spec.source.package.launch")
+	assert.Equal(t, "python3", launch["command"])
+
+	args, ok := launch["args"].([]any)
+	require.True(t, ok, "launch.args must be a list")
+	values := make([]string, 0, len(args))
+	for _, a := range args {
+		item := a.(map[string]any)
+		assert.Equal(t, "positional", item["type"])
+		values = append(values, item["value"].(string))
+	}
+	assert.Equal(t, []string{
+		"src/main.py", "--transport", "http", "--host", "0.0.0.0", "--port", "4321",
+	}, values, "http launch.args must carry --transport/--host/--port with the user's --port substituted")
+
+	// Dockerfile EXPOSE must template to the user's --port so the image's
+	// metadata stays consistent with what the launcher binds.
+	dockerfile, err := os.ReadFile(filepath.Join(projectDir, "Dockerfile"))
+	require.NoError(t, err)
+	assert.Contains(t, string(dockerfile), "EXPOSE 4321", "Dockerfile EXPOSE must reflect --port")
+}
+
+// TestInitMCP_PortIncompatibleWithStdio rejects --port + --transport stdio
+// up front so the user doesn't get a manifest with a port that the runtime
+// will ignore.
+func TestInitMCP_PortIncompatibleWithStdio(t *testing.T) {
+	tmp := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmp))
+	defer func() { _ = os.Chdir(origDir) }()
+
+	cmd := declarative.NewInitCmd(declarativeTestDeps(nil))
+	cmd.SetArgs([]string{
+		"mcp", "my-mcp",
+		"--framework", "fastmcp", "--language", "python",
+		"--transport", "stdio",
+		"--port", "4000",
+	})
+	err = cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--port")
+}
+
+// TestInitMCP_InvalidTransport rejects unknown --transport values rather
+// than silently falling back to a default.
+func TestInitMCP_InvalidTransport(t *testing.T) {
+	tmp := t.TempDir()
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmp))
+	defer func() { _ = os.Chdir(origDir) }()
+
+	cmd := declarative.NewInitCmd(declarativeTestDeps(nil))
+	cmd.SetArgs([]string{
+		"mcp", "my-mcp",
+		"--framework", "fastmcp", "--language", "python",
+		"--transport", "sse",
+	})
+	err = cmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--transport")
 }
 
 // ---- init skill ----

@@ -62,7 +62,11 @@ func NewExtensionKind(k ExtensionKind) *scheme.Kind {
 			return []string{meta.Name}
 		},
 		Get: func(ctx context.Context, c *client.Client, name, _ string) (any, error) {
-			return client.GetTyped(ctx, c, k.CanonicalKind, v1alpha1.DefaultNamespace, name, "", k.NewObject)
+			ref, err := parseResourceLookupRef(name)
+			if err != nil {
+				return nil, err
+			}
+			return client.GetTyped(ctx, c, k.CanonicalKind, ref.Namespace, ref.Name, "", k.NewObject)
 		},
 		ListFunc: func(ctx context.Context, c *client.Client, opts scheme.ListOpts) ([]any, error) {
 			return listAny(ctx, c, k.CanonicalKind, opts, k.NewObject)

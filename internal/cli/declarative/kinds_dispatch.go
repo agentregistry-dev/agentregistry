@@ -9,9 +9,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	cliruntime "github.com/agentregistry-dev/agentregistry/pkg/cli/runtime"
 )
 
@@ -25,6 +27,24 @@ func kindRegistry(deps cliruntime.Deps) *scheme.Registry {
 		return deps.Kinds
 	}
 	return scheme.NewRegistry(scheme.All()...)
+}
+
+type resourceLookupRef struct {
+	Namespace string
+	Name      string
+}
+
+func parseResourceLookupRef(arg string) (resourceLookupRef, error) {
+	if arg == "" {
+		return resourceLookupRef{}, fmt.Errorf("resource reference must be NAME or NAMESPACE/NAME")
+	}
+	if namespace, name, ok := strings.Cut(arg, "/"); ok {
+		if namespace == "" || name == "" || strings.Contains(name, "/") {
+			return resourceLookupRef{}, fmt.Errorf("resource reference must be NAME or NAMESPACE/NAME")
+		}
+		return resourceLookupRef{Namespace: namespace, Name: name}, nil
+	}
+	return resourceLookupRef{Namespace: v1alpha1.DefaultNamespace, Name: arg}, nil
 }
 
 // listItems fetches items for the given kind using its registered ListFunc.

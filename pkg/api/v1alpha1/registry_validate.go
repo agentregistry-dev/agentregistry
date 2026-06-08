@@ -2,87 +2,49 @@ package v1alpha1
 
 import (
 	"context"
-	"fmt"
 )
 
-// Registry type identifiers for RegistryPackage.RegistryType. Values
-// match the modelcontextprotocol/registry vocabulary. On-the-wire
-// string literals, not an enum, so manifests round-trip unchanged.
-const (
-	RegistryTypeNPM   = "npm"
-	RegistryTypePyPI  = "pypi"
-	RegistryTypeOCI   = "oci"
-	RegistryTypeNuGet = "nuget"
-	RegistryTypeMCPB  = "mcpb"
-)
-
-// RegistryPackage is the minimal package view a registry validator
-// consumes. MCPPackage exposes these fields; the per-kind
-// ValidateRegistries method converts its typed slice into this shape
-// and calls the caller-supplied RegistryValidatorFunc.
-//
-// Extra fields present only on MCPPackage (RegistryBaseURL,
-// FileSHA256) round-trip through here because the OCI validator
-// rejects them — it needs to see them to reject them.
-type RegistryPackage struct {
-	RegistryType    string
-	Identifier      string
-	Version         string
-	RegistryBaseURL string
-	FileSHA256      string
-}
-
-// RegistryValidatorFunc validates a single package against its
-// referenced external registry. Implementations fan out by
-// RegistryType (OCI / npm / pypi / nuget / mcpb) to the
-// appropriate per-registry validator. objectName is the resource's
-// metadata.name, used for ownership annotations (e.g. OCI's
-// io.modelcontextprotocol.server.name label match).
+// RegistryValidatorFunc validates a single package's origin against
+// its referenced external registry. Implementations fan out by which
+// sub-struct (Origin.NPM/PyPI/OCI) is non-nil to the appropriate
+// per-registry validator. expectedServerName is the upstream-claimed
+// server identity declared on the origin's sub-struct (e.g.
+// origin.oci.serverName), passed through to ownership-annotation
+// checks (e.g. OCI's io.modelcontextprotocol.server.name label match).
 //
 // A nil RegistryValidatorFunc is a no-op on the ValidateRegistries
 // methods; callers that aren't wired with a dispatcher skip the
 // check.
-type RegistryValidatorFunc func(ctx context.Context, pkg RegistryPackage, objectName string) error
+type RegistryValidatorFunc func(ctx context.Context, origin MCPPackageOrigin, expectedServerName string) error
 
-// validatePackages runs v against every element of packages,
-// accumulating FieldErrors under the supplied path prefix (e.g.
-// "spec.packages"). Returns nil FieldErrors when every validation
-// passes — no-ops cleanly when v itself is nil.
-func validatePackages(
-	ctx context.Context,
-	v RegistryValidatorFunc,
-	packages []RegistryPackage,
-	objectName, pathPrefix string,
-) FieldErrors {
-	if v == nil || len(packages) == 0 {
-		return nil
-	}
-	var errs FieldErrors
-	for i, pkg := range packages {
-		if err := v(ctx, pkg, objectName); err != nil {
-			errs.Append(fmt.Sprintf("%s[%d]", pathPrefix, i), err)
-		}
-	}
-	return errs
-}
-
-// ValidateRegistries on *MCPServer dispatches the bundled MCPPackage to the
-// caller-supplied per-registry validator.
+// ValidateRegistries on *MCPServer dispatches the bundled MCPPackage's
+// Origin to the caller-supplied per-registry validator.
 func (m *MCPServer) ValidateRegistries(ctx context.Context, v RegistryValidatorFunc) error {
 	if v == nil || m.Spec.Source == nil || m.Spec.Source.Package == nil {
 		return nil
 	}
 	p := m.Spec.Source.Package
-	pkgs := []RegistryPackage{{
-		RegistryType:    p.RegistryType,
-		Identifier:      p.Identifier,
-		Version:         p.Version,
-		RegistryBaseURL: p.RegistryBaseURL,
-		FileSHA256:      p.FileSHA256,
-	}}
-	errs := validatePackages(ctx, v, pkgs, p.ServerName, "spec.source.package")
-	if len(errs) == 0 {
-		return nil
+	if err := v(ctx, p.Origin, serverNameFromOrigin(p.Origin)); err != nil {
+		var errs FieldErrors
+		errs.Append("spec.source.package.origin", err)
+		return errs
 	}
-	return errs
+	return nil
+}
+
+// serverNameFromOrigin returns the per-type ServerName declared on
+// whichever sub-struct is non-nil. Empty if Origin is malformed
+// (no sub-struct set or multiple set) — the invariant validator
+// surfaces that as its own error before this is consulted.
+func serverNameFromOrigin(o MCPPackageOrigin) string {
+	switch {
+	case o.NPM != nil:
+		return o.NPM.ServerName
+	case o.PyPI != nil:
+		return o.PyPI.ServerName
+	case o.OCI != nil:
+		return o.OCI.ServerName
+	default:
+		return ""
+	}
 }

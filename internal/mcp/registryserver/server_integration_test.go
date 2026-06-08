@@ -5,6 +5,8 @@ package registryserver
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -32,9 +34,12 @@ func TestMCPListServers_HappyPath(t *testing.T) {
 			Description: "Echo test server",
 			Source: &v1alpha1.MCPServerSource{
 				Package: &v1alpha1.MCPPackage{
-					RegistryType: v1alpha1.RegistryTypeOCI,
-					Identifier:   "ghcr.io/example/echo:1.0.0",
-					Transport:    v1alpha1.MCPTransport{Type: "stdio"},
+					Origin: v1alpha1.MCPPackageOrigin{
+						Type:       v1alpha1.MCPPackageOriginTypeOCI,
+						Identifier: "ghcr.io/example/echo:1.0.0",
+						OCI:        &v1alpha1.MCPPackageOriginOCI{ServerName: "echo"},
+					},
+					Transport: v1alpha1.MCPTransport{Type: "stdio"},
 				},
 			},
 		},
@@ -48,7 +53,11 @@ func TestMCPListServers_HappyPath(t *testing.T) {
 	serverSession, err := server.Connect(ctx, serverTransport, nil)
 	require.NoError(t, err, "connect MCP server")
 	defer func() {
-		require.NoError(t, serverSession.Wait())
+		// In-memory transport clean close surfaces as ErrClosedPipe / io.EOF.
+		err := serverSession.Wait()
+		if err != nil && !errors.Is(err, io.ErrClosedPipe) && !errors.Is(err, io.EOF) {
+			require.NoError(t, err)
+		}
 	}()
 
 	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0.0.1"}, nil)

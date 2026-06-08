@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -24,32 +25,30 @@ type PyPIPackageResponse struct {
 	} `json:"info"`
 }
 
-// ValidatePyPI validates that a PyPI package contains the correct MCP server name
-func ValidatePyPI(ctx context.Context, pkg v1alpha1.RegistryPackage, serverName string) error {
-	// RegistryBaseURL is honored as an override — empty falls back to
-	// the canonical default, non-empty drives the probe directly so
-	// private mirrors (devpi etc.) work without OSS patching.
-	if pkg.RegistryBaseURL == "" {
-		pkg.RegistryBaseURL = DefaultURLPyPI
+// ValidatePyPI validates that a PyPI package contains the correct MCP server name.
+func ValidatePyPI(ctx context.Context, origin v1alpha1.MCPPackageOrigin, serverName string) error {
+	if origin.PyPI == nil {
+		return fmt.Errorf("PyPI validator called without origin.PyPI set")
 	}
-
-	if pkg.Identifier == "" {
+	if origin.Identifier == "" {
 		return ErrMissingIdentifierForPyPI
 	}
-
-	if pkg.Version == "" {
+	if origin.PyPI.Version == "" {
 		return ErrMissingVersionForPyPi
 	}
 
-	// Validate that MCPB-specific fields are not present
-	if pkg.FileSHA256 != "" {
-		return fmt.Errorf("PyPI packages must not have 'fileSha256' field - this is only for MCPB packages")
+	// Mirror is honored as an override — empty falls back to the
+	// canonical default, non-empty drives the probe directly so private
+	// mirrors (devpi etc.) work without OSS patching.
+	mirror := origin.PyPI.Mirror
+	if mirror == "" {
+		mirror = DefaultURLPyPI
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
 
-	url := fmt.Sprintf("%s/pypi/%s/%s/json", pkg.RegistryBaseURL, pkg.Identifier, pkg.Version)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	requestURL := fmt.Sprintf("%s/pypi/%s/%s/json", mirror, url.PathEscape(origin.Identifier), url.PathEscape(origin.PyPI.Version))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
@@ -64,7 +63,7 @@ func ValidatePyPI(ctx context.Context, pkg v1alpha1.RegistryPackage, serverName 
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("PyPI package '%s' not found (status: %d)", pkg.Identifier, resp.StatusCode)
+		return fmt.Errorf("PyPI package '%s' not found (status: %d)", origin.Identifier, resp.StatusCode)
 	}
 
 	var pypiResp PyPIPackageResponse
@@ -72,14 +71,11 @@ func ValidatePyPI(ctx context.Context, pkg v1alpha1.RegistryPackage, serverName 
 		return fmt.Errorf("failed to parse PyPI package metadata: %w", err)
 	}
 
-	// Check description (README) content
 	description := pypiResp.Info.Description
-
-	// Check for mcp-name: format (more specific)
 	mcpNamePattern := "mcp-name: " + serverName
 	if strings.Contains(description, mcpNamePattern) {
-		return nil // Found as mcp-name: format
+		return nil
 	}
 
-	return fmt.Errorf("PyPI package '%s' ownership validation failed. The server name '%s' must appear as 'mcp-name: %s' in the package README", pkg.Identifier, serverName, serverName)
+	return fmt.Errorf("PyPI package '%s' ownership validation failed. The server name '%s' must appear as 'mcp-name: %s' in the package README", origin.Identifier, serverName, serverName)
 }

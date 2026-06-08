@@ -109,7 +109,7 @@ func TestRun_InspectorDryRunNarratesURL(t *testing.T) {
 
 	require.NoError(t, os.Chdir(tmp))
 	initCmd := declarative.NewInitCmd(declarativeTestDeps(nil))
-	initCmd.SetArgs([]string{"mcp", "acme-inspmcp", "--framework", "fastmcp", "--language", "python"})
+	initCmd.SetArgs([]string{"mcp", "acme-inspmcp", "--framework", "fastmcp", "--language", "python", "--transport", "http"})
 	require.NoError(t, initCmd.Execute())
 
 	require.NoError(t, os.Chdir(filepath.Join(tmp, "acme-inspmcp")))
@@ -126,6 +126,63 @@ func TestRun_InspectorDryRunNarratesURL(t *testing.T) {
 	require.Contains(t, out, "(dry-run; skipping exec)")
 }
 
+// TestRun_StdioDefaultsToInspector verifies that running a stdio MCP project
+// without --inspector still launches the Inspector (transport-aware default),
+// and that the dry-run narration shows the binary invocation the Inspector
+// would spawn — not the docker-run pipeline reserved for http.
+func TestRun_StdioDefaultsToInspector(t *testing.T) {
+	tmp := t.TempDir()
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	require.NoError(t, os.Chdir(tmp))
+	initCmd := declarative.NewInitCmd(declarativeTestDeps(nil))
+	initCmd.SetArgs([]string{"mcp", "acme-stdiomcp", "--framework", "fastmcp", "--language", "python", "--transport", "stdio"})
+	require.NoError(t, initCmd.Execute())
+
+	require.NoError(t, os.Chdir(filepath.Join(tmp, "acme-stdiomcp")))
+	cmd := declarative.NewRunCmd(declarativeTestDeps(nil))
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"--dry-run"})
+	require.NoError(t, cmd.Execute())
+
+	out := buf.String()
+	require.Contains(t, out, "MCP Inspector (stdio)")
+	require.Contains(t, out, "python")
+	require.Contains(t, out, "src/main.py")
+	require.Contains(t, out, "(dry-run; skipping exec)")
+	require.NotContains(t, out, "docker run") // stdio must NOT go through the http docker pipeline
+}
+
+// TestRun_StdioWithInspectorFalseSkips verifies the explicit opt-out: when
+// the user passes --inspector=false on a stdio project, arctl prints the
+// "stdio needs an MCP client" hint and exits 0 without spawning anything.
+func TestRun_StdioWithInspectorFalseSkips(t *testing.T) {
+	tmp := t.TempDir()
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	require.NoError(t, os.Chdir(tmp))
+	initCmd := declarative.NewInitCmd(declarativeTestDeps(nil))
+	initCmd.SetArgs([]string{"mcp", "acme-stdiooff", "--framework", "fastmcp", "--language", "python", "--transport", "stdio"})
+	require.NoError(t, initCmd.Execute())
+
+	require.NoError(t, os.Chdir(filepath.Join(tmp, "acme-stdiooff")))
+	cmd := declarative.NewRunCmd(declarativeTestDeps(nil))
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{"--inspector=false", "--dry-run"})
+	require.NoError(t, cmd.Execute())
+
+	out := buf.String()
+	require.Contains(t, out, "stdio MCPs need a connected MCP client")
+}
+
 // TestRun_NoChatOnMCPErrors mirrors the above for the other direction:
 // --no-chat is agent-only and fails fast on MCP projects.
 func TestRun_NoChatOnMCPErrors(t *testing.T) {
@@ -136,7 +193,7 @@ func TestRun_NoChatOnMCPErrors(t *testing.T) {
 
 	require.NoError(t, os.Chdir(tmp))
 	initCmd := declarative.NewInitCmd(declarativeTestDeps(nil))
-	initCmd.SetArgs([]string{"mcp", "acme-mcpproj", "--framework", "fastmcp", "--language", "python"})
+	initCmd.SetArgs([]string{"mcp", "acme-mcpproj", "--framework", "fastmcp", "--language", "python", "--transport", "http"})
 	require.NoError(t, initCmd.Execute())
 
 	require.NoError(t, os.Chdir(filepath.Join(tmp, "acme-mcpproj")))
