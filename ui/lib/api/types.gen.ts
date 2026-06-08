@@ -224,6 +224,11 @@ export type McpServer = {
     status?: Status;
 };
 
+export type McpServerOpenApi = {
+    schema: string;
+    url: string;
+};
+
 export type McpServerSource = {
     package?: McpPackage;
     repository?: Repository;
@@ -231,6 +236,7 @@ export type McpServerSource = {
 
 export type McpServerSpec = {
     description?: string;
+    openapi?: McpServerOpenApi;
     remote?: McpRemote;
     source?: McpServerSource;
     title?: string;
