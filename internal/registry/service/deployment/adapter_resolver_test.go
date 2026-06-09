@@ -65,14 +65,3 @@ func TestAdapterResolver_UnsupportedRuntimeType(t *testing.T) {
 	require.True(t, errors.As(err, &unsupported), "expected UnsupportedDeploymentRuntimeError, got %v", err)
 	require.Equal(t, noop.RuntimeType, unsupported.Type)
 }
-
-func TestAdapterResolver_DiscoverReturnsAdapterResults(t *testing.T) {
-	_, _, runtime := seedAdapterResolverFixtures(t)
-	resolver := NewAdapterResolver(ResolverDependencies{
-		Adapters: map[string]types.DeploymentAdapter{noop.RuntimeType: noop.New()},
-	})
-
-	results, err := resolver.Discover(context.Background(), runtime)
-	require.NoError(t, err)
-	require.Empty(t, results, "noop Discover reports nothing")
-}

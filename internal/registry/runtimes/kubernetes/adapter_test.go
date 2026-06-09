@@ -163,53 +163,6 @@ func TestK8sV1Alpha1SupportedTargetKinds(t *testing.T) {
 	}
 }
 
-func TestK8sV1Alpha1Discover_SkipsManagedResources(t *testing.T) {
-	unmanaged := &v1alpha2.Agent{
-		ObjectMeta: metav1.ObjectMeta{Name: "imported", Namespace: "kagent"},
-	}
-	unmanagedRemote := &v1alpha2.RemoteMCPServer{
-		ObjectMeta: metav1.ObjectMeta{Name: "imported-remote", Namespace: "kagent"},
-	}
-	managed := &v1alpha2.Agent{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "owned",
-			Namespace: "kagent",
-			Labels:    map[string]string{kubernetesManagedLabelKey: "true"},
-		},
-	}
-	managedRemote := &v1alpha2.RemoteMCPServer{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "owned-remote",
-			Namespace: "kagent",
-			Labels:    map[string]string{kubernetesManagedLabelKey: "true"},
-		},
-	}
-	withFakeKubeClient(t, unmanaged, unmanagedRemote, managed, managedRemote)
-
-	adapter := NewKubernetesDeploymentAdapter()
-	runtime := &v1alpha1.Runtime{
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "kube-local"},
-		Spec:     v1alpha1.RuntimeSpec{Type: v1alpha1.TypeKubernetes, Config: map[string]any{"namespace": "kagent"}},
-	}
-	results, err := adapter.Discover(context.Background(), adapterpkgtypes.DiscoverInput{Runtime: runtime})
-	if err != nil {
-		t.Fatalf("Discover: %v", err)
-	}
-	if len(results) != 2 {
-		t.Fatalf("expected 2 unmanaged discoveries, got %d (%+v)", len(results), results)
-	}
-	byName := map[string]adapterpkgtypes.DiscoveryResult{}
-	for _, result := range results {
-		byName[result.Name] = result
-	}
-	if got := byName["imported"].TargetKind; got != v1alpha1.KindAgent {
-		t.Fatalf("agent TargetKind = %q, want %q", got, v1alpha1.KindAgent)
-	}
-	if got := byName["imported-remote"].TargetKind; got != v1alpha1.KindMCPServer {
-		t.Fatalf("remote TargetKind = %q, want %q", got, v1alpha1.KindMCPServer)
-	}
-}
-
 func TestK8sV1Alpha1Logs_ReturnsClosedChannel(t *testing.T) {
 	adapter := NewKubernetesDeploymentAdapter()
 	ch, err := adapter.Logs(context.Background(), adapterpkgtypes.LogsInput{})

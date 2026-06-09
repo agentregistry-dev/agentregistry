@@ -587,7 +587,3 @@ func (a *recordingDeploymentAdapter) Logs(context.Context, types.LogsInput) (<-c
 	close(ch)
 	return ch, nil
 }
-
-func (a *recordingDeploymentAdapter) Discover(context.Context, types.DiscoverInput) ([]types.DiscoveryResult, error) {
-	return nil, nil
-}

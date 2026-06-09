@@ -102,6 +102,22 @@ func TestDeploymentDiscoveryController_ErrorDoesNotMarkRowsStale(t *testing.T) {
 	require.Equal(t, v1alpha1.ConditionTrue, condition.Status)
 }
 
+func TestDeploymentDiscoveryController_SkipsAdaptersWithoutDiscoverySource(t *testing.T) {
+	ctx := context.Background()
+	stores := newControllerTestStores(t)
+	seedRuntime(t, stores, "local")
+	discovery := newDeploymentDiscoveryTestController(stores, &lifecycleOnlyDiscoveryTestAdapter{})
+
+	result, err := discovery.Sync(ctx)
+	require.NoError(t, err)
+	require.Equal(t, DeploymentDiscoverySyncResult{}, result)
+
+	deployments, cursor, err := stores[v1alpha1.KindDeployment].List(ctx, v1alpha1store.ListOpts{Limit: 10})
+	require.NoError(t, err)
+	require.Empty(t, cursor)
+	require.Empty(t, deployments)
+}
+
 func TestDeploymentDiscoveryController_DedupesManagedDeploymentTargets(t *testing.T) {
 	ctx := context.Background()
 	stores := newControllerTestStores(t)
@@ -189,4 +205,26 @@ func (a *discoveryTestAdapter) Discover(context.Context, types.DiscoverInput) ([
 		return nil, a.err
 	}
 	return a.results, nil
+}
+
+type lifecycleOnlyDiscoveryTestAdapter struct{}
+
+func (a *lifecycleOnlyDiscoveryTestAdapter) Type() string { return "Local" }
+
+func (a *lifecycleOnlyDiscoveryTestAdapter) SupportedTargetKinds() []string {
+	return []string{v1alpha1.KindMCPServer, v1alpha1.KindAgent}
+}
+
+func (a *lifecycleOnlyDiscoveryTestAdapter) Apply(context.Context, types.ApplyInput) (*types.ApplyResult, error) {
+	return &types.ApplyResult{}, nil
+}
+
+func (a *lifecycleOnlyDiscoveryTestAdapter) Remove(context.Context, types.RemoveInput) (*types.RemoveResult, error) {
+	return &types.RemoveResult{}, nil
+}
+
+func (a *lifecycleOnlyDiscoveryTestAdapter) Logs(context.Context, types.LogsInput) (<-chan types.LogLine, error) {
+	ch := make(chan types.LogLine)
+	close(ch)
+	return ch, nil
 }

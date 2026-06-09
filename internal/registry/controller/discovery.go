@@ -85,7 +85,11 @@ func (c *DeploymentDiscoveryController) Sync(ctx context.Context) (DeploymentDis
 		if adapter == nil {
 			continue
 		}
-		discovered, err := adapter.Discover(ctx, types.DiscoverInput{Runtime: runtime})
+		source, ok := adapter.(types.DeploymentDiscoverySource)
+		if !ok {
+			continue
+		}
+		discovered, err := source.Discover(ctx, types.DiscoverInput{Runtime: runtime})
 		if err != nil {
 			if firstErr == nil {
 				firstErr = fmt.Errorf("discover runtime %s/%s: %w", runtime.Metadata.NamespaceOrDefault(), runtime.Metadata.Name, err)

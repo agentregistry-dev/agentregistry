@@ -127,12 +127,6 @@ func (a *localDeploymentAdapter) Logs(ctx context.Context, in types.LogsInput) (
 	return ch, nil
 }
 
-// Discover reports no out-of-band local deployments — out-of-band
-// workloads only make sense for remote/hosted runtimes.
-func (a *localDeploymentAdapter) Discover(ctx context.Context, in types.DiscoverInput) ([]types.DiscoveryResult, error) {
-	return nil, nil
-}
-
 // buildDesiredStateFromV1Alpha1 constructs a *runtimetypes.DesiredState from
 // the v1alpha1 ApplyInput. The target dispatches by Kind:
 //   - MCPServer → one-shot translate; no ref walk.

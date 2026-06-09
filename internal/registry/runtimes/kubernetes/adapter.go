@@ -14,9 +14,9 @@ import (
 )
 
 // kubernetesDeploymentAdapter serves Deployments onto a kagent-equipped
-// Kubernetes cluster. Stateless — each Apply/Remove/Discover builds a
-// fresh controller-runtime client from the supplied v1alpha1.Runtime's
-// Spec.Config map.
+// Kubernetes cluster. Stateless — each Apply/Remove builds a fresh
+// controller-runtime client from the supplied v1alpha1.Runtime's Spec.Config
+// map.
 type kubernetesDeploymentAdapter struct{}
 
 // NewKubernetesDeploymentAdapter constructs an adapter that resolves
@@ -122,65 +122,6 @@ func (a *kubernetesDeploymentAdapter) Logs(ctx context.Context, in types.LogsInp
 	ch := make(chan types.LogLine)
 	close(ch)
 	return ch, nil
-}
-
-// Discover enumerates unmanaged kagent/kmcp workloads in the runtime's
-// namespace and returns them as DiscoveryResult entries. The discovery
-// controller persists these as discovered Deployment rows.
-//
-// Rows carrying aregistry.ai/managed=true are skipped because they
-// already correspond to existing Deployment rows.
-func (a *kubernetesDeploymentAdapter) Discover(ctx context.Context, in types.DiscoverInput) ([]types.DiscoveryResult, error) {
-	namespace := kubernetesRuntimeNamespace(in.Runtime)
-
-	isManaged := func(labels map[string]string) bool {
-		return labels != nil && labels[kubernetesManagedLabelKey] == "true"
-	}
-
-	var out []types.DiscoveryResult
-	agents, err := kubernetesListAgents(ctx, in.Runtime, namespace)
-	if err == nil {
-		for _, agent := range agents {
-			if isManaged(agent.Labels) {
-				continue
-			}
-			out = append(out, types.DiscoveryResult{
-				TargetKind: v1alpha1.KindAgent,
-				Namespace:  agent.Namespace,
-				Name:       agent.Name,
-			})
-		}
-	}
-
-	mcpServers, err := kubernetesListMCPServers(ctx, in.Runtime, namespace)
-	if err == nil {
-		for _, mcp := range mcpServers {
-			if isManaged(mcp.Labels) {
-				continue
-			}
-			out = append(out, types.DiscoveryResult{
-				TargetKind: v1alpha1.KindMCPServer,
-				Namespace:  mcp.Namespace,
-				Name:       mcp.Name,
-			})
-		}
-	}
-
-	remoteMCPs, err := kubernetesListRemoteMCPServers(ctx, in.Runtime, namespace)
-	if err == nil {
-		for _, remote := range remoteMCPs {
-			if isManaged(remote.Labels) {
-				continue
-			}
-			out = append(out, types.DiscoveryResult{
-				TargetKind: v1alpha1.KindMCPServer,
-				Namespace:  remote.Namespace,
-				Name:       remote.Name,
-			})
-		}
-	}
-
-	return out, nil
 }
 
 // buildDesiredStateFromV1Alpha1 constructs a *runtimetypes.DesiredState from

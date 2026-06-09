@@ -222,66 +222,6 @@ func kubernetesDeleteResourcesByDeploymentID(ctx context.Context, runtime *v1alp
 	}
 }
 
-func kubernetesListAgents(ctx context.Context, runtime *v1alpha1.Runtime, namespace string) ([]*v1alpha2.Agent, error) {
-	c, err := kubernetesGetClient(runtime)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
-	}
-	agentList := &v1alpha2.AgentList{}
-	listOpts := []client.ListOption{}
-	if namespace != "" {
-		listOpts = append(listOpts, client.InNamespace(namespace))
-	}
-	if err := c.List(ctx, agentList, listOpts...); err != nil {
-		return nil, fmt.Errorf("failed to list agents: %w", err)
-	}
-	agents := make([]*v1alpha2.Agent, 0, len(agentList.Items))
-	for i := range agentList.Items {
-		agents = append(agents, &agentList.Items[i])
-	}
-	return agents, nil
-}
-
-func kubernetesListMCPServers(ctx context.Context, runtime *v1alpha1.Runtime, namespace string) ([]*kmcpv1alpha1.MCPServer, error) {
-	c, err := kubernetesGetClient(runtime)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
-	}
-	mcpList := &kmcpv1alpha1.MCPServerList{}
-	listOpts := []client.ListOption{}
-	if namespace != "" {
-		listOpts = append(listOpts, client.InNamespace(namespace))
-	}
-	if err := c.List(ctx, mcpList, listOpts...); err != nil {
-		return nil, fmt.Errorf("failed to list MCP servers: %w", err)
-	}
-	servers := make([]*kmcpv1alpha1.MCPServer, 0, len(mcpList.Items))
-	for i := range mcpList.Items {
-		servers = append(servers, &mcpList.Items[i])
-	}
-	return servers, nil
-}
-
-func kubernetesListRemoteMCPServers(ctx context.Context, runtime *v1alpha1.Runtime, namespace string) ([]*v1alpha2.RemoteMCPServer, error) {
-	c, err := kubernetesGetClient(runtime)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
-	}
-	remoteMCPList := &v1alpha2.RemoteMCPServerList{}
-	listOpts := []client.ListOption{}
-	if namespace != "" {
-		listOpts = append(listOpts, client.InNamespace(namespace))
-	}
-	if err := c.List(ctx, remoteMCPList, listOpts...); err != nil {
-		return nil, fmt.Errorf("failed to list remote MCP servers: %w", err)
-	}
-	servers := make([]*v1alpha2.RemoteMCPServer, 0, len(remoteMCPList.Items))
-	for i := range remoteMCPList.Items {
-		servers = append(servers, &remoteMCPList.Items[i])
-	}
-	return servers, nil
-}
-
 func kubernetesTranslateRuntimeConfig(ctx context.Context, desired *runtimetypes.DesiredState) (*runtimetypes.KubernetesRuntimeConfig, error) {
 	_ = ctx
 

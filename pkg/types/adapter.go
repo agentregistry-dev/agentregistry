@@ -37,7 +37,9 @@ import (
 //
 // Adapters with expensive Apply paths can also implement
 // DeploymentDesiredFingerprinter to make unchanged reconciles cheap after the
-// same resolved input has already been accepted.
+// same resolved input has already been accepted. Adapters that can enumerate
+// provider-observed workloads implement DeploymentDiscoverySource separately;
+// discovery is intentionally opt-in and is not part of the lifecycle contract.
 type DeploymentAdapter interface {
 	// Type returns the canonical CamelCase discriminator string
 	// ("Local", "Kubernetes", "BedrockAgentCore", ...). Runtime.Validate
@@ -75,17 +77,6 @@ type DeploymentAdapter interface {
 	// returned channel closes when streaming ends; caller cancels via
 	// ctx.
 	Logs(ctx context.Context, in LogsInput) (<-chan LogLine, error)
-
-	// Discover enumerates out-of-band workloads running under a
-	// Runtime. Used by downstream syncers to reconcile drift between
-	// the registry's Deployment rows and external reality. Entries
-	// that correspond to managed Deployments are correlated by
-	// labels/annotations; entries without a managed owner surface as
-	// discovered-only.
-	//
-	// Adapters MUST NOT write directly to Deployment storage; the
-	// discovery controller persists provider-observed results.
-	Discover(ctx context.Context, in DiscoverInput) ([]DiscoveryResult, error)
 }
 
 // ApplyInput carries everything Apply needs without the adapter
@@ -177,14 +168,23 @@ type LogLine struct {
 	Line      string
 }
 
+// DeploymentDiscoverySource is an optional adapter capability for runtimes
+// that can list provider-observed workloads. Implementers MUST NOT write
+// directly to Deployment storage; the discovery controller is the single
+// writer for discovered Deployment rows.
+type DeploymentDiscoverySource interface {
+	Discover(ctx context.Context, in DiscoverInput) ([]DiscoveryResult, error)
+}
+
 // DiscoverInput scopes a Discover call.
 type DiscoverInput struct {
 	Runtime *v1alpha1.Runtime
 }
 
 // DiscoveryResult describes one out-of-band workload the adapter
-// observed under the Runtime. The Syncer uses the Correlation field
-// to decide whether this entry maps to an existing managed Deployment.
+// observed under the Runtime. The discovery controller correlates these
+// entries with existing managed Deployments and materializes unmanaged
+// entries as discovered Deployment rows.
 type DiscoveryResult struct {
 	// TargetKind is the v1alpha1 Kind this workload looks like —
 	// Agent or MCPServer. Empty if the adapter can't infer.

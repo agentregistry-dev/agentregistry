@@ -11,8 +11,8 @@ import (
 )
 
 // AdapterResolver resolves Deployment runtime adapters for adjacent operations
-// such as logs and discovery. The Deployment controller is the only built-in
-// lifecycle path that may call adapter Apply/Remove.
+// such as logs. The Deployment controller is the only built-in lifecycle path
+// that may call adapter Apply/Remove.
 type AdapterResolver struct {
 	adapters map[string]types.DeploymentAdapter
 	getter   v1alpha1.GetterFunc
@@ -31,7 +31,7 @@ type ResolverDependencies struct {
 
 // NewAdapterResolver constructs an adapter resolver from its dependencies.
 // Adapters must be non-nil (an empty map is fine for tests that never
-// dispatch). Getter may be nil only when callers use discovery directly.
+// dispatch). Getter may be nil only when callers do not resolve deployments.
 func NewAdapterResolver(deps ResolverDependencies) *AdapterResolver {
 	if deps.Adapters == nil {
 		deps.Adapters = map[string]types.DeploymentAdapter{}
@@ -58,20 +58,6 @@ func (r *AdapterResolver) Logs(ctx context.Context, deployment *v1alpha1.Deploym
 	}
 	in.Deployment = deployment
 	return adapter.Logs(ctx, in)
-}
-
-// Discover enumerates out-of-band workloads for the supplied Runtime. Empty
-// slice + nil error means the adapter found nothing; mismatched platforms
-// surface UnsupportedDeploymentRuntimeError.
-func (r *AdapterResolver) Discover(ctx context.Context, runtime *v1alpha1.Runtime) ([]types.DiscoveryResult, error) {
-	if runtime == nil {
-		return nil, fmt.Errorf("%w: runtime is required", pkgdb.ErrInvalidInput)
-	}
-	adapter, err := r.resolveAdapter(runtime.Spec.Type)
-	if err != nil {
-		return nil, err
-	}
-	return adapter.Discover(ctx, types.DiscoverInput{Runtime: runtime})
 }
 
 func (r *AdapterResolver) resolveRuntime(ctx context.Context, deployment *v1alpha1.Deployment) (*v1alpha1.Runtime, error) {

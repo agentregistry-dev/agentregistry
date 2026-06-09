@@ -94,10 +94,5 @@ func (a *Adapter) Logs(ctx context.Context, in types.LogsInput) (<-chan types.Lo
 	return ch, nil
 }
 
-// Discover reports nothing — noop has no out-of-band workloads.
-func (a *Adapter) Discover(ctx context.Context, in types.DiscoverInput) ([]types.DiscoveryResult, error) {
-	return nil, nil
-}
-
 // Compile-time assertion that Adapter satisfies DeploymentAdapter.
 var _ types.DeploymentAdapter = (*Adapter)(nil)

@@ -62,10 +62,3 @@ func TestAdapter_LogsClosesImmediately(t *testing.T) {
 	_, ok := <-ch
 	require.False(t, ok, "noop log channel should be closed on return")
 }
-
-func TestAdapter_DiscoverReturnsNothing(t *testing.T) {
-	a := New()
-	out, err := a.Discover(context.Background(), types.DiscoverInput{})
-	require.NoError(t, err)
-	require.Empty(t, out)
-}
