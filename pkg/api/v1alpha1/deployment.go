@@ -21,6 +21,25 @@ func init() {
 	)
 }
 
+// Deployment origin annotations distinguish registry-managed Deployment rows
+// from provider-discovered rows materialized into the same table.
+const (
+	DeploymentOriginAnnotation                = "agentregistry.solo.io/origin"
+	DeploymentDiscoveredRuntimeAnnotation     = "agentregistry.solo.io/discovered-runtime"
+	DeploymentDiscoveredRuntimeTypeAnnotation = "agentregistry.solo.io/discovered-runtime-type"
+	DeploymentOriginManaged                   = "managed"
+	DeploymentOriginDiscovered                = "discovered"
+)
+
+// IsDiscoveredDeployment reports whether a Deployment row was materialized from
+// provider discovery rather than authored as registry-managed desired state.
+func IsDiscoveredDeployment(deployment *Deployment) bool {
+	if deployment == nil || deployment.Metadata.Annotations == nil {
+		return false
+	}
+	return deployment.Metadata.Annotations[DeploymentOriginAnnotation] == DeploymentOriginDiscovered
+}
+
 // DeploymentDesiredState lifecycle intents. Empty is equivalent to
 // DesiredStateDeployed.
 const (

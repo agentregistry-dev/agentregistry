@@ -20,6 +20,7 @@ package resource
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -164,15 +165,10 @@ type Config struct {
 	// new caller.
 	ListFilter func(ctx context.Context, in AuthorizeInput) (extraWhere string, extraArgs []any, err error)
 
-	// ListAugmenter is optional; when set, list handlers call it after
-	// reading stored rows and before decoding response envelopes. It is
-	// intended for read-only synthetic rows such as discovered Deployment
-	// workloads that are not persisted in the primary Store.
-	ListAugmenter func(ctx context.Context, in ListAugmentInput) ([]*v1alpha1.RawObject, error)
-
 	// EnableOriginFilter exposes ?origin=managed|discovered on list routes
-	// for kinds that distinguish persisted rows from synthetic discovered
-	// rows. Leave false for regular resource lists.
+	// for kinds that distinguish registry-managed rows from provider-discovered
+	// rows materialized into the same Store. Leave false for regular resource
+	// lists.
 	EnableOriginFilter bool
 
 	// IncludeTerminatingByDefault, when true, makes the list handler
@@ -288,7 +284,7 @@ type listWithOriginInput struct {
 	ListInput
 
 	// Origin filters Deployment-like resources by their source. Empty includes
-	// both managed and synthetic discovered rows where the route supports them.
+	// both managed and persisted discovered rows where the route supports them.
 	Origin string `query:"origin" doc:"Deployment origin filter: managed or discovered."`
 }
 
@@ -699,20 +695,6 @@ type listParams struct {
 	Origin             string
 }
 
-// ListAugmentInput describes a list call being augmented plus the already-read
-// stored rows. Namespace == "" means cross-namespace.
-type ListAugmentInput struct {
-	Namespace          string
-	Labels             string
-	Limit              int
-	Cursor             string
-	Tag                string
-	LatestOnly         bool
-	IncludeTerminating bool
-	Origin             string
-	Existing           []*v1alpha1.RawObject
-}
-
 func handleList[T v1alpha1.Object](
 	ctx context.Context, cfg Config, newObj func() T, in listInput, origin string,
 ) (*listOutput[T], error) {
@@ -768,36 +750,13 @@ func runList[T v1alpha1.Object](
 		opts.ExtraWhere = extra
 		opts.ExtraArgs = extraArgs
 	}
+	applyOriginFilter(&opts, p.Origin)
 	rows, nextCursor, err := cfg.Store.List(ctx, opts)
 	if err != nil {
 		if errors.Is(err, v1alpha1store.ErrInvalidCursor) {
 			return nil, huma.Error400BadRequest("invalid cursor")
 		}
 		return nil, huma.Error500InternalServerError("list "+cfg.Kind, err)
-	}
-	if cfg.ListAugmenter != nil && p.Origin != "managed" {
-		extra, err := cfg.ListAugmenter(ctx, ListAugmentInput{
-			Namespace:          p.Namespace,
-			Labels:             p.Labels,
-			Limit:              p.Limit,
-			Cursor:             p.Cursor,
-			Tag:                p.Tag,
-			LatestOnly:         p.LatestOnly,
-			IncludeTerminating: p.IncludeTerminating,
-			Origin:             p.Origin,
-			Existing:           rows,
-		})
-		if err != nil {
-			return nil, err
-		}
-		if p.Origin == "discovered" {
-			rows = extra
-		} else {
-			rows = append(rows, extra...)
-		}
-	}
-	if p.Origin == "discovered" {
-		nextCursor = ""
 	}
 	items := make([]T, 0, len(rows))
 	for _, row := range rows {
@@ -811,6 +770,38 @@ func runList[T v1alpha1.Object](
 	out.Body.Items = items
 	out.Body.NextCursor = nextCursor
 	return out, nil
+}
+
+func applyOriginFilter(opts *v1alpha1store.ListOpts, origin string) {
+	if opts == nil {
+		return
+	}
+	var predicate string
+	switch origin {
+	case v1alpha1.DeploymentOriginManaged:
+		predicate = "NOT (annotations @> $%d::jsonb)"
+	case v1alpha1.DeploymentOriginDiscovered:
+		predicate = "annotations @> $%d::jsonb"
+	default:
+		return
+	}
+	originSelector, err := json.Marshal(map[string]string{
+		v1alpha1.DeploymentOriginAnnotation: v1alpha1.DeploymentOriginDiscovered,
+	})
+	if err != nil {
+		return
+	}
+	appendExtraWhere(opts, predicate, originSelector)
+}
+
+func appendExtraWhere(opts *v1alpha1store.ListOpts, predicateFormat string, arg any) {
+	opts.ExtraArgs = append(opts.ExtraArgs, arg)
+	predicate := fmt.Sprintf(predicateFormat, len(opts.ExtraArgs))
+	if opts.ExtraWhere == "" {
+		opts.ExtraWhere = predicate
+		return
+	}
+	opts.ExtraWhere = "(" + opts.ExtraWhere + ") AND (" + predicate + ")"
 }
 
 // mapNotFound converts a pkgdb.ErrNotFound error into a Huma 404 with a

@@ -39,9 +39,6 @@ type PerKindHooks struct {
 	// ListFilters injects ExtraWhere predicates into list queries per
 	// kind; see resource.Config.ListFilter.
 	ListFilters map[string]func(ctx context.Context, in resource.AuthorizeInput) (string, []any, error)
-	// ListAugmenters append synthetic read-only rows to list responses per
-	// kind; see resource.Config.ListAugmenter.
-	ListAugmenters map[string]func(ctx context.Context, in resource.ListAugmentInput) ([]*v1alpha1.RawObject, error)
 	// PostUpserts run after a successful PUT; see resource.Config.PostUpsert.
 	// Wired by downstream builds that need to mirror state into a
 	// type-specific sidecar table on Runtime apply, drive a
@@ -92,7 +89,6 @@ func Register(
 			RegistryValidator:  registryValidator,
 			Authorize:          perKind.Authorizers[kind],
 			ListFilter:         perKind.ListFilters[kind],
-			ListAugmenter:      perKind.ListAugmenters[kind],
 			EnableOriginFilter: kind == v1alpha1.KindDeployment,
 			PostUpsert:         perKind.PostUpserts[kind],
 			PostDelete:         perKind.PostDeletes[kind],

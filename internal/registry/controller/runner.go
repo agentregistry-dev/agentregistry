@@ -30,6 +30,7 @@ const (
 // ControllerHandle owns the always-on Deployment controller loops.
 type ControllerHandle struct {
 	Controller *DeploymentController
+	Discovery  *DeploymentDiscoveryController
 	Retention  *RetentionPruner
 }
 
@@ -66,6 +67,10 @@ func StartDeploymentController(
 		return nil, fmt.Errorf("deployment controller initial refresh: %w", err)
 	}
 	controller.Wakeups = controlPlaneWakeups(ctx, pool)
+	discovery := &DeploymentDiscoveryController{
+		Stores:   stores,
+		Adapters: adapters,
+	}
 
 	retention := &RetentionPruner{
 		Stores: PruneStores{
@@ -73,11 +78,16 @@ func StartDeploymentController(
 		},
 		Policy: config.Retention,
 	}
-	handle := &ControllerHandle{Controller: controller, Retention: retention}
+	handle := &ControllerHandle{Controller: controller, Discovery: discovery, Retention: retention}
 
 	go func() {
 		if err := controller.Run(ctx, defaultControllerResyncInterval); err != nil && !errors.Is(err, context.Canceled) {
 			logger.Error("deployment controller stopped", "error", err)
+		}
+	}()
+	go func() {
+		if err := discovery.Run(ctx, defaultControllerResyncInterval); err != nil && !errors.Is(err, context.Canceled) {
+			logger.Error("deployment discovery controller stopped", "error", err)
 		}
 	}()
 	if retention.Enabled() {

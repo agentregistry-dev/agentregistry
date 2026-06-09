@@ -105,6 +105,9 @@ func (c *DeploymentController) FullReconcile(ctx context.Context) (int, error) {
 	}
 	count := 0
 	for _, deployment := range deployments {
+		if v1alpha1.IsDiscoveredDeployment(deployment) {
+			continue
+		}
 		if err := c.enqueueDeployment(deployment); err != nil {
 			return count, err
 		}
@@ -281,6 +284,9 @@ func (c *DeploymentController) reconcileDeployment(ctx context.Context, key v1al
 	}, raw, v1alpha1.KindDeployment)
 	if err != nil {
 		return 0, fmt.Errorf("deployment controller: decode Deployment %s/%s: %w", namespace, key.Name, err)
+	}
+	if v1alpha1.IsDiscoveredDeployment(deployment) {
+		return 0, nil
 	}
 	if err := c.enqueueDeployment(deployment); err != nil {
 		return 0, err

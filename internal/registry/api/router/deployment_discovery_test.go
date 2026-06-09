@@ -3,7 +3,6 @@
 package router
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
@@ -12,71 +11,28 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/crud"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/database"
-	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
-	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
-const discoveryTestRuntimeType = "DiscoveryTest"
-
-func TestDeploymentListMergesDiscoveredRows(t *testing.T) {
+func TestDeploymentListFiltersPersistedDiscoveredRows(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
 	stores := v1alpha1store.NewStores(pool, v1alpha1store.TestSchemaRegistry())
 	ctx := t.Context()
 
+	seedDeploymentForDiscoveryListTest(t, stores, "managed-agent", nil, map[string]string{"tier": "managed"})
+	seedDeploymentForDiscoveryListTest(t, stores, "discovered-alpha", map[string]string{
+		v1alpha1.DeploymentOriginAnnotation: v1alpha1.DeploymentOriginDiscovered,
+	}, map[string]string{"tier": "discovered"})
+	seedDeploymentForDiscoveryListTest(t, stores, "discovered-beta", map[string]string{
+		v1alpha1.DeploymentOriginAnnotation: v1alpha1.DeploymentOriginDiscovered,
+	}, map[string]string{"tier": "discovered"})
+
 	_, err := stores[v1alpha1.KindRuntime].Upsert(ctx, &v1alpha1.Runtime{
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "field-runtime"},
-		Spec:     v1alpha1.RuntimeSpec{Type: discoveryTestRuntimeType},
+		Spec:     v1alpha1.RuntimeSpec{Type: "DiscoveryTest"},
 	})
 	require.NoError(t, err)
-	_, err = stores[v1alpha1.KindDeployment].Upsert(ctx, &v1alpha1.Deployment{
-		Metadata: v1alpha1.ObjectMeta{
-			Namespace: "default",
-			Name:      "managed-agent",
-			Annotations: map[string]string{
-				"runtimes.agentregistry.solo.io/discoverytest/remoteName": "managed-agent-sanitized",
-			},
-		},
-		Spec: v1alpha1.DeploymentSpec{
-			TargetRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindAgent, Name: "managed-agent", Tag: "latest"},
-			RuntimeRef: v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "field-runtime"},
-		},
-	})
-	require.NoError(t, err)
-
-	adapter := &fieldDiscoveryAdapter{
-		results: []types.DiscoveryResult{
-			{
-				TargetKind: v1alpha1.KindAgent,
-				Name:       "managed-agent",
-				Tag:        "latest",
-				RuntimeMetadata: map[string]string{
-					"remoteId": "managed-remote",
-				},
-			},
-			{
-				TargetKind: v1alpha1.KindAgent,
-				Name:       "managed-agent-sanitized",
-				Tag:        "latest",
-				RuntimeMetadata: map[string]string{
-					"remoteId": "managed-agent-sanitized",
-				},
-			},
-			{
-				TargetKind: v1alpha1.KindAgent,
-				Name:       "unmanaged-agent",
-				RuntimeMetadata: map[string]string{
-					"remoteId": "unmanaged-remote",
-				},
-			},
-		},
-	}
-	resolver := deploymentsvc.NewAdapterResolver(deploymentsvc.ResolverDependencies{
-		Adapters: map[string]types.DeploymentAdapter{discoveryTestRuntimeType: adapter},
-		Getter:   database.NewGetter(stores),
-	})
 
 	_, api := humatest.New(t)
 	registerKindRoutes(
@@ -84,7 +40,6 @@ func TestDeploymentListMergesDiscoveredRows(t *testing.T) {
 		"/v0",
 		stores,
 		nil,
-		resolver,
 		crud.PerKindHooks{},
 		nil,
 		nil,
@@ -94,70 +49,67 @@ func TestDeploymentListMergesDiscoveredRows(t *testing.T) {
 	)
 
 	all := listDeploymentsForDiscoveryTest(t, api, "/v0/deployments")
-	require.Len(t, all, 2, "managed row plus one unmanaged discovered row; matching managed discovery must dedupe")
-	discovered := onlyDiscoveredDeployment(t, all)
-	require.Equal(t, "unmanaged-agent", discovered.Spec.TargetRef.Name)
-	require.Equal(t, "field-runtime", discovered.Spec.RuntimeRef.Name)
-	require.Equal(t, "unknown", discovered.Spec.TargetRef.Tag)
-	require.Equal(t, v1alpha1.ConditionTrue, discovered.Status.GetCondition("Ready").Status)
+	require.Len(t, all.Items, 3)
 
 	onlyDiscovered := listDeploymentsForDiscoveryTest(t, api, "/v0/deployments?origin=discovered")
-	require.Len(t, onlyDiscovered, 1)
-	require.Equal(t, discovered.Metadata.Name, onlyDiscovered[0].Metadata.Name)
+	require.Len(t, onlyDiscovered.Items, 2)
+	require.Empty(t, onlyDiscovered.NextCursor)
+	for _, deployment := range onlyDiscovered.Items {
+		require.Equal(t, v1alpha1.DeploymentOriginDiscovered, deployment.Metadata.Annotations[v1alpha1.DeploymentOriginAnnotation])
+	}
 
 	onlyManaged := listDeploymentsForDiscoveryTest(t, api, "/v0/deployments?origin=managed")
-	require.Len(t, onlyManaged, 1)
-	require.Equal(t, "managed-agent", onlyManaged[0].Metadata.Name)
-	require.Empty(t, onlyManaged[0].Metadata.Annotations[deploymentOriginAnnotation])
+	require.Len(t, onlyManaged.Items, 1)
+	require.Equal(t, "managed-agent", onlyManaged.Items[0].Metadata.Name)
+	require.Empty(t, onlyManaged.Items[0].Metadata.Annotations[v1alpha1.DeploymentOriginAnnotation])
+
+	labeled := listDeploymentsForDiscoveryTest(t, api, "/v0/deployments?origin=discovered&labels=tier=discovered")
+	require.Len(t, labeled.Items, 2)
+	none := listDeploymentsForDiscoveryTest(t, api, "/v0/deployments?origin=discovered&labels=tier=managed")
+	require.Empty(t, none.Items)
+
+	page1 := listDeploymentsForDiscoveryTest(t, api, "/v0/deployments?origin=discovered&limit=1")
+	require.Len(t, page1.Items, 1)
+	require.NotEmpty(t, page1.NextCursor)
+	page2 := listDeploymentsForDiscoveryTest(t, api, "/v0/deployments?origin=discovered&limit=1&cursor="+page1.NextCursor)
+	require.Len(t, page2.Items, 1)
+	require.Empty(t, page2.NextCursor)
+	require.NotEqual(t, page1.Items[0].Metadata.Name, page2.Items[0].Metadata.Name)
 }
 
-func listDeploymentsForDiscoveryTest(t *testing.T, api humatest.TestAPI, path string) []v1alpha1.Deployment {
+func seedDeploymentForDiscoveryListTest(
+	t *testing.T,
+	stores map[string]*v1alpha1store.Store,
+	name string,
+	annotations map[string]string,
+	labels map[string]string,
+) {
+	t.Helper()
+	_, err := stores[v1alpha1.KindDeployment].Upsert(t.Context(), &v1alpha1.Deployment{
+		Metadata: v1alpha1.ObjectMeta{
+			Namespace:   "default",
+			Name:        name,
+			Annotations: annotations,
+			Labels:      labels,
+		},
+		Spec: v1alpha1.DeploymentSpec{
+			TargetRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindAgent, Name: name, Tag: "latest"},
+			RuntimeRef: v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "field-runtime"},
+		},
+	})
+	require.NoError(t, err)
+}
+
+type deploymentListResponse struct {
+	Items      []v1alpha1.Deployment `json:"items"`
+	NextCursor string                `json:"nextCursor"`
+}
+
+func listDeploymentsForDiscoveryTest(t *testing.T, api humatest.TestAPI, path string) deploymentListResponse {
 	t.Helper()
 	resp := api.Get(path)
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
-	var out struct {
-		Items []v1alpha1.Deployment `json:"items"`
-	}
+	var out deploymentListResponse
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
-	return out.Items
-}
-
-func onlyDiscoveredDeployment(t *testing.T, deployments []v1alpha1.Deployment) v1alpha1.Deployment {
-	t.Helper()
-	var found []v1alpha1.Deployment
-	for _, deployment := range deployments {
-		if deployment.Metadata.Annotations[deploymentOriginAnnotation] == "discovered" {
-			found = append(found, deployment)
-		}
-	}
-	require.Len(t, found, 1)
-	return found[0]
-}
-
-type fieldDiscoveryAdapter struct {
-	results []types.DiscoveryResult
-}
-
-func (a *fieldDiscoveryAdapter) Type() string { return discoveryTestRuntimeType }
-
-func (a *fieldDiscoveryAdapter) SupportedTargetKinds() []string {
-	return []string{v1alpha1.KindAgent, v1alpha1.KindMCPServer}
-}
-
-func (a *fieldDiscoveryAdapter) Apply(context.Context, types.ApplyInput) (*types.ApplyResult, error) {
-	return &types.ApplyResult{}, nil
-}
-
-func (a *fieldDiscoveryAdapter) Remove(context.Context, types.RemoveInput) (*types.RemoveResult, error) {
-	return &types.RemoveResult{}, nil
-}
-
-func (a *fieldDiscoveryAdapter) Logs(context.Context, types.LogsInput) (<-chan types.LogLine, error) {
-	ch := make(chan types.LogLine)
-	close(ch)
-	return ch, nil
-}
-
-func (a *fieldDiscoveryAdapter) Discover(context.Context, types.DiscoverInput) ([]types.DiscoveryResult, error) {
-	return a.results, nil
+	return out
 }

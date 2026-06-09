@@ -54,6 +54,9 @@ func (c *DeploymentController) reconcileKey(ctx context.Context, key deploymentQ
 	if !found {
 		return "missing", "deployment row no longer exists", nil
 	}
+	if v1alpha1.IsDiscoveredDeployment(deployment) {
+		return "skipped", "discovered deployment is provider-observed state", nil
+	}
 	action, err := deploymentAction(deployment)
 	if err != nil {
 		return "", "", err

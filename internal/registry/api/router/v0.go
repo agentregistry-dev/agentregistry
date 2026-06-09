@@ -51,10 +51,6 @@ type RouteOptions struct {
 	// CRUD hook wiring.
 	DeploymentLogResolver deploymentlogs.LogResolver
 
-	// DeploymentDiscoverer supports discovered Deployment list rows for
-	// out-of-band workloads observed on registered Runtimes.
-	DeploymentDiscoverer deploymentDiscoverer
-
 	// PerKindHooks injects per-kind Authorize + ListFilter
 	// callbacks into the generic resource handler. Downstream integrations
 	// thread their RBAC engine through here so reader / publisher /
@@ -129,7 +125,6 @@ func RegisterRoutes(
 		pathPrefix,
 		opts.Stores,
 		opts.DeploymentLogResolver,
-		opts.DeploymentDiscoverer,
 		opts.PerKindHooks,
 		opts.RegistryValidator,
 		opts.Admission,
@@ -157,7 +152,6 @@ func registerKindRoutes(
 	basePrefix string,
 	stores Stores,
 	logResolver deploymentlogs.LogResolver,
-	discoverer deploymentDiscoverer,
 	perKind crud.PerKindHooks,
 	registryValidator v1alpha1.RegistryValidatorFunc,
 	admission types.Admission,
@@ -171,12 +165,6 @@ func registerKindRoutes(
 	}
 	if registryValidator == nil {
 		registryValidator = registries.Dispatcher
-	}
-	if discoverer != nil {
-		if perKind.ListAugmenters == nil {
-			perKind.ListAugmenters = map[string]func(context.Context, resource.ListAugmentInput) ([]*v1alpha1.RawObject, error){}
-		}
-		perKind.ListAugmenters[v1alpha1.KindDeployment] = deploymentDiscoveryListAugmenter(stores, discoverer)
 	}
 	// Per-kind CRUD endpoints — one call per built-in kind, hidden
 	// inside crud.Register.

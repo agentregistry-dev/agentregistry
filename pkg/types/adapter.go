@@ -83,8 +83,8 @@ type DeploymentAdapter interface {
 	// labels/annotations; entries without a managed owner surface as
 	// discovered-only.
 	//
-	// Adapters MUST NOT write directly to the discovered_* tables;
-	// the caller persists the results.
+	// Adapters MUST NOT write directly to Deployment storage; the
+	// discovery controller persists provider-observed results.
 	Discover(ctx context.Context, in DiscoverInput) ([]DiscoveryResult, error)
 }
 
