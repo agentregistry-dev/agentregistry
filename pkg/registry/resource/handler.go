@@ -266,7 +266,9 @@ type deleteMutableInput struct {
 	Name      string `path:"name"`
 }
 
-type listInput struct {
+// ListInput defines the common list query parameters used by Huma route inputs.
+// It is exported so Huma can reflect it when embedded by route-specific inputs.
+type ListInput struct {
 	// Namespace scopes the list. Empty / missing → "default";
 	// literal "all" → cross-namespace.
 	Namespace  string `query:"namespace" doc:"Namespace (defaults to 'default'; 'all' lists across all namespaces)."`
@@ -280,33 +282,14 @@ type listInput struct {
 	IncludeTerminating bool `query:"includeTerminating" doc:"Include rows with a deletionTimestamp."`
 }
 
+type listInput = ListInput
+
 type listWithOriginInput struct {
-	// Namespace scopes the list. Empty / missing → "default";
-	// literal "all" → cross-namespace.
-	Namespace  string `query:"namespace" doc:"Namespace (defaults to 'default'; 'all' lists across all namespaces)."`
-	Limit      int    `query:"limit" doc:"Max items to return (default 50)." default:"50"`
-	Cursor     string `query:"cursor" doc:"Opaque pagination cursor."`
-	Labels     string `query:"labels" doc:"Label selector: key=value,key2=value2."`
-	Tag        string `query:"tag" doc:"Restrict the result set to one tag value (tagged artifact kinds only)."`
-	LatestOnly bool   `query:"latestOnly" doc:"Only return the literal latest tag per (namespace, name). Equivalent to tag=latest for tagged kinds."`
-	// IncludeTerminating surfaces soft-deleted rows (deletionTimestamp != nil)
-	// which are hidden by default.
-	IncludeTerminating bool `query:"includeTerminating" doc:"Include rows with a deletionTimestamp."`
+	ListInput
+
 	// Origin filters Deployment-like resources by their source. Empty includes
 	// both managed and synthetic discovered rows where the route supports them.
 	Origin string `query:"origin" doc:"Deployment origin filter: managed or discovered."`
-}
-
-func (in listWithOriginInput) listInput() listInput {
-	return listInput{
-		Namespace:          in.Namespace,
-		Limit:              in.Limit,
-		Cursor:             in.Cursor,
-		Labels:             in.Labels,
-		Tag:                in.Tag,
-		LatestOnly:         in.LatestOnly,
-		IncludeTerminating: in.IncludeTerminating,
-	}
 }
 
 type bodyOutput[T v1alpha1.Object] struct {
@@ -355,7 +338,7 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 	}
 	if cfg.EnableOriginFilter {
 		huma.Register(api, listOperation, func(ctx context.Context, in *listWithOriginInput) (*listOutput[T], error) {
-			return handleList(ctx, cfg, newObj, in.listInput(), in.Origin)
+			return handleList(ctx, cfg, newObj, in.ListInput, in.Origin)
 		})
 	} else {
 		huma.Register(api, listOperation, func(ctx context.Context, in *listInput) (*listOutput[T], error) {

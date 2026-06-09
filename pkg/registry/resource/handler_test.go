@@ -457,6 +457,8 @@ func TestResourceRegister_OriginFilterIsOptIn(t *testing.T) {
 		Store:              deployments,
 		EnableOriginFilter: true,
 	}, func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} })
+	requireListQueryParam(t, originAPI, "/v0/deployments", "namespace", true)
+	requireListQueryParam(t, originAPI, "/v0/deployments", "limit", true)
 	requireListQueryParam(t, originAPI, "/v0/deployments", "origin", true)
 	resp = originAPI.Get("/v0/deployments?origin=bogus")
 	require.Equal(t, http.StatusBadRequest, resp.Code, resp.Body.String())
