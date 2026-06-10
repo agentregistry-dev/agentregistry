@@ -289,11 +289,10 @@ func TestInitMCP_StdioTransport_WritesLaunchFromFramework(t *testing.T) {
 	assert.Equal(t, []string{"src/main.py", "--transport", "stdio"}, values)
 }
 
-// TestInitMCP_HTTPTransport_WritesLaunchFromFramework asserts that http
-// transport gets a launch block populated from the framework's http
-// defaults — so the deployed container runs with the right flags
-// (--transport http --host 0.0.0.0 --port N for fastmcp).
-func TestInitMCP_HTTPTransport_WritesLaunchFromFramework(t *testing.T) {
+// TestInitMCP_HTTPTransport_OmitsLaunch asserts http transport scaffolds no
+// launch block — the image ENTRYPOINT plus the injected PORT env start the
+// server; the transport block carries the port.
+func TestInitMCP_HTTPTransport_OmitsLaunch(t *testing.T) {
 	tmp := t.TempDir()
 	origDir, err := os.Getwd()
 	require.NoError(t, err)
@@ -313,24 +312,17 @@ func TestInitMCP_HTTPTransport_WritesLaunchFromFramework(t *testing.T) {
 	mcpSpec := readYAMLFile(t, filepath.Join(projectDir, "mcp.yaml"))["spec"].(map[string]any)
 	pkg := mcpSpec["source"].(map[string]any)["package"].(map[string]any)
 
-	launch, ok := pkg["launch"].(map[string]any)
-	require.True(t, ok, "http transport must scaffold spec.source.package.launch")
-	assert.Equal(t, "python3", launch["command"])
+	_, hasLaunch := pkg["launch"]
+	assert.False(t, hasLaunch, "http transport must NOT scaffold spec.source.package.launch")
 
-	args, ok := launch["args"].([]any)
-	require.True(t, ok, "launch.args must be a list")
-	values := make([]string, 0, len(args))
-	for _, a := range args {
-		item := a.(map[string]any)
-		assert.Equal(t, "positional", item["type"])
-		values = append(values, item["value"].(string))
-	}
-	assert.Equal(t, []string{
-		"src/main.py", "--transport", "http", "--host", "0.0.0.0", "--port", "4321",
-	}, values, "http launch.args must carry --transport/--host/--port with the user's --port substituted")
+	// The transport block carries the port the deploy path wires to the
+	// Service + container PORT env.
+	transport := pkg["transport"].(map[string]any)
+	assert.Equal(t, "http", transport["type"])
+	assert.EqualValues(t, 4321, transport["port"])
 
 	// Dockerfile EXPOSE must template to the user's --port so the image's
-	// metadata stays consistent with what the launcher binds.
+	// metadata stays consistent with the port the server binds.
 	dockerfile, err := os.ReadFile(filepath.Join(projectDir, "Dockerfile"))
 	require.NoError(t, err)
 	assert.Contains(t, string(dockerfile), "EXPOSE 4321", "Dockerfile EXPOSE must reflect --port")
