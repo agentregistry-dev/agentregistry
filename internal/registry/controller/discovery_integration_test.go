@@ -52,7 +52,7 @@ func TestDeploymentDiscoveryController_MaterializesDiscoveredDeployment(t *testi
 	require.Equal(t, "agent-123", runtimeMetadata["remoteId"])
 }
 
-func TestDeploymentDiscoveryController_MarksMissingRowsStale(t *testing.T) {
+func TestDeploymentDiscoveryController_MarksRowsStaleAfterConsecutiveMisses(t *testing.T) {
 	ctx := context.Background()
 	stores := newControllerTestStores(t)
 	seedRuntime(t, stores, "local")
@@ -64,17 +64,126 @@ func TestDeploymentDiscoveryController_MarksMissingRowsStale(t *testing.T) {
 	_, err := discovery.Sync(ctx)
 	require.NoError(t, err)
 
+	name := discoveredDeploymentName("local", v1alpha1.KindAgent, "external-agent", "unknown", "default")
+
+	// Misses below the staleness threshold only bump the counter; the
+	// conditions stay True (provider list APIs are eventually consistent).
 	adapter.results = nil
+	for miss := 1; miss < deploymentDiscoveryStaleAfterMisses; miss++ {
+		result, err := discovery.Sync(ctx)
+		require.NoError(t, err)
+		require.Zero(t, result.Stale, "miss %d should not mark the row stale", miss)
+		require.Zero(t, result.Removed)
+		deployment := loadDeployment(t, stores, name)
+		require.Equal(t, v1alpha1.ConditionTrue, deployment.Status.GetCondition(deploymentDiscoveryCondition).Status)
+		require.Equal(t, miss, discoveredMissCount(deployment))
+	}
+
 	result, err := discovery.Sync(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 1, result.Stale)
+	require.Zero(t, result.Removed)
 
-	name := discoveredDeploymentName("local", v1alpha1.KindAgent, "external-agent", "unknown", "default")
 	deployment := loadDeployment(t, stores, name)
 	condition := deployment.Status.GetCondition(deploymentDiscoveryCondition)
 	require.NotNil(t, condition)
 	require.Equal(t, v1alpha1.ConditionFalse, condition.Status)
 	require.Equal(t, "ProviderMissing", condition.Reason)
+	ready := deployment.Status.GetCondition("Ready")
+	require.NotNil(t, ready)
+	require.Equal(t, v1alpha1.ConditionFalse, ready.Status)
+}
+
+func TestDeploymentDiscoveryController_DeletesRowsAfterRepeatedMisses(t *testing.T) {
+	ctx := context.Background()
+	stores := newControllerTestStores(t)
+	seedRuntime(t, stores, "local")
+	adapter := &discoveryTestAdapter{results: []types.DiscoveryResult{{
+		TargetKind: v1alpha1.KindAgent,
+		Name:       "external-agent",
+	}}}
+	discovery := newDeploymentDiscoveryTestController(stores, adapter)
+	_, err := discovery.Sync(ctx)
+	require.NoError(t, err)
+
+	name := discoveredDeploymentName("local", v1alpha1.KindAgent, "external-agent", "unknown", "default")
+
+	adapter.results = nil
+	for miss := 1; miss < deploymentDiscoveryDeleteAfterMisses; miss++ {
+		result, err := discovery.Sync(ctx)
+		require.NoError(t, err)
+		require.Zero(t, result.Removed, "miss %d should not delete the row", miss)
+		loadDeployment(t, stores, name)
+	}
+
+	result, err := discovery.Sync(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Removed)
+	requireDeploymentMissing(t, stores, name)
+}
+
+func TestDeploymentDiscoveryController_DeletesRowsWhenRuntimeRemoved(t *testing.T) {
+	ctx := context.Background()
+	stores := newControllerTestStores(t)
+	seedRuntime(t, stores, "local")
+	adapter := &discoveryTestAdapter{results: []types.DiscoveryResult{{
+		TargetKind: v1alpha1.KindAgent,
+		Name:       "external-agent",
+	}}}
+	discovery := newDeploymentDiscoveryTestController(stores, adapter)
+	_, err := discovery.Sync(ctx)
+	require.NoError(t, err)
+
+	require.NoError(t, stores[v1alpha1.KindRuntime].Delete(ctx, "default", "local", ""))
+
+	result, err := discovery.Sync(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Removed)
+	require.Zero(t, result.Stale)
+
+	name := discoveredDeploymentName("local", v1alpha1.KindAgent, "external-agent", "unknown", "default")
+	requireDeploymentMissing(t, stores, name)
+}
+
+func TestDeploymentDiscoveryController_ReobservedRowResetsMissCounter(t *testing.T) {
+	ctx := context.Background()
+	stores := newControllerTestStores(t)
+	seedRuntime(t, stores, "local")
+	results := []types.DiscoveryResult{{
+		TargetKind: v1alpha1.KindAgent,
+		Name:       "external-agent",
+	}}
+	adapter := &discoveryTestAdapter{results: results}
+	discovery := newDeploymentDiscoveryTestController(stores, adapter)
+	_, err := discovery.Sync(ctx)
+	require.NoError(t, err)
+
+	name := discoveredDeploymentName("local", v1alpha1.KindAgent, "external-agent", "unknown", "default")
+
+	// Two misses, then the workload reappears: the counter must reset so the
+	// next miss streak starts from scratch.
+	adapter.results = nil
+	for range 2 {
+		_, err := discovery.Sync(ctx)
+		require.NoError(t, err)
+	}
+	require.Equal(t, 2, discoveredMissCount(loadDeployment(t, stores, name)))
+
+	adapter.results = results
+	_, err = discovery.Sync(ctx)
+	require.NoError(t, err)
+	deployment := loadDeployment(t, stores, name)
+	require.Zero(t, discoveredMissCount(deployment))
+	require.Equal(t, v1alpha1.ConditionTrue, deployment.Status.GetCondition(deploymentDiscoveryCondition).Status)
+
+	adapter.results = nil
+	for range 2 {
+		_, err := discovery.Sync(ctx)
+		require.NoError(t, err)
+	}
+	deployment = loadDeployment(t, stores, name)
+	require.Equal(t, 2, discoveredMissCount(deployment))
+	require.Equal(t, v1alpha1.ConditionTrue, deployment.Status.GetCondition(deploymentDiscoveryCondition).Status)
 }
 
 func TestDeploymentDiscoveryController_ErrorDoesNotMarkRowsStale(t *testing.T) {
@@ -100,6 +209,7 @@ func TestDeploymentDiscoveryController_ErrorDoesNotMarkRowsStale(t *testing.T) {
 	condition := deployment.Status.GetCondition(deploymentDiscoveryCondition)
 	require.NotNil(t, condition)
 	require.Equal(t, v1alpha1.ConditionTrue, condition.Status)
+	require.Zero(t, discoveredMissCount(deployment), "errored polls must not count as misses")
 }
 
 func TestDeploymentDiscoveryController_SkipsAdaptersWithoutDiscoverySource(t *testing.T) {

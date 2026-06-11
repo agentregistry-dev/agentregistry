@@ -559,29 +559,42 @@ func (s *Store) ApplyPatch(ctx context.Context, namespace, name, tag string, pat
 			where += " AND tag=$3"
 		}
 
+		// Columns whose mutator produced the value already stored are left out
+		// of the SET list; a patch that changes nothing skips the UPDATE
+		// entirely so periodic re-asserts (e.g. discovery status polls) don't
+		// churn updated_at, WAL, and audit surfaces.
 		if patch.Status != nil {
 			newJSON, err := buildStatusPatch(statusJSON, patch.Status)
 			if err != nil {
 				return err
 			}
-			args = append(args, newJSON)
-			setClauses = append(setClauses, fmt.Sprintf("status=$%d", len(args)))
+			if !equalSpecJSON(statusJSON, newJSON) {
+				args = append(args, newJSON)
+				setClauses = append(setClauses, fmt.Sprintf("status=$%d", len(args)))
+			}
 		}
 		if patch.Annotations != nil {
 			newJSON, err := buildAnnotationsPatch(annotationsJSON, patch.Annotations)
 			if err != nil {
 				return err
 			}
-			args = append(args, newJSON)
-			setClauses = append(setClauses, fmt.Sprintf("annotations=$%d", len(args)))
+			if !equalJSONMap(annotationsJSON, newJSON) {
+				args = append(args, newJSON)
+				setClauses = append(setClauses, fmt.Sprintf("annotations=$%d", len(args)))
+			}
 		}
 		if patch.Finalizers != nil {
 			newJSON, err := buildFinalizersPatch(finalizersJSON, patch.Finalizers)
 			if err != nil {
 				return err
 			}
-			args = append(args, newJSON)
-			setClauses = append(setClauses, fmt.Sprintf("finalizers=$%d", len(args)))
+			if !equalSpecJSON(finalizersJSON, newJSON) {
+				args = append(args, newJSON)
+				setClauses = append(setClauses, fmt.Sprintf("finalizers=$%d", len(args)))
+			}
+		}
+		if len(setClauses) == 0 {
+			return nil
 		}
 
 		if _, err := tx.Exec(ctx,

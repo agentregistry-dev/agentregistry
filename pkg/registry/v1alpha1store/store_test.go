@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -196,6 +197,40 @@ func TestStore_PatchStatusNotFound(t *testing.T) {
 
 	err := store.PatchStatus(ctx, testNS, "nope", "1", v1alpha1.StatusPatcher(func(*v1alpha1.Status) {}))
 	require.ErrorIs(t, err, pkgdb.ErrNotFound)
+}
+
+// TestStore_ApplyPatchSkipsUnchangedWrites verifies that re-asserting the
+// same status content leaves the row untouched: periodic controllers (e.g.
+// deployment discovery) re-patch on every poll, and an unconditional UPDATE
+// would churn updated_at and WAL with no content change.
+func TestStore_ApplyPatchSkipsUnchangedWrites(t *testing.T) {
+	pool := NewTestPool(t)
+	store := NewStore(pool, TestSchema(), testTable)
+	ctx := context.Background()
+
+	upsertAgent(t, store, "steady", v1alpha1.AgentSpec{Title: "alpha"}, nil)
+
+	patch := v1alpha1.StatusPatcher(func(s *v1alpha1.Status) {
+		s.SetCondition(v1alpha1.Condition{Type: "Ready", Status: v1alpha1.ConditionTrue, Reason: "Converged"})
+	})
+	require.NoError(t, store.PatchStatus(ctx, testNS, "steady", DefaultTag(), patch))
+
+	updatedAt := func() time.Time {
+		var ts time.Time
+		require.NoError(t, pool.QueryRow(ctx, fmt.Sprintf(
+			`SELECT updated_at FROM %s WHERE namespace=$1 AND name=$2 AND tag=$3`, store.qualified),
+			testNS, "steady", DefaultTag()).Scan(&ts))
+		return ts
+	}
+
+	before := updatedAt()
+	require.NoError(t, store.PatchStatus(ctx, testNS, "steady", DefaultTag(), patch))
+	require.True(t, before.Equal(updatedAt()), "no-op status patch must not rewrite the row")
+
+	require.NoError(t, store.PatchStatus(ctx, testNS, "steady", DefaultTag(), v1alpha1.StatusPatcher(func(s *v1alpha1.Status) {
+		s.SetCondition(v1alpha1.Condition{Type: "Ready", Status: v1alpha1.ConditionFalse, Reason: "Failed"})
+	})))
+	require.False(t, before.Equal(updatedAt()), "a real status change must update the row")
 }
 
 func TestStore_GetNotFound(t *testing.T) {

@@ -4,11 +4,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
@@ -16,6 +18,20 @@ import (
 const (
 	deploymentDiscoveryCondition = "Discovered"
 	deploymentRuntimeDetailsKey  = "runtimeMetadata"
+
+	// deploymentDiscoveryMissesKey tracks, in status details, how many
+	// consecutive successful polls omitted a discovered row. Provider list
+	// APIs (notably AWS) are eventually consistent, so a single missing poll
+	// is not evidence the workload is gone.
+	deploymentDiscoveryMissesKey = "discoveryMisses"
+	// deploymentDiscoveryStaleAfterMisses is how many consecutive misses it
+	// takes before the Discovered/Ready conditions flip to False.
+	deploymentDiscoveryStaleAfterMisses = 3
+	// deploymentDiscoveryDeleteAfterMisses is how many consecutive misses it
+	// takes before the row is deleted outright. Rows whose Runtime no longer
+	// exists skip the counter and are deleted immediately — no future poll
+	// could confirm them again.
+	deploymentDiscoveryDeleteAfterMisses = 5
 )
 
 // DeploymentDiscoveryController materializes adapter discovery snapshots into
@@ -30,7 +46,12 @@ type DeploymentDiscoveryController struct {
 type DeploymentDiscoverySyncResult struct {
 	Runtimes   int
 	Discovered int
-	Stale      int
+	// Stale counts discovered rows currently at or past the consecutive-miss
+	// staleness threshold (their Discovered/Ready conditions are False).
+	Stale int
+	// Removed counts discovered rows deleted this pass — either past the
+	// consecutive-miss deletion threshold or orphaned by Runtime deletion.
+	Removed int
 }
 
 func (c *DeploymentDiscoveryController) Run(ctx context.Context, interval time.Duration) error {
@@ -45,7 +66,7 @@ func (c *DeploymentDiscoveryController) Run(ctx context.Context, interval time.D
 		if err != nil {
 			logger.Error("deployment discovery sync failed", "error", err)
 		} else {
-			logger.Debug("deployment discovery synced", "runtimes", result.Runtimes, "discovered", result.Discovered, "stale", result.Stale)
+			logger.Debug("deployment discovery synced", "runtimes", result.Runtimes, "discovered", result.Discovered, "stale", result.Stale, "removed", result.Removed)
 		}
 
 		timer := time.NewTimer(interval)
@@ -76,11 +97,13 @@ func (c *DeploymentDiscoveryController) Sync(ctx context.Context) (DeploymentDis
 	var result DeploymentDiscoverySyncResult
 	var firstErr error
 	observed := map[string]struct{}{}
+	knownRuntimes := map[string]struct{}{}
 	successfulRuntimes := map[string]struct{}{}
 	for _, runtime := range runtimes {
 		if runtime == nil {
 			continue
 		}
+		knownRuntimes[runtimeDiscoveryKey(runtime.Metadata.NamespaceOrDefault(), runtime.Metadata.Name)] = struct{}{}
 		adapter := c.Adapters[strings.TrimSpace(runtime.Spec.Type)]
 		if adapter == nil {
 			continue
@@ -129,16 +152,45 @@ func (c *DeploymentDiscoveryController) Sync(ctx context.Context) (DeploymentDis
 		if _, ok := observed[key]; ok {
 			continue
 		}
-		if _, ok := successfulRuntimes[deploymentRuntimeKey(deployment)]; !ok {
+		runtimeKey := deploymentRuntimeKey(deployment)
+		if _, ok := knownRuntimes[runtimeKey]; !ok {
+			// The owning Runtime row is gone, so no future poll can confirm
+			// this workload again. Remove the row immediately.
+			if err := c.deleteDiscoveredDeployment(ctx, deployment); err != nil {
+				if firstErr == nil {
+					firstErr = err
+				}
+				continue
+			}
+			result.Removed++
 			continue
 		}
-		if err := c.patchStaleStatus(ctx, deployment); err != nil {
+		if _, ok := successfulRuntimes[runtimeKey]; !ok {
+			// The Runtime exists but this pass could not confirm provider
+			// state (discovery errored, or the adapter does not implement
+			// discovery). Leave the row untouched rather than guess.
+			continue
+		}
+		misses := discoveredMissCount(deployment) + 1
+		if misses >= deploymentDiscoveryDeleteAfterMisses {
+			if err := c.deleteDiscoveredDeployment(ctx, deployment); err != nil {
+				if firstErr == nil {
+					firstErr = err
+				}
+				continue
+			}
+			result.Removed++
+			continue
+		}
+		if err := c.patchMissedStatus(ctx, deployment, misses); err != nil {
 			if firstErr == nil {
 				firstErr = err
 			}
 			continue
 		}
-		result.Stale++
+		if misses >= deploymentDiscoveryStaleAfterMisses {
+			result.Stale++
+		}
 	}
 	return result, firstErr
 }
@@ -322,6 +374,7 @@ func (c *DeploymentDiscoveryController) patchDiscoveredStatus(
 		} else {
 			_ = s.SetDetailsKey(deploymentRuntimeDetailsKey, nil)
 		}
+		_ = s.SetDetailsKey(deploymentDiscoveryMissesKey, nil)
 	}))
 	if err != nil {
 		return fmt.Errorf("patch discovered Deployment status %s/%s: %w", deployment.Metadata.NamespaceOrDefault(), deployment.Metadata.Name, err)
@@ -329,26 +382,65 @@ func (c *DeploymentDiscoveryController) patchDiscoveredStatus(
 	return nil
 }
 
-func (c *DeploymentDiscoveryController) patchStaleStatus(ctx context.Context, deployment *v1alpha1.Deployment) error {
+// patchMissedStatus records one more consecutive miss for a discovered row.
+// Below the staleness threshold only the counter changes; at or past it the
+// Discovered and Ready conditions flip to False so list consumers can see the
+// workload is no longer observed on the provider.
+func (c *DeploymentDiscoveryController) patchMissedStatus(ctx context.Context, deployment *v1alpha1.Deployment, misses int) error {
 	now := time.Now().UTC()
 	generation := deployment.Metadata.Generation
 	err := c.deploymentStore().PatchStatus(ctx, deployment.Metadata.NamespaceOrDefault(), deployment.Metadata.Name, "", v1alpha1.StatusPatcher(func(s *v1alpha1.Status) {
 		if s.ObservedGeneration < generation {
 			s.ObservedGeneration = generation
 		}
+		_ = s.SetDetailsKey(deploymentDiscoveryMissesKey, misses)
+		if misses < deploymentDiscoveryStaleAfterMisses {
+			return
+		}
 		s.SetCondition(v1alpha1.Condition{
 			Type:               deploymentDiscoveryCondition,
 			Status:             v1alpha1.ConditionFalse,
 			Reason:             "ProviderMissing",
-			Message:            "not returned by latest discovery poll",
+			Message:            "not returned by recent discovery polls",
+			LastTransitionTime: now,
+			ObservedGeneration: generation,
+		})
+		s.SetCondition(v1alpha1.Condition{
+			Type:               "Ready",
+			Status:             v1alpha1.ConditionFalse,
+			Reason:             "ProviderMissing",
+			Message:            "no longer observed on the runtime",
 			LastTransitionTime: now,
 			ObservedGeneration: generation,
 		})
 	}))
 	if err != nil {
-		return fmt.Errorf("patch stale discovered Deployment status %s/%s: %w", deployment.Metadata.NamespaceOrDefault(), deployment.Metadata.Name, err)
+		return fmt.Errorf("patch missed discovered Deployment status %s/%s: %w", deployment.Metadata.NamespaceOrDefault(), deployment.Metadata.Name, err)
 	}
 	return nil
+}
+
+// deleteDiscoveredDeployment hard-deletes a discovered row. Discovered rows
+// never carry the controller finalizer, so Delete removes them in one step; a
+// concurrent deletion is treated as success.
+func (c *DeploymentDiscoveryController) deleteDiscoveredDeployment(ctx context.Context, deployment *v1alpha1.Deployment) error {
+	namespace := deployment.Metadata.NamespaceOrDefault()
+	name := deployment.Metadata.Name
+	if err := c.deploymentStore().Delete(ctx, namespace, name, ""); err != nil && !errors.Is(err, pkgdb.ErrNotFound) {
+		return fmt.Errorf("delete discovered Deployment %s/%s: %w", namespace, name, err)
+	}
+	return nil
+}
+
+// discoveredMissCount reads the consecutive-miss counter persisted in status
+// details. Absent or malformed values count as zero misses.
+func discoveredMissCount(deployment *v1alpha1.Deployment) int {
+	var misses int
+	ok, err := deployment.Status.GetDetailsKey(deploymentDiscoveryMissesKey, &misses)
+	if err != nil || !ok || misses < 0 {
+		return 0
+	}
+	return misses
 }
 
 func (c *DeploymentDiscoveryController) runtimeStore() *v1alpha1store.Store {
