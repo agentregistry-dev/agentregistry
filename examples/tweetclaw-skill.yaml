@@ -1,0 +1,12 @@
+apiVersion: ar.dev/v1alpha1
+kind: Skill
+metadata:
+  name: tweetclaw-x-automation
+  tag: stable
+spec:
+  title: TweetClaw X Automation
+  description: "Source-backed skill for TweetClaw, the OpenClaw plugin for X/Twitter search, reply search, follower export, media workflows, monitors, webhooks, giveaway draws, and approval-gated account actions."
+  source:
+    repository:
+      url: https://github.com/Xquik-dev/tweetclaw
+      subfolder: skills/tweetclaw

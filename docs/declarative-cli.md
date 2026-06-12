@@ -150,4 +150,4 @@ arctl apply -f full-stack.yaml
 arctl get all
 ```
 
-See [`examples/`](../examples/) for ready-to-use YAML, including [`full-stack.yaml`](../examples/full-stack.yaml) — an agent and all its dependencies in one file.
+See [`examples/`](../examples/) for ready-to-use YAML, including [`full-stack.yaml`](../examples/full-stack.yaml) for an agent and all its dependencies, and [`tweetclaw-skill.yaml`](../examples/tweetclaw-skill.yaml) for a source-backed X/Twitter automation skill resource.
