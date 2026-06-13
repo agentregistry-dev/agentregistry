@@ -402,7 +402,7 @@ func kubernetesBuildGitRepo(skill runtimetypes.AgentSkillRef) (v1alpha2.GitRepo,
 		return v1alpha2.GitRepo{}, fmt.Errorf("skill name is required for git-based skill (repo %q)", skill.RepoURL)
 	}
 
-	cloneURL, ref, path, err := gitutil.ParseGitHubURL(skill.RepoURL)
+	cloneURL, ref, path, err := gitutil.ParseGitURL(skill.RepoURL)
 	if err != nil {
 		return v1alpha2.GitRepo{}, fmt.Errorf("parse skill repo URL %q: %w", skill.RepoURL, err)
 	}
