@@ -7,6 +7,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	mcpregistrycompat "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/mcpregistry"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/crud"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/deploymentlogs"
 	v0health "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/health"
@@ -135,6 +136,17 @@ func RegisterRoutes(
 
 	if opts.ExtraRoutes != nil {
 		opts.ExtraRoutes(api, pathPrefix)
+	}
+
+	// Read-only MCP Registry v0.1 compatibility surface. Re-exposes MCPServer
+	// rows in the official server.json shape at `/v0.1/servers` (plus an
+	// optional configured prefix) for registry-aware clients. Mounted here —
+	// not via ExtraRoutes — because it's a first-party OSS read feature that
+	// needs the MCPServer store already wired into opts.Stores.
+	if cfg.MCPRegistryCompatEnabled {
+		if store := opts.Stores[v1alpha1.KindMCPServer]; store != nil {
+			mcpregistrycompat.Register(api, cfg.MCPRegistryCompatPathPrefix, store)
+		}
 	}
 	return nil
 }

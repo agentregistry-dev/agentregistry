@@ -34,6 +34,23 @@ type Config struct {
 	RuntimeDir string `env:"RUNTIME_DIR" envDefault:"/tmp/arctl-runtime"`
 	Verbose    bool   `env:"VERBOSE" envDefault:"false"`
 
+	// MCP Registry compatibility (read-only)
+	//
+	// MCPRegistryCompatEnabled toggles the read-only MCP Registry v0.1
+	// compatibility API (GET /v0.1/servers ...), which re-exposes MCPServer
+	// resources in the official server.json shape so registry-aware clients
+	// (e.g. VS Code's MCP gallery) can discover them. The endpoint is
+	// anonymous and flattens every namespace into one catalogue; it bypasses
+	// per-kind RBAC list filters, so disable it in deployments that gate
+	// MCPServer reads.
+	MCPRegistryCompatEnabled bool `env:"MCP_REGISTRY_COMPAT_ENABLED" envDefault:"true"`
+	// MCPRegistryCompatPathPrefix optionally mounts the compatibility API
+	// under a base prefix (e.g. "/mcp-registry"); empty serves the spec's
+	// standard paths at the root. Clients append "/v0.1/servers" to the base
+	// URL they're configured with, so any prefix set here must match that
+	// configured base.
+	MCPRegistryCompatPathPrefix string `env:"MCP_REGISTRY_COMPAT_PATH_PREFIX" envDefault:""`
+
 	// ControllerEventRetention is how long handled control-plane events remain
 	// available for checkpoint replay. Set to 0 to disable event pruning.
 	ControllerEventRetention time.Duration `env:"CONTROLLER_EVENT_RETENTION" envDefault:"24h"`

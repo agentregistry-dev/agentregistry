@@ -65,6 +65,16 @@ Agent deployments additionally invoke `Read` on each referenced `skill:{ref}` an
 | Metrics | `GET /metrics` |
 | Logging | `/logging` (localhost-only) |
 
+## MCP Registry v0.1 compatibility (read-only)
+
+The compatibility shim (`docs/mcp-registry-compatibility.md`) re-exposes MCPServer rows in the official `server.json` shape. These endpoints are **unauthenticated** and read directly from the store across **all namespaces**, like the `List` boundary above — they invoke neither `Check` nor the per-kind list filter, so a non-public provider does **not** gate them. Disable the feature (`AGENT_REGISTRY_MCP_REGISTRY_COMPAT_ENABLED=false`) in deployments that restrict MCP server reads.
+
+| Operation | HTTP | Required permissions | Notes |
+| --- | --- | --- | --- |
+| List servers | `GET /v0.1/servers` | none | Flattened all-namespace catalogue; no per-row filtering. |
+| List versions | `GET /v0.1/servers/{serverName}/versions` | none | |
+| Get version | `GET /v0.1/servers/{serverName}/versions/{version}` | none | `{version}` accepts `latest`. |
+
 ## Known gaps
 
 Direct-DB CLI commands that construct `auth.Authorizer{Authz: nil}` and therefore short-circuit every DB-layer `Check` to allow. Not a regression vs the trust model of these commands (both require `DATABASE_URL`), but a real gap for audit visibility and for deployments where DB credentials are not equivalent to registry admin.

@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, TDataShape } from './client';
 import { client } from './client.gen';
-import type { ApplyBatchData, ApplyBatchErrors, ApplyBatchResponses, ApplyDeploymentData, ApplyDeploymentErrors, ApplyDeploymentResponses, ApplyRuntimeData, ApplyRuntimeErrors, ApplyRuntimeResponses, DeleteAgentData, DeleteAgentErrors, DeleteAgentResponses, DeleteBatchData, DeleteBatchErrors, DeleteBatchResponses, DeleteDeploymentData, DeleteDeploymentErrors, DeleteDeploymentResponses, DeleteMcpserverData, DeleteMcpserverErrors, DeleteMcpserverResponses, DeletePromptData, DeletePromptErrors, DeletePromptResponses, DeleteRuntimeData, DeleteRuntimeErrors, DeleteRuntimeResponses, DeleteSkillData, DeleteSkillErrors, DeleteSkillResponses, GetAgentData, GetAgentErrors, GetAgentResponses, GetHealthV0Data, GetHealthV0Errors, GetHealthV0Responses, GetLatestAgentData, GetLatestAgentErrors, GetLatestAgentResponses, GetLatestDeploymentData, GetLatestDeploymentErrors, GetLatestDeploymentResponses, GetLatestMcpserverData, GetLatestMcpserverErrors, GetLatestMcpserverResponses, GetLatestPromptData, GetLatestPromptErrors, GetLatestPromptResponses, GetLatestRuntimeData, GetLatestRuntimeErrors, GetLatestRuntimeResponses, GetLatestSkillData, GetLatestSkillErrors, GetLatestSkillResponses, GetMcpserverData, GetMcpserverErrors, GetMcpserverResponses, GetPromptData, GetPromptErrors, GetPromptResponses, GetSkillData, GetSkillErrors, GetSkillResponses, GetVersionV0Data, GetVersionV0Errors, GetVersionV0Responses, ListAgentsData, ListAgentsErrors, ListAgentsResponses, ListDeploymentsData, ListDeploymentsErrors, ListDeploymentsResponses, ListMcpserversData, ListMcpserversErrors, ListMcpserversResponses, ListPromptsData, ListPromptsErrors, ListPromptsResponses, ListRuntimesData, ListRuntimesErrors, ListRuntimesResponses, ListSkillsData, ListSkillsErrors, ListSkillsResponses, ListTagsAgentData, ListTagsAgentErrors, ListTagsAgentResponses, ListTagsMcpserverData, ListTagsMcpserverErrors, ListTagsMcpserverResponses, ListTagsPromptData, ListTagsPromptErrors, ListTagsPromptResponses, ListTagsSkillData, ListTagsSkillErrors, ListTagsSkillResponses, PingV0Data, PingV0Errors, PingV0Responses } from './types.gen';
+import type { ApplyBatchData, ApplyBatchErrors, ApplyBatchResponses, ApplyDeploymentData, ApplyDeploymentErrors, ApplyDeploymentResponses, ApplyRuntimeData, ApplyRuntimeErrors, ApplyRuntimeResponses, DeleteAgentData, DeleteAgentErrors, DeleteAgentResponses, DeleteBatchData, DeleteBatchErrors, DeleteBatchResponses, DeleteDeploymentData, DeleteDeploymentErrors, DeleteDeploymentResponses, DeleteMcpserverData, DeleteMcpserverErrors, DeleteMcpserverResponses, DeletePromptData, DeletePromptErrors, DeletePromptResponses, DeleteRuntimeData, DeleteRuntimeErrors, DeleteRuntimeResponses, DeleteSkillData, DeleteSkillErrors, DeleteSkillResponses, GetAgentData, GetAgentErrors, GetAgentResponses, GetHealthV0Data, GetHealthV0Errors, GetHealthV0Responses, GetLatestAgentData, GetLatestAgentErrors, GetLatestAgentResponses, GetLatestDeploymentData, GetLatestDeploymentErrors, GetLatestDeploymentResponses, GetLatestMcpserverData, GetLatestMcpserverErrors, GetLatestMcpserverResponses, GetLatestPromptData, GetLatestPromptErrors, GetLatestPromptResponses, GetLatestRuntimeData, GetLatestRuntimeErrors, GetLatestRuntimeResponses, GetLatestSkillData, GetLatestSkillErrors, GetLatestSkillResponses, GetMcpserverData, GetMcpserverErrors, GetMcpserverResponses, GetPromptData, GetPromptErrors, GetPromptResponses, GetSkillData, GetSkillErrors, GetSkillResponses, GetVersionV0Data, GetVersionV0Errors, GetVersionV0Responses, ListAgentsData, ListAgentsErrors, ListAgentsResponses, ListDeploymentsData, ListDeploymentsErrors, ListDeploymentsResponses, ListMcpserversData, ListMcpserversErrors, ListMcpserversResponses, ListPromptsData, ListPromptsErrors, ListPromptsResponses, ListRuntimesData, ListRuntimesErrors, ListRuntimesResponses, ListSkillsData, ListSkillsErrors, ListSkillsResponses, ListTagsAgentData, ListTagsAgentErrors, ListTagsAgentResponses, ListTagsMcpserverData, ListTagsMcpserverErrors, ListTagsMcpserverResponses, ListTagsPromptData, ListTagsPromptErrors, ListTagsPromptResponses, ListTagsSkillData, ListTagsSkillErrors, ListTagsSkillResponses, McpRegistryGetServerVersionData, McpRegistryGetServerVersionErrors, McpRegistryGetServerVersionResponses, McpRegistryListServersData, McpRegistryListServersErrors, McpRegistryListServersResponses, McpRegistryListServerVersionsData, McpRegistryListServerVersionsErrors, McpRegistryListServerVersionsResponses, PingV0Data, PingV0Errors, PingV0Responses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -17,6 +17,23 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
      */
     meta?: Record<string, unknown>;
 };
+
+/**
+ * List MCP servers (MCP Registry v0.1 compatibility)
+ *
+ * Read-only listing of registered MCP servers in the official MCP Registry server.json format.
+ */
+export const mcpRegistryListServers = <ThrowOnError extends boolean = false>(options?: Options<McpRegistryListServersData, ThrowOnError>) => (options?.client ?? client).get<McpRegistryListServersResponses, McpRegistryListServersErrors, ThrowOnError>({ url: '/v0.1/servers', ...options });
+
+/**
+ * List versions of an MCP server (MCP Registry v0.1 compatibility)
+ */
+export const mcpRegistryListServerVersions = <ThrowOnError extends boolean = false>(options: Options<McpRegistryListServerVersionsData, ThrowOnError>) => (options.client ?? client).get<McpRegistryListServerVersionsResponses, McpRegistryListServerVersionsErrors, ThrowOnError>({ url: '/v0.1/servers/{serverName}/versions', ...options });
+
+/**
+ * Get a single MCP server version (MCP Registry v0.1 compatibility)
+ */
+export const mcpRegistryGetServerVersion = <ThrowOnError extends boolean = false>(options: Options<McpRegistryGetServerVersionData, ThrowOnError>) => (options.client ?? client).get<McpRegistryGetServerVersionResponses, McpRegistryGetServerVersionErrors, ThrowOnError>({ url: '/v0.1/servers/{serverName}/versions/{version}', ...options });
 
 /**
  * List Agent (scoped by ?namespace)

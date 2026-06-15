@@ -237,6 +237,17 @@ components:
       required:
       - status
       type: object
+    ListMetadata:
+      additionalProperties: false
+      properties:
+        count:
+          format: int64
+          type: integer
+        nextCursor:
+          type: string
+      required:
+      - count
+      type: object
     ListOutputAgentBody:
       additionalProperties: false
       properties:
@@ -528,6 +539,22 @@ components:
       required:
       - name
       type: object
+    OfficialMeta:
+      additionalProperties: false
+      properties:
+        isLatest:
+          type: boolean
+        publishedAt:
+          type: string
+        status:
+          type: string
+        statusChangedAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+      - isLatest
+      type: object
     PingBody:
       additionalProperties: false
       properties:
@@ -593,6 +620,12 @@ components:
       - kind
       - name
       type: object
+    ResponseMeta:
+      additionalProperties: false
+      properties:
+        io.modelcontextprotocol.registry/official:
+          $ref: '#/components/schemas/OfficialMeta'
+      type: object
     Runtime:
       additionalProperties: false
       properties:
@@ -621,6 +654,160 @@ components:
         telemetryEndpoint:
           type: string
         type:
+          type: string
+      required:
+      - type
+      type: object
+    ServerArgument:
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        value:
+          type: string
+      required:
+      - type
+      type: object
+    ServerDetail:
+      additionalProperties: false
+      properties:
+        $schema:
+          type: string
+        description:
+          type: string
+        name:
+          type: string
+        packages:
+          items:
+            $ref: '#/components/schemas/ServerPackage'
+          type:
+          - array
+          - "null"
+        remotes:
+          items:
+            $ref: '#/components/schemas/ServerTransport'
+          type:
+          - array
+          - "null"
+        repository:
+          $ref: '#/components/schemas/ServerRepository'
+        title:
+          type: string
+        version:
+          type: string
+        websiteUrl:
+          type: string
+      required:
+      - name
+      - description
+      - version
+      type: object
+    ServerInput:
+      additionalProperties: false
+      properties:
+        isRequired:
+          type: boolean
+        name:
+          type: string
+        value:
+          type: string
+      required:
+      - name
+      type: object
+    ServerListResponse:
+      additionalProperties: false
+      properties:
+        metadata:
+          $ref: '#/components/schemas/ListMetadata'
+        servers:
+          items:
+            $ref: '#/components/schemas/ServerResponse'
+          type:
+          - array
+          - "null"
+      required:
+      - servers
+      - metadata
+      type: object
+    ServerPackage:
+      additionalProperties: false
+      properties:
+        environmentVariables:
+          items:
+            $ref: '#/components/schemas/ServerInput'
+          type:
+          - array
+          - "null"
+        fileSha256:
+          type: string
+        identifier:
+          type: string
+        packageArguments:
+          items:
+            $ref: '#/components/schemas/ServerArgument'
+          type:
+          - array
+          - "null"
+        registryBaseUrl:
+          type: string
+        registryType:
+          type: string
+        runtimeArguments:
+          items:
+            $ref: '#/components/schemas/ServerArgument'
+          type:
+          - array
+          - "null"
+        runtimeHint:
+          type: string
+        transport:
+          $ref: '#/components/schemas/ServerTransport'
+        version:
+          type: string
+      required:
+      - registryType
+      - identifier
+      - version
+      - transport
+      type: object
+    ServerRepository:
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        source:
+          type: string
+        subfolder:
+          type: string
+        url:
+          type: string
+      required:
+      - url
+      type: object
+    ServerResponse:
+      additionalProperties: false
+      properties:
+        _meta:
+          $ref: '#/components/schemas/ResponseMeta'
+        server:
+          $ref: '#/components/schemas/ServerDetail'
+      required:
+      - server
+      type: object
+    ServerTransport:
+      additionalProperties: false
+      properties:
+        headers:
+          items:
+            $ref: '#/components/schemas/ServerInput'
+          type:
+          - array
+          - "null"
+        type:
+          type: string
+        url:
           type: string
       required:
       - type
@@ -700,6 +887,148 @@ info:
   version: dev
 openapi: 3.1.0
 paths:
+  /v0.1/servers:
+    get:
+      description: Read-only listing of registered MCP servers in the official MCP
+        Registry server.json format.
+      operationId: mcp-registry-list-servers
+      parameters:
+      - description: Opaque pagination cursor from a prior response.
+        explode: false
+        in: query
+        name: cursor
+        schema:
+          description: Opaque pagination cursor from a prior response.
+          type: string
+      - description: Max servers to return (capped at 100).
+        explode: false
+        in: query
+        name: limit
+        schema:
+          description: Max servers to return (capped at 100).
+          format: int64
+          type: integer
+      - description: Substring match on the server name.
+        explode: false
+        in: query
+        name: search
+        schema:
+          description: Substring match on the server name.
+          type: string
+      - description: RFC3339 timestamp; only servers updated at or after this time.
+        explode: false
+        in: query
+        name: updated_since
+        schema:
+          description: RFC3339 timestamp; only servers updated at or after this time.
+          type: string
+      - description: '''latest'' (default) or a specific version tag.'
+        explode: false
+        in: query
+        name: version
+        schema:
+          description: '''latest'' (default) or a specific version tag.'
+          type: string
+      - description: Include servers pending deletion.
+        explode: false
+        in: query
+        name: include_deleted
+        schema:
+          description: Include servers pending deletion.
+          type: boolean
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerListResponse'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorModel'
+          description: Error
+      summary: List MCP servers (MCP Registry v0.1 compatibility)
+      tags:
+      - servers
+  /v0.1/servers/{serverName}/versions:
+    get:
+      operationId: mcp-registry-list-server-versions
+      parameters:
+      - description: URL-encoded '<namespace>/<name>' server name.
+        in: path
+        name: serverName
+        required: true
+        schema:
+          description: URL-encoded '<namespace>/<name>' server name.
+          type: string
+      - explode: false
+        in: query
+        name: cursor
+        schema:
+          type: string
+      - explode: false
+        in: query
+        name: limit
+        schema:
+          format: int64
+          type: integer
+      - explode: false
+        in: query
+        name: include_deleted
+        schema:
+          type: boolean
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerListResponse'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorModel'
+          description: Error
+      summary: List versions of an MCP server (MCP Registry v0.1 compatibility)
+      tags:
+      - servers
+  /v0.1/servers/{serverName}/versions/{version}:
+    get:
+      operationId: mcp-registry-get-server-version
+      parameters:
+      - description: URL-encoded '<namespace>/<name>' server name.
+        in: path
+        name: serverName
+        required: true
+        schema:
+          description: URL-encoded '<namespace>/<name>' server name.
+          type: string
+      - description: A specific version tag, or 'latest'.
+        in: path
+        name: version
+        required: true
+        schema:
+          description: A specific version tag, or 'latest'.
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerResponse'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorModel'
+          description: Error
+      summary: Get a single MCP server version (MCP Registry v0.1 compatibility)
+      tags:
+      - servers
   /v0/agents:
     get:
       operationId: list-agents
