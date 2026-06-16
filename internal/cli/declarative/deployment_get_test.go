@@ -67,8 +67,25 @@ func deploymentTestServerV1Alpha1(t *testing.T, deployments []v1alpha1.Deploymen
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		items := deployments
+		switch r.URL.Query().Get("origin") {
+		case v1alpha1.DeploymentOriginManaged:
+			items = nil
+			for _, d := range deployments {
+				if d.Metadata.Annotations[v1alpha1.DeploymentOriginAnnotation] != v1alpha1.DeploymentOriginDiscovered {
+					items = append(items, d)
+				}
+			}
+		case v1alpha1.DeploymentOriginDiscovered:
+			items = nil
+			for _, d := range deployments {
+				if d.Metadata.Annotations[v1alpha1.DeploymentOriginAnnotation] == v1alpha1.DeploymentOriginDiscovered {
+					items = append(items, d)
+				}
+			}
+		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"items": deployments})
+		_ = json.NewEncoder(w).Encode(map[string]any{"items": items})
 	})
 	mux.HandleFunc("/v0/deployments/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -162,12 +179,15 @@ func TestDeploymentGet_NotFoundError(t *testing.T) {
 		"missing deployment should surface a not-found error")
 }
 
-// (4) List mode (no name arg) returns every deployment — exercises the shared
-// ListFunc path and guards against the Get wiring accidentally short-circuiting list.
-func TestDeploymentGet_ListReturnsAll(t *testing.T) {
+// (4) List mode (no name arg) returns registry-managed deployments, excluding
+// provider-discovered inventory rows.
+func TestDeploymentGet_ListReturnsManagedDeployments(t *testing.T) {
 	deployments := []v1alpha1.Deployment{
 		deploymentFixture("aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "deployed"),
 		deploymentFixture("gcp-v1", "other", "1.0.0", "my-gcp", "agent", "pending"),
+	}
+	deployments[1].Metadata.Annotations = map[string]string{
+		v1alpha1.DeploymentOriginAnnotation: v1alpha1.DeploymentOriginDiscovered,
 	}
 	srv := deploymentTestServerV1Alpha1(t, deployments)
 	setupClientForServer(t, srv)
@@ -179,7 +199,7 @@ func TestDeploymentGet_ListReturnsAll(t *testing.T) {
 	require.NoError(t, cmd.Execute())
 
 	assert.Contains(t, out.String(), "summarizer")
-	assert.Contains(t, out.String(), "other")
+	assert.NotContains(t, out.String(), "other")
 }
 
 // (5) `-o yaml` emits the declarative envelope (apiVersion/kind/metadata/spec)
@@ -189,8 +209,9 @@ func TestDeploymentGet_ListReturnsAll(t *testing.T) {
 func TestDeploymentGet_YAMLOutputIncludesStatus(t *testing.T) {
 	deployment := deploymentFixture("aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "deployed")
 	deployment.Spec.Env = map[string]string{"GOOGLE_API_KEY": "xxx"}
+	deployment.Spec.DeploymentRefs = []v1alpha1.DeploymentRef{{Name: "summarizer-tools"}}
 	deployment.Metadata.Annotations = map[string]string{
-		"runtimes.agentregistry.solo.io/remoteId": "runtime-abc",
+		"reconcile.agentregistry.dev/force": "2026-06-16T12:00:00Z",
 	}
 	srv := deploymentTestServerV1Alpha1(t, []v1alpha1.Deployment{deployment})
 	setupClientForServer(t, srv)
@@ -206,6 +227,9 @@ func TestDeploymentGet_YAMLOutputIncludesStatus(t *testing.T) {
 	// Envelope — apply expects these top-level keys.
 	assert.Contains(t, got, "apiVersion: ar.dev/v1alpha1")
 	assert.Contains(t, got, "kind: Deployment")
+	assert.Contains(t, got, "name: aws-v1")
+	assert.Contains(t, got, "annotations:")
+	assert.Contains(t, got, "reconcile.agentregistry.dev/force: \"2026-06-16T12:00:00Z\"")
 	assert.Contains(t, got, "name: summarizer")
 	assert.Contains(t, got, "tag: 1.0.0")
 
@@ -215,15 +239,15 @@ func TestDeploymentGet_YAMLOutputIncludesStatus(t *testing.T) {
 	assert.Contains(t, got, "name: my-aws")
 	assert.Contains(t, got, "targetRef:")
 	assert.Contains(t, got, "kind: Agent")
+	assert.Contains(t, got, "deploymentRefs:")
+	assert.Contains(t, got, "name: summarizer-tools")
 	assert.Contains(t, got, "GOOGLE_API_KEY: xxx")
 
-	// Status block — server-managed runtime state, available for debugging.
+	// Status block — canonical v1alpha1 status, available for debugging.
 	assert.Contains(t, got, "status:")
-	assert.Contains(t, got, "id: default/aws-v1")
-	assert.Contains(t, got, "phase: deployed")
-	assert.Contains(t, got, "origin: managed")
-	assert.Contains(t, got, "remoteId: runtime-abc",
-		"runtimeMetadata nested map should be emitted under .status")
+	assert.Contains(t, got, "conditions:")
+	assert.Contains(t, got, "type: Ready")
+	assert.Contains(t, got, "status: \"True\"")
 
 	// Spec block still must NOT contain status fields (structural check:
 	// the line immediately following `spec:` must not be the status keys).

@@ -2,10 +2,8 @@ package declarative
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 
 	cliCommon "github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
@@ -13,22 +11,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/printer"
 )
-
-// deploymentStatus is the shape emitted under .status when a deployment is
-// rendered as YAML/JSON. Intentionally a CLI projection rather than the raw
-// v1alpha1.Status conditions block so imperative users keep the compact fields
-// they already consume while apply decode still ignores incoming status.
-type deploymentStatus struct {
-	ID              string               `json:"id,omitempty" yaml:"id,omitempty"`
-	Phase           string               `json:"phase,omitempty" yaml:"phase,omitempty"`
-	Origin          string               `json:"origin,omitempty" yaml:"origin,omitempty"`
-	Error           string               `json:"error,omitempty" yaml:"error,omitempty"`
-	RuntimeMetadata map[string]any       `json:"runtimeMetadata,omitempty" yaml:"runtimeMetadata,omitempty"`
-	DeployedAt      time.Time            `json:"deployedAt,omitempty" yaml:"deployedAt,omitempty"`
-	UpdatedAt       time.Time            `json:"updatedAt,omitempty" yaml:"updatedAt,omitempty"`
-	Conditions      []v1alpha1.Condition `json:"conditions,omitempty" yaml:"conditions,omitempty"`
-	Details         json.RawMessage      `json:"details,omitempty" yaml:"details,omitempty"`
-}
 
 // listAny lists rows of the given kind. The zero scheme.ListOpts returns
 // every (namespace, name, tag) row of the kind — same shape as a raw
@@ -124,71 +106,28 @@ func deleteAny[T v1alpha1.Object](ctx context.Context, c *client.Client, kind, n
 	return c.Delete(ctx, kind, ref.Namespace, ref.Name, targetTag)
 }
 
-func listDeploymentAny(ctx context.Context, c *client.Client) ([]any, error) {
-	deployments, err := cliCommon.ListDeployments(ctx, c)
+func listDeploymentResources(ctx context.Context, c *client.Client, _ scheme.ListOpts) ([]any, error) {
+	items, err := client.ListAllTyped(
+		ctx,
+		c,
+		v1alpha1.KindDeployment,
+		client.ListOpts{
+			Namespace:          v1alpha1.DefaultNamespace,
+			Limit:              200,
+			Origin:             v1alpha1.DeploymentOriginManaged,
+			IncludeTerminating: true,
+		},
+		func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} },
+	)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]any, 0, len(deployments))
-	for _, dep := range deployments {
-		out = append(out, dep)
+
+	out := make([]any, 0, len(items))
+	for _, item := range items {
+		out = append(out, item)
 	}
 	return out, nil
-}
-
-func deploymentToDocument(dep *cliCommon.DeploymentRecord) any {
-	if dep == nil {
-		return nil
-	}
-
-	targetKind := v1alpha1.KindAgent
-	if dep.ResourceType == "mcp" {
-		targetKind = v1alpha1.KindMCPServer
-	}
-
-	// metadata is the Deployment row's identity, NOT the target's. Two
-	// deployments of the same target/tag against different runtimes
-	// are distinct rows; collapsing them onto target identity here
-	// (previous behavior) made get-then-apply round-trips clobber the
-	// wrong row and made delete by metadata identity impossible.
-	return struct {
-		APIVersion string                  `json:"apiVersion" yaml:"apiVersion"`
-		Kind       string                  `json:"kind" yaml:"kind"`
-		Metadata   v1alpha1.ObjectMeta     `json:"metadata" yaml:"metadata"`
-		Spec       v1alpha1.DeploymentSpec `json:"spec" yaml:"spec"`
-		Status     deploymentStatus        `json:"status,omitempty" yaml:"status,omitempty"`
-	}{
-		APIVersion: v1alpha1.GroupVersion,
-		Kind:       v1alpha1.KindDeployment,
-		Metadata: v1alpha1.ObjectMeta{
-			Namespace: dep.Namespace,
-			Name:      dep.Name,
-		},
-		Spec: v1alpha1.DeploymentSpec{
-			TargetRef: v1alpha1.ResourceRef{
-				Kind: targetKind,
-				Name: dep.TargetName,
-				Tag:  dep.TargetTag,
-			},
-			RuntimeRef: v1alpha1.ResourceRef{
-				Kind: v1alpha1.KindRuntime,
-				Name: dep.RuntimeID,
-			},
-			Env:           dep.Env,
-			RuntimeConfig: dep.RuntimeConfig,
-		},
-		Status: deploymentStatus{
-			ID:              dep.ID,
-			Phase:           dep.Status,
-			Origin:          dep.Origin,
-			Error:           dep.Error,
-			RuntimeMetadata: dep.RuntimeMetadata,
-			DeployedAt:      dep.CreatedAt,
-			UpdatedAt:       dep.UpdatedAt,
-			Conditions:      dep.Conditions,
-			Details:         dep.Details,
-		},
-	}
 }
 
 func agentRow(agent *v1alpha1.Agent) []string {
