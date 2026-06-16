@@ -65,10 +65,10 @@ func generateSpec(apiVersion string) *huma.OpenAPI {
 	// with a valid dummy key. The key is never used for actual signing.
 	cfg := &config.Config{
 		JWTPrivateKey: "0000000000000000000000000000000000000000000000000000000000000000",
-		// Enable the read-only MCP Registry v0.1 compatibility routes so the
-		// generated spec documents them. NewConfig defaults this on via
-		// envDefault, but a struct literal here would otherwise zero it to
-		// false and drop the routes from the published OpenAPI document.
+		// Force-enable the read-only MCP Registry v0.1 compatibility routes so
+		// the generated spec always documents them. The runtime default is OFF
+		// (opt-in via AGENT_REGISTRY_MCP_REGISTRY_COMPAT_ENABLED); documenting
+		// the surface regardless keeps the published OpenAPI complete.
 		MCPRegistryCompatEnabled: true,
 	}
 

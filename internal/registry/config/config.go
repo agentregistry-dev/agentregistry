@@ -40,10 +40,11 @@ type Config struct {
 	// compatibility API (GET /v0.1/servers ...), which re-exposes MCPServer
 	// resources in the official server.json shape so registry-aware clients
 	// (e.g. VS Code's MCP gallery) can discover them. The endpoint is
-	// anonymous and flattens every namespace into one catalogue; it bypasses
-	// per-kind RBAC list filters, so disable it in deployments that gate
-	// MCPServer reads.
-	MCPRegistryCompatEnabled bool `env:"MCP_REGISTRY_COMPAT_ENABLED" envDefault:"true"`
+	// anonymous and flattens every namespace into one catalogue, and it
+	// bypasses per-kind RBAC list filters, so it is OFF by default — enable
+	// it only where an unauthenticated, cross-namespace MCP catalogue is
+	// acceptable (a public OSS registry, or behind a trusted gateway).
+	MCPRegistryCompatEnabled bool `env:"MCP_REGISTRY_COMPAT_ENABLED" envDefault:"false"`
 	// MCPRegistryCompatPathPrefix optionally mounts the compatibility API
 	// under a base prefix (e.g. "/mcp-registry"); empty serves the spec's
 	// standard paths at the root. Clients append "/v0.1/servers" to the base

@@ -43,11 +43,11 @@ The client will then request `<base>/v0.1/servers`.
 
 | Env var | Default | Meaning |
 | --- | --- | --- |
-| `AGENT_REGISTRY_MCP_REGISTRY_COMPAT_ENABLED` | `true` | Toggle the compatibility API. |
+| `AGENT_REGISTRY_MCP_REGISTRY_COMPAT_ENABLED` | `false` | Toggle the compatibility API. Off by default — opt-in (see Caveats). |
 | `AGENT_REGISTRY_MCP_REGISTRY_COMPAT_PATH_PREFIX` | `""` | Optional base prefix to mount under (e.g. `/mcp-registry`). Empty serves the spec paths at the root — these do not collide with the native `/v0/*` API. |
 
 ## Caveats
 
-- **Anonymous and unfiltered.** The endpoint requires no authentication and reads MCPServer rows directly from the store across all namespaces. It does **not** invoke per-kind authorization or list-filter hooks. In the OSS build reads are already public, so this exposes nothing new; in a downstream build that gates MCPServer reads with RBAC, the compatibility endpoint would bypass those gates. **Disable it (`…COMPAT_ENABLED=false`) in deployments that restrict who may read MCP servers.**
+- **Anonymous and unfiltered — off by default.** The endpoint requires no authentication and reads MCPServer rows directly from the store across all namespaces. It does **not** invoke per-kind authorization or list-filter hooks. In the OSS build reads are already public, so this exposes nothing new; in a downstream build that gates MCPServer reads with RBAC, the compatibility endpoint would bypass those gates. It is therefore **disabled by default** — **enable it (`…COMPAT_ENABLED=true`) only where an unauthenticated, cross-namespace MCP catalogue is acceptable** (a public OSS registry, or behind a trusted gateway).
 - **v0.1 only.** The legacy, deprecated `v0` API is not served.
 - **Best-effort field mapping.** `http` package transports are surfaced as `streamable-http` with a synthesized `http://localhost:<port><path>` URL; a server's catalogue `version` is derived from the package origin (npm/pypi version, OCI tag/digest) and falls back to the tag or `0.0.0`.

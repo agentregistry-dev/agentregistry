@@ -67,7 +67,7 @@ Agent deployments additionally invoke `Read` on each referenced `skill:{ref}` an
 
 ## MCP Registry v0.1 compatibility (read-only)
 
-The compatibility shim (`docs/mcp-registry-compatibility.md`) re-exposes MCPServer rows in the official `server.json` shape. These endpoints are **unauthenticated** and read directly from the store across **all namespaces**, like the `List` boundary above — they invoke neither `Check` nor the per-kind list filter, so a non-public provider does **not** gate them. Disable the feature (`AGENT_REGISTRY_MCP_REGISTRY_COMPAT_ENABLED=false`) in deployments that restrict MCP server reads.
+The compatibility shim (`docs/mcp-registry-compatibility.md`) re-exposes MCPServer rows in the official `server.json` shape. These endpoints are **unauthenticated** and read directly from the store across **all namespaces**, like the `List` boundary above — they invoke neither `Check` nor the per-kind list filter, so a non-public provider does **not** gate them. For that reason the feature is **off by default**; enable it (`AGENT_REGISTRY_MCP_REGISTRY_COMPAT_ENABLED=true`) only where an unauthenticated, cross-namespace MCP catalogue is acceptable.
 
 | Operation | HTTP | Required permissions | Notes |
 | --- | --- | --- | --- |
