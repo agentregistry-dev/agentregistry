@@ -15,7 +15,9 @@ import (
 	handler "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/mcpregistry"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/mcpregistry"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
@@ -67,9 +69,14 @@ func rawMCPServer(t *testing.T, namespace, name, tag string, spec v1alpha1.MCPSe
 
 func newAPI(t *testing.T, store handler.ServerStore) http.Handler {
 	t.Helper()
+	return newAPIConfig(t, handler.Config{Store: store})
+}
+
+func newAPIConfig(t *testing.T, cfg handler.Config) http.Handler {
+	t.Helper()
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("Test API", "1.0.0"))
-	handler.Register(api, "", store)
+	handler.Register(api, cfg)
 	return mux
 }
 
@@ -211,6 +218,62 @@ func TestListServerVersions(t *testing.T) {
 func TestListServerVersions_NotFound(t *testing.T) {
 	srv := newAPI(t, &fakeStore{})
 	req := httptest.NewRequest(http.MethodGet, "/v0.1/servers/team-a%2Fmissing/versions", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+// A downstream RBAC ListFilter is injected into the catalogue query ahead of
+// the built-in search/updated_since predicates, with its args first so the
+// placeholders stay consistent.
+func TestListServers_RBACListFilterApplied(t *testing.T) {
+	store := &fakeStore{}
+	srv := newAPIConfig(t, handler.Config{
+		Store: store,
+		ListFilter: func(_ context.Context, in resource.AuthorizeInput) (string, []any, error) {
+			assert.Equal(t, "list", in.Verb)
+			assert.Equal(t, v1alpha1.KindMCPServer, in.Kind)
+			return "namespace = ANY($1)", []any{[]string{"team-a", "team-b"}}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v0.1/servers?search=weather", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	assert.Equal(t, "(namespace = ANY($1)) AND name ILIKE $2", store.lastOpts.ExtraWhere)
+	require.Len(t, store.lastOpts.ExtraArgs, 2)
+	assert.Equal(t, []string{"team-a", "team-b"}, store.lastOpts.ExtraArgs[0])
+	assert.Equal(t, "%weather%", store.lastOpts.ExtraArgs[1])
+}
+
+// A forbidden single-server read is surfaced as 404 (never leaks existence).
+func TestGetServerVersion_ForbiddenIs404(t *testing.T) {
+	store := &fakeStore{rows: []*v1alpha1.RawObject{
+		rawMCPServer(t, "team-a", "weather", "latest", npmSpec("Weather")),
+	}}
+	srv := newAPIConfig(t, handler.Config{
+		Store:     store,
+		Authorize: func(_ context.Context, _ resource.AuthorizeInput) error { return auth.ErrForbidden },
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v0.1/servers/team-a%2Fweather/versions/latest", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestListServerVersions_ForbiddenIs404(t *testing.T) {
+	store := &fakeStore{rows: []*v1alpha1.RawObject{
+		rawMCPServer(t, "team-a", "weather", "latest", npmSpec("Weather")),
+	}}
+	srv := newAPIConfig(t, handler.Config{
+		Store:     store,
+		Authorize: func(_ context.Context, _ resource.AuthorizeInput) error { return auth.ErrForbidden },
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v0.1/servers/team-a%2Fweather/versions", nil)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusNotFound, w.Code)

@@ -11,10 +11,13 @@
 //   - GET /v0.1/servers/{serverName}/versions/{ver}   one version ("latest" ok)
 //
 // Read-only: there is no publish/write path. The handler reads MCPServer rows
-// straight from the store across every namespace (the catalogue is flat and
-// anonymous by design) and translates them via pkg/mcpregistry. It does NOT
-// invoke per-kind authz/list filters, so downstream deployments that gate reads
-// with RBAC should disable the endpoint (config flag) rather than rely on it.
+// from the store across every namespace and translates them via pkg/mcpregistry.
+// It honors the same optional per-kind hooks as the native read path (see
+// Config: ListFilter scopes the catalogue, Authorize gates single-server reads).
+// In the public OSS build those hooks are nil, so the catalogue is flat and
+// unfiltered (matching the already-public OSS reads); a downstream build that
+// wires crud.PerKindHooks for MCPServer gets the same RBAC/tenancy scoping here.
+// The endpoint is off by default regardless (config flag).
 package mcpregistry
 
 import (
@@ -30,7 +33,9 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/mcpregistry"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
@@ -48,11 +53,30 @@ type ServerStore interface {
 
 var _ ServerStore = (*v1alpha1store.Store)(nil)
 
-// Register mounts the v0.1 compatibility routes on api. pathPrefix is prepended
-// to the standard `/v0.1` base (empty serves the spec paths at root); store is
-// the MCPServer store the endpoints read from.
-func Register(api huma.API, pathPrefix string, store ServerStore) {
-	base := pathPrefix + "/v0.1"
+// Config holds the inputs for Register: the MCPServer store the endpoints read
+// from, plus optional per-kind access hooks. ListFilter and Authorize default
+// to nil — the public OSS behavior (full, unfiltered catalogue). Downstream
+// builds pass the MCPServer entries from crud.PerKindHooks so the compat
+// endpoint honors the same RBAC/tenancy gates as the native read path.
+type Config struct {
+	PathPrefix string
+	Store      ServerStore
+	// ListFilter, when set, injects an ExtraWhere predicate (+args) into the
+	// catalogue list query so a downstream RBAC layer can scope which servers
+	// are visible. Same contract as resource.Config.ListFilter: placeholders
+	// numbered from $1 relative to the returned args.
+	ListFilter func(ctx context.Context, in resource.AuthorizeInput) (string, []any, error)
+	// Authorize, when set, gates the single-server reads (versions list +
+	// get-by-name) the same way the native Get handler does. A returned
+	// auth.ErrForbidden is surfaced as 404 so the endpoint never leaks the
+	// existence of servers the caller may not read.
+	Authorize func(ctx context.Context, in resource.AuthorizeInput) error
+}
+
+// Register mounts the v0.1 compatibility routes on api. cfg.PathPrefix is
+// prepended to the standard `/v0.1` base (empty serves the spec paths at root).
+func Register(api huma.API, cfg Config) {
+	base := cfg.PathPrefix + "/v0.1"
 
 	huma.Register(api, huma.Operation{
 		OperationID: "mcp-registry-list-servers",
@@ -61,7 +85,7 @@ func Register(api huma.API, pathPrefix string, store ServerStore) {
 		Summary:     "List MCP servers (MCP Registry v0.1 compatibility)",
 		Description: "Read-only listing of registered MCP servers in the official MCP Registry server.json format.",
 		Tags:        []string{"servers"},
-	}, listServers(store))
+	}, listServers(cfg))
 
 	huma.Register(api, huma.Operation{
 		OperationID: "mcp-registry-list-server-versions",
@@ -69,7 +93,7 @@ func Register(api huma.API, pathPrefix string, store ServerStore) {
 		Path:        base + "/servers/{serverName}/versions",
 		Summary:     "List versions of an MCP server (MCP Registry v0.1 compatibility)",
 		Tags:        []string{"servers"},
-	}, listServerVersions(store))
+	}, listServerVersions(cfg))
 
 	huma.Register(api, huma.Operation{
 		OperationID: "mcp-registry-get-server-version",
@@ -77,7 +101,7 @@ func Register(api huma.API, pathPrefix string, store ServerStore) {
 		Path:        base + "/servers/{serverName}/versions/{version}",
 		Summary:     "Get a single MCP server version (MCP Registry v0.1 compatibility)",
 		Tags:        []string{"servers"},
-	}, getServerVersion(store))
+	}, getServerVersion(cfg))
 }
 
 type listServersInput struct {
@@ -93,7 +117,7 @@ type serverListOutput struct {
 	Body mcpregistry.ServerListResponse
 }
 
-func listServers(store ServerStore) func(context.Context, *listServersInput) (*serverListOutput, error) {
+func listServers(cfg Config) func(context.Context, *listServersInput) (*serverListOutput, error) {
 	return func(ctx context.Context, in *listServersInput) (*serverListOutput, error) {
 		opts := v1alpha1store.ListOpts{
 			// Empty namespace flattens the catalogue across every namespace.
@@ -108,8 +132,20 @@ func listServers(store ServerStore) func(context.Context, *listServersInput) (*s
 			opts.Tag = in.Version
 		}
 
-		preds := make([]string, 0, 2)
-		args := make([]any, 0, 2)
+		preds := make([]string, 0, 3)
+		args := make([]any, 0, 3)
+		// Downstream RBAC filter first: its placeholders ($1..$k) line up with
+		// the leading args, so our own predicates number cleanly after it.
+		if cfg.ListFilter != nil {
+			frag, fargs, err := cfg.ListFilter(ctx, resource.AuthorizeInput{Verb: "list", Kind: v1alpha1.KindMCPServer})
+			if err != nil {
+				return nil, huma.Error500InternalServerError("authz list filter", err)
+			}
+			if frag != "" {
+				preds = append(preds, "("+frag+")")
+				args = append(args, fargs...)
+			}
+		}
 		if in.Search != "" {
 			args = append(args, "%"+in.Search+"%")
 			preds = append(preds, fmt.Sprintf("name ILIKE $%d", len(args)))
@@ -127,7 +163,7 @@ func listServers(store ServerStore) func(context.Context, *listServersInput) (*s
 			opts.ExtraArgs = args
 		}
 
-		rows, next, err := store.List(ctx, opts)
+		rows, next, err := cfg.Store.List(ctx, opts)
 		if err != nil {
 			if errors.Is(err, v1alpha1store.ErrInvalidCursor) {
 				return nil, huma.Error400BadRequest(fmt.Sprintf("invalid cursor: %v", err))
@@ -154,13 +190,16 @@ type listServerVersionsInput struct {
 	IncludeDeleted bool   `query:"include_deleted"`
 }
 
-func listServerVersions(store ServerStore) func(context.Context, *listServerVersionsInput) (*serverListOutput, error) {
+func listServerVersions(cfg Config) func(context.Context, *listServerVersionsInput) (*serverListOutput, error) {
 	return func(ctx context.Context, in *listServerVersionsInput) (*serverListOutput, error) {
 		ns, name, err := parseServerNameParam(in.ServerName)
 		if err != nil {
 			return nil, err
 		}
-		rows, next, err := store.List(ctx, v1alpha1store.ListOpts{
+		if err := authorizeRead(ctx, cfg, in.ServerName, ns, name, ""); err != nil {
+			return nil, err
+		}
+		rows, next, err := cfg.Store.List(ctx, v1alpha1store.ListOpts{
 			Namespace:          ns,
 			Limit:              clampLimit(in.Limit),
 			Cursor:             in.Cursor,
@@ -200,7 +239,7 @@ type serverOutput struct {
 	Body mcpregistry.ServerResponse
 }
 
-func getServerVersion(store ServerStore) func(context.Context, *getServerVersionInput) (*serverOutput, error) {
+func getServerVersion(cfg Config) func(context.Context, *getServerVersionInput) (*serverOutput, error) {
 	return func(ctx context.Context, in *getServerVersionInput) (*serverOutput, error) {
 		ns, name, err := parseServerNameParam(in.ServerName)
 		if err != nil {
@@ -210,12 +249,15 @@ func getServerVersion(store ServerStore) func(context.Context, *getServerVersion
 		if err != nil {
 			return nil, huma.Error400BadRequest(fmt.Sprintf("invalid version path segment: %v", err))
 		}
+		if err := authorizeRead(ctx, cfg, in.ServerName, ns, name, version); err != nil {
+			return nil, err
+		}
 
 		var raw *v1alpha1.RawObject
 		if version == "" || version == "latest" {
-			raw, err = store.GetLatest(ctx, ns, name)
+			raw, err = cfg.Store.GetLatest(ctx, ns, name)
 		} else {
-			raw, err = store.Get(ctx, ns, name, version)
+			raw, err = cfg.Store.Get(ctx, ns, name, version)
 		}
 		if err != nil {
 			if errors.Is(err, pkgdb.ErrNotFound) {
@@ -230,6 +272,25 @@ func getServerVersion(store ServerStore) func(context.Context, *getServerVersion
 		out := &serverOutput{}
 		out.Body = mcpregistry.FromMCPServer(ms)
 		return out, nil
+	}
+}
+
+// authorizeRead applies the optional single-server read gate. A forbidden
+// result is surfaced as 404 so the endpoint never reveals the existence of
+// servers the caller may not read; any other error is a 500.
+func authorizeRead(ctx context.Context, cfg Config, displayName, ns, name, tag string) error {
+	if cfg.Authorize == nil {
+		return nil
+	}
+	switch err := cfg.Authorize(ctx, resource.AuthorizeInput{
+		Verb: "get", Kind: v1alpha1.KindMCPServer, Namespace: ns, Name: name, Tag: tag,
+	}); {
+	case err == nil:
+		return nil
+	case errors.Is(err, auth.ErrForbidden):
+		return huma.Error404NotFound(fmt.Sprintf("MCP server %q not found", displayName))
+	default:
+		return huma.Error500InternalServerError("authz check", err)
 	}
 }
 

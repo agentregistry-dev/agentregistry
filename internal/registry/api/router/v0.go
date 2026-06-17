@@ -145,7 +145,15 @@ func RegisterRoutes(
 	// needs the MCPServer store already wired into opts.Stores.
 	if cfg.MCPRegistryCompatEnabled {
 		if store := opts.Stores[v1alpha1.KindMCPServer]; store != nil {
-			mcpregistrycompat.Register(api, cfg.MCPRegistryCompatPathPrefix, store)
+			// Reuse the same per-kind RBAC hooks the native MCPServer read path
+			// uses, so a downstream build that gates MCPServer reads gates the
+			// compat endpoint identically. nil hooks = public OSS behavior.
+			mcpregistrycompat.Register(api, mcpregistrycompat.Config{
+				PathPrefix: cfg.MCPRegistryCompatPathPrefix,
+				Store:      store,
+				ListFilter: opts.PerKindHooks.ListFilters[v1alpha1.KindMCPServer],
+				Authorize:  opts.PerKindHooks.Authorizers[v1alpha1.KindMCPServer],
+			})
 		}
 	}
 	return nil
