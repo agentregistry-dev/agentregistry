@@ -546,6 +546,22 @@ release-cli: bin/arctl-darwin-amd64.sha256
 release-cli: bin/arctl-darwin-arm64.sha256
 release-cli: bin/arctl-windows-amd64.exe.sha256
 
+# Security scans (snyk/trivy/grype) over the source tree and built images.
+# Toggle scanners with DISABLE_{SNYK,TRIVY,GRYPE}_SECURITY_SCAN=1. Image scans
+# need the images built locally first (make docker docker-tag-as-dev).
+SCANS_DIR ?= scans
+
+.PHONY: security-scan
+security-scan: ## Run snyk/trivy/grype security scans (missing tools warn and skip)
+	SCANS_DIR="$(SCANS_DIR)" \
+	GIT_COMMIT="$(GIT_COMMIT)" \
+	SERVER_IMAGE="$(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION)" \
+	AGENTGATEWAY_IMAGE="$(DOCKER_REGISTRY)/$(DOCKER_REPO)/arctl-agentgateway:$(VERSION)" \
+	DISABLE_SNYK_SECURITY_SCAN="$(DISABLE_SNYK_SECURITY_SCAN)" \
+	DISABLE_TRIVY_SECURITY_SCAN="$(DISABLE_TRIVY_SECURITY_SCAN)" \
+	DISABLE_GRYPE_SECURITY_SCAN="$(DISABLE_GRYPE_SECURITY_SCAN)" \
+	bash ./scripts/security-scan.sh
+
 .PHONY: lint
 lint: ## Run the linter (set GOLANGCI_LINT_ARGS=--fix for local auto-fix)
 	$(GOLANGCI_LINT) run $(GOLANGCI_LINT_ARGS)
