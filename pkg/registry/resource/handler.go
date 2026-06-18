@@ -102,7 +102,7 @@ type Config struct {
 	//
 	// The generic hook failure contract is pinned by
 	// TestResourceRegister_PostUpsertFailureLeavesPersistedRow.
-	PostUpsert func(ctx context.Context, obj v1alpha1.Object) error
+	PostUpsert func(ctx context.Context, obj v1alpha1.Object, status string) error
 
 	// PostDelete is optional; when set, the delete handler invokes it
 	// after Store.Delete (which sets DeletionTimestamp). The row still

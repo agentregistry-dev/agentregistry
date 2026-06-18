@@ -43,7 +43,7 @@ type PerKindHooks struct {
 	// Wired by downstream builds that need to mirror state into a
 	// type-specific sidecar table on Runtime apply, drive a
 	// reconciler, etc. Missing keys = no post-upsert hook for that kind.
-	PostUpserts map[string]func(ctx context.Context, obj v1alpha1.Object) error
+	PostUpserts map[string]func(ctx context.Context, obj v1alpha1.Object, status string) error
 	// PostDeletes run after a successful DELETE; see
 	// resource.Config.PostDelete. Mirrors PostUpserts above.
 	PostDeletes map[string]func(ctx context.Context, obj v1alpha1.Object) error

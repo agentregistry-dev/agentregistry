@@ -132,8 +132,8 @@ func TestRegisterApply_AdmissionCanStageInsteadOfProductionUpsert(t *testing.T) 
 		Stores: map[string]*v1alpha1store.Store{
 			v1alpha1.KindAgent: agents,
 		},
-		PostUpserts: map[string]func(context.Context, v1alpha1.Object) error{
-			v1alpha1.KindAgent: func(context.Context, v1alpha1.Object) error {
+		PostUpserts: map[string]func(context.Context, v1alpha1.Object, string) error{
+			v1alpha1.KindAgent: func(context.Context, v1alpha1.Object, string) error {
 				postUpsertCalled = true
 				return nil
 			},

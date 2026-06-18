@@ -49,7 +49,7 @@ type ApplyConfig struct {
 	// PostUpserts mirrors resource.Config.PostUpsert per kind for extension
 	// hooks. Built-in Deployment apply is controller-owned and does not use
 	// this synchronous surface.
-	PostUpserts map[string]func(ctx context.Context, obj v1alpha1.Object) error
+	PostUpserts map[string]func(ctx context.Context, obj v1alpha1.Object, status string) error
 
 	// PostDeletes mirrors resource.Config.PostDelete per kind for extension
 	// hooks. Built-in Deployment teardown is controller-owned and does not use

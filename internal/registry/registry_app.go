@@ -314,10 +314,11 @@ func crudPerKindHooks(options types.AppOptions) crud.PerKindHooks {
 			}
 		}
 	}
-	// PostUpserts / PostDeletes are already (ctx, v1alpha1.Object) →
-	// error so they pass through verbatim — no adapter needed.
+	// PostDeletes are (ctx, v1alpha1.Object) → error; PostUpserts are
+	// (ctx, v1alpha1.Object, status) → error. Both pass through verbatim —
+	// options.* and hooks.* share the same types, so no adapter is needed.
 	if len(options.PostUpserts) > 0 {
-		hooks.PostUpserts = make(map[string]func(ctx context.Context, obj v1alpha1.Object) error, len(options.PostUpserts))
+		hooks.PostUpserts = make(map[string]func(ctx context.Context, obj v1alpha1.Object, status string) error, len(options.PostUpserts))
 		for kind, fn := range options.PostUpserts {
 			hooks.PostUpserts[kind] = fn
 		}
@@ -366,7 +367,7 @@ func crudPerKindHooks(options types.AppOptions) crud.PerKindHooks {
 		adapters := make(map[string]types.RuntimeAdapter, len(options.RuntimeAdapters))
 		maps.Copy(adapters, options.RuntimeAdapters)
 		if hooks.PostUpserts == nil {
-			hooks.PostUpserts = map[string]func(ctx context.Context, obj v1alpha1.Object) error{}
+			hooks.PostUpserts = map[string]func(ctx context.Context, obj v1alpha1.Object, status string) error{}
 		}
 		if hooks.PostDeletes == nil {
 			hooks.PostDeletes = map[string]func(ctx context.Context, obj v1alpha1.Object) error{}
@@ -377,12 +378,21 @@ func crudPerKindHooks(options types.AppOptions) crud.PerKindHooks {
 				return a.ApplyRuntime(ctx, r)
 			},
 		)
-		hooks.PostDeletes[v1alpha1.KindRuntime] = runtimeAdapterDispatcher(
-			hooks.PostDeletes[v1alpha1.KindRuntime], adapters,
+		delCaller := hooks.PostDeletes[v1alpha1.KindRuntime]
+		delDispatch := runtimeAdapterDispatcher(
+			func(ctx context.Context, obj v1alpha1.Object, _ string) error {
+				if delCaller != nil {
+					return delCaller(ctx, obj)
+				}
+				return nil
+			}, adapters,
 			func(ctx context.Context, r *v1alpha1.Runtime, a types.RuntimeAdapter) error {
 				return a.RemoveRuntime(ctx, r.Metadata.Name)
 			},
 		)
+		hooks.PostDeletes[v1alpha1.KindRuntime] = func(ctx context.Context, obj v1alpha1.Object) error {
+			return delDispatch(ctx, obj, "")
+		}
 	}
 	return hooks
 }
@@ -394,13 +404,13 @@ func crudPerKindHooks(options types.AppOptions) crud.PerKindHooks {
 // adapter.Type(). A Runtime with no registered adapter is a no-op so
 // the hook stays safe for partial wiring.
 func runtimeAdapterDispatcher(
-	caller func(ctx context.Context, obj v1alpha1.Object) error,
+	caller func(ctx context.Context, obj v1alpha1.Object, status string) error,
 	adapters map[string]types.RuntimeAdapter,
 	dispatch func(ctx context.Context, r *v1alpha1.Runtime, a types.RuntimeAdapter) error,
-) func(ctx context.Context, obj v1alpha1.Object) error {
-	return func(ctx context.Context, obj v1alpha1.Object) error {
+) func(ctx context.Context, obj v1alpha1.Object, status string) error {
+	return func(ctx context.Context, obj v1alpha1.Object, status string) error {
 		if caller != nil {
-			if err := caller(ctx, obj); err != nil {
+			if err := caller(ctx, obj, status); err != nil {
 				return err
 			}
 		}

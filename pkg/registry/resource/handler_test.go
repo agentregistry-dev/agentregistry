@@ -730,7 +730,7 @@ func TestResourceRegister_PostUpsertFailureLeavesPersistedRow(t *testing.T) {
 
 	hookCalls := 0
 	hookErr := fmt.Errorf("simulated type-adapter failure")
-	hook := func(ctx context.Context, obj v1alpha1.Object) error {
+	hook := func(ctx context.Context, obj v1alpha1.Object, status string) error {
 		hookCalls++
 		return hookErr
 	}
@@ -744,7 +744,7 @@ func TestResourceRegister_PostUpsertFailureLeavesPersistedRow(t *testing.T) {
 	resource.RegisterApply(api, resource.ApplyConfig{
 		BasePrefix:  "/v0",
 		Stores:      map[string]*v1alpha1store.Store{v1alpha1.KindAgent: store},
-		PostUpserts: map[string]func(context.Context, v1alpha1.Object) error{v1alpha1.KindAgent: hook},
+		PostUpserts: map[string]func(context.Context, v1alpha1.Object, string) error{v1alpha1.KindAgent: hook},
 	})
 
 	yaml := `apiVersion: ar.dev/v1alpha1

@@ -20,7 +20,7 @@ type applyOpts struct {
 	Authorize         func(ctx context.Context, in AuthorizeInput) error
 	Resolver          v1alpha1.ResolverFunc
 	RegistryValidator v1alpha1.RegistryValidatorFunc
-	PostUpsert        func(ctx context.Context, obj v1alpha1.Object) error
+	PostUpsert        func(ctx context.Context, obj v1alpha1.Object, status string) error
 	InitialFinalizers func(obj v1alpha1.Object) []string
 	Admission         types.Admission
 	Source            string
@@ -177,7 +177,7 @@ func ProductionAdmission(ctx context.Context, in types.AdmissionInput) (types.Ad
 		meta.Generation = up.Generation
 		meta.UID = up.UID
 		in.Object.SetMetadata(*meta)
-		if err := in.PostUpsert(ctx, in.Object); err != nil {
+		if err := in.PostUpsert(ctx, in.Object, applyStatusFromUpsert(up.Outcome)); err != nil {
 			return types.AdmissionResult{}, &applyError{Stage: stagePostUpsert, Err: err}
 		}
 	}

@@ -62,7 +62,7 @@ type ListFilter func(ctx context.Context, in AuthorizeInput) (extraWhere string,
 // per-doc apply hook on /v0/apply. Hook errors propagate to the
 // caller (500 on the per-kind PUT path, ApplyStatusFailed on the
 // batch path).
-type PostUpsert func(ctx context.Context, obj v1alpha1.Object) error
+type PostUpsert func(ctx context.Context, obj v1alpha1.Object, status string) error
 
 // PostDelete runs after a successful DELETE on a v1alpha1
 // resource. Wired into resource.Config.PostDelete + the apply
