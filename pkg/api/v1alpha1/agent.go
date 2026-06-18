@@ -37,8 +37,10 @@ type AgentSpec struct {
 	MCPServers []ResourceRef `json:"mcpServers,omitempty" yaml:"mcpServers,omitempty"`
 }
 
-// AgentSource is the distribution origin of an agent — Image (the runtime
-// container) and Repository (the source code).
+// AgentSource is the distribution origin of an agent. A harness-based agent
+// (Harness) is the first-class model: a coding harness run from declarative
+// config. Image + Repository remain supported for bring-your-own
+// container/source agents. Harness is mutually exclusive with Image.
 type AgentSource struct {
 	// Image is the OCI container image reference that runs the agent.
 	// Format: <registry>/<name>:<tag> (e.g. ghcr.io/owner/agent:1.0.0).
@@ -46,4 +48,35 @@ type AgentSource struct {
 
 	// Repository links to the source code the image was built from.
 	Repository *Repository `json:"repository,omitempty" yaml:"repository,omitempty"`
+
+	// Harness declares a harness-based agent (the first-class deployment
+	// model). When set, the agent runs a coding harness (Claude Code, Codex,
+	// OpenCode, ...) materialized from the referenced plugins/skills/MCP
+	// servers rather than a prebuilt container. Mutually exclusive with Image.
+	Harness *HarnessConfig `json:"harness,omitempty" yaml:"harness,omitempty"`
+}
+
+// HarnessConfig declares a harness-based agent. At deploy time the registry
+// materializes the referenced plugins (and any individual skills) into the
+// on-disk layout the harness Type expects, wires the MCP servers, and runs the
+// harness behind the target platform's invocation contract. Model routing
+// reuses AgentSpec.ModelProvider / ModelName.
+type HarnessConfig struct {
+	// Type is the harness to run, e.g. "claude-code", "codex", "opencode".
+	Type string `json:"type" yaml:"type"`
+
+	// Version pins the harness version (optional; latest if empty).
+	Version string `json:"version,omitempty" yaml:"version,omitempty"`
+
+	// Plugins are materialized into the harness filesystem at deploy time.
+	Plugins []ResourceRef `json:"plugins,omitempty" yaml:"plugins,omitempty"`
+
+	// Skills are individual skills materialized alongside any plugins.
+	Skills []ResourceRef `json:"skills,omitempty" yaml:"skills,omitempty"`
+
+	// MCPServers wires top-level MCPServer resources into the harness.
+	MCPServers []ResourceRef `json:"mcpServers,omitempty" yaml:"mcpServers,omitempty"`
+
+	// Instructions references a Prompt providing the system prompt / AGENTS.md.
+	Instructions *ResourceRef `json:"instructions,omitempty" yaml:"instructions,omitempty"`
 }

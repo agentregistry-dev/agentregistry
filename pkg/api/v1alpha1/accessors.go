@@ -142,6 +142,19 @@ func (s *Skill) UnmarshalStatus(data json.RawMessage) error {
 	return UnmarshalStatusFromStorage(data, &s.Status)
 }
 
+func (p *Plugin) GetMetadata() *ObjectMeta { return &p.Metadata }
+func (p *Plugin) SetMetadata(meta ObjectMeta) {
+	p.Metadata = meta
+}
+func (p *Plugin) MarshalSpec() (json.RawMessage, error) { return json.Marshal(p.Spec) }
+func (p *Plugin) UnmarshalSpec(data json.RawMessage) error {
+	return json.Unmarshal(data, &p.Spec)
+}
+func (p *Plugin) MarshalStatus() (json.RawMessage, error) { return MarshalStatusForStorage(p.Status) }
+func (p *Plugin) UnmarshalStatus(data json.RawMessage) error {
+	return UnmarshalStatusFromStorage(data, &p.Status)
+}
+
 func (p *Prompt) GetMetadata() *ObjectMeta { return &p.Metadata }
 func (p *Prompt) SetMetadata(meta ObjectMeta) {
 	p.Metadata = meta
