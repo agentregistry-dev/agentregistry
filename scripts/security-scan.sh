@@ -1,19 +1,24 @@
 #!/usr/bin/env bash
-# Runs dependency and image security scans with snyk, trivy, and grype, writing
-# a JSON report per scan to $SCANS_DIR and a summary to the terminal. A missing
-# tool, unauthenticated snyk, or absent image warns and is skipped; exits 0.
+# Security scanning with snyk, trivy, and grype. Two subcommands:
 #
-# Each scanner emits JSON to a file and human output to the terminal in one run:
+#   scan                     Run all scanners over deps + images, write a JSON
+#                            report per scan plus a condensed summary into
+#                            $SCANS_DIR/<hash>/, and print to the terminal.
+#   compare <before> <after> Diff two runs' condensed summaries by commit hash,
+#                            reporting which findings were resolved/introduced.
+#
+# scan: a missing tool, unauthenticated snyk, or absent image warns and is
+# skipped; exits 0. Each scanner emits JSON to a file and human output to the
+# terminal in one run:
 #   snyk  -> --json-file-output (human stdout + json file)
 #   trivy -> --format json --output, then `trivy convert` to render to stdout
 #   grype -> -o table -o json=<file>
-#
 # Toggle scanners off (set to any non-empty value):
 #   DISABLE_SNYK_SECURITY_SCAN, DISABLE_TRIVY_SECURITY_SCAN, DISABLE_GRYPE_SECURITY_SCAN
 #
-# Inputs from the Makefile target:
-#   GIT_COMMIT          short git hash, used in report filenames
-#   SCANS_DIR           output directory for reports (default: scans)
+# Inputs from the Makefile targets:
+#   GIT_COMMIT          short git hash, names the per-run folder
+#   SCANS_DIR           root output directory (default: scans)
 #   SERVER_IMAGE        server image ref to scan (optional)
 #   AGENTGATEWAY_IMAGE  agentgateway image ref to scan (optional)
 
@@ -22,12 +27,11 @@ set -o pipefail
 SCANS_DIR="${SCANS_DIR:-scans}"
 GIT_COMMIT="${GIT_COMMIT:-$(git rev-parse --short HEAD 2>/dev/null || echo unknown)}"
 TS="$(date -u '+%Y%m%dT%H%M%SZ')"
+RUN_DIR="${SCANS_DIR}/${GIT_COMMIT}"
 
 # Image refs to scan. Empty values are simply skipped.
 SERVER_IMAGE="${SERVER_IMAGE:-}"
 AGENTGATEWAY_IMAGE="${AGENTGATEWAY_IMAGE:-}"
-
-mkdir -p "${SCANS_DIR}"
 
 # Scratch dir for transient artifacts (snyk image archives). Removed on any
 # exit — normal, error, or interrupt (Ctrl-C / TERM) — so multi-hundred-MB
@@ -55,7 +59,7 @@ warn() { echo "⚠️  $*" >&2; }
 
 report_path() {
   # report_path <scanner> <target>
-  echo "${SCANS_DIR}/${1}_${2}_${GIT_COMMIT}.json"
+  echo "${RUN_DIR}/${1}_${2}.json"
 }
 
 record() { REPORTS+=("$1"); }
@@ -200,8 +204,8 @@ scan_grype_image() {
 
 # ── condense ───────────────────────────────────────────────────────────────--
 # Merge this run's per-scanner reports into one deduplicated summary:
-#   $SCANS_DIR/security_scan_<hash>_<ts>.json  (machine-readable)
-#   $SCANS_DIR/security_scan_<hash>_<ts>.md    (grouped table)
+#   $RUN_DIR/security_scan.json  (machine-readable)
+#   $RUN_DIR/security_scan.md    (grouped table)
 # Dedup key: (target, package, installed-version, advisory). advisory prefers a
 # CVE when the scanner exposes one (snyk/grype carry CVE aliases), else the
 # primary id (GHSA / SNYK-...). Matching rows collapse across scanners, keeping
@@ -214,11 +218,11 @@ condense() {
     return 0
   fi
   shopt -s nullglob
-  local reports=( "${SCANS_DIR}"/*_"${GIT_COMMIT}".json )
+  local reports=( "${RUN_DIR}"/*.json )
   [ "${#reports[@]}" -eq 0 ] && return 0
 
-  CONDENSED_JSON="${SCANS_DIR}/security_scan_${GIT_COMMIT}.json"
-  CONDENSED_MD="${SCANS_DIR}/security_scan_${GIT_COMMIT}.md"
+  CONDENSED_JSON="${RUN_DIR}/security_scan.json"
+  CONDENSED_MD="${RUN_DIR}/security_scan.md"
 
   # Per-scanner flatten onto a uniform record:
   #   {scanner,target,advisory,package,installed,fixed,severity,title,url}
@@ -266,9 +270,9 @@ JQ
   : > "${records}"
   local f base scanner target
   for f in "${reports[@]}"; do
-    base="$(basename "${f}" .json)"          # <scanner>_<target>_<hash>_<ts>
+    base="$(basename "${f}" .json)"          # <scanner>_<target>
     scanner="${base%%_*}"
-    target="${base#*_}"; target="${target%_"${GIT_COMMIT}"}"
+    target="${base#*_}"
     case "${scanner}" in
       snyk|trivy|grype) ;;
       *) continue ;;                          # skip the condensed summary itself
@@ -321,28 +325,116 @@ JQ
   ' "${CONDENSED_JSON}" > "${CONDENSED_MD}" || { warn "condense: failed to render summary Markdown"; return 0; }
 }
 
-# ── main ─────────────────────────────────────────────────────────────────────
-
-echo "Security scan — commit ${GIT_COMMIT}, ${TS}"
-echo "Reports will be written to ${SCANS_DIR}/"
-
-run_snyk
-run_trivy
-run_grype
-condense
-
-section "Summary"
-if [ "${#REPORTS[@]}" -eq 0 ]; then
-  echo "No reports were produced (all scanners disabled, missing, or skipped)."
-else
-  echo "Per-scanner reports:"
-  for r in "${REPORTS[@]}"; do
-    echo "  • ${r}"
-  done
-  if [ -n "${CONDENSED_JSON:-}" ] && [ -f "${CONDENSED_JSON}" ]; then
-    echo "Condensed summary:"
-    echo "  • ${CONDENSED_JSON}"
-    echo "  • ${CONDENSED_MD}"
+# ── compare ────────────────────────────────────────────────────────────────--
+# Diff two runs' condensed summaries to show which findings were resolved vs
+# introduced. Comparison key is (target, package, advisory) WITHOUT the
+# installed version, so a version bump that drops a CVE reads as "resolved"
+# rather than as a churned remove+add. Writes
+# $SCANS_DIR/scan_compare_<before>_<after>.{json,md} and echoes the Markdown.
+cmd_compare() {
+  local before="$1" after="$2"
+  if ! have jq; then
+    echo "compare requires jq, which is not installed" >&2; exit 1
   fi
-fi
+  if [ -z "${before}" ] || [ -z "${after}" ]; then
+    echo "usage: security-scan.sh compare <before-hash> <after-hash>" >&2; exit 2
+  fi
+  local bj="${SCANS_DIR}/${before}/security_scan.json"
+  local aj="${SCANS_DIR}/${after}/security_scan.json"
+  for p in "${bj}" "${aj}"; do
+    [ -f "${p}" ] || { echo "no condensed summary at ${p} (run 'make security-scan' on that commit)" >&2; exit 1; }
+  done
+
+  local out_json="${SCANS_DIR}/scan_compare_${before}_${after}.json"
+  local out_md="${SCANS_DIR}/scan_compare_${before}_${after}.md"
+
+  # Set math on (target, package, advisory): resolved = in before, gone in
+  # after; introduced = in after, not before; persisting = in both.
+  jq -n --slurpfile b "${bj}" --slurpfile a "${aj}" '
+    def ckey: "\(.target) \(.package) \(.advisory)";
+    def rank($s): {"critical":4,"high":3,"medium":2,"low":1,"unknown":0}[$s] // 0;
+    ($b[0].findings // []) as $bf
+    | ($a[0].findings // []) as $af
+    | ([$bf[] | ckey] | unique) as $bk
+    | ([$af[] | ckey] | unique) as $ak
+    | (($ak | map({(.):true}) | add) // {}) as $akset
+    | (($bk | map({(.):true}) | add) // {}) as $bkset
+    | ([$bf[] | select($akset[ckey] | not)] | unique_by(ckey)
+        | sort_by([.target, (0 - rank(.severity)), .package])) as $resolved
+    | ([$af[] | select($bkset[ckey] | not)] | unique_by(ckey)
+        | sort_by([.target, (0 - rank(.severity)), .package])) as $introduced
+    | (($bk | map(select($akset[.])) | length)) as $persisting
+    | { before: $b[0].commit, after: $a[0].commit,
+        counts: {
+          resolved: ($resolved|length), introduced: ($introduced|length),
+          persisting: $persisting, net: (($introduced|length) - ($resolved|length))
+        },
+        resolved: $resolved, introduced: $introduced }
+  ' > "${out_json}" || { echo "compare: failed to build ${out_json}" >&2; exit 1; }
+
+  jq -r '
+    def sev($arr; $s): ($arr | map(select(.severity == $s)) | length);
+    def emoji($s): {"critical":"🔴","high":"🟠","medium":"🟡","low":"⚪","unknown":"❔"}[$s] // "❔";
+    def line: "| \(emoji(.severity)) \(.severity) | \(.target) | \(.advisory) | \(.package) | \(.installed) | \(.fixed // "—") |";
+    .resolved as $r | .introduced as $i
+    | "# Security scan compare", "",
+      "`\(.before)` -> `\(.after)`", "",
+      "Resolved:   \(.counts.resolved)  (🔴 \(sev($r;"critical")) · 🟠 \(sev($r;"high")) · 🟡 \(sev($r;"medium")) · ⚪ \(sev($r;"low")))",
+      "Introduced: \(.counts.introduced)  (🔴 \(sev($i;"critical")) · 🟠 \(sev($i;"high")) · 🟡 \(sev($i;"medium")) · ⚪ \(sev($i;"low")))",
+      "Persisting: \(.counts.persisting)",
+      "Net change: \(.counts.net)", "",
+      (if .counts.resolved > 0 then
+        "## Resolved", "",
+        "| Sev | Target | Advisory | Package | Installed (before) | Fixed |",
+        "| --- | --- | --- | --- | --- | --- |",
+        ($r[] | line), ""
+       else "## Resolved", "", "_none_", "" end),
+      (if .counts.introduced > 0 then
+        "## Introduced", "",
+        "| Sev | Target | Advisory | Package | Installed (after) | Fixed |",
+        "| --- | --- | --- | --- | --- | --- |",
+        ($i[] | line), ""
+       else "## Introduced", "", "_none_", "" end)
+  ' "${out_json}" | tee "${out_md}"
+
+  echo
+  echo "Wrote ${out_json}"
+  echo "Wrote ${out_md}"
+}
+
+
+# ── scan ───────────────────────────────────────────────────────────────────--
+cmd_scan() {
+  mkdir -p "${RUN_DIR}"
+  echo "Security scan — commit ${GIT_COMMIT}, ${TS}"
+  echo "Reports will be written to ${RUN_DIR}/"
+
+  run_snyk
+  run_trivy
+  run_grype
+  condense
+
+  section "Summary"
+  if [ "${#REPORTS[@]}" -eq 0 ]; then
+    echo "No reports were produced (all scanners disabled, missing, or skipped)."
+  else
+    echo "Per-scanner reports:"
+    for r in "${REPORTS[@]}"; do
+      echo "  • ${r}"
+    done
+    if [ -n "${CONDENSED_JSON:-}" ] && [ -f "${CONDENSED_JSON}" ]; then
+      echo "Condensed summary:"
+      echo "  • ${CONDENSED_JSON}"
+      echo "  • ${CONDENSED_MD}"
+    fi
+  fi
+}
+
+# ── dispatch ─────────────────────────────────────────────────────────────────
+
+case "${1:-scan}" in
+  scan)    cmd_scan ;;
+  compare) shift; cmd_compare "$@" ;;
+  *) echo "unknown subcommand '$1' (expected: scan | compare)" >&2; exit 2 ;;
+esac
 exit 0
