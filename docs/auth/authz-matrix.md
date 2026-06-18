@@ -65,6 +65,16 @@ Agent deployments additionally invoke `Read` on each referenced `skill:{ref}` an
 | Metrics | `GET /metrics` |
 | Logging | `/logging` (localhost-only) |
 
+## MCP Registry v0.1 compatibility (read-only)
+
+The compatibility shim (`docs/mcp-registry-compatibility.md`) re-exposes MCPServer rows in the official `server.json` shape. It reuses the **same per-kind `ListFilter` + `Authorize` hooks as the native MCPServer read path** (`crud.PerKindHooks`): the list endpoint applies the kind's `ListFilter`, and the single-server reads apply its `Authorize` (a forbidden read returns 404). In the public OSS build those hooks are absent, so the catalogue is unfiltered across all namespaces (matching the `List` boundary above); a downstream provider that gates MCPServer reads gates these endpoints identically. The routes deliberately stay **out of the authn skip list**, so where an authn provider is configured the middleware runs and the caller's session reaches those hooks (OSS configures no authn provider, hence anonymous). Because the OSS default is unauthenticated + cross-namespace, the feature is **off by default** — enable it (`AGENT_REGISTRY_MCP_REGISTRY_COMPAT_ENABLED=true`) only where that, or your wired RBAC scoping, is acceptable.
+
+| Operation | HTTP | Required permissions | Notes |
+| --- | --- | --- | --- |
+| List servers | `GET /v0.1/servers` | none | Flattened all-namespace catalogue; no per-row filtering. |
+| List versions | `GET /v0.1/servers/{serverName}/versions` | none | |
+| Get version | `GET /v0.1/servers/{serverName}/versions/{version}` | none | `{version}` accepts `latest`. |
+
 ## Known gaps
 
 Direct-DB CLI commands that construct `auth.Authorizer{Authz: nil}` and therefore short-circuit every DB-layer `Check` to allow. Not a regression vs the trust model of these commands (both require `DATABASE_URL`), but a real gap for audit visibility and for deployments where DB credentials are not equivalent to registry admin.
