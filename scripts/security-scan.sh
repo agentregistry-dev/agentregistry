@@ -94,8 +94,9 @@ run_snyk() {
 
   section "snyk: dependency scan (source tree: go.mod + ui lockfiles)"
   local deps_report; deps_report="$(report_path snyk deps)"
+  # Skip tools/ (dev toolchain, not shipped) and bin/ (local build artifacts).
   # --json-file-output prints human-readable output to stdout AND writes JSON.
-  snyk test --all-projects --json-file-output="${deps_report}" || true
+  snyk test --all-projects --exclude=tools,bin --json-file-output="${deps_report}" || true
   [ -f "${deps_report}" ] && record "${deps_report}"
 
   scan_snyk_image "${SERVER_IMAGE}" "image-server"
@@ -140,7 +141,8 @@ run_trivy() {
 
   section "trivy: dependency scan (source tree: go.mod + ui lockfiles)"
   local deps_report; deps_report="$(report_path trivy deps)"
-  trivy fs --scanners vuln --format json --output "${deps_report}" . || true
+  # Skip tools/ (dev toolchain, not shipped) and bin/ (local build artifacts).
+  trivy fs --scanners vuln --skip-dirs tools --skip-dirs bin --format json --output "${deps_report}" . || true
   if [ -f "${deps_report}" ]; then
     record "${deps_report}"
     # Render the JSON report to the terminal without rescanning.
@@ -181,8 +183,9 @@ run_grype() {
 
   section "grype: dependency scan (source tree: go.mod + ui lockfiles)"
   local deps_report; deps_report="$(report_path grype deps)"
+  # Skip tools/ (dev toolchain, not shipped) and bin/ (local build artifacts).
   # -o table streams to stdout; -o json=<file> writes the typed report.
-  grype dir:. -o table -o "json=${deps_report}" || true
+  grype dir:. --exclude './tools/**' --exclude './bin/**' -o table -o "json=${deps_report}" || true
   [ -f "${deps_report}" ] && record "${deps_report}"
 
   scan_grype_image "${SERVER_IMAGE}" "image-server"
