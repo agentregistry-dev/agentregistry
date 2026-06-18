@@ -148,6 +148,11 @@ func RegisterRoutes(
 			// Reuse the same per-kind RBAC hooks the native MCPServer read path
 			// uses, so a downstream build that gates MCPServer reads gates the
 			// compat endpoint identically. nil hooks = public OSS behavior.
+			//
+			// These routes are intentionally NOT in the authn skip list: where
+			// an authn provider is configured, the middleware must run so the
+			// caller's session reaches ListFilter/Authorize for per-caller
+			// scoping. OSS configures no authn provider, so they're anonymous.
 			mcpregistrycompat.Register(api, mcpregistrycompat.Config{
 				PathPrefix: cfg.MCPRegistryCompatPathPrefix,
 				Store:      store,

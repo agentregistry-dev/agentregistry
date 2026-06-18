@@ -223,6 +223,24 @@ func TestListServerVersions_NotFound(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
+// A PathPrefix without a leading slash (and/or a trailing slash) is normalized
+// so route registration still produces a valid, reachable path.
+func TestRegister_PathPrefixNormalized(t *testing.T) {
+	for _, prefix := range []string{"registry", "/registry", "registry/"} {
+		t.Run(prefix, func(t *testing.T) {
+			store := &fakeStore{rows: []*v1alpha1.RawObject{
+				rawMCPServer(t, "team-a", "weather", "latest", npmSpec("Weather")),
+			}}
+			srv := newAPIConfig(t, handler.Config{PathPrefix: prefix, Store: store})
+
+			req := httptest.NewRequest(http.MethodGet, "/registry/v0.1/servers", nil)
+			w := httptest.NewRecorder()
+			srv.ServeHTTP(w, req)
+			assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		})
+	}
+}
+
 // A downstream RBAC ListFilter is injected into the catalogue query ahead of
 // the built-in search/updated_since predicates, with its args first so the
 // placeholders stay consistent.

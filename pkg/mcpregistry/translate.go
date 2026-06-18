@@ -209,6 +209,8 @@ func mirrorOf(o v1alpha1.MCPPackageOrigin) string {
 // the stdio transport.
 func packageTransportOf(t v1alpha1.MCPTransport) ServerTransport {
 	if t.Type == "http" {
+		// Port is required + non-zero for http transport (enforced at apply by
+		// MCPServer validation), so it's always set on stored servers.
 		return ServerTransport{
 			Type: "streamable-http",
 			URL:  fmt.Sprintf("http://localhost:%d%s", t.Port, t.Path),

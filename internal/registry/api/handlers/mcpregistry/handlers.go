@@ -76,7 +76,14 @@ type Config struct {
 // Register mounts the v0.1 compatibility routes on api. cfg.PathPrefix is
 // prepended to the standard `/v0.1` base (empty serves the spec paths at root).
 func Register(api huma.API, cfg Config) {
-	base := cfg.PathPrefix + "/v0.1"
+	// Normalize the optional prefix: ServeMux patterns must start with "/",
+	// and a trailing "/" would double up against the "/v0.1" we append. So
+	// "registry", "/registry", and "registry/" all yield "/registry/v0.1".
+	prefix := cfg.PathPrefix
+	if prefix != "" {
+		prefix = "/" + strings.Trim(prefix, "/")
+	}
+	base := prefix + "/v0.1"
 
 	huma.Register(api, huma.Operation{
 		OperationID: "mcp-registry-list-servers",
