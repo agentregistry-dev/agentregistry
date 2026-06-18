@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestParseGitHubURL(t *testing.T) {
+func TestParseGitURL(t *testing.T) {
 	tests := []struct {
 		name     string
 		rawURL   string
@@ -47,9 +47,11 @@ func TestParseGitHubURL(t *testing.T) {
 			wantURL: "https://github.com/owner/repo.git",
 		},
 		{
-			name:    "non-tree segment ignored (e.g. blob)",
-			rawURL:  "https://github.com/owner/repo/blob/main/README.md",
-			wantURL: "https://github.com/owner/repo.git",
+			name:     "blob URL with file path",
+			rawURL:   "https://github.com/owner/repo/blob/main/README.md",
+			wantURL:  "https://github.com/owner/repo.git",
+			wantRef:  "main",
+			wantPath: "README.md",
 		},
 		{
 			name:    "three path segments without tree",
@@ -102,9 +104,30 @@ func TestParseGitHubURL(t *testing.T) {
 			wantPath: "src",
 		},
 		{
-			name:    "non-github host",
+			name:    "gitlab repo root",
 			rawURL:  "https://gitlab.com/owner/repo",
-			wantErr: true,
+			wantURL: "https://gitlab.com/owner/repo.git",
+		},
+		{
+			name:     "self-hosted gitlab tree URL",
+			rawURL:   "https://gitlabe2.ext.net.nokia.com/chalapat/fpm-tools/-/tree/main/ai-skills/artifactory-auth-migration",
+			wantURL:  "https://gitlabe2.ext.net.nokia.com/chalapat/fpm-tools.git",
+			wantRef:  "main",
+			wantPath: "ai-skills/artifactory-auth-migration",
+		},
+		{
+			name:     "self-hosted gitlab blob URL",
+			rawURL:   "https://gitlabe2.ext.net.nokia.com/chalapat/fpm-tools/-/blob/main/ai-skills/artifactory-auth-migration/.cursor/skills/artifactory-auth-migration/SKILL.md?ref_type=heads",
+			wantURL:  "https://gitlabe2.ext.net.nokia.com/chalapat/fpm-tools.git",
+			wantRef:  "main",
+			wantPath: "ai-skills/artifactory-auth-migration/.cursor/skills/artifactory-auth-migration/SKILL.md",
+		},
+		{
+			name:     "self-hosted gitlab nested group tree URL",
+			rawURL:   "https://gitlab.example.com/org/platform/team/skills/-/tree/feature%2Fgitlab-support/cursor/skill",
+			wantURL:  "https://gitlab.example.com/org/platform/team/skills.git",
+			wantRef:  "feature/gitlab-support",
+			wantPath: "cursor/skill",
 		},
 		{
 			name:    "missing repo in path",
@@ -125,9 +148,9 @@ func TestParseGitHubURL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotURL, gotRef, gotPath, err := ParseGitHubURL(tt.rawURL)
+			gotURL, gotRef, gotPath, err := ParseGitURL(tt.rawURL)
 			if (err != nil) != tt.wantErr {
-				t.Fatalf("ParseGitHubURL(%q) error = %v, wantErr %v", tt.rawURL, err, tt.wantErr)
+				t.Fatalf("ParseGitURL(%q) error = %v, wantErr %v", tt.rawURL, err, tt.wantErr)
 			}
 			if tt.wantErr {
 				return
@@ -197,6 +220,30 @@ func TestCopyRepoContents(t *testing.T) {
 		}
 		if _, err := os.Stat(filepath.Join(outDir, "README.md")); !os.IsNotExist(err) {
 			t.Error("root README.md should not be copied with subpath")
+		}
+	})
+
+	t.Run("copies single file subpath", func(t *testing.T) {
+		repoDir := t.TempDir()
+		outDir := filepath.Join(t.TempDir(), "output")
+
+		os.MkdirAll(filepath.Join(repoDir, "skills", "ticket-debug"), 0o755)
+		os.WriteFile(filepath.Join(repoDir, "skills", "ticket-debug", "SKILL.md"), []byte("skill"), 0o644)
+		os.WriteFile(filepath.Join(repoDir, "README.md"), []byte("root"), 0o644)
+
+		if err := CopyRepoContents(repoDir, "skills/ticket-debug/SKILL.md", outDir); err != nil {
+			t.Fatalf("CopyRepoContents() error = %v", err)
+		}
+
+		got, err := os.ReadFile(filepath.Join(outDir, "SKILL.md"))
+		if err != nil {
+			t.Fatalf("expected SKILL.md in output: %v", err)
+		}
+		if string(got) != "skill" {
+			t.Errorf("SKILL.md = %q, want %q", string(got), "skill")
+		}
+		if _, err := os.Stat(filepath.Join(outDir, "README.md")); !os.IsNotExist(err) {
+			t.Error("root README.md should not be copied with file subpath")
 		}
 	})
 
