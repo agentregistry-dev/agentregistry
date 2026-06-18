@@ -1,6 +1,6 @@
 module github.com/agentregistry-dev/agentregistry
 
-go 1.25.7
+go 1.25.11
 
 require (
 	github.com/caarlos0/env/v11 v11.3.1
