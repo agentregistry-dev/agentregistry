@@ -55,7 +55,7 @@ warn() { echo "⚠️  $*" >&2; }
 
 report_path() {
   # report_path <scanner> <target>
-  echo "${SCANS_DIR}/${1}_${2}_${GIT_COMMIT}_${TS}.json"
+  echo "${SCANS_DIR}/${1}_${2}_${GIT_COMMIT}.json"
 }
 
 record() { REPORTS+=("$1"); }
@@ -198,22 +198,151 @@ scan_grype_image() {
   [ -f "${rep}" ] && record "${rep}"
 }
 
+# ── condense ───────────────────────────────────────────────────────────────--
+# Merge this run's per-scanner reports into one deduplicated summary:
+#   $SCANS_DIR/security_scan_<hash>_<ts>.json  (machine-readable)
+#   $SCANS_DIR/security_scan_<hash>_<ts>.md    (grouped table)
+# Dedup key: (target, package, installed-version, advisory). advisory prefers a
+# CVE when the scanner exposes one (snyk/grype carry CVE aliases), else the
+# primary id (GHSA / SNYK-...). Matching rows collapse across scanners, keeping
+# the highest severity and first known fix. Cross-scanner dedup is approximate:
+# a finding seen only as GHSA by one scanner and only as CVE by another (no
+# shared alias) will not collapse.
+condense() {
+  if ! have jq; then
+    warn "jq not installed; skipping condensed summary (per-scanner reports still written)"
+    return 0
+  fi
+  shopt -s nullglob
+  local reports=( "${SCANS_DIR}"/*_"${GIT_COMMIT}".json )
+  [ "${#reports[@]}" -eq 0 ] && return 0
+
+  CONDENSED_JSON="${SCANS_DIR}/security_scan_${GIT_COMMIT}.json"
+  CONDENSED_MD="${SCANS_DIR}/security_scan_${GIT_COMMIT}.md"
+
+  # Per-scanner flatten onto a uniform record:
+  #   {scanner,target,advisory,package,installed,fixed,severity,title,url}
+  local flatten
+  read -r -d '' flatten <<'JQ'
+def norm_sev:
+  ascii_downcase
+  | if . == "critical" then "critical"
+    elif . == "high" then "high"
+    elif . == "medium" or . == "moderate" then "medium"
+    elif . == "low" or . == "negligible" then "low"
+    else "unknown" end;
+def nonempty: (. // "") | if . == "" then null else . end;
+def flatten($scanner; $target):
+  if $scanner == "trivy" then
+    [ .Results[]? | (.Vulnerabilities // [])[] | {
+        scanner:$scanner, target:$target, advisory:.VulnerabilityID,
+        package:.PkgName, installed:.InstalledVersion, fixed:(.FixedVersion | nonempty),
+        severity:((.Severity // "unknown") | norm_sev),
+        title:((.Title // .Description // "")), url:(.PrimaryURL // "") } ]
+  elif $scanner == "grype" then
+    [ .matches[]? | (.vulnerability.id) as $pid
+      | ([$pid] + [ .relatedVulnerabilities[]?.id ]) as $ids | {
+          scanner:$scanner, target:$target,
+          advisory:(($ids | map(select(type=="string" and startswith("CVE-"))) | .[0]) // $pid),
+          package:.artifact.name, installed:.artifact.version,
+          fixed:(((.vulnerability.fix.versions // []) | join(", ")) | nonempty),
+          severity:((.vulnerability.severity // "unknown") | norm_sev),
+          title:((.vulnerability.description // "")), url:(.vulnerability.dataSource // "") } ]
+  elif $scanner == "snyk" then
+    # container test => object with .vulnerabilities; test --all-projects => array of projects.
+    (if type == "array" then . else [.] end)
+    | [ .[].vulnerabilities[]? | ((.identifiers.CVE? // [])) as $cve | {
+          scanner:$scanner, target:$target,
+          advisory:(($cve | map(select(startswith("CVE-"))) | .[0]) // .id),
+          package:.packageName, installed:.version,
+          fixed:(((.fixedIn // []) | join(", ")) | nonempty),
+          severity:((.severity // "unknown") | norm_sev),
+          title:((.title // "")), url:("https://security.snyk.io/vuln/" + (.id // "")) } ]
+  else [] end;
+flatten($scanner; $target)[]
+JQ
+
+  local records="${WORKDIR}/records.ndjson"
+  : > "${records}"
+  local f base scanner target
+  for f in "${reports[@]}"; do
+    base="$(basename "${f}" .json)"          # <scanner>_<target>_<hash>_<ts>
+    scanner="${base%%_*}"
+    target="${base#*_}"; target="${target%_"${GIT_COMMIT}"}"
+    case "${scanner}" in
+      snyk|trivy|grype) ;;
+      *) continue ;;                          # skip the condensed summary itself
+    esac
+    jq -c --arg scanner "${scanner}" --arg target "${target}" "${flatten}" "${f}" \
+      >> "${records}" 2>/dev/null || true
+  done
+
+  jq -s --arg commit "${GIT_COMMIT}" --arg ts "${TS}" '
+    def rank($s): {"critical":4,"high":3,"medium":2,"low":1,"unknown":0}[$s] // 0;
+    def sevcount($f; $s): ($f | map(select(.severity == $s)) | length);
+    . as $raw
+    | ( $raw | group_by([.target, .package, .installed, .advisory])
+        | map( . as $grp | {
+            target:$grp[0].target, advisory:$grp[0].advisory,
+            package:$grp[0].package, installed:$grp[0].installed,
+            severity:($grp | max_by(rank(.severity)) | .severity),
+            fixed:($grp | map(.fixed) | map(select(. != null)) | (.[0] // null)),
+            scanners:($grp | map(.scanner) | unique),
+            title:($grp | map(.title) | map(select(. != "")) | (.[0] // "")),
+            url:($grp | map(.url) | map(select(. != "")) | (.[0] // ""))
+          }) ) as $u
+    | ( $u | sort_by([.target, (0 - rank(.severity)), .package]) ) as $findings
+    | { commit:$commit, timestamp:$ts,
+        totals: { raw:($raw|length), unique:($findings|length),
+          critical:sevcount($findings;"critical"), high:sevcount($findings;"high"),
+          medium:sevcount($findings;"medium"), low:sevcount($findings;"low"),
+          unknown:sevcount($findings;"unknown") },
+        by_target: ( $findings | group_by(.target)
+          | map({ key:.[0].target, value:{ unique:length,
+              critical:sevcount(.;"critical"), high:sevcount(.;"high"),
+              medium:sevcount(.;"medium"), low:sevcount(.;"low"), unknown:sevcount(.;"unknown") }})
+          | from_entries ),
+        findings: $findings }
+  ' "${records}" > "${CONDENSED_JSON}" || { warn "condense: failed to build summary JSON"; return 0; }
+
+  jq -r '
+    def emoji($s): {"critical":"🔴","high":"🟠","medium":"🟡","low":"⚪","unknown":"❔"}[$s] // "❔";
+    "# Security scan summary", "",
+    "Commit `\(.commit)` · \(.timestamp)", "",
+    "**\(.totals.unique) unique findings** (from \(.totals.raw) raw rows) — " +
+      "🔴 \(.totals.critical) critical · 🟠 \(.totals.high) high · 🟡 \(.totals.medium) medium · " +
+      "⚪ \(.totals.low) low · ❔ \(.totals.unknown) unknown", "",
+    ( .findings | group_by(.target)[] |
+        "## \(.[0].target)", "",
+        "| Sev | Advisory | Package | Installed | Fixed | Scanners |",
+        "| --- | --- | --- | --- | --- | --- |",
+        ( .[] | "| \(emoji(.severity)) \(.severity) | \(.advisory) | \(.package) | \(.installed) | \(.fixed // "—") | \(.scanners | join(", ")) |" ),
+        "" )
+  ' "${CONDENSED_JSON}" > "${CONDENSED_MD}" || { warn "condense: failed to render summary Markdown"; return 0; }
+}
+
 # ── main ─────────────────────────────────────────────────────────────────────
 
-echo "Security scan (report-only) — commit ${GIT_COMMIT}, ${TS}"
+echo "Security scan — commit ${GIT_COMMIT}, ${TS}"
 echo "Reports will be written to ${SCANS_DIR}/"
 
 run_snyk
 run_trivy
 run_grype
+condense
 
 section "Summary"
 if [ "${#REPORTS[@]}" -eq 0 ]; then
   echo "No reports were produced (all scanners disabled, missing, or skipped)."
 else
-  echo "Reports written:"
+  echo "Per-scanner reports:"
   for r in "${REPORTS[@]}"; do
     echo "  • ${r}"
   done
+  if [ -n "${CONDENSED_JSON:-}" ] && [ -f "${CONDENSED_JSON}" ]; then
+    echo "Condensed summary:"
+    echo "  • ${CONDENSED_JSON}"
+    echo "  • ${CONDENSED_MD}"
+  fi
 fi
 exit 0
