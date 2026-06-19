@@ -25,6 +25,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	controller "github.com/agentregistry-dev/agentregistry/internal/registry/controller"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	pluginstore "github.com/agentregistry-dev/agentregistry/internal/registry/plugins/store"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/kubernetes"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/local"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
@@ -132,6 +133,18 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 			slog.Error("failed to shutdown telemetry", "error", err)
 		}
 	}()
+
+	// Wire a fail-closed Plugin publish hook by default: it resolves the
+	// plugin's OCI origin, stores the canonical bundle, and populates
+	// spec.Content + spec.Manifest before persistence. When no plugin registry
+	// is configured the hook rejects Plugin applies rather than persisting
+	// un-storable rows. A caller-provided Prepares[KindPlugin] wins.
+	if options.Prepares == nil {
+		options.Prepares = map[string]types.Prepare{}
+	}
+	if _, ok := options.Prepares[v1alpha1.KindPlugin]; !ok {
+		options.Prepares[v1alpha1.KindPlugin] = pluginPrepareFromConfig(cfg)
+	}
 
 	routeOpts := buildRouteOptions(options, stores, deploymentAdapters, crudPerKindHooks(options))
 
@@ -280,6 +293,27 @@ func buildRouteOptions(
 	}
 
 	return routeOpts
+}
+
+// pluginPrepareFromConfig builds the default Plugin publish hook from cfg. With
+// no PluginRegistry configured it returns a fail-closed hook that rejects
+// Plugin applies, so the registry never persists Content-less plugin rows.
+func pluginPrepareFromConfig(cfg *config.Config) types.Prepare {
+	if cfg.PluginRegistry == "" {
+		slog.Warn("plugin storage not configured; Plugin publishes will be rejected (set AGENT_REGISTRY_PLUGIN_REGISTRY)")
+		return pluginstore.NewPluginPrepare(nil, nil)
+	}
+	st, err := pluginstore.NewOCIStore(pluginstore.Config{
+		Registry:         cfg.PluginRegistry,
+		RepositoryPrefix: cfg.PluginRegistryPrefix,
+		Insecure:         cfg.PluginRegistryInsecure,
+	})
+	if err != nil {
+		slog.Error("plugin store init failed; Plugin publishes will be rejected", "error", err)
+		return pluginstore.NewPluginPrepare(nil, nil)
+	}
+	fetcher := pluginstore.NewOCIOriginFetcher(nil, cfg.PluginRegistryInsecure)
+	return pluginstore.NewPluginPrepare(fetcher, st)
 }
 
 // crudPerKindHooks adapts the AppOptions per-kind authorizer +
