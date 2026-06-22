@@ -45,8 +45,10 @@ func TestPluginPrepareHappyPath(t *testing.T) {
 	if p.Spec.Content.ContentHash != wantHash {
 		t.Fatalf("Content.ContentHash %q != %q", p.Spec.Content.ContentHash, wantHash)
 	}
-	if p.Spec.Manifest == nil || len(p.Spec.Manifest.Skills) == 0 {
-		t.Fatalf("manifest not indexed: %+v", p.Spec.Manifest)
+	// sampleBundle ships no .claude-plugin/plugin.json, so Manifest is nil; the
+	// derived Inventory indexes the bundle's actual skills.
+	if p.Spec.Inventory == nil || len(p.Spec.Inventory.Skills) == 0 {
+		t.Fatalf("inventory not indexed: %+v", p.Spec.Inventory)
 	}
 }
 

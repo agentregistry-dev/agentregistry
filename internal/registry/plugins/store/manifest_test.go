@@ -7,7 +7,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
-func TestParseManifest(t *testing.T) {
+func TestBuildInventory(t *testing.T) {
 	b := &CanonicalBundle{Files: map[string][]byte{
 		"skills/deploy/SKILL.md": []byte("---\nname: deploy\ndescription: Deploys things\n---\nbody\n"),
 		"SKILL.md":               []byte("---\nname: root-skill\n---\n"),
@@ -18,7 +18,7 @@ func TestParseManifest(t *testing.T) {
 		"hooks/hooks.json":       []byte(`{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command"}]}],"PostToolUse":[{"hooks":[{"type":"command"},{"type":"http"}]}]}}`),
 	}}
 
-	m := ParseManifest(b)
+	m := BuildInventory(b)
 
 	wantSkills := []v1alpha1.PluginSkill{
 		{Name: "root-skill"},                            // top-level SKILL.md (sorts before "skills/...")
@@ -49,13 +49,36 @@ func TestParseManifest(t *testing.T) {
 	}
 }
 
-func TestParseManifestBestEffortOnMalformed(t *testing.T) {
+func TestBuildInventoryBestEffortOnMalformed(t *testing.T) {
 	b := &CanonicalBundle{Files: map[string][]byte{
 		".mcp.json":        []byte("not json"),
 		"hooks/hooks.json": []byte("{bad"),
 	}}
-	m := ParseManifest(b) // must not panic
+	m := BuildInventory(b) // must not panic
 	if len(m.MCPServers) != 0 || len(m.Hooks) != 0 {
 		t.Fatalf("expected empty index for malformed files, got %+v", m)
+	}
+}
+
+func TestParseManifest(t *testing.T) {
+	// Absent manifest -> nil, no error.
+	if m, err := ParseManifest(&CanonicalBundle{Files: map[string][]byte{"SKILL.md": []byte("x")}}); err != nil || m != nil {
+		t.Fatalf("absent manifest: got (%v, %v), want (nil, nil)", m, err)
+	}
+	// Real plugin.json -> typed manifest.
+	b := &CanonicalBundle{Files: map[string][]byte{
+		ManifestPath: []byte(`{"name":"company-deploy","version":"1.2.0","author":{"name":"Maya"},"keywords":["deploy"]}`),
+	}}
+	m, err := ParseManifest(b)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if m == nil || m.Name != "company-deploy" || m.Version != "1.2.0" || m.Author == nil || m.Author.Name != "Maya" {
+		t.Fatalf("typed manifest not parsed: %+v", m)
+	}
+	// Malformed manifest -> error (fail closed).
+	bad := &CanonicalBundle{Files: map[string][]byte{ManifestPath: []byte("{not json")}}
+	if _, err := ParseManifest(bad); err == nil {
+		t.Fatal("expected error for malformed manifest")
 	}
 }

@@ -49,8 +49,14 @@ func NewPluginPrepare(src BundleSource, st Store) func(ctx context.Context, obj 
 			return fmt.Errorf("store plugin bundle: %w", err)
 		}
 
+		manifest, err := ParseManifest(bundle)
+		if err != nil {
+			return fmt.Errorf("parse plugin manifest: %w", err)
+		}
+
 		p.Spec.Content = &v1alpha1.PluginContent{ContentHash: contentHash, OCIRef: ociRef}
-		p.Spec.Manifest = ParseManifest(bundle)
+		p.Spec.Manifest = manifest                // canonical typed plugin.json (nil if none shipped)
+		p.Spec.Inventory = BuildInventory(bundle) // derived risk surface
 		return nil
 	}
 }

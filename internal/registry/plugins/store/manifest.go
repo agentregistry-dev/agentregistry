@@ -2,6 +2,7 @@ package store
 
 import (
 	"encoding/json"
+	"fmt"
 	"path"
 	"sort"
 	"strings"
@@ -11,13 +12,33 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
-// ParseManifest indexes a canonical bundle into a PluginManifest: the skills,
-// sub-agents, commands, MCP servers, hooks, and bin/ executables it ships. It
-// is best-effort — a malformed declarative file is skipped rather than failing
-// the publish, since the manifest is a search/governance index, not the source
-// of truth. Output is deterministic (sorted) for stable spec hashing.
-func ParseManifest(b *CanonicalBundle) *v1alpha1.PluginManifest {
-	m := &v1alpha1.PluginManifest{}
+// ManifestPath is the canonical location of the plugin manifest within a bundle.
+const ManifestPath = ".claude-plugin/plugin.json"
+
+// ParseManifest parses the bundle's real .claude-plugin/plugin.json into the
+// typed, faithful PluginManifest (the canonical lingua-franca manifest).
+// Returns (nil, nil) when the bundle ships no manifest, or (nil, err) when the
+// manifest is present but malformed (the caller decides whether to fail).
+func ParseManifest(b *CanonicalBundle) (*v1alpha1.PluginManifest, error) {
+	data, ok := b.Files[ManifestPath]
+	if !ok {
+		return nil, nil
+	}
+	var m v1alpha1.PluginManifest
+	if err := json.Unmarshal(data, &m); err != nil {
+		return nil, fmt.Errorf("%w: parse %s: %v", ErrInvalidBundle, ManifestPath, err)
+	}
+	return &m, nil
+}
+
+// BuildInventory indexes a canonical bundle into a PluginInventory: the skills,
+// sub-agents, commands, MCP servers, hooks, and bin/ executables it actually
+// ships — the legible governance risk surface, derived by scanning bundle files
+// (not the author-supplied manifest). Best-effort: a malformed declarative file
+// is skipped rather than failing the publish. Output is deterministic (sorted)
+// for stable spec hashing.
+func BuildInventory(b *CanonicalBundle) *v1alpha1.PluginInventory {
+	m := &v1alpha1.PluginInventory{}
 
 	var skillPaths, agentPaths, cmdPaths, binPaths []string
 	for p := range b.Files {

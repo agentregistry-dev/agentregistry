@@ -40,11 +40,19 @@ type PluginSpec struct {
 	// plugin. Populated by the registry at publish time — not author-supplied.
 	Content *PluginContent `json:"content,omitempty" yaml:"content,omitempty"`
 
-	// Manifest is the publish-time index of the bundle's contents: the skills,
-	// hooks, MCP servers, sub-agents, and bin/ executables it ships. It powers
-	// search and is the risk surface the approval flow reviews (hooks and
-	// executables run arbitrary code). Populated by the registry at publish.
+	// Manifest is the canonical plugin manifest — a faithful, typed
+	// representation of the bundle's .claude-plugin/plugin.json (the
+	// lingua-franca format, a superset across harnesses). Parsed and populated
+	// by the registry at publish.
 	Manifest *PluginManifest `json:"manifest,omitempty" yaml:"manifest,omitempty"`
+
+	// Inventory is the server-derived index of what the bundle actually ships
+	// (skills, sub-agents, commands, hooks, MCP servers, bin/ executables),
+	// computed by scanning the bundle files. It is the legible risk surface the
+	// approval flow reviews (hooks + executables run arbitrary code) and powers
+	// search. Distinct from Manifest because plugin.json may reference
+	// components by path rather than inline. Populated by the registry at publish.
+	Inventory *PluginInventory `json:"inventory,omitempty" yaml:"inventory,omitempty"`
 }
 
 // PluginOriginType selects which origin sub-struct is set.
@@ -88,8 +96,10 @@ type PluginContent struct {
 	OCIRef string `json:"ociRef,omitempty" yaml:"ociRef,omitempty"`
 }
 
-// PluginManifest is the indexed inventory of a bundle's contents.
-type PluginManifest struct {
+// PluginInventory is the server-derived index of a bundle's actual contents,
+// computed by scanning the bundle files (not the author-supplied manifest). It
+// is the legible governance risk surface and the search index.
+type PluginInventory struct {
 	Skills   []PluginSkill `json:"skills,omitempty" yaml:"skills,omitempty"`
 	Commands []string      `json:"commands,omitempty" yaml:"commands,omitempty"`
 	// Agents are sub-agent names; sub-agents are markdown prompt files in the
