@@ -54,10 +54,10 @@ RUN DOCKER_ARCH=$(case "${TARGETARCH:-}" in \
         (arm64) echo "aarch64" ;; \
         (*) echo "x86_64" ;; \
     esac) && \
-    wget https://download.docker.com/linux/static/stable/${DOCKER_ARCH}/docker-28.5.1.tgz && \
-    tar -xvf docker-28.5.1.tgz && \
+    wget https://download.docker.com/linux/static/stable/${DOCKER_ARCH}/docker-29.6.0.tgz && \
+    tar -xvf docker-29.6.0.tgz && \
     mv docker/docker /usr/local/bin/docker && \
-    rm -rf docker-28.5.1.tgz docker
+    rm -rf docker-29.6.0.tgz docker
 
 # Install Docker Compose plugin
 ARG TARGETARCH
@@ -68,7 +68,7 @@ RUN set -eux; \
         (*) echo "x86_64" ;; \
     esac); \
     COMPOSE_NAME=docker-compose-linux-${COMPOSE_ARCH}; \
-    COMPOSE_URL=https://github.com/docker/compose/releases/download/v2.40.3; \
+    COMPOSE_URL=https://github.com/docker/compose/releases/download/v5.1.4; \
     COMPOSE_DIR=/tmp/docker-compose-download; \
     for attempt in 1 2 3 4 5; do \
         rm -rf ${COMPOSE_DIR}; \
