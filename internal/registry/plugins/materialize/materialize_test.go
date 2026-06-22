@@ -40,8 +40,9 @@ func TestMaterializePluginAndWriteDir(t *testing.T) {
 	st := newStore(t)
 
 	bundle := &store.CanonicalBundle{Files: map[string][]byte{
-		"skills/deploy/SKILL.md": []byte("---\nname: deploy\n---\n"),
-		".mcp.json":              []byte(`{"mcpServers":{"db":{}}}`),
+		".claude-plugin/plugin.json": []byte(`{"name":"company-deploy"}`), // real manifest, passes through
+		"skills/deploy/SKILL.md":     []byte("---\nname: deploy\n---\n"),
+		".mcp.json":                  []byte(`{"mcpServers":{"db":{}}}`),
 	}}
 	ref, hash, err := st.Push(ctx, "author", "company-deploy", "v1", bundle)
 	if err != nil {

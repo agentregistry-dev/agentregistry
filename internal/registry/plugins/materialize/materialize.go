@@ -29,7 +29,7 @@ func Plugin(ctx context.Context, st store.Store, p *v1alpha1.Plugin, harness tra
 	if err != nil {
 		return nil, nil, fmt.Errorf("materialize: pull canonical bundle: %w", err)
 	}
-	files, rep, err := translate.ToHarness(harness, bundle, translate.MetaFromPlugin(p))
+	files, rep, err := translate.ToHarness(harness, bundle)
 	if err != nil {
 		return nil, nil, fmt.Errorf("materialize: translate to %s: %w", harness, err)
 	}

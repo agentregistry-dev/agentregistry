@@ -22,24 +22,18 @@ type PathMapping struct {
 	DropReason string        // why, for the report (set when Drop)
 }
 
-// Adapter encapsulates one harness's on-disk conventions. Implementations
-// register via Register in an init(). They must be stateless and concurrency-safe.
+// Adapter encapsulates one harness's on-disk conventions as pure path mappings.
+// The plugin manifest is just another file (.claude-plugin/plugin.json): a
+// harness that uses a different manifest path/shape expresses that as a
+// MapToHarness path move + byte transform, not a regeneration from metadata.
+// Implementations register via Register in an init() and must be stateless.
 type Adapter interface {
 	Harness() Harness
-	// ManifestPath is the harness manifest's relative path, e.g.
-	// ".claude-plugin/plugin.json".
-	ManifestPath() string
 	// MapToHarness maps a canonical path to its harness on-disk path. Return the
 	// zero PathMapping for default-pass (identity).
 	MapToHarness(canonicalPath string) PathMapping
 	// MapFromHarness is the inverse. Return the zero PathMapping for default-pass.
 	MapFromHarness(harnessPath string) PathMapping
-	// GenerateManifest produces the harness manifest bytes from canonical
-	// metadata. Output must be deterministic (stable key order).
-	GenerateManifest(meta PluginMeta) ([]byte, error)
-	// ParseManifest recovers PluginMeta from harness manifest bytes; unknown
-	// fields are stashed into meta.Extras[Harness].
-	ParseManifest(manifestBytes []byte) (PluginMeta, error)
 }
 
 var registry = map[Harness]Adapter{}

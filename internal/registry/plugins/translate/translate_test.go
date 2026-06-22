@@ -1,7 +1,6 @@
 package translate
 
 import (
-	"bytes"
 	"errors"
 	"reflect"
 	"testing"
@@ -11,6 +10,7 @@ import (
 
 func richCanonical() *store.CanonicalBundle {
 	return &store.CanonicalBundle{Files: map[string][]byte{
+		".claude-plugin/plugin.json": []byte(`{"name":"my-plugin","version":"1.0.0"}`), // real manifest: passes through
 		"SKILL.md":                   []byte("---\nname: root\n---\n"),
 		"skills/deploy/SKILL.md":     []byte("---\nname: deploy\n---\n"),
 		"skills/deploy/reference.md": []byte("supporting file"), // must survive (default-pass)
@@ -25,26 +25,23 @@ func richCanonical() *store.CanonicalBundle {
 
 func TestClaudeCodeRoundTripLossless(t *testing.T) {
 	orig := richCanonical()
-	meta := PluginMeta{Name: "my-plugin", Version: "v1", Title: "My Plugin", Description: "does things"}
 
-	harnessFiles, toRep, err := ToHarness(HarnessClaudeCode, orig, meta)
+	harnessFiles, toRep, err := ToHarness(HarnessClaudeCode, orig)
 	if err != nil {
 		t.Fatalf("ToHarness: %v", err)
 	}
 	if !toRep.IsClean() {
-		t.Fatalf("expected clean to-harness translation, got %+v", toRep)
+		t.Fatalf("expected clean (identity) to-harness translation, got %+v", toRep)
+	}
+	// Identity: every canonical file (incl. the real manifest) is preserved verbatim.
+	if !reflect.DeepEqual(orig.Files, harnessFiles) {
+		t.Fatalf("ToHarness should be identity for claude-code")
 	}
 	if _, ok := harnessFiles[".claude-plugin/plugin.json"]; !ok {
-		t.Fatal("manifest not generated")
-	}
-	// Every canonical file must appear unchanged in the harness layout.
-	for p, want := range orig.Files {
-		if got, ok := harnessFiles[p]; !ok || !bytes.Equal(got, want) {
-			t.Fatalf("file %q not identity-preserved on ToHarness", p)
-		}
+		t.Fatal("real manifest did not pass through")
 	}
 
-	canon, gotMeta, fromRep, err := FromHarness(HarnessClaudeCode, harnessFiles)
+	canon, fromRep, err := FromHarness(HarnessClaudeCode, harnessFiles)
 	if err != nil {
 		t.Fatalf("FromHarness: %v", err)
 	}
@@ -52,12 +49,8 @@ func TestClaudeCodeRoundTripLossless(t *testing.T) {
 		t.Fatalf("from-harness should not lose anything, got %+v", fromRep.Dropped)
 	}
 	if !reflect.DeepEqual(canon.Files, orig.Files) {
-		t.Fatalf("round-trip not lossless:\n want %v\n got  %v", keys(orig.Files), keys(canon.Files))
+		t.Fatalf("round-trip not lossless")
 	}
-	if gotMeta.Name != "my-plugin" || gotMeta.Title != "My Plugin" || gotMeta.Version != "v1" {
-		t.Fatalf("metadata not recovered: %+v", gotMeta)
-	}
-	// Content hash stable across the round-trip.
 	h1, _ := orig.ContentHash()
 	h2, _ := canon.ContentHash()
 	if h1 != h2 {
@@ -67,24 +60,21 @@ func TestClaudeCodeRoundTripLossless(t *testing.T) {
 
 func TestToHarnessDeterministic(t *testing.T) {
 	b := richCanonical()
-	meta := PluginMeta{Name: "p", Version: "v1"}
-	a, _, _ := ToHarness(HarnessClaudeCode, b, meta)
-	c, _, _ := ToHarness(HarnessClaudeCode, b, meta)
+	a, _, _ := ToHarness(HarnessClaudeCode, b)
+	c, _, _ := ToHarness(HarnessClaudeCode, b)
 	if !reflect.DeepEqual(a, c) {
 		t.Fatal("ToHarness not deterministic")
 	}
 }
 
 func TestCodexUnsupported(t *testing.T) {
-	_, _, err := ToHarness(HarnessCodex, richCanonical(), PluginMeta{Name: "p"})
-	if !errors.Is(err, ErrUnsupportedHarness) {
+	if _, _, err := ToHarness(HarnessCodex, richCanonical()); !errors.Is(err, ErrUnsupportedHarness) {
 		t.Fatalf("expected ErrUnsupportedHarness for codex, got %v", err)
 	}
 }
 
 func TestUnknownHarness(t *testing.T) {
-	_, _, err := ToHarness(Harness("zed"), richCanonical(), PluginMeta{Name: "p"})
-	if !errors.Is(err, ErrUnknownHarness) {
+	if _, _, err := ToHarness(Harness("zed"), richCanonical()); !errors.Is(err, ErrUnknownHarness) {
 		t.Fatalf("expected ErrUnknownHarness, got %v", err)
 	}
 }
@@ -97,7 +87,7 @@ func TestClassifyMatchesEdgeCases(t *testing.T) {
 		"agents/r.md":           KindAgent,
 		"commands/s.md":         KindCommand,
 		"bin/tool":              KindBin,
-		"bin/":                  KindOther, // bare dir excluded, mirrors store.ParseManifest
+		"bin/":                  KindOther, // bare dir excluded, mirrors store inventory scan
 		".mcp.json":             KindMCP,
 		"hooks/hooks.json":      KindHooks,
 		"skills/x/reference.md": KindOther,
@@ -115,5 +105,3 @@ func TestHarnessesRegistered(t *testing.T) {
 		t.Fatalf("expected only claude-code registered, got %v", hs)
 	}
 }
-
-func keys(m map[string][]byte) []string { return sortedKeys(m) }
