@@ -94,4 +94,9 @@ LABEL org.opencontainers.image.source=https://github.com/agentregistry-dev/agent
 LABEL org.opencontainers.image.description="Agent Registry Server"
 LABEL org.opencontainers.image.authors="Agent Registry Creators 🤖"
 
+# Skip the default Content-Type:application/json POST check to keep pre-1.4.1 MCP behavior.
+# As of 1.4.1 CORS protection has been changing in the mcp sdk a few times, so this is our safest bet
+# Ref: https://github.com/modelcontextprotocol/go-sdk/releases/tag/v1.6.1
+ENV MCPGODEBUG=disablecontenttypecheck=1
+
 CMD ["/app/bin/arctl-server"]
