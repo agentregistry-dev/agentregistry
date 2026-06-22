@@ -33,6 +33,14 @@ RUN_DIR="${SCANS_DIR}/${GIT_COMMIT}"
 SERVER_IMAGE="${SERVER_IMAGE:-}"
 AGENTGATEWAY_IMAGE="${AGENTGATEWAY_IMAGE:-}"
 
+# Minimum severity rendered in the condensed summary and compare output ("sev and
+# above"); raw per-scanner JSON is always kept full. One of: critical|high|medium|low|all.
+SEV="${SEV:-high}"
+case "${SEV}" in
+  critical|high|medium|low|all) ;;
+  *) echo "⚠️  invalid SEV='${SEV}' (expected critical|high|medium|low|all); defaulting to high" >&2; SEV="high" ;;
+esac
+
 # Scratch dir for transient artifacts (snyk image archives). Removed on any
 # exit — normal, error, or interrupt (Ctrl-C / TERM) — so multi-hundred-MB
 # 'docker save' tarballs can never accumulate in the temp dir.
@@ -312,14 +320,18 @@ JQ
         findings: $findings }
   ' "${records}" > "${CONDENSED_JSON}" || { warn "condense: failed to build summary JSON"; return 0; }
 
-  jq -r '
+  jq -r --arg sev "${SEV}" '
     def emoji($s): {"critical":"🔴","high":"🟠","medium":"🟡","low":"⚪","unknown":"❔"}[$s] // "❔";
-    "# Security scan summary", "",
+    def rank($s): {"critical":4,"high":3,"medium":2,"low":1,"unknown":0}[$s] // 0;
+    ({"critical":4,"high":3,"medium":2,"low":1,"all":0}[$sev] // 3) as $min
+    | (.findings | map(select(rank(.severity) >= $min))) as $shown
+    | "# Security scan summary", "",
     "Commit `\(.commit)` · \(.timestamp)", "",
     "**\(.totals.unique) unique findings** (from \(.totals.raw) raw rows) — " +
       "🔴 \(.totals.critical) critical · 🟠 \(.totals.high) high · 🟡 \(.totals.medium) medium · " +
       "⚪ \(.totals.low) low · ❔ \(.totals.unknown) unknown", "",
-    ( .findings | group_by(.target)[] |
+    "Showing **\($sev)+**: \($shown|length) of \(.totals.unique) (\((.totals.unique) - ($shown|length)) hidden below threshold)", "",
+    ( $shown | group_by(.target)[] |
         "## \(.[0].target)", "",
         "| Sev | Advisory | Package | Installed | Fixed | Scanners |",
         "| --- | --- | --- | --- | --- | --- |",
@@ -375,24 +387,28 @@ cmd_compare() {
         resolved: $resolved, introduced: $introduced }
   ' > "${out_json}" || { echo "compare: failed to build ${out_json}" >&2; exit 1; }
 
-  jq -r '
+  jq -r --arg sev "${SEV}" '
     def sev($arr; $s): ($arr | map(select(.severity == $s)) | length);
     def emoji($s): {"critical":"🔴","high":"🟠","medium":"🟡","low":"⚪","unknown":"❔"}[$s] // "❔";
+    def rank($s): {"critical":4,"high":3,"medium":2,"low":1,"unknown":0}[$s] // 0;
     def line: "| \(emoji(.severity)) \(.severity) | \(.target) | \(.advisory) | \(.package) | \(.installed) | \(.fixed // "—") |";
-    .resolved as $r | .introduced as $i
+    ({"critical":4,"high":3,"medium":2,"low":1,"all":0}[$sev] // 3) as $min
+    | (.resolved | map(select(rank(.severity) >= $min))) as $r
+    | (.introduced | map(select(rank(.severity) >= $min))) as $i
     | "# Security scan compare", "",
       "`\(.before)` -> `\(.after)`", "",
-      "Resolved:   \(.counts.resolved)  (🔴 \(sev($r;"critical")) · 🟠 \(sev($r;"high")) · 🟡 \(sev($r;"medium")) · ⚪ \(sev($r;"low")))",
-      "Introduced: \(.counts.introduced)  (🔴 \(sev($i;"critical")) · 🟠 \(sev($i;"high")) · 🟡 \(sev($i;"medium")) · ⚪ \(sev($i;"low")))",
+      "Severity filter: **\($sev)+**", "",
+      "Resolved:   \($r|length)  (🔴 \(sev($r;"critical")) · 🟠 \(sev($r;"high")) · 🟡 \(sev($r;"medium")) · ⚪ \(sev($r;"low")))",
+      "Introduced: \($i|length)  (🔴 \(sev($i;"critical")) · 🟠 \(sev($i;"high")) · 🟡 \(sev($i;"medium")) · ⚪ \(sev($i;"low")))",
       "Persisting: \(.counts.persisting)",
-      "Net change: \(.counts.net)", "",
-      (if .counts.resolved > 0 then
+      "Net change: \(($i|length) - ($r|length))", "",
+      (if ($r|length) > 0 then
         "## Resolved", "",
         "| Sev | Target | Advisory | Package | Installed (before) | Fixed |",
         "| --- | --- | --- | --- | --- | --- |",
         ($r[] | line), ""
        else "## Resolved", "", "_none_", "" end),
-      (if .counts.introduced > 0 then
+      (if ($i|length) > 0 then
         "## Introduced", "",
         "| Sev | Target | Advisory | Package | Installed (after) | Fixed |",
         "| --- | --- | --- | --- | --- | --- |",
