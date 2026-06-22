@@ -78,6 +78,14 @@ func CloneAndCopy(repoURL, branch, commit, subPath, targetDir string, verbose bo
 	if subPath == "" {
 		subPath = urlSubPath
 	}
+	// Guard against argument injection: branch/commit are passed positionally to
+	// git, but a value starting with "-" would be parsed as an option.
+	if err := safeGitRef(branch); err != nil {
+		return err
+	}
+	if err := safeGitRef(commit); err != nil {
+		return err
+	}
 
 	tempDir, err := os.MkdirTemp("", "arctl-git-clone-*")
 	if err != nil {
@@ -121,6 +129,88 @@ func CloneAndCopy(repoURL, branch, commit, subPath, targetDir string, verbose bo
 	}
 
 	return CopyRepoContents(tempDir, subPath, targetDir)
+}
+
+// safeGitRef rejects a ref/branch/commit that git could mis-parse as a
+// command-line option (argument injection): the value must not begin with "-".
+// An empty value is allowed (callers treat it as "unset"). Values are passed
+// positionally to git, never through a shell, so no further quoting is needed.
+func safeGitRef(ref string) error {
+	if strings.HasPrefix(ref, "-") {
+		return fmt.Errorf("invalid git ref %q: must not start with '-'", ref)
+	}
+	return nil
+}
+
+// isFullCommitSHA reports whether s is a full 40-character hex commit SHA.
+func isFullCommitSHA(s string) bool {
+	if len(s) != 40 {
+		return false
+	}
+	for _, r := range s {
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')) {
+			return false
+		}
+	}
+	return true
+}
+
+// ResolveRef resolves a branch, tag, or HEAD to a concrete commit SHA on the
+// remote WITHOUT cloning, using `git ls-remote`. A ref that is already a full
+// 40-char commit SHA is returned unchanged (lowercased). An empty ref (after
+// the URL-embedded branch is considered) resolves the remote's default branch
+// (HEAD). Only github.com URLs are supported (see ParseGitHubURL).
+func ResolveRef(repoURL, ref string) (string, error) {
+	if isFullCommitSHA(ref) {
+		return strings.ToLower(ref), nil
+	}
+	cloneURL, urlBranch, _, err := ParseGitHubURL(repoURL)
+	if err != nil {
+		return "", fmt.Errorf("parse GitHub URL: %w", err)
+	}
+	if ref == "" {
+		ref = urlBranch
+	}
+	lsRef := ref
+	if lsRef == "" {
+		lsRef = "HEAD"
+	}
+	if err := safeGitRef(lsRef); err != nil {
+		return "", err
+	}
+	out, err := exec.Command("git", "ls-remote", cloneURL, lsRef).Output()
+	if err != nil {
+		return "", fmt.Errorf("git ls-remote %s %q: %w", cloneURL, lsRef, err)
+	}
+	sha := firstLSRemoteSHA(string(out))
+	if sha == "" {
+		return "", fmt.Errorf("ref %q not found in %s", lsRef, cloneURL)
+	}
+	return sha, nil
+}
+
+// firstLSRemoteSHA returns the commit SHA from `git ls-remote` output (lines of
+// "<sha>\t<refname>"). When the output carries both an annotated tag and its
+// dereferenced commit ("<tag>^{}"), the dereferenced commit is preferred so the
+// resolved SHA is the actual commit rather than the tag object.
+func firstLSRemoteSHA(out string) string {
+	var first, deref string
+	for _, line := range strings.Split(out, "\n") {
+		fields := strings.Fields(strings.TrimSpace(line))
+		if len(fields) == 0 {
+			continue
+		}
+		if first == "" {
+			first = fields[0]
+		}
+		if len(fields) >= 2 && strings.HasSuffix(fields[1], "^{}") {
+			deref = fields[0]
+		}
+	}
+	if deref != "" {
+		return deref
+	}
+	return first
 }
 
 // resolveSubPath validates and resolves a subPath within repoDir, returning

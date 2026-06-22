@@ -1,4 +1,4 @@
-package store
+package bundle
 
 import (
 	"encoding/json"
@@ -35,8 +35,7 @@ func ParseManifest(b *CanonicalBundle) (*v1alpha1.PluginManifest, error) {
 // sub-agents, commands, MCP servers, hooks, and bin/ executables it actually
 // ships — the legible governance risk surface, derived by scanning bundle files
 // (not the author-supplied manifest). Best-effort: a malformed declarative file
-// is skipped rather than failing the publish. Output is deterministic (sorted)
-// for stable spec hashing.
+// is skipped rather than failing the resolve. Output is deterministic (sorted).
 func BuildInventory(b *CanonicalBundle) *v1alpha1.PluginInventory {
 	m := &v1alpha1.PluginInventory{}
 

@@ -5,11 +5,11 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/plugins/store"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/plugins/bundle"
 )
 
-func richCanonical() *store.CanonicalBundle {
-	return &store.CanonicalBundle{Files: map[string][]byte{
+func richCanonical() *bundle.CanonicalBundle {
+	return &bundle.CanonicalBundle{Files: map[string][]byte{
 		".claude-plugin/plugin.json": []byte(`{"name":"my-plugin","version":"1.0.0"}`), // real manifest: passes through
 		"SKILL.md":                   []byte("---\nname: root\n---\n"),
 		"skills/deploy/SKILL.md":     []byte("---\nname: deploy\n---\n"),
@@ -50,11 +50,6 @@ func TestClaudeCodeRoundTripLossless(t *testing.T) {
 	}
 	if !reflect.DeepEqual(canon.Files, orig.Files) {
 		t.Fatalf("round-trip not lossless")
-	}
-	h1, _ := orig.ContentHash()
-	h2, _ := canon.ContentHash()
-	if h1 != h2 {
-		t.Fatalf("content hash changed across round-trip: %q vs %q", h1, h2)
 	}
 }
 

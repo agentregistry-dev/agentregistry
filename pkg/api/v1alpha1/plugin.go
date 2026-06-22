@@ -4,24 +4,29 @@ package v1alpha1
 //
 // A Plugin is a self-contained, versioned bundle of harness extensions —
 // skills, MCP servers, hooks, and sub-agents — modeled on the Claude Code
-// plugin format. The registry stores a parsed canonical representation of the
-// bundle (see PluginContent) and indexes its contents (see PluginManifest) for
-// search, UI, and governance. Plugins are immutable by tag: the source is
-// resolved and frozen at publish, so a given namespace/name/tag always
-// materializes the same bytes. Translation into a specific harness's on-disk
-// layout happens at pull/deploy time from the canonical form.
+// plugin format. The Spec is USER INTENT ONLY: a pinned pointer to an external
+// source (a git commit or — later — an OCI digest), the same source-based model
+// agents and skills use. The registry hosts NOTHING; the Plugin controller
+// resolves the pointer to a concrete commit/digest and scans the source for its
+// manifest and inventory OUT OF BAND, recording that server-determined data in
+// Status — never in Spec. The bundle is materialized from its source into a
+// harness layout at deploy time.
 type Plugin struct {
 	TypeMeta `json:",inline" yaml:",inline"`
-	Metadata ObjectMeta `json:"metadata" yaml:"metadata"`
-	Spec     PluginSpec `json:"spec" yaml:"spec"`
-	Status   Status     `json:"status,omitzero" yaml:"status,omitempty"`
+	Metadata ObjectMeta   `json:"metadata" yaml:"metadata"`
+	Spec     PluginSpec   `json:"spec" yaml:"spec"`
+	Status   PluginStatus `json:"status,omitzero" yaml:"status,omitempty"`
 }
 
 func init() {
 	MustRegisterKind[*Plugin, PluginSpec](KindPlugin)
 }
 
-// PluginSpec is the plugin resource's declarative body.
+// PluginSpec is the plugin resource's declarative body — USER INTENT ONLY.
+// Server-derived data (the resolved source pin, the parsed Manifest, and the
+// derived Inventory) lives in PluginStatus, populated out of band by the Plugin
+// controller. Keeping it out of the spec means a status write never changes the
+// spec content hash, so re-applying identical intent is an UpsertNoOp.
 type PluginSpec struct {
 	Title       string `json:"title,omitempty" yaml:"title,omitempty"`
 	Description string `json:"description,omitempty" yaml:"description,omitempty"`
@@ -31,28 +36,44 @@ type PluginSpec struct {
 	// other harnesses from the canonical form regardless of what's listed here.
 	Harnesses []string `json:"harnesses,omitempty" yaml:"harnesses,omitempty"`
 
-	// Origin is where the bundle was ingested from, pinned
-	// (resolve-and-freeze at publish) so the tag stays immutable. Required on
-	// publish; retained afterwards as provenance.
+	// Origin is where the bundle is ingested from, pinned (git commit / OCI
+	// digest) so a published tag is reproducible.
 	Origin *PluginOrigin `json:"origin,omitempty" yaml:"origin,omitempty"`
+}
 
-	// Content addresses the canonical bundle the registry stored for this
-	// plugin. Populated by the registry at publish time — not author-supplied.
-	Content *PluginContent `json:"content,omitempty" yaml:"content,omitempty"`
+// PluginStatus is the Plugin observed-state subresource, written by the Plugin
+// controller out of band of the API write. It embeds the shared Status
+// (conditions + observedGeneration) and adds the server-determined resolution
+// data.
+//
+// Readiness contract: consumers MUST treat the absence of a Ready=True condition
+// (or ResolvedSource==nil) as "not yet resolved". The controller sets
+// Ready=False/Reason=Progressing on first observe, Ready=True/Reason=Resolved
+// once the pointer is pinned and the source scanned, and Ready=False with a
+// specific reason (OriginUnresolvable, OriginUnsupported, SourceInvalid) on
+// failure.
+type PluginStatus struct {
+	Status `json:",inline" yaml:",inline"`
 
-	// Manifest is the canonical plugin manifest — a faithful, typed
-	// representation of the bundle's .claude-plugin/plugin.json (the
-	// lingua-franca format, a superset across harnesses). Parsed and populated
-	// by the registry at publish.
+	// ResolvedSource is the controller's immutable pin of the user's origin
+	// pointer (the concrete commit/digest the source resolved to).
+	ResolvedSource *PluginResolvedSource `json:"resolvedSource,omitempty" yaml:"resolvedSource,omitempty"`
+	// Manifest is the canonical typed plugin.json parsed from the source.
 	Manifest *PluginManifest `json:"manifest,omitempty" yaml:"manifest,omitempty"`
-
-	// Inventory is the server-derived index of what the bundle actually ships
-	// (skills, sub-agents, commands, hooks, MCP servers, bin/ executables),
-	// computed by scanning the bundle files. It is the legible risk surface the
-	// approval flow reviews (hooks + executables run arbitrary code) and powers
-	// search. Distinct from Manifest because plugin.json may reference
-	// components by path rather than inline. Populated by the registry at publish.
+	// Inventory is the server-derived risk surface / search index.
 	Inventory *PluginInventory `json:"inventory,omitempty" yaml:"inventory,omitempty"`
+}
+
+// PluginResolvedSource records the concrete, immutable revision the controller
+// pinned the user's origin pointer to. Exactly one of Commit/Digest is set,
+// matching Type. It is the reproducibility anchor: deploys materialize from this
+// pin, not from the (possibly moving) ref the user supplied.
+type PluginResolvedSource struct {
+	Type PluginOriginType `json:"type" yaml:"type"`
+	// Commit is the resolved full git commit SHA (Type=git).
+	Commit string `json:"commit,omitempty" yaml:"commit,omitempty"`
+	// Digest is the resolved OCI digest, e.g. "sha256:…" (Type=oci; future).
+	Digest string `json:"digest,omitempty" yaml:"digest,omitempty"`
 }
 
 // PluginOriginType selects which origin sub-struct is set.
@@ -72,8 +93,10 @@ type PluginOrigin struct {
 	OCI  *PluginOriginOCI `json:"oci,omitempty" yaml:"oci,omitempty"`
 }
 
-// PluginOriginGit is a git source. Repository.Commit must be a full commit SHA
-// so the origin is pinned; Repository.Subfolder selects a plugin inside a
+// PluginOriginGit is a git source. Repository may pin a Commit, a Branch, or a
+// tag (empty => the remote default branch); the Plugin controller resolves
+// whatever ref is supplied to a concrete commit SHA and records that immutable
+// pin in status.ResolvedSource. Repository.Subfolder selects a plugin inside a
 // monorepo.
 type PluginOriginGit struct {
 	Repository *Repository `json:"repository" yaml:"repository"`
@@ -83,17 +106,6 @@ type PluginOriginGit struct {
 // "ghcr.io/org/plugin@sha256:...". Bare/tag-only refs are rejected.
 type PluginOriginOCI struct {
 	Reference string `json:"reference" yaml:"reference"`
-}
-
-// PluginContent addresses the canonical bundle stored by the registry. The
-// canonical form is the portable core (SKILL.md, AGENTS.md, hooks, .mcp.json,
-// sub-agent markdown) from which any target-harness layout is materialized.
-type PluginContent struct {
-	// ContentHash is the sha256 (hex) of the canonical bundle.
-	ContentHash string `json:"contentHash,omitempty" yaml:"contentHash,omitempty"`
-	// OCIRef is the OCI artifact reference where the registry stored the
-	// canonical bundle (digest-pinned).
-	OCIRef string `json:"ociRef,omitempty" yaml:"ociRef,omitempty"`
 }
 
 // PluginInventory is the server-derived index of a bundle's actual contents,

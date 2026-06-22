@@ -150,9 +150,56 @@ func (p *Plugin) MarshalSpec() (json.RawMessage, error) { return json.Marshal(p.
 func (p *Plugin) UnmarshalSpec(data json.RawMessage) error {
 	return json.Unmarshal(data, &p.Spec)
 }
-func (p *Plugin) MarshalStatus() (json.RawMessage, error) { return MarshalStatusForStorage(p.Status) }
+
+// MarshalStatus serializes the typed PluginStatus: the embedded Status via the
+// storage codec, with the server-determined ResolvedSource/Manifest/Inventory
+// spliced onto the same object. Nil custom fields are omitted (no stray nulls)
+// so the store's patch-skip byte comparison stays stable.
+func (p *Plugin) MarshalStatus() (json.RawMessage, error) {
+	base, err := MarshalStatusForStorage(p.Status.Status)
+	if err != nil {
+		return nil, err
+	}
+	m := map[string]json.RawMessage{}
+	if err := json.Unmarshal(base, &m); err != nil {
+		return nil, err
+	}
+	if p.Status.ResolvedSource != nil {
+		if m["resolvedSource"], err = json.Marshal(p.Status.ResolvedSource); err != nil {
+			return nil, err
+		}
+	}
+	if p.Status.Manifest != nil {
+		if m["manifest"], err = json.Marshal(p.Status.Manifest); err != nil {
+			return nil, err
+		}
+	}
+	if p.Status.Inventory != nil {
+		if m["inventory"], err = json.Marshal(p.Status.Inventory); err != nil {
+			return nil, err
+		}
+	}
+	return json.Marshal(m)
+}
+
 func (p *Plugin) UnmarshalStatus(data json.RawMessage) error {
-	return UnmarshalStatusFromStorage(data, &p.Status)
+	if len(data) == 0 {
+		p.Status = PluginStatus{}
+		return nil
+	}
+	if err := UnmarshalStatusFromStorage(data, &p.Status.Status); err != nil {
+		return err
+	}
+	var custom struct {
+		ResolvedSource *PluginResolvedSource `json:"resolvedSource"`
+		Manifest       *PluginManifest       `json:"manifest"`
+		Inventory      *PluginInventory      `json:"inventory"`
+	}
+	if err := json.Unmarshal(data, &custom); err != nil {
+		return err
+	}
+	p.Status.ResolvedSource, p.Status.Manifest, p.Status.Inventory = custom.ResolvedSource, custom.Manifest, custom.Inventory
+	return nil
 }
 
 func (p *Prompt) GetMetadata() *ObjectMeta { return &p.Metadata }

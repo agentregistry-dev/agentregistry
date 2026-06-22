@@ -34,9 +34,17 @@ func TestPluginValidate(t *testing.T) {
 			wantErr: "spec.origin",
 		},
 		{
-			name:    "git origin not pinned to commit",
-			spec:    PluginSpec{Origin: &PluginOrigin{Type: PluginOriginTypeGit, Git: &PluginOriginGit{Repository: &Repository{URL: "https://github.com/org/repo"}}}},
-			wantErr: "commit",
+			name: "git origin with branch only (controller resolves the commit)",
+			spec: PluginSpec{Origin: &PluginOrigin{Type: PluginOriginTypeGit, Git: &PluginOriginGit{Repository: &Repository{URL: "https://github.com/org/repo", Branch: "main"}}}},
+		},
+		{
+			name: "git origin with no ref (controller resolves default branch)",
+			spec: PluginSpec{Origin: &PluginOrigin{Type: PluginOriginTypeGit, Git: &PluginOriginGit{Repository: &Repository{URL: "https://github.com/org/repo"}}}},
+		},
+		{
+			name:    "git origin missing url",
+			spec:    PluginSpec{Origin: &PluginOrigin{Type: PluginOriginTypeGit, Git: &PluginOriginGit{Repository: &Repository{Commit: "abc123def456"}}}},
+			wantErr: "url",
 		},
 		{
 			name:    "oci origin not digest-pinned",

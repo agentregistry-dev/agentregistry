@@ -3,7 +3,7 @@ package translate
 import "strings"
 
 // ComponentKind classifies a canonical bundle path. It mirrors the path
-// recognition in store.ParseManifest exactly (including the bare-"bin/"
+// recognition in bundle.BuildInventory exactly (including the bare-"bin/"
 // exclusion) and adds KindAgentsMd and KindManifest, so the two indexes never
 // disagree. Unrecognized paths are KindOther (default-pass / supporting files).
 type ComponentKind string

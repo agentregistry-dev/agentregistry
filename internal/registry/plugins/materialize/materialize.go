@@ -1,35 +1,29 @@
-// Package materialize turns a stored plugin into an on-disk harness layout. It
-// is the shared hinge between local pull and cloud deploy: pull the canonical
-// bundle from the store, translate it to the target harness's file set, and
-// (optionally) write that set to a directory. It owns no new I/O beyond the
-// store pull and filesystem writes.
+// Package materialize turns a plugin bundle into an on-disk harness layout. It
+// is the shared hinge for deploys: given a CanonicalBundle (loaded from the
+// plugin's source via the source package), translate it to the target harness's
+// file set and (optionally) write that set to a directory. It owns no I/O
+// beyond filesystem writes.
 package materialize
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/plugins/store"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/plugins/bundle"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/plugins/translate"
-	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
-// Plugin pulls the canonical bundle for p from st and translates it into the
-// target harness's on-disk file set. p.Spec.Content.OCIRef must be populated
-// (set by the publish hook). The returned report records anything dropped or
-// transformed for that harness.
-func Plugin(ctx context.Context, st store.Store, p *v1alpha1.Plugin, harness translate.Harness) (map[string][]byte, *translate.TranslationReport, error) {
-	if p == nil || p.Spec.Content == nil || p.Spec.Content.OCIRef == "" {
-		return nil, nil, fmt.Errorf("materialize: plugin %q has no stored content (not published?)", pluginName(p))
+// Plugin translates a canonical bundle into the target harness's on-disk file
+// set. The caller loads the bundle from the plugin's resolved source (see the
+// source package). The returned report records anything dropped or transformed
+// for that harness.
+func Plugin(b *bundle.CanonicalBundle, harness translate.Harness) (map[string][]byte, *translate.TranslationReport, error) {
+	if b == nil {
+		return nil, nil, fmt.Errorf("materialize: nil bundle")
 	}
-	bundle, err := st.Pull(ctx, p.Spec.Content.OCIRef)
-	if err != nil {
-		return nil, nil, fmt.Errorf("materialize: pull canonical bundle: %w", err)
-	}
-	files, rep, err := translate.ToHarness(harness, bundle)
+	files, rep, err := translate.ToHarness(harness, b)
 	if err != nil {
 		return nil, nil, fmt.Errorf("materialize: translate to %s: %w", harness, err)
 	}
@@ -74,11 +68,4 @@ func safeRelPath(p string) error {
 		}
 	}
 	return nil
-}
-
-func pluginName(p *v1alpha1.Plugin) string {
-	if p == nil {
-		return "<nil>"
-	}
-	return p.Metadata.Namespace + "/" + p.Metadata.Name
 }

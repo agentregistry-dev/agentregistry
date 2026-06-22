@@ -19,8 +19,7 @@ func validatePluginSpec(s *PluginSpec) FieldErrors {
 	var errs FieldErrors
 	errs.Append("spec.title", validateTitle(s.Title))
 
-	// Origin is required and must be pinned so the published tag is
-	// reproducible (resolve-and-freeze at publish).
+	// Origin is required: it is the pointer the controller resolves and pins.
 	if s.Origin == nil {
 		errs.Append("spec.origin", fmt.Errorf("%w", ErrRequiredField))
 	} else {
@@ -48,10 +47,9 @@ func validatePluginOrigin(o *PluginOrigin) FieldErrors {
 		if o.Git.Repository.URL == "" {
 			errs.Append("git.repository.url", fmt.Errorf("%w", ErrRequiredField))
 		}
-		// Pin requirement: a published git origin must carry a commit SHA.
-		if o.Git.Repository.Commit == "" {
-			errs.Append("git.repository.commit", fmt.Errorf("%w: git origin must be pinned to a commit", ErrInvalidFormat))
-		}
+		// A branch, tag, or commit may be supplied (empty => the remote default
+		// branch). The controller resolves whatever ref is given to a concrete
+		// commit SHA and records that immutable pin in status.ResolvedSource.
 	case PluginOriginTypeOCI:
 		if o.Git != nil {
 			errs.Append("git", fmt.Errorf("%w: git must be empty when type=oci", ErrInvalidFormat))

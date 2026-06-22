@@ -30,14 +30,6 @@ type Config struct {
 	// Agent Gateway Configuration
 	AgentGatewayPort uint16 `env:"AGENT_GATEWAY_PORT" envDefault:"8081"`
 
-	// Plugin bundle storage. PluginRegistry is the OCI registry the canonical
-	// plugin bundles are stored in (e.g. "ghcr.io" or "localhost:5001"). When
-	// empty, publishing a Plugin fails closed (the apply is rejected) rather
-	// than persisting an un-storable, Content-less row.
-	PluginRegistry         string `env:"PLUGIN_REGISTRY" envDefault:""`
-	PluginRegistryPrefix   string `env:"PLUGIN_REGISTRY_PREFIX" envDefault:"agentregistry/plugins"`
-	PluginRegistryInsecure bool   `env:"PLUGIN_REGISTRY_INSECURE" envDefault:"false"`
-
 	// Runtime Configuration
 	RuntimeDir string `env:"RUNTIME_DIR" envDefault:"/tmp/arctl-runtime"`
 	Verbose    bool   `env:"VERBOSE" envDefault:"false"`

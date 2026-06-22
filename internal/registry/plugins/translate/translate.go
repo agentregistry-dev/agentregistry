@@ -1,5 +1,5 @@
 // Package translate converts plugin bundles between the canonical portable-core
-// form (store.CanonicalBundle) and a concrete harness's on-disk file set.
+// form (bundle.CanonicalBundle) and a concrete harness's on-disk file set.
 //
 // The canonical bundle is a SUPERSET that preserves every file — including the
 // real .claude-plugin/plugin.json manifest — so canonical<->claude-code is
@@ -15,7 +15,7 @@ import (
 	"errors"
 	"sort"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/plugins/store"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/plugins/bundle"
 )
 
 // Harness identifies a harness layout. Values match v1alpha1.PluginSpec.Harnesses.
@@ -46,7 +46,7 @@ var reservedHarnesses = map[Harness]struct{}{
 // It returns a new file map (b.Files is never mutated) plus an always-non-nil
 // report of everything dropped/transformed. It errors only on an unknown/
 // unsupported harness — never on a droppable component.
-func ToHarness(h Harness, b *store.CanonicalBundle) (map[string][]byte, *TranslationReport, error) {
+func ToHarness(h Harness, b *bundle.CanonicalBundle) (map[string][]byte, *TranslationReport, error) {
 	a, err := lookup(h)
 	if err != nil {
 		return nil, nil, err
@@ -63,7 +63,7 @@ func ToHarness(h Harness, b *store.CanonicalBundle) (map[string][]byte, *Transla
 // FromHarness ingests a harness h on-disk file set into a CanonicalBundle
 // (canonical-by-construction: caller hashes via b.Bytes()). It reports any file
 // dropped because it has no canonical home.
-func FromHarness(h Harness, files map[string][]byte) (*store.CanonicalBundle, *TranslationReport, error) {
+func FromHarness(h Harness, files map[string][]byte) (*bundle.CanonicalBundle, *TranslationReport, error) {
 	a, err := lookup(h)
 	if err != nil {
 		return nil, nil, err
@@ -74,7 +74,7 @@ func FromHarness(h Harness, files map[string][]byte) (*store.CanonicalBundle, *T
 		applyMapping(a.MapFromHarness(p), p, files[p], out, rep)
 	}
 	rep.sort()
-	return &store.CanonicalBundle{Files: out}, rep, nil
+	return &bundle.CanonicalBundle{Files: out}, rep, nil
 }
 
 // applyMapping applies one path mapping to out + records report entries.
