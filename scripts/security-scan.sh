@@ -378,13 +378,14 @@ cmd_compare() {
         | sort_by([.target, (0 - rank(.severity)), .package])) as $resolved
     | ([$af[] | select($bkset[ckey] | not)] | unique_by(ckey)
         | sort_by([.target, (0 - rank(.severity)), .package])) as $introduced
-    | (($bk | map(select($akset[.])) | length)) as $persisting
+    | ([$af[] | select($bkset[ckey])] | unique_by(ckey)
+        | sort_by([.target, (0 - rank(.severity)), .package])) as $persistingList
     | { before: $b[0].commit, after: $a[0].commit,
         counts: {
           resolved: ($resolved|length), introduced: ($introduced|length),
-          persisting: $persisting, net: (($introduced|length) - ($resolved|length))
+          persisting: ($persistingList|length), net: (($introduced|length) - ($resolved|length))
         },
-        resolved: $resolved, introduced: $introduced }
+        resolved: $resolved, introduced: $introduced, persisting_findings: $persistingList }
   ' > "${out_json}" || { echo "compare: failed to build ${out_json}" >&2; exit 1; }
 
   jq -r --arg sev "${SEV}" '
@@ -395,12 +396,13 @@ cmd_compare() {
     ({"critical":4,"high":3,"medium":2,"low":1,"all":0}[$sev] // 3) as $min
     | (.resolved | map(select(rank(.severity) >= $min))) as $r
     | (.introduced | map(select(rank(.severity) >= $min))) as $i
+    | ((.persisting_findings // []) | map(select(rank(.severity) >= $min))) as $p
     | "# Security scan compare", "",
       "`\(.before)` -> `\(.after)`", "",
       "Severity filter: **\($sev)+**", "",
       "Resolved:   \($r|length)  (🔴 \(sev($r;"critical")) · 🟠 \(sev($r;"high")) · 🟡 \(sev($r;"medium")) · ⚪ \(sev($r;"low")))",
       "Introduced: \($i|length)  (🔴 \(sev($i;"critical")) · 🟠 \(sev($i;"high")) · 🟡 \(sev($i;"medium")) · ⚪ \(sev($i;"low")))",
-      "Persisting: \(.counts.persisting)",
+      "Unresolved: \($p|length)  (🔴 \(sev($p;"critical")) · 🟠 \(sev($p;"high")) · 🟡 \(sev($p;"medium")) · ⚪ \(sev($p;"low")))",
       "Net change: \(($i|length) - ($r|length))", "",
       (if ($r|length) > 0 then
         "## Resolved", "",
@@ -413,7 +415,13 @@ cmd_compare() {
         "| Sev | Target | Advisory | Package | Installed (after) | Fixed |",
         "| --- | --- | --- | --- | --- | --- |",
         ($i[] | line), ""
-       else "## Introduced", "", "_none_", "" end)
+       else "## Introduced", "", "_none_", "" end),
+      (if ($p|length) > 0 then
+        "## Unresolved", "",
+        "| Sev | Target | Advisory | Package | Installed (after) | Fixed |",
+        "| --- | --- | --- | --- | --- | --- |",
+        ($p[] | line), ""
+       else "## Unresolved", "", "_none_", "" end)
   ' "${out_json}" | tee "${out_md}"
 
   echo
