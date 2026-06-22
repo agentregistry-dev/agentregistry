@@ -241,13 +241,13 @@ test-e2e-docker: local-registry docker docker-tag-as-dev daemon-start
 	@set -e; \
 	  trap '$(MAKE) --no-print-directory daemon-stop-purge >/dev/null 2>&1 || true' EXIT; \
 	  ARCTL_API_BASE_URL=http://localhost:12121/v0 E2E_BACKEND=docker GOOGLE_API_KEY=$(GOOGLE_API_KEY) OPENAI_API_KEY=$(OPENAI_API_KEY) \
-	    $(GOTESTSUM) --format testdox -- -v -tags=e2e -timeout 45m ./e2e/...
+	    $(GOTESTSUM) --format testdox -- -v -tags=e2e -timeout 45m ./test/e2e/...
 
 # Run e2e tests against k8s backend (full Kind cluster setup)
 .PHONY: test-e2e-k8s
 test-e2e-k8s: setup-kind-cluster build-cli
 	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) E2E_BACKEND=k8s GOOGLE_API_KEY=$(GOOGLE_API_KEY) OPENAI_API_KEY=$(OPENAI_API_KEY) \
-	  $(GOTESTSUM) --format testdox -- -v -tags=e2e -timeout 45m ./e2e/...
+	  $(GOTESTSUM) --format testdox -- -v -tags=e2e -timeout 45m ./test/e2e/...
 
 # Run e2e tests (default: k8s)
 .PHONY: test-e2e

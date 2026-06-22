@@ -34,7 +34,7 @@ func TestMain(m *testing.M) {
 	checkPrerequisites()
 
 	// Resolve the arctl binary path once now, before any test calls
-	// t.Chdir / os.Chdir. The relative fallback (`../bin/arctl`) would
+	// t.Chdir / os.Chdir. The relative fallback (`../../bin/arctl`) would
 	// otherwise re-resolve against whatever cwd a test happens to be in.
 	os.Setenv("ARCTL_BINARY", resolveArctlBinaryPath())
 
@@ -170,7 +170,7 @@ func checkPrerequisites() {
 		if _, err := exec.LookPath("kubectl"); err != nil {
 			log.Fatalf("kubectl not found in PATH -- required for k8s e2e tests")
 		}
-		toolsModfile := filepath.Join(testDir(), "..", "tools", "go.mod")
+		toolsModfile := filepath.Join(testDir(), "..", "..", "tools", "go.mod")
 		if out, err := exec.Command("go", "tool", "-modfile="+toolsModfile, "kind", "version").CombinedOutput(); err != nil {
 			log.Fatalf("kind not available via tools/go.mod -- required for k8s e2e tests: %v\n%s", err, out)
 		}
@@ -191,7 +191,7 @@ func testDir() string {
 func resolveArctlBinaryPath() string {
 	bin := os.Getenv("ARCTL_BINARY")
 	if bin == "" {
-		bin = filepath.Join("..", "bin", "arctl")
+		bin = filepath.Join("..", "..", "bin", "arctl")
 	}
 	abs, err := filepath.Abs(bin)
 	if err != nil {
