@@ -16,7 +16,6 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/spf13/cobra"
 
-	"github.com/agentregistry-dev/agentregistry/pkg/cli/annotations"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database/orchestrator"
 )
@@ -57,9 +56,6 @@ func NewCommand(sources ...Source) *cobra.Command {
 		Long: `Apply, roll back, and inspect database migrations independently
 of server startup. Reads ` + dbURLEnv + ` from the environment when
 --db-url is omitted.`,
-		Annotations: map[string]string{
-			annotations.AnnotationSkipTokenResolution: "true",
-		},
 	}
 	cmd.PersistentFlags().StringVar(&state.dbURL, "db-url", "",
 		"PostgreSQL connection URL (defaults to value of "+dbURLEnv+" env var)")
