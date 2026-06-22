@@ -144,7 +144,7 @@ func (a *localDeploymentAdapter) buildDesiredStateFromV1Alpha1(
 
 	switch target := in.Target.(type) {
 	case *v1alpha1.MCPServer:
-		server, err := utils.SpecToPlatformMCPServer(ctx, target.Metadata, target.Spec, utils.MCPServerTranslateOpts{
+		server, err := utils.SpecToRuntimeMCPServer(ctx, target.Metadata, target.Spec, utils.MCPServerTranslateOpts{
 			DeploymentID: deploymentID,
 			EnvValues:    envValues,
 			ArgValues:    argValues,
@@ -159,7 +159,7 @@ func (a *localDeploymentAdapter) buildDesiredStateFromV1Alpha1(
 		if in.Runtime != nil {
 			telemetryEndpoint = in.Runtime.Spec.TelemetryEndpoint
 		}
-		agent, servers, err := utils.SpecToPlatformAgent(ctx, target.Metadata, target.Spec, utils.AgentTranslateOpts{
+		agent, servers, err := utils.SpecToRuntimeAgent(ctx, target.Metadata, target.Spec, utils.AgentTranslateOpts{
 			DeploymentID:      deploymentID,
 			KagentURL:         "http://localhost",
 			DeploymentEnv:     envValues,

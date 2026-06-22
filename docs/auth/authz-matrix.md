@@ -43,9 +43,9 @@ Every deployment lifecycle operation — launching, undeploying, cancelling — 
 | Delete | `DELETE /v0/deployments/{name}?namespace={namespace}` | `Read` + `Deploy` on target |
 | Logs | `GET /v0/deployments/{name}/logs?namespace={namespace}` | `Read` on target |
 
-Agent deployments additionally invoke `Read` on each referenced `skill:{ref}` and `prompt:{ref}` when the platform adapter resolves the agent's manifest before deploying. These reads run under the caller's session (not a system context), so the user triggering the deployment must have `Read` on every manifest-referenced skill and prompt.
+Agent deployments additionally invoke `Read` on each referenced `skill:{ref}` and `prompt:{ref}` when the runtime adapter resolves the agent's manifest before deploying. These reads run under the caller's session (not a system context), so the user triggering the deployment must have `Read` on every manifest-referenced skill and prompt.
 
-**Partial permissions leave stale `Failed` rows.** The Deployment resource row is written before the adapter resolves manifest references. A missing `Read` on any skill/prompt fails inside adapter apply, the caller gets 403, and the row is then patched to a failed condition under system context. No platform resources are created.
+**Partial permissions leave stale `Failed` rows.** The Deployment resource row is written before the adapter resolves manifest references. A missing `Read` on any skill/prompt fails inside adapter apply, the caller gets 403, and the row is then patched to a failed condition under system context. No runtime resources are created.
 
 ## Batch (apply)
 

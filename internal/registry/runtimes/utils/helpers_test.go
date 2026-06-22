@@ -9,7 +9,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
-func TestSpecToPlatformMCPServer_RemoteTransport(t *testing.T) {
+func TestSpecToRuntimeMCPServer_RemoteTransport(t *testing.T) {
 	spec := v1alpha1.MCPServerSpec{
 		Description: "weather",
 		Remote: &v1alpha1.MCPRemote{
@@ -23,11 +23,11 @@ func TestSpecToPlatformMCPServer_RemoteTransport(t *testing.T) {
 	}
 	meta := v1alpha1.ObjectMeta{Namespace: "default", Name: "weather", Tag: "1.0.0"}
 
-	got, err := SpecToPlatformMCPServer(context.Background(), meta, spec, MCPServerTranslateOpts{
+	got, err := SpecToRuntimeMCPServer(context.Background(), meta, spec, MCPServerTranslateOpts{
 		DeploymentID: "dep-1",
 	})
 	if err != nil {
-		t.Fatalf("SpecToPlatformMCPServer: %v", err)
+		t.Fatalf("SpecToRuntimeMCPServer: %v", err)
 	}
 	if got.MCPServerType != runtimetypes.MCPServerTypeRemote {
 		t.Fatalf("MCPServerType = %q, want %q", got.MCPServerType, runtimetypes.MCPServerTypeRemote)
@@ -49,7 +49,7 @@ func TestSpecToPlatformMCPServer_RemoteTransport(t *testing.T) {
 	}
 }
 
-func TestSpecToPlatformMCPServer_OCIPackage(t *testing.T) {
+func TestSpecToRuntimeMCPServer_OCIPackage(t *testing.T) {
 	spec := v1alpha1.MCPServerSpec{
 		Source: &v1alpha1.MCPServerSource{
 			Package: &v1alpha1.MCPPackage{
@@ -64,9 +64,9 @@ func TestSpecToPlatformMCPServer_OCIPackage(t *testing.T) {
 	}
 	meta := v1alpha1.ObjectMeta{Namespace: "default", Name: "example", Tag: "0.1.0"}
 
-	got, err := SpecToPlatformMCPServer(context.Background(), meta, spec, MCPServerTranslateOpts{DeploymentID: "dep-2"})
+	got, err := SpecToRuntimeMCPServer(context.Background(), meta, spec, MCPServerTranslateOpts{DeploymentID: "dep-2"})
 	if err != nil {
-		t.Fatalf("SpecToPlatformMCPServer: %v", err)
+		t.Fatalf("SpecToRuntimeMCPServer: %v", err)
 	}
 	if got.MCPServerType != runtimetypes.MCPServerTypeLocal {
 		t.Fatalf("MCPServerType = %q", got.MCPServerType)
@@ -76,7 +76,7 @@ func TestSpecToPlatformMCPServer_OCIPackage(t *testing.T) {
 	}
 }
 
-func TestSpecToPlatformMCPServer_NamespaceOptOverridesMeta(t *testing.T) {
+func TestSpecToRuntimeMCPServer_NamespaceOptOverridesMeta(t *testing.T) {
 	spec := v1alpha1.MCPServerSpec{
 		Source: &v1alpha1.MCPServerSource{
 			Package: &v1alpha1.MCPPackage{
@@ -91,19 +91,19 @@ func TestSpecToPlatformMCPServer_NamespaceOptOverridesMeta(t *testing.T) {
 	}
 	meta := v1alpha1.ObjectMeta{Namespace: "team-a", Name: "example", Tag: "1.0.0"}
 
-	got, err := SpecToPlatformMCPServer(context.Background(), meta, spec, MCPServerTranslateOpts{
+	got, err := SpecToRuntimeMCPServer(context.Background(), meta, spec, MCPServerTranslateOpts{
 		DeploymentID: "dep-3",
-		Namespace:    "platform",
+		Namespace:    "runtime",
 	})
 	if err != nil {
-		t.Fatalf("SpecToPlatformMCPServer: %v", err)
+		t.Fatalf("SpecToRuntimeMCPServer: %v", err)
 	}
-	if got.Namespace != "platform" {
-		t.Fatalf("Namespace = %q, want platform (opts override)", got.Namespace)
+	if got.Namespace != "runtime" {
+		t.Fatalf("Namespace = %q, want runtime (opts override)", got.Namespace)
 	}
 }
 
-func TestSpecToPlatformAgent_ResolvesMCPServerRefs(t *testing.T) {
+func TestSpecToRuntimeAgent_ResolvesMCPServerRefs(t *testing.T) {
 	mcp := &v1alpha1.MCPServer{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindMCPServer},
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "tools", Tag: "1.0.0"},
@@ -136,14 +136,14 @@ func TestSpecToPlatformAgent_ResolvesMCPServerRefs(t *testing.T) {
 		},
 	}
 
-	agent, servers, err := SpecToPlatformAgent(context.Background(), agentMeta, agentSpec, AgentTranslateOpts{
+	agent, servers, err := SpecToRuntimeAgent(context.Background(), agentMeta, agentSpec, AgentTranslateOpts{
 		DeploymentID:  "dep-42",
 		KagentURL:     "http://localhost",
 		DeploymentEnv: map[string]string{"EXTRA": "value"},
 		Getter:        getter,
 	})
 	if err != nil {
-		t.Fatalf("SpecToPlatformAgent: %v", err)
+		t.Fatalf("SpecToRuntimeAgent: %v", err)
 	}
 	if len(getterCalls) != 1 {
 		t.Fatalf("getter calls = %d, want 1", len(getterCalls))
@@ -176,7 +176,7 @@ func TestSpecToPlatformAgent_ResolvesMCPServerRefs(t *testing.T) {
 	}
 }
 
-func TestSpecToPlatformAgent_ResolvesRemoteMCPServerHeaders(t *testing.T) {
+func TestSpecToRuntimeAgent_ResolvesRemoteMCPServerHeaders(t *testing.T) {
 	remote := &v1alpha1.MCPServer{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindMCPServer},
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "remote-tools", Tag: "1.0.0"},
@@ -195,7 +195,7 @@ func TestSpecToPlatformAgent_ResolvesRemoteMCPServerHeaders(t *testing.T) {
 		return remote, nil
 	}
 
-	agent, servers, err := SpecToPlatformAgent(
+	agent, servers, err := SpecToRuntimeAgent(
 		context.Background(),
 		v1alpha1.ObjectMeta{Namespace: "default", Name: "alice", Tag: "1.0.0"},
 		v1alpha1.AgentSpec{
@@ -212,7 +212,7 @@ func TestSpecToPlatformAgent_ResolvesRemoteMCPServerHeaders(t *testing.T) {
 		},
 	)
 	if err != nil {
-		t.Fatalf("SpecToPlatformAgent: %v", err)
+		t.Fatalf("SpecToRuntimeAgent: %v", err)
 	}
 	if len(servers) != 1 || servers[0].Remote == nil {
 		t.Fatalf("resolved remote servers unexpected: %+v", servers)
@@ -234,26 +234,26 @@ func TestSpecToPlatformAgent_ResolvesRemoteMCPServerHeaders(t *testing.T) {
 	}
 }
 
-func TestSpecToPlatformAgent_NamespaceOptWinsOverMeta(t *testing.T) {
+func TestSpecToRuntimeAgent_NamespaceOptWinsOverMeta(t *testing.T) {
 	getter := func(ctx context.Context, ref v1alpha1.ResourceRef) (v1alpha1.Object, error) {
 		t.Fatalf("getter should not be called when no refs; got %+v", ref)
 		return nil, nil
 	}
 	agentMeta := v1alpha1.ObjectMeta{Namespace: "team-a", Name: "alice", Tag: "1.0.0"}
-	agent, _, err := SpecToPlatformAgent(context.Background(), agentMeta, v1alpha1.AgentSpec{}, AgentTranslateOpts{
+	agent, _, err := SpecToRuntimeAgent(context.Background(), agentMeta, v1alpha1.AgentSpec{}, AgentTranslateOpts{
 		DeploymentID: "dep-ns",
 		Namespace:    "kagent",
 		Getter:       getter,
 	})
 	if err != nil {
-		t.Fatalf("SpecToPlatformAgent: %v", err)
+		t.Fatalf("SpecToRuntimeAgent: %v", err)
 	}
 	if agent.Deployment.Env["KAGENT_NAMESPACE"] != "kagent" {
 		t.Fatalf("KAGENT_NAMESPACE = %q, want kagent", agent.Deployment.Env["KAGENT_NAMESPACE"])
 	}
 }
 
-func TestSpecToPlatformAgent_DanglingRefPropagates(t *testing.T) {
+func TestSpecToRuntimeAgent_DanglingRefPropagates(t *testing.T) {
 	getter := func(ctx context.Context, ref v1alpha1.ResourceRef) (v1alpha1.Object, error) {
 		return nil, v1alpha1.ErrDanglingRef
 	}
@@ -263,7 +263,7 @@ func TestSpecToPlatformAgent_DanglingRefPropagates(t *testing.T) {
 			{Kind: v1alpha1.KindMCPServer, Name: "missing", Tag: "1.0.0"},
 		},
 	}
-	_, _, err := SpecToPlatformAgent(context.Background(), agentMeta, agentSpec, AgentTranslateOpts{Getter: getter})
+	_, _, err := SpecToRuntimeAgent(context.Background(), agentMeta, agentSpec, AgentTranslateOpts{Getter: getter})
 	if err == nil {
 		t.Fatalf("expected error for dangling ref")
 	}
