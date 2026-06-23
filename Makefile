@@ -548,26 +548,26 @@ release-cli: bin/arctl-windows-amd64.exe.sha256
 
 # Security scans (snyk/trivy/grype) over the source tree and built images,
 # written to scans/<git-hash>/. Toggle scanners with
-# DISABLE_{SNYK,TRIVY,GRYPE}_SECURITY_SCAN=1. Set SEV=critical|high|medium|low|all
+# DISABLE_{SNYK,TRIVY,GRYPE}_SECURITY_SCAN=1. Set SCAN_SEV=critical|high|medium|low|all
 # to control the minimum severity shown in the summary/compare (default high).
 # Image scans need the images built locally first (make docker docker-tag-as-dev).
 SCANS_DIR ?= scans
 
 .PHONY: security-scan
-security-scan: ## Run snyk/trivy/grype security scans (missing tools warn and skip; SEV=<level> filters output)
+security-scan: ## Run snyk/trivy/grype security scans (missing tools warn and skip; SCAN_SEV=<level> filters output)
 	SCANS_DIR="$(SCANS_DIR)" \
 	GIT_COMMIT="$(GIT_COMMIT)" \
-	SERVER_IMAGE="$(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION)" \
-	AGENTGATEWAY_IMAGE="$(DOCKER_REGISTRY)/$(DOCKER_REPO)/arctl-agentgateway:$(VERSION)" \
+	SCAN_EXCLUDE_DIRS="tools bin node_modules" \
+	SCAN_IMAGES="image-server=$(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION) image-agentgateway=$(DOCKER_REGISTRY)/$(DOCKER_REPO)/arctl-agentgateway:$(VERSION)" \
 	DISABLE_SNYK_SECURITY_SCAN="$(DISABLE_SNYK_SECURITY_SCAN)" \
 	DISABLE_TRIVY_SECURITY_SCAN="$(DISABLE_TRIVY_SECURITY_SCAN)" \
 	DISABLE_GRYPE_SECURITY_SCAN="$(DISABLE_GRYPE_SECURITY_SCAN)" \
-	SEV="$(SEV)" \
+	SCAN_SEV="$(SCAN_SEV)" \
 	bash ./scripts/security-scan.sh scan
 
 .PHONY: security-scan-compare
-security-scan-compare: ## Diff two scan runs (BEFORE=<git-hash> AFTER=<git-hash>): resolved vs introduced findings (SEV=<level> filters)
-	@SCANS_DIR="$(SCANS_DIR)" SEV="$(SEV)" bash ./scripts/security-scan.sh compare "$(BEFORE)" "$(AFTER)"
+security-scan-compare: ## Diff two scan runs (BEFORE=<git-hash> AFTER=<git-hash>): resolved vs introduced findings (SCAN_SEV=<level> filters)
+	@SCANS_DIR="$(SCANS_DIR)" SCAN_SEV="$(SCAN_SEV)" bash ./scripts/security-scan.sh compare "$(BEFORE)" "$(AFTER)"
 
 .PHONY: lint
 lint: ## Run the linter (set GOLANGCI_LINT_ARGS=--fix for local auto-fix)

@@ -19,8 +19,8 @@
 # Inputs from the Makefile targets:
 #   GIT_COMMIT          short git hash, names the per-run folder
 #   SCANS_DIR           root output directory (default: scans)
-#   SERVER_IMAGE        server image ref to scan (optional)
-#   AGENTGATEWAY_IMAGE  agentgateway image ref to scan (optional)
+#   SCAN_IMAGES         space-separated "target-name=image-ref" pairs to scan (optional)
+#   SCAN_EXCLUDE_DIRS   space-separated dir names excluded from the deps scan (optional)
 
 set -o pipefail
 
@@ -29,16 +29,19 @@ GIT_COMMIT="${GIT_COMMIT:-$(git rev-parse --short HEAD 2>/dev/null || echo unkno
 TS="$(date -u '+%Y%m%dT%H%M%SZ')"
 RUN_DIR="${SCANS_DIR}/${GIT_COMMIT}"
 
-# Image refs to scan. Empty values are simply skipped.
-SERVER_IMAGE="${SERVER_IMAGE:-}"
-AGENTGATEWAY_IMAGE="${AGENTGATEWAY_IMAGE:-}"
+# Scan config — all repo-specific values come from env (see the Makefile's
+# security-scan target); the script itself stays generic, no built-in defaults.
+# SCAN_EXCLUDE_DIRS: space-separated dir names excluded from the deps scan, matched at any depth.
+SCAN_EXCLUDE_DIRS="${SCAN_EXCLUDE_DIRS:-}"
+# SCAN_IMAGES: space-separated "target-name=image-ref" pairs; empty refs are skipped.
+read -ra SCAN_IMAGES <<< "${SCAN_IMAGES:-}"
 
 # Minimum severity rendered in the condensed summary and compare output ("sev and
 # above"); raw per-scanner JSON is always kept full. One of: critical|high|medium|low|all.
-SEV="${SEV:-high}"
-case "${SEV}" in
+SCAN_SEV="${SCAN_SEV:-high}"
+case "${SCAN_SEV}" in
   critical|high|medium|low|all) ;;
-  *) echo "⚠️  invalid SEV='${SEV}' (expected critical|high|medium|low|all); defaulting to high" >&2; SEV="high" ;;
+  *) echo "⚠️  invalid SCAN_SEV='${SCAN_SEV}' (expected critical|high|medium|low|all); defaulting to high" >&2; SCAN_SEV="high" ;;
 esac
 
 # Scratch dir for transient artifacts (snyk image archives). Removed on any
@@ -84,6 +87,24 @@ image_present() {
   docker image inspect "$1" >/dev/null 2>&1
 }
 
+# Populate the global array EXCLUDE_ARGS with scanner-specific flags built from
+# SCAN_EXCLUDE_DIRS. Quoted array use at the call site keeps the **/ globs from
+# being pathname-expanded by the shell.
+build_exclude_args() {
+  # build_exclude_args <snyk|trivy|grype>
+  local dir csv=""
+  EXCLUDE_ARGS=()
+  case "$1" in
+    snyk)
+      for dir in ${SCAN_EXCLUDE_DIRS}; do csv="${csv:+${csv},}${dir}"; done
+      [ -n "${csv}" ] && EXCLUDE_ARGS=(--exclude="${csv}") ;;
+    trivy)
+      for dir in ${SCAN_EXCLUDE_DIRS}; do EXCLUDE_ARGS+=(--skip-dirs "**/${dir}"); done ;;
+    grype)
+      for dir in ${SCAN_EXCLUDE_DIRS}; do EXCLUDE_ARGS+=(--exclude "**/${dir}/**"); done ;;
+  esac
+}
+
 # ── snyk ─────────────────────────────────────────────────────────────────────
 
 run_snyk() {
@@ -102,13 +123,16 @@ run_snyk() {
 
   section "snyk: dependency scan (source tree: go.mod + ui lockfiles)"
   local deps_report; deps_report="$(report_path snyk deps)"
-  # Skip tools/, bin/, and node_modules/ (deps come from the committed lockfile).
+  # Excludes from SCAN_EXCLUDE_DIRS (deps come from the committed lockfile).
   # --json-file-output prints human-readable output to stdout AND writes JSON.
-  snyk test --all-projects --exclude=tools,bin,node_modules --json-file-output="${deps_report}" || true
+  build_exclude_args snyk
+  snyk test --all-projects "${EXCLUDE_ARGS[@]}" --json-file-output="${deps_report}" || true
   [ -f "${deps_report}" ] && record "${deps_report}"
 
-  scan_snyk_image "${SERVER_IMAGE}" "image-server"
-  scan_snyk_image "${AGENTGATEWAY_IMAGE}" "image-agentgateway"
+  local entry
+  for entry in "${SCAN_IMAGES[@]}"; do
+    scan_snyk_image "${entry#*=}" "${entry%%=*}"
+  done
 }
 
 scan_snyk_image() {
@@ -149,16 +173,19 @@ run_trivy() {
 
   section "trivy: dependency scan (source tree: go.mod + ui lockfiles)"
   local deps_report; deps_report="$(report_path trivy deps)"
-  # Skip tools/, bin/, and node_modules/ (deps come from the committed lockfile).
-  trivy fs --scanners vuln --skip-dirs tools --skip-dirs bin --skip-dirs '**/node_modules' --format json --output "${deps_report}" . || true
+  # Excludes from SCAN_EXCLUDE_DIRS (deps come from the committed lockfile).
+  build_exclude_args trivy
+  trivy fs --scanners vuln "${EXCLUDE_ARGS[@]}" --format json --output "${deps_report}" . || true
   if [ -f "${deps_report}" ]; then
     record "${deps_report}"
     # Render the JSON report to the terminal without rescanning.
     trivy convert --format table "${deps_report}" || true
   fi
 
-  scan_trivy_image "${SERVER_IMAGE}" "image-server"
-  scan_trivy_image "${AGENTGATEWAY_IMAGE}" "image-agentgateway"
+  local entry
+  for entry in "${SCAN_IMAGES[@]}"; do
+    scan_trivy_image "${entry#*=}" "${entry%%=*}"
+  done
 }
 
 scan_trivy_image() {
@@ -191,13 +218,16 @@ run_grype() {
 
   section "grype: dependency scan (source tree: go.mod + ui lockfiles)"
   local deps_report; deps_report="$(report_path grype deps)"
-  # Skip tools/, bin/, and node_modules/ (deps come from the committed lockfile).
+  # Excludes from SCAN_EXCLUDE_DIRS (deps come from the committed lockfile).
   # -o table streams to stdout; -o json=<file> writes the typed report.
-  grype dir:. --exclude './tools/**' --exclude './bin/**' --exclude '**/node_modules/**' -o table -o "json=${deps_report}" || true
+  build_exclude_args grype
+  grype dir:. "${EXCLUDE_ARGS[@]}" -o table -o "json=${deps_report}" || true
   [ -f "${deps_report}" ] && record "${deps_report}"
 
-  scan_grype_image "${SERVER_IMAGE}" "image-server"
-  scan_grype_image "${AGENTGATEWAY_IMAGE}" "image-agentgateway"
+  local entry
+  for entry in "${SCAN_IMAGES[@]}"; do
+    scan_grype_image "${entry#*=}" "${entry%%=*}"
+  done
 }
 
 scan_grype_image() {
@@ -320,7 +350,7 @@ JQ
         findings: $findings }
   ' "${records}" > "${CONDENSED_JSON}" || { warn "condense: failed to build summary JSON"; return 0; }
 
-  jq -r --arg sev "${SEV}" '
+  jq -r --arg sev "${SCAN_SEV}" '
     def emoji($s): {"critical":"🔴","high":"🟠","medium":"🟡","low":"⚪","unknown":"❔"}[$s] // "❔";
     def rank($s): {"critical":4,"high":3,"medium":2,"low":1,"unknown":0}[$s] // 0;
     ({"critical":4,"high":3,"medium":2,"low":1,"all":0}[$sev] // 3) as $min
@@ -388,7 +418,7 @@ cmd_compare() {
         resolved: $resolved, introduced: $introduced, persisting_findings: $persistingList }
   ' > "${out_json}" || { echo "compare: failed to build ${out_json}" >&2; exit 1; }
 
-  jq -r --arg sev "${SEV}" '
+  jq -r --arg sev "${SCAN_SEV}" '
     def sev($arr; $s): ($arr | map(select(.severity == $s)) | length);
     def emoji($s): {"critical":"🔴","high":"🟠","medium":"🟡","low":"⚪","unknown":"❔"}[$s] // "❔";
     def rank($s): {"critical":4,"high":3,"medium":2,"low":1,"unknown":0}[$s] // 0;
