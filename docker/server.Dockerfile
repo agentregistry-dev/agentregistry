@@ -68,7 +68,7 @@ RUN set -eux; \
         (*) echo "x86_64" ;; \
     esac); \
     COMPOSE_NAME=docker-compose-linux-${COMPOSE_ARCH}; \
-    COMPOSE_URL=https://github.com/docker/compose/releases/download/v5.1.4; \
+    COMPOSE_URL=https://github.com/docker/compose/releases/download/v5.2.0; \
     COMPOSE_DIR=/tmp/docker-compose-download; \
     for attempt in 1 2 3 4 5; do \
         rm -rf ${COMPOSE_DIR}; \
