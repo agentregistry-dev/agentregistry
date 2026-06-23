@@ -1,6 +1,6 @@
 //go:build e2e
 
-// e2e/init_build_run_test.go
+// test/e2e/init_build_run_test.go
 package e2e
 
 import (
