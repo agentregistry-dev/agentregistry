@@ -51,16 +51,17 @@ type AgentSource struct {
 
 	// Harness declares a harness-based agent (the first-class deployment
 	// model). When set, the agent runs a coding harness (Claude Code, Codex,
-	// OpenCode, ...) materialized from the referenced plugins/skills/MCP
-	// servers rather than a prebuilt container. Mutually exclusive with Image.
+	// OpenCode, ...) materialized from the referenced plugins and optional
+	// instructions rather than a prebuilt container. Mutually exclusive with
+	// Image. MCP wiring stays on AgentSpec.MCPServers.
 	Harness *HarnessConfig `json:"harness,omitempty" yaml:"harness,omitempty"`
 }
 
 // HarnessConfig declares a harness-based agent. At deploy time the registry
-// materializes the referenced plugins (and any individual skills) into the
-// on-disk layout the harness Type expects, wires the MCP servers, and runs the
-// harness behind the target platform's invocation contract. Model routing
-// reuses AgentSpec.ModelProvider / ModelName.
+// materializes the referenced plugins into the on-disk layout the harness Type
+// expects, applies optional instructions, and runs the harness behind the target
+// platform's invocation contract. Model routing reuses AgentSpec.ModelProvider /
+// ModelName, and MCP wiring reuses AgentSpec.MCPServers.
 type HarnessConfig struct {
 	// Type is the harness to run, e.g. "claude-code", "codex", "opencode".
 	Type string `json:"type" yaml:"type"`
@@ -70,12 +71,6 @@ type HarnessConfig struct {
 
 	// Plugins are materialized into the harness filesystem at deploy time.
 	Plugins []ResourceRef `json:"plugins,omitempty" yaml:"plugins,omitempty"`
-
-	// Skills are individual skills materialized alongside any plugins.
-	Skills []ResourceRef `json:"skills,omitempty" yaml:"skills,omitempty"`
-
-	// MCPServers wires top-level MCPServer resources into the harness.
-	MCPServers []ResourceRef `json:"mcpServers,omitempty" yaml:"mcpServers,omitempty"`
 
 	// Instructions references a Prompt providing the system prompt / AGENTS.md.
 	Instructions *ResourceRef `json:"instructions,omitempty" yaml:"instructions,omitempty"`

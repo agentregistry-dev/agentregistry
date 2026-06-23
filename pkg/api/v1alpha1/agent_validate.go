@@ -38,8 +38,6 @@ func (a *Agent) ResolveRefs(ctx context.Context, resolver ResolverFunc) error {
 	if a.Spec.Source != nil && a.Spec.Source.Harness != nil {
 		h := a.Spec.Source.Harness
 		errs = append(errs, resolveHarnessRefs(ctx, resolver, a.Metadata.Namespace, "spec.source.harness.plugins", h.Plugins, KindPlugin)...)
-		errs = append(errs, resolveHarnessRefs(ctx, resolver, a.Metadata.Namespace, "spec.source.harness.skills", h.Skills, KindSkill)...)
-		errs = append(errs, resolveHarnessRefs(ctx, resolver, a.Metadata.Namespace, "spec.source.harness.mcpServers", h.MCPServers, KindMCPServer)...)
 		if h.Instructions != nil {
 			errs = append(errs, resolveHarnessRefs(ctx, resolver, a.Metadata.Namespace, "spec.source.harness.instructions", []ResourceRef{*h.Instructions}, KindPrompt)...)
 		}
@@ -107,16 +105,14 @@ func validateAgentSpec(s *AgentSpec) FieldErrors {
 }
 
 // validateHarnessConfig runs structural checks on a harness-based agent's
-// source: a harness Type is required, and every referenced plugin/skill/MCP
-// server/instructions ref must be well-formed and name the expected kind.
+// source: a harness Type is required, and every referenced plugin/instructions
+// ref must be well-formed and name the expected kind.
 func validateHarnessConfig(h *HarnessConfig) FieldErrors {
 	var errs FieldErrors
 	if h.Type == "" {
 		errs.Append("spec.source.harness.type", fmt.Errorf("%w", ErrRequiredField))
 	}
 	errs = append(errs, validateHarnessRefs("spec.source.harness.plugins", h.Plugins, KindPlugin)...)
-	errs = append(errs, validateHarnessRefs("spec.source.harness.skills", h.Skills, KindSkill)...)
-	errs = append(errs, validateHarnessRefs("spec.source.harness.mcpServers", h.MCPServers, KindMCPServer)...)
 	if h.Instructions != nil {
 		// Default in place so the persisted ref carries the kind (see below);
 		// the copy passed to validateHarnessRefs then already has it.

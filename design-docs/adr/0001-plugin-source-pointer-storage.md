@@ -1,8 +1,8 @@
 # ADR 0001 — Plugins are pinned source pointers, not registry-hosted bundles
 
-- **Status:** Proposed — *pending team ratification*. **Supersedes decision D2** ("OCI artifacts for both: canonical store + materialized output") from the 2026-06-16 plugins/harness design review.
+- **Status:** Accepted. **Supersedes decision D2** ("OCI artifacts for both: canonical store + materialized output") from the 2026-06-16 plugins/harness design review.
 - **Date:** 2026-06-22
-- **Code:** landed behind draft PR #554 (`ilackarms/plugins-harness`), commit `5c09ada9`, marked *storage pivot — pending ratification*.
+- **Code:** landed behind draft PR #554 (`ilackarms/plugins-harness`), starting at commit `5c09ada9`.
 
 ## Context
 
@@ -146,13 +146,12 @@ mechanism today (this is Claude Code-specific).
   `SourceInvalid`. No external consumers exist yet.
 - **New runtime dependency:** the controller and (later) deploys shell out to
   `git` server-side. Only github.com is supported initially (matches skills).
-  Clone resource-bounds (size/time/file-count) are a required follow-up before
-  this is production-safe.
+  Resolve/clone is bounded by context timeout plus file-count/byte ceilings.
 
 ## Status / ratification
 
-This ADR **reverses confirmed decision D2** and therefore needs team
-ratification before the lane proceeds past resolve-and-pin. The code is landed
-behind draft PR #554 (marked *pending ratification*) so CI runs and reviewers
-see real code. Marketplace serving (1e) and arctl integration (1f) are **held**
-until this is ratified.
+This ADR **reverses confirmed decision D2** and records the accepted
+source-pointer model. The code is landed behind draft PR #554 so CI runs and
+reviewers see real code. Marketplace serving (1e), arctl integration (1f), and
+cloud deploy-time materialization proceed as follow-on work on top of this
+foundation.

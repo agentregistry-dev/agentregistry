@@ -140,9 +140,7 @@ export type HttpHeader = {
 
 export type HarnessConfig = {
     instructions?: ResourceRef;
-    mcpServers?: Array<ResourceRef> | null;
     plugins?: Array<ResourceRef> | null;
-    skills?: Array<ResourceRef> | null;
     type: string;
     version?: string;
 };

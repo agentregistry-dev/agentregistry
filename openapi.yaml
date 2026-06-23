@@ -258,19 +258,7 @@ components:
       properties:
         instructions:
           $ref: '#/components/schemas/ResourceRef'
-        mcpServers:
-          items:
-            $ref: '#/components/schemas/ResourceRef'
-          type:
-          - array
-          - "null"
         plugins:
-          items:
-            $ref: '#/components/schemas/ResourceRef'
-          type:
-          - array
-          - "null"
-        skills:
           items:
             $ref: '#/components/schemas/ResourceRef'
           type:

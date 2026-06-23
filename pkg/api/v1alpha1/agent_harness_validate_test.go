@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -88,8 +89,6 @@ func TestHarnessRefKindDefaultingPersists(t *testing.T) {
 				Harness: &HarnessConfig{
 					Type:         "claude-code",
 					Plugins:      []ResourceRef{{Name: "plugin-a"}},
-					Skills:       []ResourceRef{{Name: "skill-a"}},
-					MCPServers:   []ResourceRef{{Name: "mcp-a"}},
 					Instructions: &ResourceRef{Name: "instr-a"},
 				},
 			},
@@ -102,13 +101,20 @@ func TestHarnessRefKindDefaultingPersists(t *testing.T) {
 	h := a.Spec.Source.Harness
 	for _, c := range []struct{ field, got, want string }{
 		{"harness.plugins", h.Plugins[0].Kind, KindPlugin},
-		{"harness.skills", h.Skills[0].Kind, KindSkill},
-		{"harness.mcpServers", h.MCPServers[0].Kind, KindMCPServer},
 		{"harness.instructions", h.Instructions.Kind, KindPrompt},
 		{"spec.mcpServers", a.Spec.MCPServers[0].Kind, KindMCPServer},
 	} {
 		if c.got != c.want {
 			t.Errorf("%s: kind not defaulted in place: got %q, want %q", c.field, c.got, c.want)
+		}
+	}
+}
+
+func TestHarnessConfigExposesOnlyPhase1Refs(t *testing.T) {
+	harnessType := reflect.TypeOf(HarnessConfig{})
+	for _, removed := range []string{"Skills", "MCPServers"} {
+		if _, ok := harnessType.FieldByName(removed); ok {
+			t.Fatalf("HarnessConfig must not expose %s in Phase 1; use plugins/instructions plus top-level AgentSpec.MCPServers", removed)
 		}
 	}
 }
