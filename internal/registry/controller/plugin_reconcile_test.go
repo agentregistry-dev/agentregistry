@@ -18,8 +18,9 @@ import (
 // fakePluginStore captures status patches by replaying the raw-JSON callback,
 // so reconcile/patchStatus can be tested with no database.
 type fakePluginStore struct {
-	status  map[string]json.RawMessage
-	reasons []string // Ready-condition reasons, in apply order
+	status   map[string]json.RawMessage
+	reasons  []string // Ready-condition reasons, in apply order
+	listRows []*v1alpha1.RawObject
 }
 
 func newFakePluginStore() *fakePluginStore {
@@ -33,7 +34,7 @@ func (f *fakePluginStore) Get(context.Context, string, string, string) (*v1alpha
 }
 
 func (f *fakePluginStore) List(context.Context, v1alpha1store.ListOpts) ([]*v1alpha1.RawObject, string, error) {
-	return nil, "", nil
+	return f.listRows, "", nil // single page
 }
 
 func (f *fakePluginStore) ApplyPatch(_ context.Context, ns, name, tag string, patch v1alpha1store.PatchOpts) error {
@@ -77,6 +78,31 @@ func readyReason(p *v1alpha1.Plugin) string {
 		return c.Reason
 	}
 	return ""
+}
+
+// TestEnqueueAllSkipsUndecodableRow guards the resilience fix: one row that
+// fails to decode must be skipped (logged), not abort the whole enqueue pass.
+func TestEnqueueAllSkipsUndecodableRow(t *testing.T) {
+	rawOf := func(name string, spec string) *v1alpha1.RawObject {
+		return &v1alpha1.RawObject{
+			TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindPlugin},
+			Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: name, Tag: "v1", Generation: 1},
+			Spec:     json.RawMessage(spec),
+		}
+	}
+	store := newFakePluginStore()
+	store.listRows = []*v1alpha1.RawObject{
+		rawOf("bad", `not json`),                   // EnvelopeFromRaw fails -> skip
+		rawOf("good", `{"origin":{"type":"git"}}`), // valid, needs reconcile -> enqueue
+	}
+	c := &PluginController{Store: store, Resolver: fakeResolver{}}
+
+	if err := c.enqueueAll(context.Background()); err != nil {
+		t.Fatalf("enqueueAll must not error on an undecodable row, got %v", err)
+	}
+	if n := c.workQueue().Len(); n != 1 {
+		t.Fatalf("expected only the good row enqueued, queue len = %d", n)
+	}
 }
 
 func TestPluginReconcile(t *testing.T) {
