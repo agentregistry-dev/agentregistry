@@ -21,22 +21,32 @@ func TestFirstLSRemoteSHA(t *testing.T) {
 	tests := []struct {
 		name string
 		in   string
+		ref  string
 		want string
 	}{
-		{"branch", "deadbeef\trefs/heads/main\n", "deadbeef"},
-		{"empty", "", ""},
-		{"blank lines", "\n  \n", ""},
+		{"branch", "deadbeef\trefs/heads/main\n", "main", "deadbeef"},
+		{"empty", "", "main", ""},
+		{"blank lines", "\n  \n", "main", ""},
 		{
 			name: "annotated tag prefers dereferenced commit",
 			in:   "1111111\trefs/tags/v1\n2222222\trefs/tags/v1^{}\n",
+			ref:  "v1",
 			want: "2222222",
 		},
-		{"first of many", "aaa\trefs/heads/a\nbbb\trefs/heads/b\n", "aaa"},
+		{"first of many", "aaa\trefs/heads/a\nbbb\trefs/heads/b\n", "a", "aaa"},
+		{
+			// Ambiguous name that is both a branch and a tag: resolve
+			// deterministically, following git's ref precedence (tag wins).
+			name: "tag preferred over branch for same name (git precedence)",
+			in:   "ttttttt\trefs/tags/release\nhhhhhhh\trefs/heads/release\n",
+			ref:  "release",
+			want: "ttttttt",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := firstLSRemoteSHA(tt.in); got != tt.want {
-				t.Fatalf("firstLSRemoteSHA(%q) = %q, want %q", tt.in, got, tt.want)
+			if got := firstLSRemoteSHA(tt.in, tt.ref); got != tt.want {
+				t.Fatalf("firstLSRemoteSHA(%q, %q) = %q, want %q", tt.in, tt.ref, got, tt.want)
 			}
 		})
 	}

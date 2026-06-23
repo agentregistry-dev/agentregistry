@@ -3,6 +3,8 @@
 package gitutil
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -10,6 +12,17 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+)
+
+var (
+	// ErrUnsupportedHost is returned for a non-github.com host. It is a
+	// permanent (terminal) condition — callers can errors.Is it to avoid
+	// retrying a host that will never be supported.
+	ErrUnsupportedHost = errors.New("unsupported git host")
+	// ErrRefNotFound is returned when a ref resolves to no commit on the remote
+	// (deleted branch/tag, typo, or a short/non-existent SHA). Terminal:
+	// retrying the same ref will not find it.
+	ErrRefNotFound = errors.New("git ref not found")
 )
 
 // ParseGitHubURL parses a GitHub URL into its clone URL, branch, and subdirectory path.
@@ -27,7 +40,7 @@ func ParseGitHubURL(rawURL string) (cloneURL, branch, subPath string, err error)
 	}
 
 	if u.Host != "github.com" {
-		return "", "", "", fmt.Errorf("unsupported host %q, only github.com is supported", u.Host)
+		return "", "", "", fmt.Errorf("%w: %q, only github.com is supported", ErrUnsupportedHost, u.Host)
 	}
 
 	// Use EscapedPath so that percent-encoded segments (e.g. %2F in branch
@@ -68,6 +81,14 @@ func ParseGitHubURL(rawURL string) (cloneURL, branch, subPath string, err error)
 // commit argument explicitly. branch is passed to `git clone --branch`; commit
 // triggers a fetch + checkout after the clone.
 func CloneAndCopy(repoURL, branch, commit, subPath, targetDir string, verbose bool) error {
+	return CloneAndCopyContext(context.Background(), repoURL, branch, commit, subPath, targetDir, verbose)
+}
+
+// CloneAndCopyContext is CloneAndCopy with a context: every git invocation runs
+// under ctx, so a caller can bound clone/fetch/checkout time (and disk/CPU
+// runaway) by passing a context.WithTimeout. ctx cancellation kills the git
+// child process.
+func CloneAndCopyContext(ctx context.Context, repoURL, branch, commit, subPath, targetDir string, verbose bool) error {
 	cloneURL, urlBranch, urlSubPath, err := ParseGitHubURL(repoURL)
 	if err != nil {
 		return fmt.Errorf("parse GitHub URL: %w", err)
@@ -99,7 +120,7 @@ func CloneAndCopy(repoURL, branch, commit, subPath, targetDir string, verbose bo
 	}
 	cloneArgs = append(cloneArgs, cloneURL, tempDir)
 
-	gitCmd := exec.Command("git", cloneArgs...)
+	gitCmd := exec.CommandContext(ctx, "git", cloneArgs...)
 	if verbose {
 		gitCmd.Stdout = os.Stdout
 		gitCmd.Stderr = os.Stderr
@@ -109,7 +130,7 @@ func CloneAndCopy(repoURL, branch, commit, subPath, targetDir string, verbose bo
 	}
 
 	if commit != "" {
-		fetchCmd := exec.Command("git", "-C", tempDir, "fetch", "--depth", "1", "origin", commit)
+		fetchCmd := exec.CommandContext(ctx, "git", "-C", tempDir, "fetch", "--depth", "1", "origin", commit)
 		if verbose {
 			fetchCmd.Stdout = os.Stdout
 			fetchCmd.Stderr = os.Stderr
@@ -118,7 +139,7 @@ func CloneAndCopy(repoURL, branch, commit, subPath, targetDir string, verbose bo
 			return fmt.Errorf("fetch commit %s: %w", commit, err)
 		}
 
-		checkoutCmd := exec.Command("git", "-C", tempDir, "checkout", "FETCH_HEAD")
+		checkoutCmd := exec.CommandContext(ctx, "git", "-C", tempDir, "checkout", "FETCH_HEAD")
 		if verbose {
 			checkoutCmd.Stdout = os.Stdout
 			checkoutCmd.Stderr = os.Stderr
@@ -161,6 +182,12 @@ func isFullCommitSHA(s string) bool {
 // the URL-embedded branch is considered) resolves the remote's default branch
 // (HEAD). Only github.com URLs are supported (see ParseGitHubURL).
 func ResolveRef(repoURL, ref string) (string, error) {
+	return ResolveRefContext(context.Background(), repoURL, ref)
+}
+
+// ResolveRefContext is ResolveRef with a context bounding the ls-remote call.
+// A ref that resolves to no commit returns ErrRefNotFound (terminal).
+func ResolveRefContext(ctx context.Context, repoURL, ref string) (string, error) {
 	if isFullCommitSHA(ref) {
 		return strings.ToLower(ref), nil
 	}
@@ -178,39 +205,68 @@ func ResolveRef(repoURL, ref string) (string, error) {
 	if err := safeGitRef(lsRef); err != nil {
 		return "", err
 	}
-	out, err := exec.Command("git", "ls-remote", cloneURL, lsRef).Output()
+	out, err := exec.CommandContext(ctx, "git", "ls-remote", cloneURL, lsRef).Output()
 	if err != nil {
 		return "", fmt.Errorf("git ls-remote %s %q: %w", cloneURL, lsRef, err)
 	}
-	sha := firstLSRemoteSHA(string(out))
+	sha := firstLSRemoteSHA(string(out), lsRef)
 	if sha == "" {
-		return "", fmt.Errorf("ref %q not found in %s", lsRef, cloneURL)
+		return "", fmt.Errorf("%w: %q in %s", ErrRefNotFound, lsRef, cloneURL)
 	}
 	return sha, nil
 }
 
-// firstLSRemoteSHA returns the commit SHA from `git ls-remote` output (lines of
-// "<sha>\t<refname>"). When the output carries both an annotated tag and its
-// dereferenced commit ("<tag>^{}"), the dereferenced commit is preferred so the
-// resolved SHA is the actual commit rather than the tag object.
-func firstLSRemoteSHA(out string) string {
-	var first, deref string
+// firstLSRemoteSHA selects the commit SHA from `git ls-remote` output (lines of
+// "<sha>\t<refname>") for the queried ref. Preference order makes an ambiguous
+// query (e.g. a name that is both a branch and a tag) deterministic, following
+// git's own ref precedence (tags before heads), and resolves annotated tags to
+// the commit they point at:
+//  1. the dereferenced commit of an exact refs/tags/<ref> ("…^{}"),
+//  2. an exact refs/tags/<ref>,
+//  3. an exact refs/heads/<ref>,
+//  4. any dereferenced commit ("…^{}"),
+//  5. the first SHA.
+func firstLSRemoteSHA(out, ref string) string {
+	wantHead := "refs/heads/" + ref
+	wantTag := "refs/tags/" + ref
+	var first, anyDeref, tag, tagDeref, head string
 	for _, line := range strings.Split(out, "\n") {
 		fields := strings.Fields(strings.TrimSpace(line))
 		if len(fields) == 0 {
 			continue
 		}
+		sha := fields[0]
 		if first == "" {
-			first = fields[0]
+			first = sha
 		}
-		if len(fields) >= 2 && strings.HasSuffix(fields[1], "^{}") {
-			deref = fields[0]
+		if len(fields) < 2 {
+			continue
+		}
+		name := fields[1]
+		switch {
+		case name == wantTag+"^{}":
+			tagDeref = sha
+			anyDeref = sha
+		case strings.HasSuffix(name, "^{}"):
+			anyDeref = sha
+		case name == wantTag:
+			tag = sha
+		case name == wantHead:
+			head = sha
 		}
 	}
-	if deref != "" {
-		return deref
+	switch {
+	case tagDeref != "":
+		return tagDeref
+	case tag != "":
+		return tag
+	case head != "":
+		return head
+	case anyDeref != "":
+		return anyDeref
+	default:
+		return first
 	}
-	return first
 }
 
 // resolveSubPath validates and resolves a subPath within repoDir, returning

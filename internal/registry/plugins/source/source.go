@@ -10,17 +10,26 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
+	"time"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common/gitutil"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/plugins/bundle"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
-// ErrUnsupportedOrigin marks an origin the resolver cannot handle — a TERMINAL
-// condition (retrying will not help). OCI origins and non-GitHub git hosts are
-// currently unsupported.
-var ErrUnsupportedOrigin = errors.New("source: unsupported plugin origin")
+// cloneTimeout bounds a single resolve (ls-remote + shallow clone) so a slow or
+// hostile origin cannot hang the controller worker indefinitely.
+const cloneTimeout = 2 * time.Minute
+
+var (
+	// ErrUnsupportedOrigin marks an origin the resolver cannot handle — a
+	// TERMINAL condition (retrying will not help). OCI origins and non-GitHub
+	// git hosts are currently unsupported.
+	ErrUnsupportedOrigin = errors.New("source: unsupported plugin origin")
+	// ErrSourceNotFound marks a ref that resolves to no commit on the remote
+	// (deleted/typo'd branch or tag, or a non-existent SHA) — TERMINAL.
+	ErrSourceNotFound = errors.New("source: git ref not found")
+)
 
 // Resolver pins a plugin's origin and loads its bundle. Transient failures
 // (network, clone) are returned as plain errors (retryable); permanent
@@ -55,11 +64,16 @@ func (r *GitResolver) Resolve(ctx context.Context, p *v1alpha1.Plugin) (*v1alpha
 	}
 }
 
-func (r *GitResolver) resolveGit(_ context.Context, g *v1alpha1.PluginOriginGit) (*v1alpha1.PluginResolvedSource, *bundle.CanonicalBundle, error) {
+func (r *GitResolver) resolveGit(ctx context.Context, g *v1alpha1.PluginOriginGit) (*v1alpha1.PluginResolvedSource, *bundle.CanonicalBundle, error) {
 	if g == nil || g.Repository == nil || g.Repository.URL == "" {
 		return nil, nil, fmt.Errorf("%w: git origin missing repository url", ErrUnsupportedOrigin)
 	}
 	repo := g.Repository
+
+	// Bound the whole resolve (ls-remote + clone) so a slow/hostile origin can't
+	// hang the worker. gitutil kills the git child when ctx expires.
+	ctx, cancel := context.WithTimeout(ctx, cloneTimeout)
+	defer cancel()
 
 	// Prefer an explicit commit; otherwise resolve the branch/tag (or the
 	// remote default HEAD) to a concrete SHA so status records an immutable pin.
@@ -67,12 +81,9 @@ func (r *GitResolver) resolveGit(_ context.Context, g *v1alpha1.PluginOriginGit)
 	if ref == "" {
 		ref = repo.Branch
 	}
-	commit, err := gitutil.ResolveRef(repo.URL, ref)
+	commit, err := gitutil.ResolveRefContext(ctx, repo.URL, ref)
 	if err != nil {
-		if isUnsupportedHost(err) {
-			return nil, nil, fmt.Errorf("%w: %v", ErrUnsupportedOrigin, err)
-		}
-		return nil, nil, fmt.Errorf("resolve git ref %q: %w", ref, err) // retryable
+		return nil, nil, classifyGitErr(err, "resolve git ref "+ref)
 	}
 
 	dir, err := os.MkdirTemp("", "arctl-plugin-src-*")
@@ -83,11 +94,8 @@ func (r *GitResolver) resolveGit(_ context.Context, g *v1alpha1.PluginOriginGit)
 
 	// branch="" + commit=resolved => clone the default branch shallow, then
 	// fetch+checkout the exact pinned commit (gitutil does the fetch-by-SHA).
-	if err := gitutil.CloneAndCopy(repo.URL, "", commit, repo.Subfolder, dir, false); err != nil {
-		if isUnsupportedHost(err) {
-			return nil, nil, fmt.Errorf("%w: %v", ErrUnsupportedOrigin, err)
-		}
-		return nil, nil, fmt.Errorf("clone git source: %w", err) // retryable
+	if err := gitutil.CloneAndCopyContext(ctx, repo.URL, "", commit, repo.Subfolder, dir, false); err != nil {
+		return nil, nil, classifyGitErr(err, "clone git source")
 	}
 
 	b, err := bundle.FromDir(dir)
@@ -97,8 +105,16 @@ func (r *GitResolver) resolveGit(_ context.Context, g *v1alpha1.PluginOriginGit)
 	return &v1alpha1.PluginResolvedSource{Type: v1alpha1.PluginOriginTypeGit, Commit: commit}, b, nil
 }
 
-// isUnsupportedHost reports whether err is gitutil's non-github.com rejection,
-// which is permanent (terminal) rather than a transient network failure.
-func isUnsupportedHost(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "only github.com is supported")
+// classifyGitErr maps a gitutil error to the resolver's terminal/retryable
+// contract: a non-github host or a missing ref is terminal (wrapped in a
+// terminal sentinel); anything else (network, transport) is retryable.
+func classifyGitErr(err error, context string) error {
+	switch {
+	case errors.Is(err, gitutil.ErrUnsupportedHost):
+		return fmt.Errorf("%w: %v", ErrUnsupportedOrigin, err)
+	case errors.Is(err, gitutil.ErrRefNotFound):
+		return fmt.Errorf("%w: %v", ErrSourceNotFound, err)
+	default:
+		return fmt.Errorf("%s: %w", context, err) // retryable
+	}
 }

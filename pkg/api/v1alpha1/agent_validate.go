@@ -78,20 +78,20 @@ func validateAgentSpec(s *AgentSpec) FieldErrors {
 			errs.Append("spec.source."+e.Path, e.Cause)
 		}
 	}
-	for i, ref := range s.MCPServers {
-		// References within Agent.Spec default Kind=MCPServer. MCPServer
-		// covers both bundled (spec.source) and remote (spec.remote) servers
-		// under a single kind.
-		kind := ref.Kind
-		if kind == "" {
-			kind = KindMCPServer
+	for i := range s.MCPServers {
+		// References within Agent.Spec default Kind=MCPServer (covering both
+		// bundled and remote servers). Default IN PLACE so the persisted ref
+		// carries the kind — the deploy-time resolver does no defaulting and an
+		// empty Kind would resolve to no store.
+		if s.MCPServers[i].Kind == "" {
+			s.MCPServers[i].Kind = KindMCPServer
 		}
-		if kind != KindMCPServer {
+		if s.MCPServers[i].Kind != KindMCPServer {
 			errs.Append(fmt.Sprintf("spec.mcpServers[%d].kind", i),
 				fmt.Errorf("%w: must be %q, got %q",
-					ErrInvalidRef, KindMCPServer, ref.Kind))
+					ErrInvalidRef, KindMCPServer, s.MCPServers[i].Kind))
 		}
-		for _, e := range validateRef(ref) {
+		for _, e := range validateRef(s.MCPServers[i]) {
 			errs.Append(fmt.Sprintf("spec.mcpServers[%d].%s", i, e.Path), e.Cause)
 		}
 	}
@@ -118,25 +118,33 @@ func validateHarnessConfig(h *HarnessConfig) FieldErrors {
 	errs = append(errs, validateHarnessRefs("spec.source.harness.skills", h.Skills, KindSkill)...)
 	errs = append(errs, validateHarnessRefs("spec.source.harness.mcpServers", h.MCPServers, KindMCPServer)...)
 	if h.Instructions != nil {
+		// Default in place so the persisted ref carries the kind (see below);
+		// the copy passed to validateHarnessRefs then already has it.
+		if h.Instructions.Kind == "" {
+			h.Instructions.Kind = KindPrompt
+		}
 		errs = append(errs, validateHarnessRefs("spec.source.harness.instructions", []ResourceRef{*h.Instructions}, KindPrompt)...)
 	}
 	return errs
 }
 
-// validateHarnessRefs validates refs that default Kind to expectKind, matching
-// the MCPServers ref convention used elsewhere in AgentSpec.
+// validateHarnessRefs validates refs and defaults an empty Kind to expectKind
+// IN PLACE. The defaulting must persist into the stored spec: the deploy-time
+// resolver looks up stores[ref.Kind] with no defaulting of its own, so a ref
+// left with an empty Kind would resolve to no store and fail the deploy.
+// Slices share their backing array, so mutating refs[i] mutates the caller's
+// HarnessConfig field.
 func validateHarnessRefs(path string, refs []ResourceRef, expectKind string) FieldErrors {
 	var errs FieldErrors
-	for i, ref := range refs {
-		kind := ref.Kind
-		if kind == "" {
-			kind = expectKind
+	for i := range refs {
+		if refs[i].Kind == "" {
+			refs[i].Kind = expectKind
 		}
-		if kind != expectKind {
+		if refs[i].Kind != expectKind {
 			errs.Append(fmt.Sprintf("%s[%d].kind", path, i),
-				fmt.Errorf("%w: must be %q, got %q", ErrInvalidRef, expectKind, ref.Kind))
+				fmt.Errorf("%w: must be %q, got %q", ErrInvalidRef, expectKind, refs[i].Kind))
 		}
-		for _, e := range validateRef(ref) {
+		for _, e := range validateRef(refs[i]) {
 			errs.Append(fmt.Sprintf("%s[%d].%s", path, i, e.Path), e.Cause)
 		}
 	}

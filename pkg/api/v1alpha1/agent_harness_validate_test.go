@@ -71,3 +71,44 @@ func TestAgentHarnessValidate(t *testing.T) {
 		})
 	}
 }
+
+// TestHarnessRefKindDefaultingPersists guards the fix for the harness-ref
+// kind-defaulting bug: an omitted Kind must default AND persist into the spec,
+// because the deploy-time resolver looks up stores[ref.Kind] with no defaulting
+// of its own (an empty Kind would resolve to no store). Before the fix, the
+// default lived in a local variable, so an omitted Kind was rejected outright
+// and never reached the persisted ref.
+func TestHarnessRefKindDefaultingPersists(t *testing.T) {
+	a := &Agent{
+		TypeMeta: TypeMeta{APIVersion: GroupVersion, Kind: KindAgent},
+		Metadata: ObjectMeta{Namespace: "default", Name: "my-agent", Tag: "v1"},
+		Spec: AgentSpec{
+			MCPServers: []ResourceRef{{Name: "top-mcp"}}, // empty Kind (the twin path)
+			Source: &AgentSource{
+				Harness: &HarnessConfig{
+					Type:         "claude-code",
+					Plugins:      []ResourceRef{{Name: "plugin-a"}},
+					Skills:       []ResourceRef{{Name: "skill-a"}},
+					MCPServers:   []ResourceRef{{Name: "mcp-a"}},
+					Instructions: &ResourceRef{Name: "instr-a"},
+				},
+			},
+		},
+	}
+	if err := a.Validate(); err != nil {
+		t.Fatalf("expected valid (kinds default in place), got: %v", err)
+	}
+
+	h := a.Spec.Source.Harness
+	for _, c := range []struct{ field, got, want string }{
+		{"harness.plugins", h.Plugins[0].Kind, KindPlugin},
+		{"harness.skills", h.Skills[0].Kind, KindSkill},
+		{"harness.mcpServers", h.MCPServers[0].Kind, KindMCPServer},
+		{"harness.instructions", h.Instructions.Kind, KindPrompt},
+		{"spec.mcpServers", a.Spec.MCPServers[0].Kind, KindMCPServer},
+	} {
+		if c.got != c.want {
+			t.Errorf("%s: kind not defaulted in place: got %q, want %q", c.field, c.got, c.want)
+		}
+	}
+}

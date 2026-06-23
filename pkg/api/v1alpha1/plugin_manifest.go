@@ -315,12 +315,14 @@ type HookEntry struct {
 	Tool   string          `json:"tool,omitempty" yaml:"tool,omitempty"`
 	Input  json.RawMessage `json:"input,omitempty" yaml:"input,omitempty"`
 
-	If            string  `json:"if,omitempty" yaml:"if,omitempty"`
-	Timeout       float64 `json:"timeout,omitempty" yaml:"timeout,omitempty"`
-	StatusMessage string  `json:"statusMessage,omitempty" yaml:"statusMessage,omitempty"`
-	Once          *bool   `json:"once,omitempty" yaml:"once,omitempty"`
-	Async         *bool   `json:"async,omitempty" yaml:"async,omitempty"`
-	AsyncRewake   *bool   `json:"asyncRewake,omitempty" yaml:"asyncRewake,omitempty"`
+	If string `json:"if,omitempty" yaml:"if,omitempty"`
+	// Timeout is a pointer so an explicit "timeout": 0 (disable) round-trips
+	// losslessly — a float64 with omitempty would silently drop the zero.
+	Timeout       *float64 `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	StatusMessage string   `json:"statusMessage,omitempty" yaml:"statusMessage,omitempty"`
+	Once          *bool    `json:"once,omitempty" yaml:"once,omitempty"`
+	Async         *bool    `json:"async,omitempty" yaml:"async,omitempty"`
+	AsyncRewake   *bool    `json:"asyncRewake,omitempty" yaml:"asyncRewake,omitempty"`
 }
 
 // MCPServersField models `mcpServers`: a path/MCPB string (Path), an inline
@@ -377,8 +379,9 @@ type MCPServerEntry struct {
 
 // MCPServerOAuth is the sse/http oauth sub-block.
 type MCPServerOAuth struct {
-	ClientID              string   `json:"clientId,omitempty" yaml:"clientId,omitempty"`
-	CallbackPort          int      `json:"callbackPort,omitempty" yaml:"callbackPort,omitempty"`
+	ClientID string `json:"clientId,omitempty" yaml:"clientId,omitempty"`
+	// Pointer so an explicit callbackPort:0 round-trips (omitempty would drop it).
+	CallbackPort          *int     `json:"callbackPort,omitempty" yaml:"callbackPort,omitempty"`
 	AuthServerMetadataURL string   `json:"authServerMetadataUrl,omitempty" yaml:"authServerMetadataUrl,omitempty"`
 	Scopes                []string `json:"scopes,omitempty" yaml:"scopes,omitempty"`
 }

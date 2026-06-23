@@ -24,6 +24,15 @@ type PluginControllerDeps struct {
 	Resolver source.Resolver
 }
 
+// pluginStore is the subset of *v1alpha1store.Store the controller uses,
+// expressed as an interface so reconcile/patchStatus can be tested with a fake
+// (no database). *v1alpha1store.Store satisfies it.
+type pluginStore interface {
+	Get(ctx context.Context, namespace, name, tag string) (*v1alpha1.RawObject, error)
+	List(ctx context.Context, opts v1alpha1store.ListOpts) ([]*v1alpha1.RawObject, string, error)
+	ApplyPatch(ctx context.Context, namespace, name, tag string, patch v1alpha1store.PatchOpts) error
+}
+
 type pluginQueueKey struct {
 	Namespace string
 	Name      string
@@ -39,9 +48,11 @@ type pluginQueueKey struct {
 // It is level-triggered — every control-plane wakeup (and the resync tick)
 // re-lists plugins and enqueues those whose status is behind their generation.
 // Status writes never re-emit control-plane events (the trigger skips
-// spec-equal updates), so the controller does not wake itself.
+// spec-equal updates), so the controller does not wake itself. Each controller
+// opens its OWN control-plane LISTEN subscription (the Deployment controller has
+// a separate one); there is no shared listen loop.
 type PluginController struct {
-	Store    *v1alpha1store.Store
+	Store    pluginStore
 	Resolver source.Resolver
 	Wakeups  <-chan struct{}
 
@@ -50,7 +61,8 @@ type PluginController struct {
 }
 
 // StartPluginController wires the Plugin controller and starts it in the
-// background, reusing the shared control-plane LISTEN loop.
+// background, opening its own control-plane LISTEN subscription (same mechanism
+// as the Deployment controller).
 func StartPluginController(
 	ctx context.Context,
 	pool *pgxpool.Pool,
@@ -102,9 +114,7 @@ func (c *PluginController) Run(ctx context.Context, resync time.Duration) error 
 	workerErrs := make(chan error, 1)
 	go func() { workerErrs <- c.runWorker(ctx) }()
 
-	if err := c.enqueueAll(ctx); err != nil {
-		return err
-	}
+	c.enqueueAllLogged(ctx)
 
 	var ticks <-chan time.Time
 	if resync > 0 {
@@ -119,14 +129,19 @@ func (c *PluginController) Run(ctx context.Context, resync time.Duration) error 
 		case err := <-workerErrs:
 			return err
 		case <-c.Wakeups:
-			if err := c.enqueueAll(ctx); err != nil {
-				return err
-			}
+			c.enqueueAllLogged(ctx)
 		case <-ticks:
-			if err := c.enqueueAll(ctx); err != nil {
-				return err
-			}
+			c.enqueueAllLogged(ctx)
 		}
+	}
+}
+
+// enqueueAllLogged runs an enqueue pass, logging (not propagating) a failure so
+// a transient list/decode error cannot kill the controller — the next
+// wakeup/resync tick retries. Mirrors DeploymentDiscoveryController.Run.
+func (c *PluginController) enqueueAllLogged(ctx context.Context) {
+	if err := c.enqueueAll(ctx); err != nil {
+		logger.Error("plugin controller: enqueue pass failed (will retry on next tick)", "error", err)
 	}
 }
 
@@ -172,7 +187,10 @@ func (c *PluginController) enqueueAll(ctx context.Context) error {
 		for _, raw := range rows {
 			p, err := v1alpha1.EnvelopeFromRaw(func() *v1alpha1.Plugin { return &v1alpha1.Plugin{} }, raw, v1alpha1.KindPlugin)
 			if err != nil {
-				return fmt.Errorf("plugin controller: decode plugin: %w", err)
+				// One unparseable row must not halt reconciliation of all the
+				// others; skip it (it cannot be acted on) and continue.
+				logger.Error("plugin controller: skipping undecodable plugin row", "error", err)
+				continue
 			}
 			if pluginReconciled(p) {
 				continue
@@ -277,6 +295,8 @@ func classifyResolveErr(err error) (reason string, terminal bool) {
 	switch {
 	case errors.Is(err, source.ErrUnsupportedOrigin):
 		return "OriginUnsupported", true
+	case errors.Is(err, source.ErrSourceNotFound):
+		return "RefNotFound", true
 	case errors.Is(err, bundle.ErrInvalidBundle):
 		return "SourceInvalid", true
 	default:

@@ -64,6 +64,24 @@ func TestValidateBundlePathTraversal(t *testing.T) {
 	}
 }
 
+func TestFromDirRejectsTooManyFiles(t *testing.T) {
+	root := t.TempDir()
+	for _, n := range []string{"a", "b", "c"} {
+		writeFile(t, root, n+".txt", "x")
+	}
+	if _, err := fromDir(root, 2, MaxBundleBytes); !errors.Is(err, ErrInvalidBundle) {
+		t.Fatalf("expected ErrInvalidBundle for file-count overflow, got %v", err)
+	}
+}
+
+func TestFromDirRejectsTooManyBytes(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "big.txt", "0123456789") // 10 bytes
+	if _, err := fromDir(root, MaxBundleFiles, 5); !errors.Is(err, ErrInvalidBundle) {
+		t.Fatalf("expected ErrInvalidBundle for byte overflow, got %v", err)
+	}
+}
+
 func writeFile(t *testing.T, root, rel, content string) {
 	t.Helper()
 	full := filepath.Join(root, filepath.FromSlash(rel))

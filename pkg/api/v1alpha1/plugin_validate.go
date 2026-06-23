@@ -30,6 +30,19 @@ func validatePluginSpec(s *PluginSpec) FieldErrors {
 	return errs
 }
 
+// isFullCommitSHA reports whether s is a full 40-character hex commit SHA.
+func isFullCommitSHA(s string) bool {
+	if len(s) != 40 {
+		return false
+	}
+	for _, r := range s {
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')) {
+			return false
+		}
+	}
+	return true
+}
+
 func validatePluginOrigin(o *PluginOrigin) FieldErrors {
 	var errs FieldErrors
 	switch o.Type {
@@ -47,9 +60,18 @@ func validatePluginOrigin(o *PluginOrigin) FieldErrors {
 		if o.Git.Repository.URL == "" {
 			errs.Append("git.repository.url", fmt.Errorf("%w", ErrRequiredField))
 		}
-		// A branch, tag, or commit may be supplied (empty => the remote default
-		// branch). The controller resolves whatever ref is given to a concrete
+		// A branch/tag OR a commit may be supplied (empty => the remote default
+		// branch); the controller resolves whatever ref is given to a concrete
 		// commit SHA and records that immutable pin in status.ResolvedSource.
+		// Reject both-set (ambiguous), and require a full 40-hex SHA when Commit
+		// is used — a short/non-SHA commit would never resolve and would retry
+		// forever.
+		if o.Git.Repository.Branch != "" && o.Git.Repository.Commit != "" {
+			errs.Append("git.repository", fmt.Errorf("%w: set at most one of branch or commit", ErrInvalidFormat))
+		}
+		if o.Git.Repository.Commit != "" && !isFullCommitSHA(o.Git.Repository.Commit) {
+			errs.Append("git.repository.commit", fmt.Errorf("%w: commit must be a full 40-character SHA (use branch for a tag/branch ref)", ErrInvalidFormat))
+		}
 	case PluginOriginTypeOCI:
 		if o.Git != nil {
 			errs.Append("git", fmt.Errorf("%w: git must be empty when type=oci", ErrInvalidFormat))

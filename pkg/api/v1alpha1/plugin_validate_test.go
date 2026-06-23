@@ -10,9 +10,10 @@ func basePluginMeta() ObjectMeta {
 }
 
 func TestPluginValidate(t *testing.T) {
+	fullSHA := strings.Repeat("a1b2c3d4", 5) // 40 hex chars
 	gitPinned := &PluginOrigin{
 		Type: PluginOriginTypeGit,
-		Git:  &PluginOriginGit{Repository: &Repository{URL: "https://github.com/org/repo", Commit: "abc123def456"}},
+		Git:  &PluginOriginGit{Repository: &Repository{URL: "https://github.com/org/repo", Commit: fullSHA}},
 	}
 
 	tests := []struct {
@@ -43,8 +44,18 @@ func TestPluginValidate(t *testing.T) {
 		},
 		{
 			name:    "git origin missing url",
-			spec:    PluginSpec{Origin: &PluginOrigin{Type: PluginOriginTypeGit, Git: &PluginOriginGit{Repository: &Repository{Commit: "abc123def456"}}}},
+			spec:    PluginSpec{Origin: &PluginOrigin{Type: PluginOriginTypeGit, Git: &PluginOriginGit{Repository: &Repository{Commit: fullSHA}}}},
 			wantErr: "url",
+		},
+		{
+			name:    "git commit not a full SHA (would never resolve)",
+			spec:    PluginSpec{Origin: &PluginOrigin{Type: PluginOriginTypeGit, Git: &PluginOriginGit{Repository: &Repository{URL: "https://github.com/org/repo", Commit: "abc123"}}}},
+			wantErr: "full 40-character SHA",
+		},
+		{
+			name:    "git branch and commit both set (ambiguous)",
+			spec:    PluginSpec{Origin: &PluginOrigin{Type: PluginOriginTypeGit, Git: &PluginOriginGit{Repository: &Repository{URL: "https://github.com/org/repo", Branch: "main", Commit: fullSHA}}}},
+			wantErr: "at most one of branch or commit",
 		},
 		{
 			name:    "oci origin not digest-pinned",

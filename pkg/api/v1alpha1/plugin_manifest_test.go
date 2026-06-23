@@ -84,6 +84,31 @@ func TestPluginManifestRoundTripLossless(t *testing.T) {
 	}
 }
 
+func TestPluginManifestPreservesExplicitZero(t *testing.T) {
+	// An explicit "timeout": 0 (disable) and "callbackPort": 0 are meaningful
+	// and must survive — a float64/int with omitempty would silently drop them.
+	const src = `{"name":"z","hooks":{"PreToolUse":[{"matcher":"*","hooks":[{"type":"command","command":"./x.sh","timeout":0}]}]},"mcpServers":{"s":{"type":"sse","url":"https://x","oauth":{"callbackPort":0}}}}`
+	var m PluginManifest
+	if err := json.Unmarshal([]byte(src), &m); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if to := m.Hooks.Events["PreToolUse"][0].Hooks[0].Timeout; to == nil || *to != 0 {
+		t.Fatalf("timeout:0 must be captured as *float64(0), got %v", to)
+	}
+	out, err := json.Marshal(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var want, got map[string]any
+	_ = json.Unmarshal([]byte(src), &want)
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(want, got) {
+		t.Fatalf("explicit-zero round-trip lossy:\n want %v\n got  %v", want, got)
+	}
+}
+
 func TestPluginManifestSparseNoNulls(t *testing.T) {
 	// A minimal manifest must not emit null/empty component keys.
 	out, err := json.Marshal(PluginManifest{Name: "x"})
