@@ -169,7 +169,7 @@ func isFullCommitSHA(s string) bool {
 		return false
 	}
 	for _, r := range s {
-		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')) {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') && (r < 'A' || r > 'F') {
 			return false
 		}
 	}
@@ -230,7 +230,7 @@ func firstLSRemoteSHA(out, ref string) string {
 	wantHead := "refs/heads/" + ref
 	wantTag := "refs/tags/" + ref
 	var first, anyDeref, tag, tagDeref, head string
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		fields := strings.Fields(strings.TrimSpace(line))
 		if len(fields) == 0 {
 			continue

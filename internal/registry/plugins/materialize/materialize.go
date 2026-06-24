@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/plugins/bundle"
@@ -62,10 +63,8 @@ func safeRelPath(p string) error {
 	if p == "" || strings.ContainsRune(p, '\\') || filepath.IsAbs(p) {
 		return fmt.Errorf("materialize: unsafe path %q", p)
 	}
-	for _, seg := range strings.Split(p, "/") {
-		if seg == ".." {
-			return fmt.Errorf("materialize: path traversal in %q", p)
-		}
+	if slices.Contains(strings.Split(p, "/"), "..") {
+		return fmt.Errorf("materialize: path traversal in %q", p)
 	}
 	return nil
 }

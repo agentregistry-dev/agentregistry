@@ -111,7 +111,7 @@ func TestHarnessRefKindDefaultingPersists(t *testing.T) {
 }
 
 func TestHarnessConfigExposesOnlyPhase1Refs(t *testing.T) {
-	harnessType := reflect.TypeOf(HarnessConfig{})
+	harnessType := reflect.TypeFor[HarnessConfig]()
 	for _, removed := range []string{"Skills", "MCPServers"} {
 		if _, ok := harnessType.FieldByName(removed); ok {
 			t.Fatalf("HarnessConfig must not expose %s in Phase 1; use plugins/instructions plus top-level AgentSpec.MCPServers", removed)

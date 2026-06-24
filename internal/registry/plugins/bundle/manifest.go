@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path"
-	"sort"
+	"slices"
 	"strings"
 
 	"sigs.k8s.io/yaml"
@@ -52,10 +52,10 @@ func BuildInventory(b *CanonicalBundle) *v1alpha1.PluginInventory {
 			binPaths = append(binPaths, p)
 		}
 	}
-	sort.Strings(skillPaths)
-	sort.Strings(agentPaths)
-	sort.Strings(cmdPaths)
-	sort.Strings(binPaths)
+	slices.Sort(skillPaths)
+	slices.Sort(agentPaths)
+	slices.Sort(cmdPaths)
+	slices.Sort(binPaths)
 
 	for _, p := range skillPaths {
 		name, desc := parseSkillFrontmatter(b.Files[p])
@@ -90,15 +90,15 @@ func parseSkillFrontmatter(content []byte) (name, desc string) {
 		return "", ""
 	}
 	rest := s[3:]
-	idx := strings.Index(rest, "\n---")
-	if idx < 0 {
+	frontmatter, _, ok := strings.Cut(rest, "\n---")
+	if !ok {
 		return "", ""
 	}
 	var meta struct {
 		Name        string `json:"name"`
 		Description string `json:"description"`
 	}
-	if err := yaml.Unmarshal([]byte(rest[:idx]), &meta); err != nil {
+	if err := yaml.Unmarshal([]byte(frontmatter), &meta); err != nil {
 		return "", ""
 	}
 	return meta.Name, meta.Description
@@ -116,7 +116,7 @@ func parseMCPServers(data []byte) []string {
 	for k := range doc.MCPServers {
 		names = append(names, k)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	return names
 }
 
@@ -137,7 +137,7 @@ func parseHooks(data []byte) []v1alpha1.PluginHook {
 	for ev := range doc.Hooks {
 		events = append(events, ev)
 	}
-	sort.Strings(events)
+	slices.Sort(events)
 
 	seen := map[string]bool{}
 	var out []v1alpha1.PluginHook
@@ -169,8 +169,8 @@ func baseNameNoExt(p string) string {
 func skillNameFromPath(p string) string {
 	if strings.HasPrefix(p, "skills/") && strings.HasSuffix(p, "/SKILL.md") {
 		mid := strings.TrimSuffix(strings.TrimPrefix(p, "skills/"), "/SKILL.md")
-		if i := strings.Index(mid, "/"); i >= 0 {
-			return mid[:i]
+		if name, _, ok := strings.Cut(mid, "/"); ok {
+			return name
 		}
 		return mid
 	}

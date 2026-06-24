@@ -2,7 +2,7 @@ package translate
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 )
 
 // ByteTransform rewrites a file's bytes during translation. It returns the new
@@ -53,7 +53,7 @@ func Harnesses() []Harness {
 	for h := range registry {
 		out = append(out, h)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	slices.Sort(out)
 	return out
 }
 

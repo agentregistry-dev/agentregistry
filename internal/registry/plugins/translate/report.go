@@ -1,6 +1,6 @@
 package translate
 
-import "sort"
+import "slices"
 
 // Direction is the translation direction.
 type Direction string
@@ -58,19 +58,32 @@ func (r *TranslationReport) addWarning(path, msg string) {
 
 // sort orders all slices deterministically (source iteration is unordered).
 func (r *TranslationReport) sort() {
-	sort.Slice(r.Dropped, func(i, j int) bool { return r.Dropped[i].SourcePath < r.Dropped[j].SourcePath })
-	sort.Slice(r.Transformed, func(i, j int) bool {
-		if r.Transformed[i].SourcePath != r.Transformed[j].SourcePath {
-			return r.Transformed[i].SourcePath < r.Transformed[j].SourcePath
-		}
-		return r.Transformed[i].Note < r.Transformed[j].Note
+	slices.SortFunc(r.Dropped, func(a, b DroppedComponent) int {
+		return cmpString(a.SourcePath, b.SourcePath)
 	})
-	sort.Slice(r.Warnings, func(i, j int) bool {
-		if r.Warnings[i].Path != r.Warnings[j].Path {
-			return r.Warnings[i].Path < r.Warnings[j].Path
+	slices.SortFunc(r.Transformed, func(a, b TransformedFile) int {
+		if a.SourcePath != b.SourcePath {
+			return cmpString(a.SourcePath, b.SourcePath)
 		}
-		return r.Warnings[i].Message < r.Warnings[j].Message
+		return cmpString(a.Note, b.Note)
 	})
+	slices.SortFunc(r.Warnings, func(a, b Warning) int {
+		if a.Path != b.Path {
+			return cmpString(a.Path, b.Path)
+		}
+		return cmpString(a.Message, b.Message)
+	})
+}
+
+func cmpString(a, b string) int {
+	switch {
+	case a < b:
+		return -1
+	case a > b:
+		return 1
+	default:
+		return 0
+	}
 }
 
 // HasLoss reports whether anything was dropped (drops are loss; transforms aren't).

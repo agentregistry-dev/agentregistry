@@ -13,7 +13,7 @@ package translate
 
 import (
 	"errors"
-	"sort"
+	"slices"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/plugins/bundle"
 )
@@ -111,6 +111,6 @@ func sortedKeys(m map[string][]byte) []string {
 	for k := range m {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	return keys
 }

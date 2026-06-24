@@ -359,11 +359,14 @@ func TestE2E_UpIsIdempotent(t *testing.T) {
 	}
 }
 
-// TestE2E_DownErrNotReversible — 001_initial_schema ships an up-only
-// .down.sql that RAISES EXCEPTION. `down 1` after a successful `up`
-// must fail and the error must mention "not reversible" so operators
-// see why.
+// TestE2E_DownErrNotReversible — the OSS migration set contains up-only
+// migrations whose .down.sql RAISES EXCEPTION. After a successful `up`,
+// rolling back far enough to reach one of those migrations must fail and the
+// error must mention "not reversible" so operators see why. This intentionally
+// does not assume the newest migration is up-only; later migrations may be
+// reversible.
 func TestE2E_DownErrNotReversible(t *testing.T) {
+	expected := ossMigrationExpectation(t)
 	dsn := freshDB(t)
 	env := append(stripARRegistryEnv(), "AGENT_REGISTRY_DATABASE_URL="+dsn)
 
@@ -371,9 +374,9 @@ func TestE2E_DownErrNotReversible(t *testing.T) {
 		t.Fatalf("up setup: exit %d\nstderr: %s", r.exitCode, r.stderr)
 	}
 
-	r := runArctl(t, env, "db", "migrate", "down", "1")
+	r := runArctl(t, env, "db", "migrate", "down", strconv.Itoa(expected.latest))
 	if r.exitCode == 0 {
-		t.Fatalf("down 1 against up-only OSS should fail; got exit 0\nstdout: %s", r.stdout)
+		t.Fatalf("down to an up-only OSS migration should fail; got exit 0\nstdout: %s", r.stdout)
 	}
 	if !strings.Contains(r.combined, "not reversible") {
 		t.Errorf("error should reference 'not reversible'; got:\n%s", r.combined)

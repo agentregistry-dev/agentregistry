@@ -19,6 +19,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -129,10 +130,8 @@ func validateBundlePath(p string) error {
 	if path.Clean(p) != p {
 		return fmt.Errorf("%w: non-clean path %q", ErrInvalidBundle, p)
 	}
-	for _, seg := range strings.Split(p, "/") {
-		if seg == ".." {
-			return fmt.Errorf("%w: parent traversal in path %q", ErrInvalidBundle, p)
-		}
+	if slices.Contains(strings.Split(p, "/"), "..") {
+		return fmt.Errorf("%w: parent traversal in path %q", ErrInvalidBundle, p)
 	}
 	return nil
 }
