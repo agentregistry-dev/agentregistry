@@ -24,22 +24,24 @@ const (
 	// APIs (notably AWS) are eventually consistent, so a single missing poll
 	// is not evidence the workload is gone.
 	deploymentDiscoveryMissesKey = "discoveryMisses"
-	// deploymentDiscoveryStaleAfterMisses is how many consecutive misses it
+	// defaultDeploymentDiscoveryStaleAfterMisses is how many consecutive misses it
 	// takes before the Discovered/Ready conditions flip to False.
-	deploymentDiscoveryStaleAfterMisses = 3
-	// deploymentDiscoveryDeleteAfterMisses is how many consecutive misses it
+	defaultDeploymentDiscoveryStaleAfterMisses = 3
+	// defaultDeploymentDiscoveryDeleteAfterMisses is how many consecutive misses it
 	// takes before the row is deleted outright. Rows whose Runtime no longer
 	// exists skip the counter and are deleted immediately — no future poll
 	// could confirm them again.
-	deploymentDiscoveryDeleteAfterMisses = 5
+	defaultDeploymentDiscoveryDeleteAfterMisses = 5
 )
 
 // DeploymentDiscoveryController materializes adapter discovery snapshots into
 // persisted Deployment rows. It owns provider-observed state; the normal
 // DeploymentController skips these rows so they do not become desired state.
 type DeploymentDiscoveryController struct {
-	Stores   map[string]*v1alpha1store.Store
-	Adapters map[string]types.DeploymentAdapter
+	Stores            map[string]*v1alpha1store.Store
+	Adapters          map[string]types.DeploymentAdapter
+	StaleAfterMisses  int
+	DeleteAfterMisses int
 }
 
 // DeploymentDiscoverySyncResult summarizes one discovery materialization pass.
@@ -172,7 +174,7 @@ func (c *DeploymentDiscoveryController) Sync(ctx context.Context) (DeploymentDis
 			continue
 		}
 		misses := discoveredMissCount(deployment) + 1
-		if misses >= deploymentDiscoveryDeleteAfterMisses {
+		if misses >= c.deleteAfterMisses() {
 			if err := c.deleteDiscoveredDeployment(ctx, deployment); err != nil {
 				if firstErr == nil {
 					firstErr = err
@@ -188,7 +190,7 @@ func (c *DeploymentDiscoveryController) Sync(ctx context.Context) (DeploymentDis
 			}
 			continue
 		}
-		if misses >= deploymentDiscoveryStaleAfterMisses {
+		if misses >= c.staleAfterMisses() {
 			result.Stale++
 		}
 	}
@@ -394,7 +396,7 @@ func (c *DeploymentDiscoveryController) patchMissedStatus(ctx context.Context, d
 			s.ObservedGeneration = generation
 		}
 		_ = s.SetDetailsKey(deploymentDiscoveryMissesKey, misses)
-		if misses < deploymentDiscoveryStaleAfterMisses {
+		if misses < c.staleAfterMisses() {
 			return
 		}
 		s.SetCondition(v1alpha1.Condition{
@@ -441,6 +443,20 @@ func discoveredMissCount(deployment *v1alpha1.Deployment) int {
 		return 0
 	}
 	return misses
+}
+
+func (c *DeploymentDiscoveryController) staleAfterMisses() int {
+	if c != nil && c.StaleAfterMisses > 0 {
+		return c.StaleAfterMisses
+	}
+	return defaultDeploymentDiscoveryStaleAfterMisses
+}
+
+func (c *DeploymentDiscoveryController) deleteAfterMisses() int {
+	if c != nil && c.DeleteAfterMisses > 0 {
+		return c.DeleteAfterMisses
+	}
+	return defaultDeploymentDiscoveryDeleteAfterMisses
 }
 
 func (c *DeploymentDiscoveryController) runtimeStore() *v1alpha1store.Store {

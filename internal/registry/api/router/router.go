@@ -222,6 +222,7 @@ func NewHumaAPI(
 		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			// Check if this is an API route - if so, return 404
 			if strings.HasPrefix(r.URL.Path, "/v0/") ||
+				strings.HasPrefix(r.URL.Path, "/v0.1/") ||
 				r.URL.Path == "/health" ||
 				r.URL.Path == "/ping" ||
 				r.URL.Path == "/metrics" ||

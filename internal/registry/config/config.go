@@ -34,6 +34,24 @@ type Config struct {
 	RuntimeDir string `env:"RUNTIME_DIR" envDefault:"/tmp/arctl-runtime"`
 	Verbose    bool   `env:"VERBOSE" envDefault:"false"`
 
+	// MCP Registry compatibility (read-only)
+	//
+	// MCPRegistryCompatEnabled toggles the read-only MCP Registry v0.1
+	// compatibility API (GET /v0.1/servers ...), which re-exposes MCPServer
+	// resources in the official server.json shape so registry-aware clients
+	// (e.g. VS Code's MCP gallery) can discover them. The endpoint is
+	// anonymous and flattens every namespace into one catalogue, and it
+	// bypasses per-kind RBAC list filters, so it is OFF by default — enable
+	// it only where an unauthenticated, cross-namespace MCP catalogue is
+	// acceptable (a public OSS registry, or behind a trusted gateway).
+	MCPRegistryCompatEnabled bool `env:"MCP_REGISTRY_COMPAT_ENABLED" envDefault:"false"`
+	// MCPRegistryCompatPathPrefix optionally mounts the compatibility API
+	// under a base prefix (e.g. "/mcp-registry"); empty serves the spec's
+	// standard paths at the root. Clients append "/v0.1/servers" to the base
+	// URL they're configured with, so any prefix set here must match that
+	// configured base.
+	MCPRegistryCompatPathPrefix string `env:"MCP_REGISTRY_COMPAT_PATH_PREFIX" envDefault:""`
+
 	// ControllerEventRetention is how long handled control-plane events remain
 	// available for checkpoint replay. Set to 0 to disable event pruning.
 	ControllerEventRetention time.Duration `env:"CONTROLLER_EVENT_RETENTION" envDefault:"24h"`
@@ -43,6 +61,17 @@ type Config struct {
 	// ControllerRetentionPruneBatchLimit caps rows removed per retention pass so
 	// pruning cannot monopolize the database during startup or repair loops.
 	ControllerRetentionPruneBatchLimit int `env:"CONTROLLER_RETENTION_PRUNE_BATCH_LIMIT" envDefault:"500"`
+	// ControllerDiscoveryInterval is how often provider discovery snapshots are
+	// materialized into discovered Deployment rows. Provider-specific cache
+	// refreshes may have separate intervals.
+	ControllerDiscoveryInterval time.Duration `env:"CONTROLLER_DISCOVERY_INTERVAL" envDefault:"60s"`
+	// ControllerDiscoveryStaleAfterMisses is how many consecutive successful
+	// discovery polls may omit a discovered Deployment before it is marked
+	// not-ready/stale.
+	ControllerDiscoveryStaleAfterMisses int `env:"CONTROLLER_DISCOVERY_STALE_AFTER_MISSES" envDefault:"3"`
+	// ControllerDiscoveryDeleteAfterMisses is how many consecutive successful
+	// discovery polls may omit a discovered Deployment before it is deleted.
+	ControllerDiscoveryDeleteAfterMisses int `env:"CONTROLLER_DISCOVERY_DELETE_AFTER_MISSES" envDefault:"5"`
 
 	// SkipMigrations gates the server's Postgres migrator at startup.
 	// Set true when migrations are applied out-of-band (e.g. by

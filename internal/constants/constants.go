@@ -2,7 +2,7 @@
 package constants
 
 // Agent runtime environment variable keys injected by ResolveAgent and consumed
-// by platform adapters and agent frameworks at deploy/run time.
+// by runtime adapters and agent frameworks at deploy/run time.
 const (
 	// EnvKagentNamespace is the Kubernetes namespace where the agent is deployed.
 	// Defaults to "default" when not explicitly set.

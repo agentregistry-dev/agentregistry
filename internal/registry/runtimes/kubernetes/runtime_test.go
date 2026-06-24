@@ -18,7 +18,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
-func TestKubernetesTranslatePlatformConfig_AgentOnly(t *testing.T) {
+func TestKubernetesTranslateRuntimeConfig_AgentOnly(t *testing.T) {
 	ctx := context.Background()
 
 	desired := &runtimetypes.DesiredState{
@@ -51,7 +51,7 @@ func TestKubernetesTranslatePlatformConfig_AgentOnly(t *testing.T) {
 	}
 }
 
-func TestKubernetesTranslatePlatformConfig_RemoteMCP(t *testing.T) {
+func TestKubernetesTranslateRuntimeConfig_RemoteMCP(t *testing.T) {
 	ctx := context.Background()
 
 	desired := &runtimetypes.DesiredState{
@@ -83,7 +83,7 @@ func TestKubernetesTranslatePlatformConfig_RemoteMCP(t *testing.T) {
 	}
 }
 
-func TestKubernetesTranslatePlatformConfig_LocalMCP(t *testing.T) {
+func TestKubernetesTranslateRuntimeConfig_LocalMCP(t *testing.T) {
 	ctx := context.Background()
 
 	desired := &runtimetypes.DesiredState{
@@ -123,7 +123,7 @@ func TestKubernetesTranslatePlatformConfig_LocalMCP(t *testing.T) {
 	}
 }
 
-func TestKubernetesTranslatePlatformConfig_AgentWithMCPServers(t *testing.T) {
+func TestKubernetesTranslateRuntimeConfig_AgentWithMCPServers(t *testing.T) {
 	ctx := context.Background()
 
 	// MCP server config is now injected via MCP_SERVERS_CONFIG env var by ResolveAgent,
@@ -188,7 +188,7 @@ func TestKubernetesTranslatePlatformConfig_AgentWithMCPServers(t *testing.T) {
 	}
 }
 
-func TestKubernetesTranslatePlatformConfig_NamespaceConsistency(t *testing.T) {
+func TestKubernetesTranslateRuntimeConfig_NamespaceConsistency(t *testing.T) {
 	tests := []struct {
 		name              string
 		agentEnv          map[string]string
@@ -282,7 +282,7 @@ func TestKubernetesTranslatePlatformConfig_NamespaceConsistency(t *testing.T) {
 	}
 }
 
-func TestKubernetesTranslatePlatformConfig_DeploymentIDMetadataAndNaming(t *testing.T) {
+func TestKubernetesTranslateRuntimeConfig_DeploymentIDMetadataAndNaming(t *testing.T) {
 	ctx := context.Background()
 
 	desired := &runtimetypes.DesiredState{
@@ -369,7 +369,7 @@ func TestKubernetesTranslateSkillsForAgent(t *testing.T) {
 	})
 }
 
-func TestKubernetesTranslatePlatformConfig_AgentWithSkills(t *testing.T) {
+func TestKubernetesTranslateRuntimeConfig_AgentWithSkills(t *testing.T) {
 	ctx := context.Background()
 
 	desired := &runtimetypes.DesiredState{
@@ -396,7 +396,7 @@ func TestKubernetesTranslatePlatformConfig_AgentWithSkills(t *testing.T) {
 	}
 }
 
-func TestKubernetesTranslatePlatformConfig_AgentWithPromptsOnly(t *testing.T) {
+func TestKubernetesTranslateRuntimeConfig_AgentWithPromptsOnly(t *testing.T) {
 	ctx := context.Background()
 
 	desired := &runtimetypes.DesiredState{
@@ -446,7 +446,7 @@ func TestKubernetesTranslatePlatformConfig_AgentWithPromptsOnly(t *testing.T) {
 	}
 }
 
-func TestKubernetesTranslatePlatformConfig_AgentWithMCPServersAndPrompts(t *testing.T) {
+func TestKubernetesTranslateRuntimeConfig_AgentWithMCPServersAndPrompts(t *testing.T) {
 	ctx := context.Background()
 
 	// MCP server config is delivered via MCP_SERVERS_CONFIG env var.

@@ -12,9 +12,12 @@ import (
 
 func TestDeploymentControllerConfigMapsRetentionSettings(t *testing.T) {
 	cfg := &config.Config{
-		ControllerEventRetention:           2 * time.Hour,
-		ControllerEventKeepAfterRevision:   42,
-		ControllerRetentionPruneBatchLimit: 17,
+		ControllerEventRetention:             2 * time.Hour,
+		ControllerEventKeepAfterRevision:     42,
+		ControllerRetentionPruneBatchLimit:   17,
+		ControllerDiscoveryInterval:          15 * time.Second,
+		ControllerDiscoveryStaleAfterMisses:  2,
+		ControllerDiscoveryDeleteAfterMisses: 4,
 	}
 
 	got := deploymentControllerConfig(cfg)
@@ -22,6 +25,9 @@ func TestDeploymentControllerConfigMapsRetentionSettings(t *testing.T) {
 	require.Equal(t, 2*time.Hour, got.Retention.ControlPlaneEvents)
 	require.Equal(t, int64(42), got.Retention.EventKeepAfterRev)
 	require.Equal(t, 17, got.Retention.BatchLimit)
+	require.Equal(t, 15*time.Second, got.DiscoveryInterval)
+	require.Equal(t, 2, got.DiscoveryStaleAfterMisses)
+	require.Equal(t, 4, got.DiscoveryDeleteAfterMisses)
 }
 
 func TestBuildStoresAddsExtraStoreTables(t *testing.T) {

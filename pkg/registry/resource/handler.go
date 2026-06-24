@@ -96,7 +96,7 @@ type Config struct {
 	// re-applies that are a no-op at the Store layer — because the
 	// handler unconditionally invokes PostUpsert after Upsert
 	// returns, without consulting the upsert change-status. This is
-	// the operator-friendly retry path: a transient platform-adapter
+	// the operator-friendly retry path: a transient runtime-adapter
 	// failure clears as soon as the operator re-applies (or a periodic
 	// CI re-apply succeeds), without forcing a spec bump.
 	//
@@ -579,7 +579,7 @@ func runDeleteLatest[T v1alpha1.Object](ctx context.Context, cfg Config, newObj 
 	// expecting the same response shape. Store.Delete is already a no-op
 	// on terminating rows (see v1alpha1store.deleteMutable), and the
 	// PostDelete re-fire mirrors PostUpsert's operator-friendly retry path
-	// for transient platform-adapter failures.
+	// for transient runtime-adapter failures.
 	row, err := cfg.Store.GetLatestIncludingTerminating(ctx, ns, name)
 	if err != nil {
 		return nil, mapNotFound(err, kind, ns, name, "")

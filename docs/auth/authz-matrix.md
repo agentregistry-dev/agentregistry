@@ -43,9 +43,9 @@ Every deployment lifecycle operation — launching, undeploying, cancelling — 
 | Delete | `DELETE /v0/deployments/{name}?namespace={namespace}` | `Read` + `Deploy` on target |
 | Logs | `GET /v0/deployments/{name}/logs?namespace={namespace}` | `Read` on target |
 
-Agent deployments additionally invoke `Read` on each referenced `skill:{ref}` and `prompt:{ref}` when the platform adapter resolves the agent's manifest before deploying. These reads run under the caller's session (not a system context), so the user triggering the deployment must have `Read` on every manifest-referenced skill and prompt.
+Agent deployments additionally invoke `Read` on each referenced `skill:{ref}` and `prompt:{ref}` when the runtime adapter resolves the agent's manifest before deploying. These reads run under the caller's session (not a system context), so the user triggering the deployment must have `Read` on every manifest-referenced skill and prompt.
 
-**Partial permissions leave stale `Failed` rows.** The Deployment resource row is written before the adapter resolves manifest references. A missing `Read` on any skill/prompt fails inside adapter apply, the caller gets 403, and the row is then patched to a failed condition under system context. No platform resources are created.
+**Partial permissions leave stale `Failed` rows.** The Deployment resource row is written before the adapter resolves manifest references. A missing `Read` on any skill/prompt fails inside adapter apply, the caller gets 403, and the row is then patched to a failed condition under system context. No runtime resources are created.
 
 ## Batch (apply)
 
@@ -64,6 +64,16 @@ Agent deployments additionally invoke `Read` on each referenced `skill:{ref}` an
 | Docs | `GET /docs` |
 | Metrics | `GET /metrics` |
 | Logging | `/logging` (localhost-only) |
+
+## MCP Registry v0.1 compatibility (read-only)
+
+The compatibility shim (`docs/mcp-registry-compatibility.md`) re-exposes MCPServer rows in the official `server.json` shape. It reuses the **same per-kind `ListFilter` + `Authorize` hooks as the native MCPServer read path** (`crud.PerKindHooks`): the list endpoint applies the kind's `ListFilter`, and the single-server reads apply its `Authorize` (a forbidden read returns 404). In the public OSS build those hooks are absent, so the catalogue is unfiltered across all namespaces (matching the `List` boundary above); a downstream provider that gates MCPServer reads gates these endpoints identically. The routes deliberately stay **out of the authn skip list**, so where an authn provider is configured the middleware runs and the caller's session reaches those hooks (OSS configures no authn provider, hence anonymous). Because the OSS default is unauthenticated + cross-namespace, the feature is **off by default** — enable it (`AGENT_REGISTRY_MCP_REGISTRY_COMPAT_ENABLED=true`) only where that, or your wired RBAC scoping, is acceptable.
+
+| Operation | HTTP | Required permissions | Notes |
+| --- | --- | --- | --- |
+| List servers | `GET /v0.1/servers` | none | Flattened all-namespace catalogue; no per-row filtering. |
+| List versions | `GET /v0.1/servers/{serverName}/versions` | none | |
+| Get version | `GET /v0.1/servers/{serverName}/versions/{version}` | none | `{version}` accepts `latest`. |
 
 ## Known gaps
 

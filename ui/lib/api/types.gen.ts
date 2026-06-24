@@ -216,6 +216,11 @@ export type LspServersField = {
     };
 };
 
+export type ListMetadata = {
+    count: number;
+    nextCursor?: string;
+};
+
 export type ListOutputAgentBody = {
     items: Array<Agent> | null;
     nextCursor?: string;
@@ -389,6 +394,14 @@ export type ObjectMeta = {
     updatedAt?: string;
 };
 
+export type OfficialMeta = {
+    isLatest: boolean;
+    publishedAt?: string;
+    status?: string;
+    statusChangedAt?: string;
+    updatedAt?: string;
+};
+
 export type PathOrPaths = {
     Values: Array<string> | null;
     WasArray: boolean;
@@ -557,6 +570,10 @@ export type ResourceRef = {
     tag?: string;
 };
 
+export type ResponseMeta = {
+    'io.modelcontextprotocol.registry/official'?: OfficialMeta;
+};
+
 export type Runtime = {
     apiVersion: string;
     kind: string;
@@ -571,6 +588,66 @@ export type RuntimeSpec = {
     };
     telemetryEndpoint?: string;
     type: string;
+};
+
+export type ServerArgument = {
+    name?: string;
+    type: string;
+    value?: string;
+};
+
+export type ServerDetail = {
+    $schema?: string;
+    description: string;
+    name: string;
+    packages?: Array<ServerPackage> | null;
+    remotes?: Array<ServerTransport> | null;
+    repository?: ServerRepository;
+    title?: string;
+    version: string;
+    websiteUrl?: string;
+};
+
+export type ServerInput = {
+    isRequired?: boolean;
+    name: string;
+    value?: string;
+};
+
+export type ServerListResponse = {
+    metadata: ListMetadata;
+    servers: Array<ServerResponse> | null;
+};
+
+export type ServerPackage = {
+    environmentVariables?: Array<ServerInput> | null;
+    fileSha256?: string;
+    identifier: string;
+    packageArguments?: Array<ServerArgument> | null;
+    registryBaseUrl?: string;
+    registryType: string;
+    runtimeArguments?: Array<ServerArgument> | null;
+    runtimeHint?: string;
+    transport: ServerTransport;
+    version: string;
+};
+
+export type ServerRepository = {
+    id?: string;
+    source?: string;
+    subfolder?: string;
+    url: string;
+};
+
+export type ServerResponse = {
+    _meta?: ResponseMeta;
+    server: ServerDetail;
+};
+
+export type ServerTransport = {
+    headers?: Array<ServerInput> | null;
+    type: string;
+    url?: string;
 };
 
 export type Skill = {
@@ -610,6 +687,124 @@ export type VersionBody = {
      */
     version: string;
 };
+
+export type McpRegistryListServersData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Opaque pagination cursor from a prior response.
+         */
+        cursor?: string;
+        /**
+         * Max servers to return (capped at 100).
+         */
+        limit?: number;
+        /**
+         * Substring match on the server name.
+         */
+        search?: string;
+        /**
+         * RFC3339 timestamp; only servers updated at or after this time.
+         */
+        updated_since?: string;
+        /**
+         * 'latest' (default) or a specific version tag.
+         */
+        version?: string;
+        /**
+         * Include servers pending deletion.
+         */
+        include_deleted?: boolean;
+    };
+    url: '/v0.1/servers';
+};
+
+export type McpRegistryListServersErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type McpRegistryListServersError = McpRegistryListServersErrors[keyof McpRegistryListServersErrors];
+
+export type McpRegistryListServersResponses = {
+    /**
+     * OK
+     */
+    200: ServerListResponse;
+};
+
+export type McpRegistryListServersResponse = McpRegistryListServersResponses[keyof McpRegistryListServersResponses];
+
+export type McpRegistryListServerVersionsData = {
+    body?: never;
+    path: {
+        /**
+         * URL-encoded '<namespace>/<name>' server name.
+         */
+        serverName: string;
+    };
+    query?: {
+        cursor?: string;
+        limit?: number;
+        include_deleted?: boolean;
+    };
+    url: '/v0.1/servers/{serverName}/versions';
+};
+
+export type McpRegistryListServerVersionsErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type McpRegistryListServerVersionsError = McpRegistryListServerVersionsErrors[keyof McpRegistryListServerVersionsErrors];
+
+export type McpRegistryListServerVersionsResponses = {
+    /**
+     * OK
+     */
+    200: ServerListResponse;
+};
+
+export type McpRegistryListServerVersionsResponse = McpRegistryListServerVersionsResponses[keyof McpRegistryListServerVersionsResponses];
+
+export type McpRegistryGetServerVersionData = {
+    body?: never;
+    path: {
+        /**
+         * URL-encoded '<namespace>/<name>' server name.
+         */
+        serverName: string;
+        /**
+         * A specific version tag, or 'latest'.
+         */
+        version: string;
+    };
+    query?: never;
+    url: '/v0.1/servers/{serverName}/versions/{version}';
+};
+
+export type McpRegistryGetServerVersionErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type McpRegistryGetServerVersionError = McpRegistryGetServerVersionErrors[keyof McpRegistryGetServerVersionErrors];
+
+export type McpRegistryGetServerVersionResponses = {
+    /**
+     * OK
+     */
+    200: ServerResponse;
+};
+
+export type McpRegistryGetServerVersionResponse = McpRegistryGetServerVersionResponses[keyof McpRegistryGetServerVersionResponses];
 
 export type ListAgentsData = {
     body?: never;

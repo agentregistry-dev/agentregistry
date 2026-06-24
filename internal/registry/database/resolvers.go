@@ -37,7 +37,7 @@ func NewResolver(stores map[string]*v1alpha1store.Store) v1alpha1.ResolverFunc {
 // NewGetter returns a v1alpha1.GetterFunc that dispatches a
 // cross-kind ResourceRef fetch against the supplied Stores map and
 // decodes the RawObject into its typed envelope via v1alpha1.Default.
-// Consumers: reconcilers / platform adapters that need the referenced
+// Consumers: reconcilers / runtime adapters that need the referenced
 // object's Spec (not just an existence check).
 //
 // Dangling references return v1alpha1.ErrDanglingRef; unknown kinds

@@ -12,25 +12,24 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
-// MCPServerTranslateOpts bundles knobs for SpecToPlatformMCPServer that vary
+// MCPServerTranslateOpts bundles knobs for SpecToRuntimeMCPServer that vary
 // per-adapter.
 type MCPServerTranslateOpts struct {
 	DeploymentID string
 	// Namespace, when non-empty, overrides meta.Namespace on the emitted
-	// platform MCPServer. k8s callers set it to the runtime's runtime
-	// namespace so label selectors line up; local callers usually leave it
-	// blank.
+	// runtime MCPServer. k8s callers set it to the target runtime namespace
+	// so label selectors line up; local callers usually leave it blank.
 	Namespace    string
 	EnvValues    map[string]string
 	ArgValues    map[string]string
 	HeaderValues map[string]string
 }
 
-// SpecToPlatformMCPServer translates a v1alpha1 MCPServer envelope into the
-// platform-internal *runtimetypes.MCPServer. Bundled servers (Spec.Source)
+// SpecToRuntimeMCPServer translates a v1alpha1 MCPServer envelope into the
+// runtime-internal *runtimetypes.MCPServer. Bundled servers (Spec.Source)
 // produce local transport; remote servers (Spec.Remote) produce remote
 // transport. The translator dispatches based on which Spec field is set.
-func SpecToPlatformMCPServer(
+func SpecToRuntimeMCPServer(
 	ctx context.Context,
 	meta v1alpha1.ObjectMeta,
 	spec v1alpha1.MCPServerSpec,
@@ -44,19 +43,19 @@ func SpecToPlatformMCPServer(
 		ArgValues:    nonNilStringMap(opts.ArgValues),
 		HeaderValues: nonNilStringMap(opts.HeaderValues),
 	}
-	platformServer, err := TranslateMCPServer(ctx, req)
+	runtimeServer, err := TranslateMCPServer(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("translate mcp server %s@%s: %w", meta.Name, meta.Tag, err)
 	}
 	if opts.Namespace != "" {
-		platformServer.Namespace = opts.Namespace
-	} else if meta.Namespace != "" && platformServer.Namespace == "" {
-		platformServer.Namespace = meta.Namespace
+		runtimeServer.Namespace = opts.Namespace
+	} else if meta.Namespace != "" && runtimeServer.Namespace == "" {
+		runtimeServer.Namespace = meta.Namespace
 	}
-	return platformServer, nil
+	return runtimeServer, nil
 }
 
-// AgentTranslateOpts bundles knobs for SpecToPlatformAgent.
+// AgentTranslateOpts bundles knobs for SpecToRuntimeAgent.
 type AgentTranslateOpts struct {
 	DeploymentID string
 	// Namespace is the target runtime namespace — populates KAGENT_NAMESPACE
@@ -68,7 +67,7 @@ type AgentTranslateOpts struct {
 	// .cluster.local" for in-cluster, etc.
 	KagentURL string
 	// DeploymentEnv is the raw Deployment.Spec.Env map pre-split — callers
-	// pass it as-is; SpecToPlatformAgent treats it as plain env overrides.
+	// pass it as-is; SpecToRuntimeAgent treats it as plain env overrides.
 	// Use SplitDeploymentRuntimeInputs upstream if the deployment encodes
 	// ARG_/HEADER_ prefixes.
 	DeploymentEnv map[string]string
@@ -84,12 +83,12 @@ type AgentTranslateOpts struct {
 	Getter v1alpha1.GetterFunc
 }
 
-// SpecToPlatformAgent translates a v1alpha1 Agent envelope + Deployment
-// overrides into the platform-internal *runtimetypes.Agent plus the set of
+// SpecToRuntimeAgent translates a v1alpha1 Agent envelope + Deployment
+// overrides into the runtime-internal *runtimetypes.Agent plus the set of
 // resolved MCPServers that should be deployed alongside it. Nested
 // AgentSpec.MCPServers refs are fetched via opts.Getter; dangling refs
 // surface as v1alpha1.ErrDanglingRef.
-func SpecToPlatformAgent(
+func SpecToRuntimeAgent(
 	ctx context.Context,
 	agentMeta v1alpha1.ObjectMeta,
 	agentSpec v1alpha1.AgentSpec,
@@ -145,7 +144,7 @@ func SpecToPlatformAgent(
 		if !ok || mcp == nil {
 			return nil, nil, fmt.Errorf("spec.mcpServers[%d]: getter returned unexpected type for %s/%s", i, normalized.Namespace, normalized.Name)
 		}
-		platformServer, err := SpecToPlatformMCPServer(ctx, mcp.Metadata, mcp.Spec, MCPServerTranslateOpts{
+		runtimeServer, err := SpecToRuntimeMCPServer(ctx, mcp.Metadata, mcp.Spec, MCPServerTranslateOpts{
 			DeploymentID: opts.DeploymentID,
 			Namespace:    opts.Namespace,
 			HeaderValues: opts.HeaderValues,
@@ -153,9 +152,9 @@ func SpecToPlatformAgent(
 		if err != nil {
 			return nil, nil, fmt.Errorf("spec.mcpServers[%d]: %w", i, err)
 		}
-		resolvedServers = append(resolvedServers, platformServer)
+		resolvedServers = append(resolvedServers, runtimeServer)
 		if mcp.Spec.Remote != nil {
-			resolvedConfigs = append(resolvedConfigs, remoteMCPServerConfig(mcp.Metadata.Name, mcp.Spec, opts.DeploymentID, platformServer))
+			resolvedConfigs = append(resolvedConfigs, remoteMCPServerConfig(mcp.Metadata.Name, mcp.Spec, opts.DeploymentID, runtimeServer))
 		} else {
 			resolvedConfigs = append(resolvedConfigs, mcpServerConfigFromSpec(mcp.Metadata.Name, mcp.Spec, opts.DeploymentID))
 		}
@@ -225,17 +224,17 @@ func mcpServerConfigFromSpec(name string, _ v1alpha1.MCPServerSpec, deploymentID
 
 // remoteMCPServerConfig builds the per-server entry for an agent that
 // references a remote MCPServer (Spec.Remote set). Type is always "remote".
-// Headers come from the translated platform server so required/default/
-// override processing matches the platform apply path.
-func remoteMCPServerConfig(name string, spec v1alpha1.MCPServerSpec, deploymentID string, platformServer *runtimetypes.MCPServer) runtimetypes.ResolvedMCPServerConfig {
+// Headers come from the translated runtime server so required/default/
+// override processing matches the runtime apply path.
+func remoteMCPServerConfig(name string, spec v1alpha1.MCPServerSpec, deploymentID string, runtimeServer *runtimetypes.MCPServer) runtimetypes.ResolvedMCPServerConfig {
 	cfg := runtimetypes.ResolvedMCPServerConfig{
 		Name: GenerateInternalNameForDeployment(name, deploymentID),
 		Type: "remote",
 		URL:  spec.Remote.URL,
 	}
-	if platformServer != nil && platformServer.Remote != nil && len(platformServer.Remote.Headers) > 0 {
-		headers := make(map[string]string, len(platformServer.Remote.Headers))
-		for _, h := range platformServer.Remote.Headers {
+	if runtimeServer != nil && runtimeServer.Remote != nil && len(runtimeServer.Remote.Headers) > 0 {
+		headers := make(map[string]string, len(runtimeServer.Remote.Headers))
+		for _, h := range runtimeServer.Remote.Headers {
 			headers[h.Name] = h.Value
 		}
 		cfg.Headers = headers
