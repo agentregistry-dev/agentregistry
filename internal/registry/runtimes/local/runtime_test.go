@@ -9,7 +9,7 @@ import (
 )
 
 func TestBuildLocalRuntimeConfig_UsesDefaultAgentPortInGatewayRoute(t *testing.T) {
-	cfg, err := BuildLocalRuntimeConfig(context.Background(), "/tmp/test-platform", 8081, "test-project", &runtimetypes.DesiredState{
+	cfg, err := BuildLocalRuntimeConfig(context.Background(), "/tmp/test-runtime", 8081, "test-project", &runtimetypes.DesiredState{
 		Agents: []*runtimetypes.Agent{{
 			Name:       "demo-agent",
 			Tag:        "1.0.0",

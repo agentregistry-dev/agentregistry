@@ -58,7 +58,7 @@ const (
 	MCPServerTypeLocal  MCPServerType = "local"
 )
 
-// RemoteMCPTarget is the platform-internal DTO describing a remote MCP
+// RemoteMCPTarget is the runtime-internal DTO describing a remote MCP
 // endpoint (parsed URL components + headers). Distinct from the
 // kagent.dev/v1alpha2.RemoteMCPServer CRD which is the on-cluster
 // representation.
