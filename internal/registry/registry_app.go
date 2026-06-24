@@ -113,7 +113,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	if _, err := controller.StartDeploymentController(ctx, pool, stores, deploymentAdapters, deploymentControllerConfig(cfg)); err != nil {
 		return fmt.Errorf("start deployment controller: %w", err)
 	}
-	// The Plugin controller resolves each plugin's pinned origin pointer to a
+	// The Plugin controller resolves each plugin's pinned source pointer to a
 	// concrete commit/digest and records the manifest/inventory in PluginStatus
 	// out of band of the API write — same pattern as the Deployment controller.
 	if _, err := controller.StartPluginController(ctx, pool, stores, controller.PluginControllerDeps{Resolver: pluginsource.NewGitResolver()}); err != nil {

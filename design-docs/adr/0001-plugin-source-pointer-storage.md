@@ -35,9 +35,9 @@ Two things changed that calculus:
 A **Plugin is a pinned pointer to an external source**, and the registry hosts
 **no plugin bytes**.
 
-- `PluginSpec` is user intent only: `Origin` = a **git** source (or, later, an
+- `PluginSpec` is user intent only: `Source` = a **git** source (or, later, an
   OCI digest), reusing the shared `v1alpha1.Repository` type. **Git-first**; the
-  OCI origin type stays declared but unimplemented.
+  OCI source type stays declared but unimplemented.
 - The Plugin controller **resolves and pins** the pointer out of band: it
   resolves the ref (branch/tag/HEAD) to a concrete commit SHA via
   `git ls-remote`, shallow-clones that commit to scan the source, and records
@@ -65,7 +65,7 @@ A **Plugin is a pinned pointer to an external source**, and the registry hosts
 
 The shared `Repository` type and the mature `gitutil` clone/checkout path make
 git the lower-friction, more-consistent default, and Claude Code marketplaces
-are git-native. The `Origin` union keeps OCI as a declared type so it can be
+are git-native. The `Source` union keeps OCI as a declared type so it can be
 added later with no API churn (it's the natural durability escape hatch — see
 below).
 
@@ -93,7 +93,7 @@ order of when they apply:
    the pinned bundle into a registry-side blob/OCI store and records a
    `status.mirror` ref; deploys fall back to the mirror when the origin is
    unreachable. Crucially this is a **cache, not the source of truth** — the
-   origin pointer remains authoritative, the mirror is best-effort and
+   source pointer remains authoritative, the mirror is best-effort and
    GC-able, and it is entirely optional. This re-uses the *concept* of the
    deleted OCI store without re-coupling the data model to it.
 
@@ -116,9 +116,9 @@ This maps **directly** onto our model:
 
 | marketplace.json `source` field | comes from |
 | --- | --- |
-| `source: "git-subdir"` / `"github"` / `"url"` | `Plugin.Spec.Origin` type |
-| `url` / `repo` | `Origin.Git.Repository.URL` |
-| `path` | `Origin.Git.Repository.Subfolder` |
+| `source: "git-subdir"` / `"github"` / `"url"` | `Plugin.Spec.Source` type |
+| `url` / `repo` | `Source.Git.Repository.URL` |
+| `path` | `Source.Git.Repository.Subfolder` |
 | `sha` | **`status.ResolvedSource.Commit`** (the controller's pin) |
 
 So 1e (marketplace serving) is: the registry emits a marketplace.json catalog
@@ -142,7 +142,7 @@ mechanism today (this is Claude Code-specific).
   generic spec hash, unaffected.
 - **Status shape is breaking** for any consumer that read `status.content` or
   the `StorageNotConfigured`/`Published`/`BundleInvalid` reasons — replaced by
-  `status.resolvedSource` and `Resolved`/`OriginUnresolvable`/`OriginUnsupported`/
+  `status.resolvedSource` and `Resolved`/`SourceUnresolvable`/`SourceUnsupported`/
   `SourceInvalid`. No external consumers exist yet.
 - **New runtime dependency:** the controller and (later) deploys shell out to
   `git` server-side. Only github.com is supported initially (matches skills).

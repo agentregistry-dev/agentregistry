@@ -491,20 +491,6 @@ export type PluginManifest = {
     version?: string;
 };
 
-export type PluginOrigin = {
-    git?: PluginOriginGit;
-    oci?: PluginOriginOci;
-    type: string;
-};
-
-export type PluginOriginGit = {
-    repository: Repository;
-};
-
-export type PluginOriginOci = {
-    reference: string;
-};
-
 export type PluginResolvedSource = {
     commit?: string;
     digest?: string;
@@ -516,10 +502,24 @@ export type PluginSkill = {
     name: string;
 };
 
+export type PluginSource = {
+    git?: PluginSourceGit;
+    oci?: PluginSourceOci;
+    type: string;
+};
+
+export type PluginSourceGit = {
+    repository: Repository;
+};
+
+export type PluginSourceOci = {
+    reference: string;
+};
+
 export type PluginSpec = {
     description?: string;
     harnesses?: Array<string> | null;
-    origin?: PluginOrigin;
+    source?: PluginSource;
     title?: string;
 };
 

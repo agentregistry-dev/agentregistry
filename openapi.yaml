@@ -1050,34 +1050,6 @@ components:
       required:
       - name
       type: object
-    PluginOrigin:
-      additionalProperties: false
-      properties:
-        git:
-          $ref: '#/components/schemas/PluginOriginGit'
-        oci:
-          $ref: '#/components/schemas/PluginOriginOCI'
-        type:
-          type: string
-      required:
-      - type
-      type: object
-    PluginOriginGit:
-      additionalProperties: false
-      properties:
-        repository:
-          $ref: '#/components/schemas/Repository'
-      required:
-      - repository
-      type: object
-    PluginOriginOCI:
-      additionalProperties: false
-      properties:
-        reference:
-          type: string
-      required:
-      - reference
-      type: object
     PluginResolvedSource:
       additionalProperties: false
       properties:
@@ -1100,6 +1072,34 @@ components:
       required:
       - name
       type: object
+    PluginSource:
+      additionalProperties: false
+      properties:
+        git:
+          $ref: '#/components/schemas/PluginSourceGit'
+        oci:
+          $ref: '#/components/schemas/PluginSourceOCI'
+        type:
+          type: string
+      required:
+      - type
+      type: object
+    PluginSourceGit:
+      additionalProperties: false
+      properties:
+        repository:
+          $ref: '#/components/schemas/Repository'
+      required:
+      - repository
+      type: object
+    PluginSourceOCI:
+      additionalProperties: false
+      properties:
+        reference:
+          type: string
+      required:
+      - reference
+      type: object
     PluginSpec:
       additionalProperties: false
       properties:
@@ -1111,8 +1111,8 @@ components:
           type:
           - array
           - "null"
-        origin:
-          $ref: '#/components/schemas/PluginOrigin'
+        source:
+          $ref: '#/components/schemas/PluginSource'
         title:
           type: string
       type: object

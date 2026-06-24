@@ -19,7 +19,7 @@ import (
 )
 
 // PluginControllerDeps are the Plugin controller's dependencies. Resolver pins
-// a plugin's origin pointer and loads its bundle; it is required.
+// a plugin's source pointer and loads its bundle; it is required.
 type PluginControllerDeps struct {
 	Resolver source.Resolver
 }
@@ -40,7 +40,7 @@ type pluginQueueKey struct {
 }
 
 // PluginController reconciles Plugin resources out of band of the API write: it
-// resolves each plugin's pinned origin pointer (a git commit or — later — an
+// resolves each plugin's pinned source pointer (a git commit or — later — an
 // OCI digest) to a concrete commit/digest, scans the source for its manifest
 // and inventory, and records all of it in PluginStatus. It stores NOTHING: the
 // bundle stays at its origin and is materialized from source at deploy time.
@@ -293,14 +293,14 @@ func (c *PluginController) reconcile(ctx context.Context, p *v1alpha1.Plugin) (s
 // terminal (Forget) or retryable (rate-limited requeue).
 func classifyResolveErr(err error) (reason string, terminal bool) {
 	switch {
-	case errors.Is(err, source.ErrUnsupportedOrigin):
-		return "OriginUnsupported", true
+	case errors.Is(err, source.ErrUnsupportedSource):
+		return "SourceUnsupported", true
 	case errors.Is(err, source.ErrSourceNotFound):
 		return "RefNotFound", true
 	case errors.Is(err, bundle.ErrInvalidBundle):
 		return "SourceInvalid", true
 	default:
-		return "OriginUnresolvable", false
+		return "SourceUnresolvable", false
 	}
 }
 

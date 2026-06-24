@@ -17,9 +17,9 @@ func TestClassifyResolveErr(t *testing.T) {
 		wantReason   string
 		wantTerminal bool
 	}{
-		{"unsupported origin", fmt.Errorf("wrap: %w", source.ErrUnsupportedOrigin), "OriginUnsupported", true},
+		{"unsupported source", fmt.Errorf("wrap: %w", source.ErrUnsupportedSource), "SourceUnsupported", true},
 		{"invalid bundle", fmt.Errorf("wrap: %w", bundle.ErrInvalidBundle), "SourceInvalid", true},
-		{"transient", errors.New("dial tcp: timeout"), "OriginUnresolvable", false},
+		{"transient", errors.New("dial tcp: timeout"), "SourceUnresolvable", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

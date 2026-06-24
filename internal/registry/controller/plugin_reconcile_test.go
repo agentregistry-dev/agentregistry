@@ -93,7 +93,7 @@ func TestEnqueueAllSkipsUndecodableRow(t *testing.T) {
 	store := newFakePluginStore()
 	store.listRows = []*v1alpha1.RawObject{
 		rawOf("bad", `not json`),                   // EnvelopeFromRaw fails -> skip
-		rawOf("good", `{"origin":{"type":"git"}}`), // valid, needs reconcile -> enqueue
+		rawOf("good", `{"source":{"type":"git"}}`), // valid, needs reconcile -> enqueue
 	}
 	c := &PluginController{Store: store, Resolver: fakeResolver{}}
 
@@ -109,9 +109,9 @@ func TestPluginReconcile(t *testing.T) {
 	const ns, name, tag = "default", "p", "v1"
 	newPlugin := func(gen int64) *v1alpha1.Plugin {
 		p := &v1alpha1.Plugin{Metadata: v1alpha1.ObjectMeta{Namespace: ns, Name: name, Tag: tag, Generation: gen}}
-		p.Spec.Origin = &v1alpha1.PluginOrigin{
-			Type: v1alpha1.PluginOriginTypeGit,
-			Git:  &v1alpha1.PluginOriginGit{Repository: &v1alpha1.Repository{URL: "https://github.com/o/r", Branch: "main"}},
+		p.Spec.Source = &v1alpha1.PluginSource{
+			Type: v1alpha1.PluginSourceTypeGit,
+			Git:  &v1alpha1.PluginSourceGit{Repository: &v1alpha1.Repository{URL: "https://github.com/o/r", Branch: "main"}},
 		}
 		return p
 	}
@@ -123,7 +123,7 @@ func TestPluginReconcile(t *testing.T) {
 	t.Run("success transitions Progressing then Resolved and bumps observedGeneration", func(t *testing.T) {
 		store := newFakePluginStore()
 		c := &PluginController{Store: store, Resolver: fakeResolver{
-			resolved: &v1alpha1.PluginResolvedSource{Type: v1alpha1.PluginOriginTypeGit, Commit: "deadbeef"},
+			resolved: &v1alpha1.PluginResolvedSource{Type: v1alpha1.PluginSourceTypeGit, Commit: "deadbeef"},
 			bundle:   goodBundle,
 		}}
 		outcome, _, err := c.reconcile(context.Background(), newPlugin(2))
@@ -148,15 +148,15 @@ func TestPluginReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("terminal unsupported origin forgets and bumps observedGeneration", func(t *testing.T) {
+	t.Run("terminal unsupported source forgets and bumps observedGeneration", func(t *testing.T) {
 		store := newFakePluginStore()
-		c := &PluginController{Store: store, Resolver: fakeResolver{err: fmt.Errorf("x: %w", source.ErrUnsupportedOrigin)}}
+		c := &PluginController{Store: store, Resolver: fakeResolver{err: fmt.Errorf("x: %w", source.ErrUnsupportedSource)}}
 		outcome, reason, err := c.reconcile(context.Background(), newPlugin(3))
 		if err != nil {
 			t.Fatalf("terminal failure must return nil error (Forget), got %v", err)
 		}
-		if outcome != "failed" || reason != "OriginUnsupported" {
-			t.Fatalf("got (%q, %q), want (failed, OriginUnsupported)", outcome, reason)
+		if outcome != "failed" || reason != "SourceUnsupported" {
+			t.Fatalf("got (%q, %q), want (failed, SourceUnsupported)", outcome, reason)
 		}
 		got := store.plugin(t, ns, name, tag)
 		if got.Status.ObservedGeneration != 3 {
@@ -178,8 +178,8 @@ func TestPluginReconcile(t *testing.T) {
 		if got.Status.ObservedGeneration != 0 {
 			t.Errorf("retryable must NOT bump observedGeneration, got %d", got.Status.ObservedGeneration)
 		}
-		if r := readyReason(got); r != "OriginUnresolvable" {
-			t.Errorf("ready reason = %q, want OriginUnresolvable", r)
+		if r := readyReason(got); r != "SourceUnresolvable" {
+			t.Errorf("ready reason = %q, want SourceUnresolvable", r)
 		}
 	})
 
@@ -187,7 +187,7 @@ func TestPluginReconcile(t *testing.T) {
 		store := newFakePluginStore()
 		badBundle := &bundle.CanonicalBundle{Files: map[string][]byte{".claude-plugin/plugin.json": []byte("{bad")}}
 		c := &PluginController{Store: store, Resolver: fakeResolver{
-			resolved: &v1alpha1.PluginResolvedSource{Type: v1alpha1.PluginOriginTypeGit, Commit: "c"},
+			resolved: &v1alpha1.PluginResolvedSource{Type: v1alpha1.PluginSourceTypeGit, Commit: "c"},
 			bundle:   badBundle,
 		}}
 		outcome, reason, err := c.reconcile(context.Background(), newPlugin(5))

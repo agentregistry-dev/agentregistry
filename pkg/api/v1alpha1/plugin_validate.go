@@ -19,12 +19,12 @@ func validatePluginSpec(s *PluginSpec) FieldErrors {
 	var errs FieldErrors
 	errs.Append("spec.title", validateTitle(s.Title))
 
-	// Origin is required: it is the pointer the controller resolves and pins.
-	if s.Origin == nil {
-		errs.Append("spec.origin", fmt.Errorf("%w", ErrRequiredField))
+	// Source is required: it is the pointer the controller resolves and pins.
+	if s.Source == nil {
+		errs.Append("spec.source", fmt.Errorf("%w", ErrRequiredField))
 	} else {
-		for _, e := range validatePluginOrigin(s.Origin) {
-			errs.Append("spec.origin."+e.Path, e.Cause)
+		for _, e := range validatePluginSource(s.Source) {
+			errs.Append("spec.source."+e.Path, e.Cause)
 		}
 	}
 	return errs
@@ -43,10 +43,10 @@ func isFullCommitSHA(s string) bool {
 	return true
 }
 
-func validatePluginOrigin(o *PluginOrigin) FieldErrors {
+func validatePluginSource(o *PluginSource) FieldErrors {
 	var errs FieldErrors
 	switch o.Type {
-	case PluginOriginTypeGit:
+	case PluginSourceTypeGit:
 		if o.OCI != nil {
 			errs.Append("oci", fmt.Errorf("%w: oci must be empty when type=git", ErrInvalidFormat))
 		}
@@ -72,7 +72,7 @@ func validatePluginOrigin(o *PluginOrigin) FieldErrors {
 		if o.Git.Repository.Commit != "" && !isFullCommitSHA(o.Git.Repository.Commit) {
 			errs.Append("git.repository.commit", fmt.Errorf("%w: commit must be a full 40-character SHA (use branch for a tag/branch ref)", ErrInvalidFormat))
 		}
-	case PluginOriginTypeOCI:
+	case PluginSourceTypeOCI:
 		if o.Git != nil {
 			errs.Append("git", fmt.Errorf("%w: git must be empty when type=oci", ErrInvalidFormat))
 		}
@@ -80,14 +80,14 @@ func validatePluginOrigin(o *PluginOrigin) FieldErrors {
 			errs.Append("oci.reference", fmt.Errorf("%w", ErrRequiredField))
 			break
 		}
-		// Pin requirement: OCI origin must be digest-pinned, not a floating tag.
+		// Pin requirement: OCI source must be digest-pinned, not a floating tag.
 		if !strings.Contains(o.OCI.Reference, "@sha256:") {
-			errs.Append("oci.reference", fmt.Errorf("%w: oci origin must be digest-pinned (…@sha256:…)", ErrInvalidFormat))
+			errs.Append("oci.reference", fmt.Errorf("%w: oci source must be digest-pinned (…@sha256:…)", ErrInvalidFormat))
 		}
 	case "":
 		errs.Append("type", fmt.Errorf("%w", ErrRequiredField))
 	default:
-		errs.Append("type", fmt.Errorf("%w: unknown plugin origin type %q", ErrInvalidFormat, o.Type))
+		errs.Append("type", fmt.Errorf("%w: unknown plugin source type %q", ErrInvalidFormat, o.Type))
 	}
 	return errs
 }

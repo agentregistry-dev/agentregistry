@@ -11,9 +11,9 @@ func basePluginMeta() ObjectMeta {
 
 func TestPluginValidate(t *testing.T) {
 	fullSHA := strings.Repeat("a1b2c3d4", 5) // 40 hex chars
-	gitPinned := &PluginOrigin{
-		Type: PluginOriginTypeGit,
-		Git:  &PluginOriginGit{Repository: &Repository{URL: "https://github.com/org/repo", Commit: fullSHA}},
+	gitPinned := &PluginSource{
+		Type: PluginSourceTypeGit,
+		Git:  &PluginSourceGit{Repository: &Repository{URL: "https://github.com/org/repo", Commit: fullSHA}},
 	}
 
 	tests := []struct {
@@ -22,54 +22,54 @@ func TestPluginValidate(t *testing.T) {
 		wantErr string // substring; empty means valid
 	}{
 		{
-			name: "valid git origin",
-			spec: PluginSpec{Title: "My Plugin", Harnesses: []string{"claude-code"}, Origin: gitPinned},
+			name: "valid git source",
+			spec: PluginSpec{Title: "My Plugin", Harnesses: []string{"claude-code"}, Source: gitPinned},
 		},
 		{
-			name: "valid oci digest origin",
-			spec: PluginSpec{Origin: &PluginOrigin{Type: PluginOriginTypeOCI, OCI: &PluginOriginOCI{Reference: "ghcr.io/org/plugin@sha256:" + strings.Repeat("a", 64)}}},
+			name: "valid oci digest source",
+			spec: PluginSpec{Source: &PluginSource{Type: PluginSourceTypeOCI, OCI: &PluginSourceOCI{Reference: "ghcr.io/org/plugin@sha256:" + strings.Repeat("a", 64)}}},
 		},
 		{
-			name:    "missing origin",
+			name:    "missing source",
 			spec:    PluginSpec{Title: "x"},
-			wantErr: "spec.origin",
+			wantErr: "spec.source",
 		},
 		{
-			name: "git origin with branch only (controller resolves the commit)",
-			spec: PluginSpec{Origin: &PluginOrigin{Type: PluginOriginTypeGit, Git: &PluginOriginGit{Repository: &Repository{URL: "https://github.com/org/repo", Branch: "main"}}}},
+			name: "git source with branch only (controller resolves the commit)",
+			spec: PluginSpec{Source: &PluginSource{Type: PluginSourceTypeGit, Git: &PluginSourceGit{Repository: &Repository{URL: "https://github.com/org/repo", Branch: "main"}}}},
 		},
 		{
-			name: "git origin with no ref (controller resolves default branch)",
-			spec: PluginSpec{Origin: &PluginOrigin{Type: PluginOriginTypeGit, Git: &PluginOriginGit{Repository: &Repository{URL: "https://github.com/org/repo"}}}},
+			name: "git source with no ref (controller resolves default branch)",
+			spec: PluginSpec{Source: &PluginSource{Type: PluginSourceTypeGit, Git: &PluginSourceGit{Repository: &Repository{URL: "https://github.com/org/repo"}}}},
 		},
 		{
-			name:    "git origin missing url",
-			spec:    PluginSpec{Origin: &PluginOrigin{Type: PluginOriginTypeGit, Git: &PluginOriginGit{Repository: &Repository{Commit: fullSHA}}}},
+			name:    "git source missing url",
+			spec:    PluginSpec{Source: &PluginSource{Type: PluginSourceTypeGit, Git: &PluginSourceGit{Repository: &Repository{Commit: fullSHA}}}},
 			wantErr: "url",
 		},
 		{
 			name:    "git commit not a full SHA (would never resolve)",
-			spec:    PluginSpec{Origin: &PluginOrigin{Type: PluginOriginTypeGit, Git: &PluginOriginGit{Repository: &Repository{URL: "https://github.com/org/repo", Commit: "abc123"}}}},
+			spec:    PluginSpec{Source: &PluginSource{Type: PluginSourceTypeGit, Git: &PluginSourceGit{Repository: &Repository{URL: "https://github.com/org/repo", Commit: "abc123"}}}},
 			wantErr: "full 40-character SHA",
 		},
 		{
 			name:    "git branch and commit both set (ambiguous)",
-			spec:    PluginSpec{Origin: &PluginOrigin{Type: PluginOriginTypeGit, Git: &PluginOriginGit{Repository: &Repository{URL: "https://github.com/org/repo", Branch: "main", Commit: fullSHA}}}},
+			spec:    PluginSpec{Source: &PluginSource{Type: PluginSourceTypeGit, Git: &PluginSourceGit{Repository: &Repository{URL: "https://github.com/org/repo", Branch: "main", Commit: fullSHA}}}},
 			wantErr: "at most one of branch or commit",
 		},
 		{
-			name:    "oci origin not digest-pinned",
-			spec:    PluginSpec{Origin: &PluginOrigin{Type: PluginOriginTypeOCI, OCI: &PluginOriginOCI{Reference: "ghcr.io/org/plugin:latest"}}},
+			name:    "oci source not digest-pinned",
+			spec:    PluginSpec{Source: &PluginSource{Type: PluginSourceTypeOCI, OCI: &PluginSourceOCI{Reference: "ghcr.io/org/plugin:latest"}}},
 			wantErr: "digest-pinned",
 		},
 		{
-			name:    "unknown origin type",
-			spec:    PluginSpec{Origin: &PluginOrigin{Type: "svn"}},
-			wantErr: "unknown plugin origin type",
+			name:    "unknown source type",
+			spec:    PluginSpec{Source: &PluginSource{Type: "svn"}},
+			wantErr: "unknown plugin source type",
 		},
 		{
 			name:    "git and oci both set",
-			spec:    PluginSpec{Origin: &PluginOrigin{Type: PluginOriginTypeGit, Git: &PluginOriginGit{Repository: &Repository{URL: "https://github.com/org/repo", Commit: "abc"}}, OCI: &PluginOriginOCI{Reference: "x"}}},
+			spec:    PluginSpec{Source: &PluginSource{Type: PluginSourceTypeGit, Git: &PluginSourceGit{Repository: &Repository{URL: "https://github.com/org/repo", Commit: "abc"}}, OCI: &PluginSourceOCI{Reference: "x"}}},
 			wantErr: "oci must be empty",
 		},
 	}

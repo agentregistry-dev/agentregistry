@@ -36,9 +36,9 @@ type PluginSpec struct {
 	// other harnesses from the canonical form regardless of what's listed here.
 	Harnesses []string `json:"harnesses,omitempty" yaml:"harnesses,omitempty"`
 
-	// Origin is where the bundle is ingested from, pinned (git commit / OCI
+	// Source is where the bundle is ingested from, pinned (git commit / OCI
 	// digest) so a published tag is reproducible.
-	Origin *PluginOrigin `json:"origin,omitempty" yaml:"origin,omitempty"`
+	Source *PluginSource `json:"source,omitempty" yaml:"source,omitempty"`
 }
 
 // PluginStatus is the Plugin observed-state subresource, written by the Plugin
@@ -50,12 +50,12 @@ type PluginSpec struct {
 // (or ResolvedSource==nil) as "not yet resolved". The controller sets
 // Ready=False/Reason=Progressing on first observe, Ready=True/Reason=Resolved
 // once the pointer is pinned and the source scanned, and Ready=False with a
-// specific reason (OriginUnresolvable, OriginUnsupported, SourceInvalid) on
+// specific reason (SourceUnresolvable, SourceUnsupported, SourceInvalid) on
 // failure.
 type PluginStatus struct {
 	Status `json:",inline" yaml:",inline"`
 
-	// ResolvedSource is the controller's immutable pin of the user's origin
+	// ResolvedSource is the controller's immutable pin of the user's source
 	// pointer (the concrete commit/digest the source resolved to).
 	ResolvedSource *PluginResolvedSource `json:"resolvedSource,omitempty" yaml:"resolvedSource,omitempty"`
 	// Manifest is the canonical typed plugin.json parsed from the source.
@@ -65,46 +65,46 @@ type PluginStatus struct {
 }
 
 // PluginResolvedSource records the concrete, immutable revision the controller
-// pinned the user's origin pointer to. Exactly one of Commit/Digest is set,
+// pinned the user's source pointer to. Exactly one of Commit/Digest is set,
 // matching Type. It is the reproducibility anchor: deploys materialize from this
 // pin, not from the (possibly moving) ref the user supplied.
 type PluginResolvedSource struct {
-	Type PluginOriginType `json:"type" yaml:"type"`
+	Type PluginSourceType `json:"type" yaml:"type"`
 	// Commit is the resolved full git commit SHA (Type=git).
 	Commit string `json:"commit,omitempty" yaml:"commit,omitempty"`
 	// Digest is the resolved OCI digest, e.g. "sha256:…" (Type=oci; future).
 	Digest string `json:"digest,omitempty" yaml:"digest,omitempty"`
 }
 
-// PluginOriginType selects which origin sub-struct is set.
-type PluginOriginType string
+// PluginSourceType selects which source sub-struct is set.
+type PluginSourceType string
 
 const (
-	PluginOriginTypeGit PluginOriginType = "git"
-	PluginOriginTypeOCI PluginOriginType = "oci"
+	PluginSourceTypeGit PluginSourceType = "git"
+	PluginSourceTypeOCI PluginSourceType = "oci"
 )
 
-// PluginOrigin identifies where the bundle came from. Exactly one of Git/OCI
+// PluginSource identifies where the bundle came from. Exactly one of Git/OCI
 // is set, matching Type. The reference must be pinned (git commit / OCI digest)
 // so the published tag is reproducible.
-type PluginOrigin struct {
-	Type PluginOriginType `json:"type" yaml:"type"`
-	Git  *PluginOriginGit `json:"git,omitempty" yaml:"git,omitempty"`
-	OCI  *PluginOriginOCI `json:"oci,omitempty" yaml:"oci,omitempty"`
+type PluginSource struct {
+	Type PluginSourceType `json:"type" yaml:"type"`
+	Git  *PluginSourceGit `json:"git,omitempty" yaml:"git,omitempty"`
+	OCI  *PluginSourceOCI `json:"oci,omitempty" yaml:"oci,omitempty"`
 }
 
-// PluginOriginGit is a git source. Repository may pin a Commit, a Branch, or a
+// PluginSourceGit is a git source. Repository may pin a Commit, a Branch, or a
 // tag (empty => the remote default branch); the Plugin controller resolves
 // whatever ref is supplied to a concrete commit SHA and records that immutable
 // pin in status.ResolvedSource. Repository.Subfolder selects a plugin inside a
 // monorepo.
-type PluginOriginGit struct {
+type PluginSourceGit struct {
 	Repository *Repository `json:"repository" yaml:"repository"`
 }
 
-// PluginOriginOCI is a digest-pinned OCI artifact reference, e.g.
+// PluginSourceOCI is a digest-pinned OCI artifact reference, e.g.
 // "ghcr.io/org/plugin@sha256:...". Bare/tag-only refs are rejected.
-type PluginOriginOCI struct {
+type PluginSourceOCI struct {
 	Reference string `json:"reference" yaml:"reference"`
 }
 

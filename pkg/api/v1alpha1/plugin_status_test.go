@@ -9,7 +9,7 @@ func TestPluginStatusRoundTrip(t *testing.T) {
 	in := &Plugin{}
 	in.Status.ObservedGeneration = 5
 	in.Status.SetCondition(Condition{Type: "Ready", Status: ConditionTrue, Reason: "Resolved"})
-	in.Status.ResolvedSource = &PluginResolvedSource{Type: PluginOriginTypeGit, Commit: "abc123"}
+	in.Status.ResolvedSource = &PluginResolvedSource{Type: PluginSourceTypeGit, Commit: "abc123"}
 	in.Status.Manifest = &PluginManifest{Name: "deploy", Version: "1.2.0"}
 	in.Status.Inventory = &PluginInventory{Skills: []PluginSkill{{Name: "deploy", Description: "Deploys"}}}
 
@@ -29,7 +29,7 @@ func TestPluginStatusRoundTrip(t *testing.T) {
 	if !out.Status.IsConditionTrue("Ready") {
 		t.Error("Ready condition did not round-trip")
 	}
-	if out.Status.ResolvedSource == nil || out.Status.ResolvedSource.Commit != "abc123" || out.Status.ResolvedSource.Type != PluginOriginTypeGit {
+	if out.Status.ResolvedSource == nil || out.Status.ResolvedSource.Commit != "abc123" || out.Status.ResolvedSource.Type != PluginSourceTypeGit {
 		t.Errorf("resolvedSource did not round-trip: %+v", out.Status.ResolvedSource)
 	}
 	if out.Status.Manifest == nil || out.Status.Manifest.Name != "deploy" || out.Status.Manifest.Version != "1.2.0" {
