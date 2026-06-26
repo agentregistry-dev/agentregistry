@@ -68,4 +68,17 @@ type DeploymentSpec struct {
 	DeploymentRefs []DeploymentRef   `json:"deploymentRefs,omitempty" yaml:"deploymentRefs,omitempty"`
 	Env            map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
 	RuntimeConfig  map[string]any    `json:"runtimeConfig,omitempty" yaml:"runtimeConfig,omitempty"`
+	// HarnessPolicy configures runtime policy for harness-based deployments
+	// (e.g. the harness permission posture). Ignored by non-harness deployments.
+	HarnessPolicy *HarnessPolicy `json:"harnessPolicy,omitempty" yaml:"harnessPolicy,omitempty"`
+}
+
+// HarnessPolicy configures how a harness runtime behaves for a Deployment.
+// Extensible; today it carries the permission posture.
+type HarnessPolicy struct {
+	// PermissionMode controls the harness tool-permission posture, e.g.
+	// "default", "acceptEdits", "bypassPermissions". Empty defaults to
+	// "bypassPermissions" for headless harness runtimes (no interactive
+	// approval is possible); subject to security review.
+	PermissionMode string `json:"permissionMode,omitempty" yaml:"permissionMode,omitempty"`
 }

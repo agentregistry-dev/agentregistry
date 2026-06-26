@@ -21,6 +21,7 @@ var TableFor = map[string]string{
 	v1alpha1.KindAgent:      "agents",
 	v1alpha1.KindMCPServer:  "mcp_servers",
 	v1alpha1.KindSkill:      "skills",
+	v1alpha1.KindPlugin:     "plugins",
 	v1alpha1.KindPrompt:     "prompts",
 	v1alpha1.KindRuntime:    "runtimes",
 	v1alpha1.KindDeployment: "deployments",

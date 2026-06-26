@@ -22,6 +22,8 @@ components:
     AgentSource:
       additionalProperties: false
       properties:
+        harness:
+          $ref: '#/components/schemas/HarnessConfig'
         image:
           type: string
         repository:
@@ -32,6 +34,8 @@ components:
       properties:
         description:
           type: string
+        instructions:
+          $ref: '#/components/schemas/ResourceRef'
         mcpServers:
           items:
             $ref: '#/components/schemas/ResourceRef'
@@ -42,6 +46,18 @@ components:
           type: string
         modelProvider:
           type: string
+        plugins:
+          items:
+            $ref: '#/components/schemas/ResourceRef'
+          type:
+          - array
+          - "null"
+        skills:
+          items:
+            $ref: '#/components/schemas/ResourceRef'
+          type:
+          - array
+          - "null"
         source:
           $ref: '#/components/schemas/AgentSource'
         title:
@@ -79,6 +95,39 @@ components:
           - "null"
       required:
       - results
+      type: object
+    CommandEntry:
+      additionalProperties: false
+      properties:
+        allowedTools:
+          items:
+            type: string
+          type:
+          - array
+          - "null"
+        argumentHint:
+          type: string
+        content:
+          type: string
+        description:
+          type: string
+        model:
+          type: string
+        source:
+          type: string
+      type: object
+    CommandsField:
+      additionalProperties: false
+      properties:
+        Map:
+          additionalProperties:
+            $ref: '#/components/schemas/CommandEntry'
+          type: object
+        Paths:
+          $ref: '#/components/schemas/PathOrPaths'
+      required:
+      - Paths
+      - Map
       type: object
     Condition:
       additionalProperties: false
@@ -142,6 +191,8 @@ components:
           additionalProperties:
             type: string
           type: object
+        harnessPolicy:
+          $ref: '#/components/schemas/HarnessPolicy'
         runtimeConfig:
           additionalProperties: {}
           type: object
@@ -218,6 +269,22 @@ components:
       required:
       - name
       type: object
+    HarnessConfig:
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+        version:
+          type: string
+      required:
+      - type
+      type: object
+    HarnessPolicy:
+      additionalProperties: false
+      properties:
+        permissionMode:
+          type: string
+      type: object
     HealthBody:
       additionalProperties: false
       properties:
@@ -236,6 +303,135 @@ components:
           type: string
       required:
       - status
+      type: object
+    HookEntry:
+      additionalProperties: false
+      properties:
+        allowedEnvVars:
+          items:
+            type: string
+          type:
+          - array
+          - "null"
+        async:
+          type: boolean
+        asyncRewake:
+          type: boolean
+        command:
+          type: string
+        headers:
+          additionalProperties:
+            type: string
+          type: object
+        if:
+          type: string
+        input: {}
+        model:
+          type: string
+        once:
+          type: boolean
+        prompt:
+          type: string
+        server:
+          type: string
+        shell:
+          type: string
+        statusMessage:
+          type: string
+        timeout:
+          format: double
+          type: number
+        tool:
+          type: string
+        type:
+          type: string
+        url:
+          type: string
+      required:
+      - type
+      type: object
+    HookMatcherGroup:
+      additionalProperties: false
+      properties:
+        hooks:
+          items:
+            $ref: '#/components/schemas/HookEntry'
+          type:
+          - array
+          - "null"
+        matcher:
+          type: string
+      required:
+      - hooks
+      type: object
+    HooksField:
+      additionalProperties: false
+      properties:
+        Events:
+          additionalProperties:
+            items:
+              $ref: '#/components/schemas/HookMatcherGroup'
+            type:
+            - array
+            - "null"
+          type: object
+        Path:
+          type: string
+        Raw: {}
+      required:
+      - Path
+      - Events
+      - Raw
+      type: object
+    LSPServerEntry:
+      additionalProperties: false
+      properties:
+        args:
+          items:
+            type: string
+          type:
+          - array
+          - "null"
+        command:
+          type: string
+        env:
+          additionalProperties:
+            type: string
+          type: object
+        extensionToLanguage:
+          additionalProperties:
+            type: string
+          type: object
+        initializationOptions: {}
+        maxRestarts:
+          format: int64
+          type: integer
+        settings: {}
+        startupTimeout:
+          format: int64
+          type: integer
+        transport:
+          type: string
+        workspaceFolder:
+          type: string
+      required:
+      - command
+      - extensionToLanguage
+      type: object
+    LSPServersField:
+      additionalProperties: false
+      properties:
+        Path:
+          type: string
+        Raw: {}
+        Servers:
+          additionalProperties:
+            $ref: '#/components/schemas/LSPServerEntry'
+          type: object
+      required:
+      - Path
+      - Servers
+      - Raw
       type: object
     ListMetadata:
       additionalProperties: false
@@ -282,6 +478,20 @@ components:
         items:
           items:
             $ref: '#/components/schemas/MCPServer'
+          type:
+          - array
+          - "null"
+        nextCursor:
+          type: string
+      required:
+      - items
+      type: object
+    ListOutputPluginBody:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/Plugin'
           type:
           - array
           - "null"
@@ -474,6 +684,51 @@ components:
       - apiVersion
       - kind
       type: object
+    MCPServerEntry:
+      additionalProperties: false
+      properties:
+        args:
+          items:
+            type: string
+          type:
+          - array
+          - "null"
+        command:
+          type: string
+        env:
+          additionalProperties:
+            type: string
+          type: object
+        headers:
+          additionalProperties:
+            type: string
+          type: object
+        headersHelper:
+          type: string
+        oauth:
+          $ref: '#/components/schemas/MCPServerOAuth'
+        type:
+          type: string
+        url:
+          type: string
+      type: object
+    MCPServerOAuth:
+      additionalProperties: false
+      properties:
+        authServerMetadataUrl:
+          type: string
+        callbackPort:
+          format: int64
+          type: integer
+        clientId:
+          type: string
+        scopes:
+          items:
+            type: string
+          type:
+          - array
+          - "null"
+      type: object
     MCPServerSource:
       additionalProperties: false
       properties:
@@ -494,6 +749,21 @@ components:
         title:
           type: string
       type: object
+    MCPServersField:
+      additionalProperties: false
+      properties:
+        Path:
+          type: string
+        Raw: {}
+        Servers:
+          additionalProperties:
+            $ref: '#/components/schemas/MCPServerEntry'
+          type: object
+      required:
+      - Path
+      - Servers
+      - Raw
+      type: object
     MCPTransport:
       additionalProperties: false
       properties:
@@ -507,6 +777,37 @@ components:
           type: string
       required:
       - type
+      type: object
+    MonitorEntry:
+      additionalProperties: false
+      properties:
+        command:
+          type: string
+        description:
+          type: string
+        name:
+          type: string
+        when:
+          type: string
+      required:
+      - name
+      - command
+      - description
+      type: object
+    MonitorsField:
+      additionalProperties: false
+      properties:
+        Entries:
+          items:
+            $ref: '#/components/schemas/MonitorEntry'
+          type:
+          - array
+          - "null"
+        Path:
+          type: string
+      required:
+      - Path
+      - Entries
       type: object
     ObjectMeta:
       additionalProperties: false
@@ -555,6 +856,21 @@ components:
       required:
       - isLatest
       type: object
+    PathOrPaths:
+      additionalProperties: false
+      properties:
+        Values:
+          items:
+            type: string
+          type:
+          - array
+          - "null"
+        WasArray:
+          type: boolean
+      required:
+      - Values
+      - WasArray
+      type: object
     PingBody:
       additionalProperties: false
       properties:
@@ -565,6 +881,298 @@ components:
           type: boolean
       required:
       - pong
+      type: object
+    Plugin:
+      additionalProperties: false
+      properties:
+        apiVersion:
+          type: string
+        kind:
+          type: string
+        metadata:
+          $ref: '#/components/schemas/ObjectMeta'
+        spec:
+          $ref: '#/components/schemas/PluginSpec'
+        status:
+          $ref: '#/components/schemas/PluginStatus'
+      required:
+      - metadata
+      - spec
+      - apiVersion
+      - kind
+      type: object
+    PluginAuthor:
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+        name:
+          type: string
+        url:
+          type: string
+      required:
+      - name
+      type: object
+    PluginChannel:
+      additionalProperties: false
+      properties:
+        displayName:
+          type: string
+        server:
+          type: string
+        userConfig:
+          additionalProperties:
+            $ref: '#/components/schemas/PluginUserConfigField'
+          type: object
+      required:
+      - server
+      type: object
+    PluginDependency:
+      additionalProperties: false
+      properties:
+        marketplace:
+          type: string
+        name:
+          type: string
+        version:
+          type: string
+      type: object
+    PluginExperimental:
+      additionalProperties: false
+      properties:
+        monitors:
+          $ref: '#/components/schemas/MonitorsField'
+        themes:
+          $ref: '#/components/schemas/PathOrPaths'
+      type: object
+    PluginHook:
+      additionalProperties: false
+      properties:
+        event:
+          type: string
+        type:
+          type: string
+      required:
+      - event
+      type: object
+    PluginInventory:
+      additionalProperties: false
+      properties:
+        agents:
+          items:
+            type: string
+          type:
+          - array
+          - "null"
+        commands:
+          items:
+            type: string
+          type:
+          - array
+          - "null"
+        executables:
+          items:
+            type: string
+          type:
+          - array
+          - "null"
+        hooks:
+          items:
+            $ref: '#/components/schemas/PluginHook'
+          type:
+          - array
+          - "null"
+        mcpServers:
+          items:
+            type: string
+          type:
+          - array
+          - "null"
+        skills:
+          items:
+            $ref: '#/components/schemas/PluginSkill'
+          type:
+          - array
+          - "null"
+      type: object
+    PluginManifest:
+      additionalProperties: false
+      properties:
+        $schema:
+          type: string
+        agents:
+          $ref: '#/components/schemas/PathOrPaths'
+        author:
+          $ref: '#/components/schemas/PluginAuthor'
+        channels:
+          items:
+            $ref: '#/components/schemas/PluginChannel'
+          type:
+          - array
+          - "null"
+        commands:
+          $ref: '#/components/schemas/CommandsField'
+        defaultEnabled:
+          type: boolean
+        dependencies:
+          items:
+            $ref: '#/components/schemas/PluginDependency'
+          type:
+          - array
+          - "null"
+        description:
+          type: string
+        displayName:
+          type: string
+        experimental:
+          $ref: '#/components/schemas/PluginExperimental'
+        homepage:
+          type: string
+        hooks:
+          $ref: '#/components/schemas/HooksField'
+        keywords:
+          items:
+            type: string
+          type:
+          - array
+          - "null"
+        license:
+          type: string
+        lspServers:
+          $ref: '#/components/schemas/LSPServersField'
+        mcpServers:
+          $ref: '#/components/schemas/MCPServersField'
+        monitors:
+          $ref: '#/components/schemas/MonitorsField'
+        name:
+          type: string
+        outputStyles:
+          $ref: '#/components/schemas/PathOrPaths'
+        repository:
+          type: string
+        settings: {}
+        skills:
+          $ref: '#/components/schemas/PathOrPaths'
+        themes:
+          $ref: '#/components/schemas/PathOrPaths'
+        userConfig:
+          additionalProperties:
+            $ref: '#/components/schemas/PluginUserConfigField'
+          type: object
+        version:
+          type: string
+      required:
+      - name
+      type: object
+    PluginResolvedSource:
+      additionalProperties: false
+      properties:
+        commit:
+          type: string
+        digest:
+          type: string
+        type:
+          type: string
+      required:
+      - type
+      type: object
+    PluginSkill:
+      additionalProperties: false
+      properties:
+        description:
+          type: string
+        name:
+          type: string
+      required:
+      - name
+      type: object
+    PluginSource:
+      additionalProperties: false
+      properties:
+        git:
+          $ref: '#/components/schemas/PluginSourceGit'
+        oci:
+          $ref: '#/components/schemas/PluginSourceOCI'
+        type:
+          type: string
+      required:
+      - type
+      type: object
+    PluginSourceGit:
+      additionalProperties: false
+      properties:
+        repository:
+          $ref: '#/components/schemas/Repository'
+      required:
+      - repository
+      type: object
+    PluginSourceOCI:
+      additionalProperties: false
+      properties:
+        reference:
+          type: string
+      required:
+      - reference
+      type: object
+    PluginSpec:
+      additionalProperties: false
+      properties:
+        description:
+          type: string
+        harnesses:
+          items:
+            type: string
+          type:
+          - array
+          - "null"
+        source:
+          $ref: '#/components/schemas/PluginSource'
+        title:
+          type: string
+      type: object
+    PluginStatus:
+      additionalProperties: false
+      properties:
+        conditions:
+          items:
+            $ref: '#/components/schemas/Condition'
+          type:
+          - array
+          - "null"
+        details: {}
+        inventory:
+          $ref: '#/components/schemas/PluginInventory'
+        manifest:
+          $ref: '#/components/schemas/PluginManifest'
+        resolvedSource:
+          $ref: '#/components/schemas/PluginResolvedSource'
+      type: object
+    PluginUserConfigField:
+      additionalProperties: false
+      properties:
+        default: {}
+        description:
+          type: string
+        max:
+          format: double
+          type: number
+        min:
+          format: double
+          type: number
+        multiple:
+          type: boolean
+        required:
+          type: boolean
+        sensitive:
+          type: boolean
+        title:
+          type: string
+        type:
+          type: string
+      required:
+      - type
+      - title
+      - description
       type: object
     Prompt:
       additionalProperties: false
@@ -824,12 +1432,18 @@ components:
         spec:
           $ref: '#/components/schemas/SkillSpec'
         status:
-          $ref: '#/components/schemas/Status'
+          $ref: '#/components/schemas/SkillStatus'
       required:
       - metadata
       - spec
       - apiVersion
       - kind
+      type: object
+    SkillResolvedSource:
+      additionalProperties: false
+      properties:
+        commit:
+          type: string
       type: object
     SkillSource:
       additionalProperties: false
@@ -846,6 +1460,19 @@ components:
           $ref: '#/components/schemas/SkillSource'
         title:
           type: string
+      type: object
+    SkillStatus:
+      additionalProperties: false
+      properties:
+        conditions:
+          items:
+            $ref: '#/components/schemas/Condition'
+          type:
+          - array
+          - "null"
+        details: {}
+        resolvedSource:
+          $ref: '#/components/schemas/SkillResolvedSource'
       type: object
     Status:
       additionalProperties: false
@@ -1699,6 +2326,204 @@ paths:
       summary: Ping
       tags:
       - ping
+  /v0/plugins:
+    get:
+      operationId: list-plugins
+      parameters:
+      - description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
+        explode: false
+        in: query
+        name: namespace
+        schema:
+          description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
+          type: string
+      - description: Max items to return (default 50).
+        explode: false
+        in: query
+        name: limit
+        schema:
+          default: 50
+          description: Max items to return (default 50).
+          format: int64
+          type: integer
+      - description: Opaque pagination cursor.
+        explode: false
+        in: query
+        name: cursor
+        schema:
+          description: Opaque pagination cursor.
+          type: string
+      - description: 'Label selector: key=value,key2=value2.'
+        explode: false
+        in: query
+        name: labels
+        schema:
+          description: 'Label selector: key=value,key2=value2.'
+          type: string
+      - description: Restrict the result set to one tag value (tagged artifact kinds
+          only).
+        explode: false
+        in: query
+        name: tag
+        schema:
+          description: Restrict the result set to one tag value (tagged artifact kinds
+            only).
+          type: string
+      - description: Only return the literal latest tag per (namespace, name). Equivalent
+          to tag=latest for tagged kinds.
+        explode: false
+        in: query
+        name: latestOnly
+        schema:
+          description: Only return the literal latest tag per (namespace, name). Equivalent
+            to tag=latest for tagged kinds.
+          type: boolean
+      - description: Include rows with a deletionTimestamp.
+        explode: false
+        in: query
+        name: includeTerminating
+        schema:
+          description: Include rows with a deletionTimestamp.
+          type: boolean
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListOutputPluginBody'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorModel'
+          description: Error
+      summary: List Plugin (scoped by ?namespace)
+  /v0/plugins/{name}:
+    get:
+      operationId: get-latest-plugin
+      parameters:
+      - description: Namespace (internal; defaults to 'default').
+        explode: false
+        in: query
+        name: namespace
+        schema:
+          description: Namespace (internal; defaults to 'default').
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Plugin'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorModel'
+          description: Error
+      summary: Get the latest Plugin
+  /v0/plugins/{name}/{tag}:
+    delete:
+      operationId: delete-plugin
+      parameters:
+      - description: Namespace (internal; defaults to 'default').
+        explode: false
+        in: query
+        name: namespace
+        schema:
+          description: Namespace (internal; defaults to 'default').
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: tag
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorModel'
+          description: Error
+      summary: 'Delete a Plugin (soft-delete: sets deletionTimestamp)'
+    get:
+      operationId: get-plugin
+      parameters:
+      - description: Namespace (internal; defaults to 'default').
+        explode: false
+        in: query
+        name: namespace
+        schema:
+          description: Namespace (internal; defaults to 'default').
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: tag
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Plugin'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorModel'
+          description: Error
+      summary: Get a Plugin by name and tag
+  /v0/plugins/{name}/tags:
+    get:
+      operationId: list-tags-plugin
+      parameters:
+      - description: Namespace (internal; defaults to 'default').
+        explode: false
+        in: query
+        name: namespace
+        schema:
+          description: Namespace (internal; defaults to 'default').
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListOutputPluginBody'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorModel'
+          description: Error
+      summary: List all tags of a Plugin
   /v0/prompts:
     get:
       operationId: list-prompts

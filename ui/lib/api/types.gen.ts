@@ -13,15 +13,19 @@ export type Agent = {
 };
 
 export type AgentSource = {
+    harness?: HarnessConfig;
     image?: string;
     repository?: Repository;
 };
 
 export type AgentSpec = {
     description?: string;
+    instructions?: ResourceRef;
     mcpServers?: Array<ResourceRef> | null;
     modelName?: string;
     modelProvider?: string;
+    plugins?: Array<ResourceRef> | null;
+    skills?: Array<ResourceRef> | null;
     source?: AgentSource;
     title?: string;
 };
@@ -38,6 +42,22 @@ export type ApplyResult = {
 
 export type ApplyResultsResponse = {
     results: Array<ApplyResult> | null;
+};
+
+export type CommandEntry = {
+    allowedTools?: Array<string> | null;
+    argumentHint?: string;
+    content?: string;
+    description?: string;
+    model?: string;
+    source?: string;
+};
+
+export type CommandsField = {
+    Map: {
+        [key: string]: CommandEntry;
+    };
+    Paths: PathOrPaths;
 };
 
 export type Condition = {
@@ -67,6 +87,7 @@ export type DeploymentSpec = {
     env?: {
         [key: string]: string;
     };
+    harnessPolicy?: HarnessPolicy;
     runtimeConfig?: {
         [key: string]: unknown;
     };
@@ -121,6 +142,15 @@ export type HttpHeader = {
     value?: string;
 };
 
+export type HarnessConfig = {
+    type: string;
+    version?: string;
+};
+
+export type HarnessPolicy = {
+    permissionMode?: string;
+};
+
 export type HealthBody = {
     /**
      * Platform mode
@@ -130,6 +160,66 @@ export type HealthBody = {
      * Health status
      */
     status: string;
+};
+
+export type HookEntry = {
+    allowedEnvVars?: Array<string> | null;
+    async?: boolean;
+    asyncRewake?: boolean;
+    command?: string;
+    headers?: {
+        [key: string]: string;
+    };
+    if?: string;
+    input?: unknown;
+    model?: string;
+    once?: boolean;
+    prompt?: string;
+    server?: string;
+    shell?: string;
+    statusMessage?: string;
+    timeout?: number;
+    tool?: string;
+    type: string;
+    url?: string;
+};
+
+export type HookMatcherGroup = {
+    hooks: Array<HookEntry> | null;
+    matcher?: string;
+};
+
+export type HooksField = {
+    Events: {
+        [key: string]: Array<HookMatcherGroup> | null;
+    };
+    Path: string;
+    Raw: unknown;
+};
+
+export type LspServerEntry = {
+    args?: Array<string> | null;
+    command: string;
+    env?: {
+        [key: string]: string;
+    };
+    extensionToLanguage: {
+        [key: string]: string;
+    };
+    initializationOptions?: unknown;
+    maxRestarts?: number;
+    settings?: unknown;
+    startupTimeout?: number;
+    transport?: string;
+    workspaceFolder?: string;
+};
+
+export type LspServersField = {
+    Path: string;
+    Raw: unknown;
+    Servers: {
+        [key: string]: LspServerEntry;
+    };
 };
 
 export type ListMetadata = {
@@ -149,6 +239,11 @@ export type ListOutputDeploymentBody = {
 
 export type ListOutputMcpServerBody = {
     items: Array<McpServer> | null;
+    nextCursor?: string;
+};
+
+export type ListOutputPluginBody = {
+    items: Array<Plugin> | null;
     nextCursor?: string;
 };
 
@@ -229,6 +324,28 @@ export type McpServer = {
     status?: Status;
 };
 
+export type McpServerEntry = {
+    args?: Array<string> | null;
+    command?: string;
+    env?: {
+        [key: string]: string;
+    };
+    headers?: {
+        [key: string]: string;
+    };
+    headersHelper?: string;
+    oauth?: McpServerOAuth;
+    type?: string;
+    url?: string;
+};
+
+export type McpServerOAuth = {
+    authServerMetadataUrl?: string;
+    callbackPort?: number;
+    clientId?: string;
+    scopes?: Array<string> | null;
+};
+
 export type McpServerSource = {
     package?: McpPackage;
     repository?: Repository;
@@ -241,10 +358,30 @@ export type McpServerSpec = {
     title?: string;
 };
 
+export type McpServersField = {
+    Path: string;
+    Raw: unknown;
+    Servers: {
+        [key: string]: McpServerEntry;
+    };
+};
+
 export type McpTransport = {
     path?: string;
     port?: number;
     type: string;
+};
+
+export type MonitorEntry = {
+    command: string;
+    description: string;
+    name: string;
+    when?: string;
+};
+
+export type MonitorsField = {
+    Entries: Array<MonitorEntry> | null;
+    Path: string;
 };
 
 export type ObjectMeta = {
@@ -271,11 +408,145 @@ export type OfficialMeta = {
     updatedAt?: string;
 };
 
+export type PathOrPaths = {
+    Values: Array<string> | null;
+    WasArray: boolean;
+};
+
 export type PingBody = {
     /**
      * Ping response
      */
     pong: boolean;
+};
+
+export type Plugin = {
+    apiVersion: string;
+    kind: string;
+    metadata: ObjectMeta;
+    spec: PluginSpec;
+    status?: PluginStatus;
+};
+
+export type PluginAuthor = {
+    email?: string;
+    name: string;
+    url?: string;
+};
+
+export type PluginChannel = {
+    displayName?: string;
+    server: string;
+    userConfig?: {
+        [key: string]: PluginUserConfigField;
+    };
+};
+
+export type PluginDependency = {
+    marketplace?: string;
+    name?: string;
+    version?: string;
+};
+
+export type PluginExperimental = {
+    monitors?: MonitorsField;
+    themes?: PathOrPaths;
+};
+
+export type PluginHook = {
+    event: string;
+    type?: string;
+};
+
+export type PluginInventory = {
+    agents?: Array<string> | null;
+    commands?: Array<string> | null;
+    executables?: Array<string> | null;
+    hooks?: Array<PluginHook> | null;
+    mcpServers?: Array<string> | null;
+    skills?: Array<PluginSkill> | null;
+};
+
+export type PluginManifest = {
+    $schema?: string;
+    agents?: PathOrPaths;
+    author?: PluginAuthor;
+    channels?: Array<PluginChannel> | null;
+    commands?: CommandsField;
+    defaultEnabled?: boolean;
+    dependencies?: Array<PluginDependency> | null;
+    description?: string;
+    displayName?: string;
+    experimental?: PluginExperimental;
+    homepage?: string;
+    hooks?: HooksField;
+    keywords?: Array<string> | null;
+    license?: string;
+    lspServers?: LspServersField;
+    mcpServers?: McpServersField;
+    monitors?: MonitorsField;
+    name: string;
+    outputStyles?: PathOrPaths;
+    repository?: string;
+    settings?: unknown;
+    skills?: PathOrPaths;
+    themes?: PathOrPaths;
+    userConfig?: {
+        [key: string]: PluginUserConfigField;
+    };
+    version?: string;
+};
+
+export type PluginResolvedSource = {
+    commit?: string;
+    digest?: string;
+    type: string;
+};
+
+export type PluginSkill = {
+    description?: string;
+    name: string;
+};
+
+export type PluginSource = {
+    git?: PluginSourceGit;
+    oci?: PluginSourceOci;
+    type: string;
+};
+
+export type PluginSourceGit = {
+    repository: Repository;
+};
+
+export type PluginSourceOci = {
+    reference: string;
+};
+
+export type PluginSpec = {
+    description?: string;
+    harnesses?: Array<string> | null;
+    source?: PluginSource;
+    title?: string;
+};
+
+export type PluginStatus = {
+    conditions?: Array<Condition> | null;
+    details?: unknown;
+    inventory?: PluginInventory;
+    manifest?: PluginManifest;
+    resolvedSource?: PluginResolvedSource;
+};
+
+export type PluginUserConfigField = {
+    default?: unknown;
+    description: string;
+    max?: number;
+    min?: number;
+    multiple?: boolean;
+    required?: boolean;
+    sensitive?: boolean;
+    title: string;
+    type: string;
 };
 
 export type Prompt = {
@@ -390,7 +661,11 @@ export type Skill = {
     kind: string;
     metadata: ObjectMeta;
     spec: SkillSpec;
-    status?: Status;
+    status?: SkillStatus;
+};
+
+export type SkillResolvedSource = {
+    commit?: string;
 };
 
 export type SkillSource = {
@@ -401,6 +676,12 @@ export type SkillSpec = {
     description?: string;
     source?: SkillSource;
     title?: string;
+};
+
+export type SkillStatus = {
+    conditions?: Array<Condition> | null;
+    details?: unknown;
+    resolvedSource?: SkillResolvedSource;
 };
 
 export type Status = {
@@ -1172,6 +1453,190 @@ export type PingV0Responses = {
 };
 
 export type PingV0Response = PingV0Responses[keyof PingV0Responses];
+
+export type ListPluginsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Namespace (defaults to 'default'; 'all' lists across all namespaces).
+         */
+        namespace?: string;
+        /**
+         * Max items to return (default 50).
+         */
+        limit?: number;
+        /**
+         * Opaque pagination cursor.
+         */
+        cursor?: string;
+        /**
+         * Label selector: key=value,key2=value2.
+         */
+        labels?: string;
+        /**
+         * Restrict the result set to one tag value (tagged artifact kinds only).
+         */
+        tag?: string;
+        /**
+         * Only return the literal latest tag per (namespace, name). Equivalent to tag=latest for tagged kinds.
+         */
+        latestOnly?: boolean;
+        /**
+         * Include rows with a deletionTimestamp.
+         */
+        includeTerminating?: boolean;
+    };
+    url: '/v0/plugins';
+};
+
+export type ListPluginsErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type ListPluginsError = ListPluginsErrors[keyof ListPluginsErrors];
+
+export type ListPluginsResponses = {
+    /**
+     * OK
+     */
+    200: ListOutputPluginBody;
+};
+
+export type ListPluginsResponse = ListPluginsResponses[keyof ListPluginsResponses];
+
+export type GetLatestPluginData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/plugins/{name}';
+};
+
+export type GetLatestPluginErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetLatestPluginError = GetLatestPluginErrors[keyof GetLatestPluginErrors];
+
+export type GetLatestPluginResponses = {
+    /**
+     * OK
+     */
+    200: Plugin;
+};
+
+export type GetLatestPluginResponse = GetLatestPluginResponses[keyof GetLatestPluginResponses];
+
+export type DeletePluginData = {
+    body?: never;
+    path: {
+        name: string;
+        tag: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/plugins/{name}/{tag}';
+};
+
+export type DeletePluginErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type DeletePluginError = DeletePluginErrors[keyof DeletePluginErrors];
+
+export type DeletePluginResponses = {
+    /**
+     * No Content
+     */
+    204: void;
+};
+
+export type DeletePluginResponse = DeletePluginResponses[keyof DeletePluginResponses];
+
+export type GetPluginData = {
+    body?: never;
+    path: {
+        name: string;
+        tag: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/plugins/{name}/{tag}';
+};
+
+export type GetPluginErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetPluginError = GetPluginErrors[keyof GetPluginErrors];
+
+export type GetPluginResponses = {
+    /**
+     * OK
+     */
+    200: Plugin;
+};
+
+export type GetPluginResponse = GetPluginResponses[keyof GetPluginResponses];
+
+export type ListTagsPluginData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/plugins/{name}/tags';
+};
+
+export type ListTagsPluginErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type ListTagsPluginError = ListTagsPluginErrors[keyof ListTagsPluginErrors];
+
+export type ListTagsPluginResponses = {
+    /**
+     * OK
+     */
+    200: ListOutputPluginBody;
+};
+
+export type ListTagsPluginResponse = ListTagsPluginResponses[keyof ListTagsPluginResponses];
 
 export type ListPromptsData = {
     body?: never;
