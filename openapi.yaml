@@ -1432,12 +1432,18 @@ components:
         spec:
           $ref: '#/components/schemas/SkillSpec'
         status:
-          $ref: '#/components/schemas/Status'
+          $ref: '#/components/schemas/SkillStatus'
       required:
       - metadata
       - spec
       - apiVersion
       - kind
+      type: object
+    SkillResolvedSource:
+      additionalProperties: false
+      properties:
+        commit:
+          type: string
       type: object
     SkillSource:
       additionalProperties: false
@@ -1454,6 +1460,19 @@ components:
           $ref: '#/components/schemas/SkillSource'
         title:
           type: string
+      type: object
+    SkillStatus:
+      additionalProperties: false
+      properties:
+        conditions:
+          items:
+            $ref: '#/components/schemas/Condition'
+          type:
+          - array
+          - "null"
+        details: {}
+        resolvedSource:
+          $ref: '#/components/schemas/SkillResolvedSource'
       type: object
     Status:
       additionalProperties: false

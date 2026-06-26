@@ -137,9 +137,43 @@ func (s *Skill) MarshalSpec() (json.RawMessage, error) { return json.Marshal(s.S
 func (s *Skill) UnmarshalSpec(data json.RawMessage) error {
 	return json.Unmarshal(data, &s.Spec)
 }
-func (s *Skill) MarshalStatus() (json.RawMessage, error) { return MarshalStatusForStorage(s.Status) }
+
+// MarshalStatus serializes the typed SkillStatus: the embedded Status via the
+// storage codec, with the controller-determined ResolvedSource spliced onto the
+// same object. A nil ResolvedSource is omitted (no stray null) so the store's
+// patch-skip byte comparison stays stable.
+func (s *Skill) MarshalStatus() (json.RawMessage, error) {
+	base, err := MarshalStatusForStorage(s.Status.Status)
+	if err != nil {
+		return nil, err
+	}
+	m := map[string]json.RawMessage{}
+	if err := json.Unmarshal(base, &m); err != nil {
+		return nil, err
+	}
+	if s.Status.ResolvedSource != nil {
+		if m["resolvedSource"], err = json.Marshal(s.Status.ResolvedSource); err != nil {
+			return nil, err
+		}
+	}
+	return json.Marshal(m)
+}
 func (s *Skill) UnmarshalStatus(data json.RawMessage) error {
-	return UnmarshalStatusFromStorage(data, &s.Status)
+	if len(data) == 0 {
+		s.Status = SkillStatus{}
+		return nil
+	}
+	if err := UnmarshalStatusFromStorage(data, &s.Status.Status); err != nil {
+		return err
+	}
+	var custom struct {
+		ResolvedSource *SkillResolvedSource `json:"resolvedSource"`
+	}
+	if err := json.Unmarshal(data, &custom); err != nil {
+		return err
+	}
+	s.Status.ResolvedSource = custom.ResolvedSource
+	return nil
 }
 
 func (p *Plugin) GetMetadata() *ObjectMeta { return &p.Metadata }

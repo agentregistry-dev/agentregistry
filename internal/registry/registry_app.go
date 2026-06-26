@@ -119,6 +119,13 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	if _, err := controller.StartPluginController(ctx, pool, stores, controller.PluginControllerDeps{Resolver: pluginsource.NewGitResolver()}); err != nil {
 		return fmt.Errorf("start plugin controller: %w", err)
 	}
+	// The Skill controller resolves each skill's pinned git source ref to a
+	// concrete commit and records it in SkillStatus out of band of the API write
+	// — the resolve-and-pin counterpart to the Plugin controller, minus the
+	// manifest/inventory scan (a skill has no bundle to enumerate).
+	if _, err := controller.StartSkillController(ctx, pool, stores, controller.SkillControllerDeps{}); err != nil {
+		return fmt.Errorf("start skill controller: %w", err)
+	}
 
 	slog.Info("starting agentregistry", "version", version.Version, "commit", version.GitCommit)
 

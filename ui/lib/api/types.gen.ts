@@ -661,7 +661,11 @@ export type Skill = {
     kind: string;
     metadata: ObjectMeta;
     spec: SkillSpec;
-    status?: Status;
+    status?: SkillStatus;
+};
+
+export type SkillResolvedSource = {
+    commit?: string;
 };
 
 export type SkillSource = {
@@ -672,6 +676,12 @@ export type SkillSpec = {
     description?: string;
     source?: SkillSource;
     title?: string;
+};
+
+export type SkillStatus = {
+    conditions?: Array<Condition> | null;
+    details?: unknown;
+    resolvedSource?: SkillResolvedSource;
 };
 
 export type Status = {
