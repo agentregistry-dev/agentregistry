@@ -34,6 +34,8 @@ components:
       properties:
         description:
           type: string
+        instructions:
+          $ref: '#/components/schemas/ResourceRef'
         mcpServers:
           items:
             $ref: '#/components/schemas/ResourceRef'
@@ -44,6 +46,18 @@ components:
           type: string
         modelProvider:
           type: string
+        plugins:
+          items:
+            $ref: '#/components/schemas/ResourceRef'
+          type:
+          - array
+          - "null"
+        skills:
+          items:
+            $ref: '#/components/schemas/ResourceRef'
+          type:
+          - array
+          - "null"
         source:
           $ref: '#/components/schemas/AgentSource'
         title:
@@ -177,6 +191,8 @@ components:
           additionalProperties:
             type: string
           type: object
+        harnessPolicy:
+          $ref: '#/components/schemas/HarnessPolicy'
         runtimeConfig:
           additionalProperties: {}
           type: object
@@ -256,20 +272,18 @@ components:
     HarnessConfig:
       additionalProperties: false
       properties:
-        instructions:
-          $ref: '#/components/schemas/ResourceRef'
-        plugins:
-          items:
-            $ref: '#/components/schemas/ResourceRef'
-          type:
-          - array
-          - "null"
         type:
           type: string
         version:
           type: string
       required:
       - type
+      type: object
+    HarnessPolicy:
+      additionalProperties: false
+      properties:
+        permissionMode:
+          type: string
       type: object
     HealthBody:
       additionalProperties: false

@@ -20,9 +20,12 @@ export type AgentSource = {
 
 export type AgentSpec = {
     description?: string;
+    instructions?: ResourceRef;
     mcpServers?: Array<ResourceRef> | null;
     modelName?: string;
     modelProvider?: string;
+    plugins?: Array<ResourceRef> | null;
+    skills?: Array<ResourceRef> | null;
     source?: AgentSource;
     title?: string;
 };
@@ -84,6 +87,7 @@ export type DeploymentSpec = {
     env?: {
         [key: string]: string;
     };
+    harnessPolicy?: HarnessPolicy;
     runtimeConfig?: {
         [key: string]: unknown;
     };
@@ -139,10 +143,12 @@ export type HttpHeader = {
 };
 
 export type HarnessConfig = {
-    instructions?: ResourceRef;
-    plugins?: Array<ResourceRef> | null;
     type: string;
     version?: string;
+};
+
+export type HarnessPolicy = {
+    permissionMode?: string;
 };
 
 export type HealthBody = {
