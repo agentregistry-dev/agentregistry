@@ -1,30 +1,25 @@
 package v1alpha1store
 
 import (
+	"strings"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
 
-// TableFor is the canonical mapping from v1alpha1 Kind name to its
-// backing table. The names are unqualified here; NewStores qualifies
-// each with the OSS schema (from the injected registry) so queries name
-// the schema explicitly rather than relying on the connection's
-// search_path.
-//
-// Downstream builds that register additional kinds via
-// v1alpha1.Scheme.Register should extend their own copy of this map
-// rather than mutating this one; the OSS side treats it as effectively
-// const after init.
-var TableFor = map[string]string{
-	v1alpha1.KindAgent:      "agents",
-	v1alpha1.KindMCPServer:  "mcp_servers",
-	v1alpha1.KindSkill:      "skills",
-	v1alpha1.KindPlugin:     "plugins",
-	v1alpha1.KindPrompt:     "prompts",
-	v1alpha1.KindRuntime:    "runtimes",
-	v1alpha1.KindDeployment: "deployments",
+// builtInKinds is the OSS store allowlist. Table names and storage behavior
+// come from v1alpha1.KindDescriptor so the registration record remains the
+// single source of per-kind metadata.
+var builtInKinds = map[string]struct{}{
+	v1alpha1.KindAgent:      {},
+	v1alpha1.KindMCPServer:  {},
+	v1alpha1.KindSkill:      {},
+	v1alpha1.KindPlugin:     {},
+	v1alpha1.KindPrompt:     {},
+	v1alpha1.KindRuntime:    {},
+	v1alpha1.KindDeployment: {},
 }
 
 // NewStores builds one *Store per OSS built-in v1alpha1 Kind, bound to its
@@ -47,12 +42,15 @@ func NewStores(pool *pgxpool.Pool, schemas *pkgdb.SchemaRegistry, opts ...StoreO
 	// wiring bug, so MustGet panics rather than returning a nil schema
 	// that would surface as a malformed query later.
 	ossSchema := schemas.MustGet(pkgdb.OSSSourceName)
-	out := make(map[string]*Store, len(TableFor))
+	out := make(map[string]*Store, len(builtInKinds))
 	for _, descriptor := range v1alpha1.KindDescriptors() {
 		kind := descriptor.Kind
-		table, ok := TableFor[kind]
-		if !ok {
+		if _, ok := builtInKinds[kind]; !ok {
 			continue
+		}
+		table := storeTableNameFromDescriptor(descriptor)
+		if table == "" {
+			panic("v1alpha1store: empty table for built-in kind " + kind)
 		}
 		// Prepend WithKind so per-kind audit events name the kind
 		// correctly even if the inbound object's TypeMeta is empty.
@@ -65,10 +63,15 @@ func NewStores(pool *pgxpool.Pool, schemas *pkgdb.SchemaRegistry, opts ...StoreO
 		}
 		out[kind] = NewStore(pool, ossSchema, table, kindOpts...)
 	}
-	for kind := range TableFor {
+	for kind := range builtInKinds {
 		if _, ok := out[kind]; !ok {
-			panic("v1alpha1store: no kind descriptor registered for table " + kind)
+			panic("v1alpha1store: no kind descriptor registered for built-in kind " + kind)
 		}
 	}
 	return out
+}
+
+func storeTableNameFromDescriptor(descriptor v1alpha1.KindDescriptor) string {
+	table := strings.TrimSpace(descriptor.Table)
+	return strings.TrimPrefix(table, "v1alpha1.")
 }

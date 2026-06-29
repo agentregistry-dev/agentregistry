@@ -27,11 +27,11 @@ func (a *Agent) ResolveRefs(ctx context.Context, resolver ResolverFunc) error {
 	}
 	var errs FieldErrors
 	ns := a.Metadata.Namespace
-	errs = append(errs, resolveHarnessRefs(ctx, resolver, ns, "spec.mcpServers", a.Spec.MCPServers, KindMCPServer)...)
-	errs = append(errs, resolveHarnessRefs(ctx, resolver, ns, "spec.plugins", a.Spec.Plugins, KindPlugin)...)
-	errs = append(errs, resolveHarnessRefs(ctx, resolver, ns, "spec.skills", a.Spec.Skills, KindSkill)...)
+	errs = append(errs, resolveResourceRefs(ctx, resolver, ns, "spec.mcpServers", a.Spec.MCPServers, KindMCPServer)...)
+	errs = append(errs, resolveResourceRefs(ctx, resolver, ns, "spec.plugins", a.Spec.Plugins, KindPlugin)...)
+	errs = append(errs, resolveResourceRefs(ctx, resolver, ns, "spec.skills", a.Spec.Skills, KindSkill)...)
 	if a.Spec.Instructions != nil {
-		errs = append(errs, resolveHarnessRefs(ctx, resolver, ns, "spec.instructions", []ResourceRef{*a.Spec.Instructions}, KindPrompt)...)
+		errs = append(errs, resolveResourceRefs(ctx, resolver, ns, "spec.instructions", []ResourceRef{*a.Spec.Instructions}, KindPrompt)...)
 	}
 	if len(errs) == 0 {
 		return nil
@@ -39,9 +39,9 @@ func (a *Agent) ResolveRefs(ctx context.Context, resolver ResolverFunc) error {
 	return errs
 }
 
-// resolveHarnessRefs resolves a slice of harness refs, defaulting Kind to
+// resolveResourceRefs resolves a slice of resource refs, defaulting Kind to
 // defaultKind and Namespace to the agent's namespace before each lookup.
-func resolveHarnessRefs(ctx context.Context, resolver ResolverFunc, ns, path string, refs []ResourceRef, defaultKind string) FieldErrors {
+func resolveResourceRefs(ctx context.Context, resolver ResolverFunc, ns, path string, refs []ResourceRef, defaultKind string) FieldErrors {
 	var errs FieldErrors
 	for i, ref := range refs {
 		if ref.Kind == "" {
@@ -70,15 +70,15 @@ func validateAgentSpec(s *AgentSpec) FieldErrors {
 	// Composition refs default their Kind IN PLACE — the deploy-time resolver
 	// does no defaulting, so the persisted ref must carry the kind. MCPServers
 	// are available to any MCP-capable runtime; plugins/skills/instructions are
-	// harness composition.
-	errs = append(errs, validateHarnessRefs("spec.mcpServers", s.MCPServers, KindMCPServer)...)
-	errs = append(errs, validateHarnessRefs("spec.plugins", s.Plugins, KindPlugin)...)
-	errs = append(errs, validateHarnessRefs("spec.skills", s.Skills, KindSkill)...)
+	// harness composition inputs and are gated below.
+	errs = append(errs, validateResourceRefs("spec.mcpServers", s.MCPServers, KindMCPServer)...)
+	errs = append(errs, validateResourceRefs("spec.plugins", s.Plugins, KindPlugin)...)
+	errs = append(errs, validateResourceRefs("spec.skills", s.Skills, KindSkill)...)
 	if s.Instructions != nil {
 		if s.Instructions.Kind == "" {
 			s.Instructions.Kind = KindPrompt
 		}
-		errs = append(errs, validateHarnessRefs("spec.instructions", []ResourceRef{*s.Instructions}, KindPrompt)...)
+		errs = append(errs, validateResourceRefs("spec.instructions", []ResourceRef{*s.Instructions}, KindPrompt)...)
 	}
 
 	// Plugins/skills/instructions only apply to harness agents — a prebuilt
@@ -110,13 +110,13 @@ func validateHarnessConfig(h *HarnessConfig) FieldErrors {
 	return errs
 }
 
-// validateHarnessRefs validates refs and defaults an empty Kind to expectKind
+// validateResourceRefs validates refs and defaults an empty Kind to expectKind
 // IN PLACE. The defaulting must persist into the stored spec: the deploy-time
 // resolver looks up stores[ref.Kind] with no defaulting of its own, so a ref
 // left with an empty Kind would resolve to no store and fail the deploy.
 // Slices share their backing array, so mutating refs[i] mutates the caller's
-// HarnessConfig field.
-func validateHarnessRefs(path string, refs []ResourceRef, expectKind string) FieldErrors {
+// slice field.
+func validateResourceRefs(path string, refs []ResourceRef, expectKind string) FieldErrors {
 	var errs FieldErrors
 	for i := range refs {
 		if refs[i].Kind == "" {

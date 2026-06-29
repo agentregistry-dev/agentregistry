@@ -50,7 +50,7 @@ type CanonicalBundle struct {
 // CanonicalBundle. Directories, symlinks, and the .git directory are skipped;
 // every regular-file path is normalized to forward slashes and
 // traversal-checked. It is the bridge from a freshly-cloned source directory
-// to the in-memory bundle the controller scans and deploys materialize.
+// to the in-memory bundle the controller scans and records in status.
 func FromDir(dir string) (*CanonicalBundle, error) {
 	return fromDir(dir, MaxBundleFiles, MaxBundleBytes)
 }
