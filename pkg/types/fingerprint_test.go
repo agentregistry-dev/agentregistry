@@ -103,6 +103,73 @@ func TestDefaultApplyFingerprintResultIncludesDependencySnapshot(t *testing.T) {
 	}
 }
 
+func TestDefaultApplyFingerprintIncludesAgentHarnessCompositionDependencies(t *testing.T) {
+	in := testApplyInput()
+	in.Target = &v1alpha1.Agent{
+		TypeMeta: v1alpha1.TypeMeta{Kind: v1alpha1.KindAgent},
+		Metadata: v1alpha1.ObjectMeta{
+			Namespace: "team-a",
+			Name:      "assistant",
+		},
+		Spec: v1alpha1.AgentSpec{
+			Source: &v1alpha1.AgentSource{Harness: &v1alpha1.HarnessConfig{Type: "claude-code"}},
+			Plugins: []v1alpha1.ResourceRef{{
+				Name: "deploy-tools",
+			}},
+			Skills: []v1alpha1.ResourceRef{{
+				Name: "weather",
+			}},
+			Instructions: &v1alpha1.ResourceRef{Name: "writer-instructions"},
+			MCPServers: []v1alpha1.ResourceRef{{
+				Name: "search",
+			}},
+		},
+	}
+
+	pluginCommit := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	skillCommit := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	in.Getter = func(_ context.Context, ref v1alpha1.ResourceRef) (v1alpha1.Object, error) {
+		switch ref.Kind {
+		case v1alpha1.KindPlugin:
+			return testPlugin(ref.Namespace, ref.Name, pluginCommit), nil
+		case v1alpha1.KindSkill:
+			return testSkill(ref.Namespace, ref.Name, skillCommit), nil
+		case v1alpha1.KindPrompt:
+			return testPrompt(ref.Namespace, ref.Name, "Write concise rollout notes."), nil
+		case v1alpha1.KindMCPServer:
+			return testMCPServerInNamespace(ref.Namespace, ref.Name, "ghcr.io/example/search:1.0.0"), nil
+		default:
+			t.Fatalf("unexpected dependency ref: %+v", ref)
+			return nil, nil
+		}
+	}
+
+	first, err := DefaultApplyFingerprintResult(context.Background(), in, ApplyFingerprintOptions{AdapterType: "test"})
+	if err != nil {
+		t.Fatalf("DefaultApplyFingerprintResult: %v", err)
+	}
+	if len(first.Dependencies) != 4 {
+		t.Fatalf("dependencies = %+v, want Plugin, Skill, Prompt, and MCPServer", first.Dependencies)
+	}
+	for _, dep := range first.Dependencies {
+		if dep.Namespace != "team-a" {
+			t.Fatalf("dependency namespace = %q, want team-a: %+v", dep.Namespace, dep)
+		}
+		if dep.MaterialHash == "" {
+			t.Fatalf("dependency material hash is empty: %+v", dep)
+		}
+	}
+
+	pluginCommit = "cccccccccccccccccccccccccccccccccccccccc"
+	second, err := DefaultApplyFingerprintResult(context.Background(), in, ApplyFingerprintOptions{AdapterType: "test"})
+	if err != nil {
+		t.Fatalf("DefaultApplyFingerprintResult after plugin commit change: %v", err)
+	}
+	if second.Fingerprint == first.Fingerprint {
+		t.Fatalf("fingerprint did not change after resolved Plugin source changed: %s", second.Fingerprint)
+	}
+}
+
 func testApplyInput() ApplyInput {
 	return ApplyInput{
 		Deployment: &v1alpha1.Deployment{
@@ -133,12 +200,68 @@ func testApplyInput() ApplyInput {
 	}
 }
 
+func testPlugin(namespace, name, commit string) *v1alpha1.Plugin {
+	return &v1alpha1.Plugin{
+		TypeMeta: v1alpha1.TypeMeta{Kind: v1alpha1.KindPlugin},
+		Metadata: v1alpha1.ObjectMeta{
+			Namespace:  namespace,
+			Name:       name,
+			UID:        "plugin-uid",
+			Generation: 1,
+		},
+		Spec: v1alpha1.PluginSpec{
+			Source: &v1alpha1.PluginSource{
+				Type: v1alpha1.PluginSourceTypeGit,
+				Git:  &v1alpha1.PluginSourceGit{Repository: &v1alpha1.Repository{URL: "https://github.com/acme/plugin"}},
+			},
+		},
+		Status: v1alpha1.PluginStatus{
+			ResolvedSource: &v1alpha1.PluginResolvedSource{Type: v1alpha1.PluginSourceTypeGit, Commit: commit},
+		},
+	}
+}
+
+func testSkill(namespace, name, commit string) *v1alpha1.Skill {
+	return &v1alpha1.Skill{
+		TypeMeta: v1alpha1.TypeMeta{Kind: v1alpha1.KindSkill},
+		Metadata: v1alpha1.ObjectMeta{
+			Namespace:  namespace,
+			Name:       name,
+			UID:        "skill-uid",
+			Generation: 1,
+		},
+		Spec: v1alpha1.SkillSpec{
+			Source: &v1alpha1.SkillSource{Repository: &v1alpha1.Repository{URL: "https://github.com/acme/skill"}},
+		},
+		Status: v1alpha1.SkillStatus{
+			ResolvedSource: &v1alpha1.SkillResolvedSource{Commit: commit},
+		},
+	}
+}
+
+func testPrompt(namespace, name, content string) *v1alpha1.Prompt {
+	return &v1alpha1.Prompt{
+		TypeMeta: v1alpha1.TypeMeta{Kind: v1alpha1.KindPrompt},
+		Metadata: v1alpha1.ObjectMeta{
+			Namespace:  namespace,
+			Name:       name,
+			UID:        "prompt-uid",
+			Generation: 1,
+		},
+		Spec: v1alpha1.PromptSpec{Content: content},
+	}
+}
+
 func testMCPServer(identifier string) *v1alpha1.MCPServer {
+	return testMCPServerInNamespace("default", "weather", identifier)
+}
+
+func testMCPServerInNamespace(namespace, name, identifier string) *v1alpha1.MCPServer {
 	return &v1alpha1.MCPServer{
 		TypeMeta: v1alpha1.TypeMeta{Kind: v1alpha1.KindMCPServer},
 		Metadata: v1alpha1.ObjectMeta{
-			Namespace:  "default",
-			Name:       "weather",
+			Namespace:  namespace,
+			Name:       name,
 			UID:        "mcp-uid",
 			Generation: 1,
 		},

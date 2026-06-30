@@ -138,6 +138,7 @@ type fingerprintObject struct {
 	UID        string          `json:"uid,omitempty"`
 	Generation int64           `json:"generation,omitempty"`
 	Spec       json.RawMessage `json:"spec,omitempty"`
+	Material   json.RawMessage `json:"material,omitempty"`
 }
 
 func objectFingerprint(defaultKind string, obj v1alpha1.Object) (fingerprintObject, error) {
@@ -159,6 +160,10 @@ func objectFingerprint(defaultKind string, obj v1alpha1.Object) (fingerprintObje
 	if err != nil {
 		return fingerprintObject{}, fmt.Errorf("fingerprint: marshal %s %s/%s spec: %w", kind, meta.NamespaceOrDefault(), meta.Name, err)
 	}
+	material, err := dependencyMaterial(kind, obj)
+	if err != nil {
+		return fingerprintObject{}, err
+	}
 	return fingerprintObject{
 		Kind:       kind,
 		Namespace:  meta.NamespaceOrDefault(),
@@ -167,6 +172,7 @@ func objectFingerprint(defaultKind string, obj v1alpha1.Object) (fingerprintObje
 		UID:        meta.UID,
 		Generation: meta.Generation,
 		Spec:       spec,
+		Material:   material,
 	}, nil
 }
 
@@ -178,38 +184,117 @@ func dependencySnapshot(fp fingerprintObject) ApplyDependencySnapshot {
 		Tag:          fp.Tag,
 		UID:          fp.UID,
 		Generation:   fp.Generation,
-		MaterialHash: materialHash(fp.Spec),
+		MaterialHash: materialHash(fp.Spec, fp.Material),
 	}
 }
 
-func materialHash(spec json.RawMessage) string {
-	if len(spec) == 0 {
+func dependencyMaterial(kind string, obj v1alpha1.Object) (json.RawMessage, error) {
+	switch kind {
+	case v1alpha1.KindPlugin:
+		plugin, ok := obj.(*v1alpha1.Plugin)
+		if !ok || plugin.Status.ResolvedSource == nil {
+			return nil, nil
+		}
+		return json.Marshal(struct {
+			ResolvedSource *v1alpha1.PluginResolvedSource `json:"resolvedSource"`
+		}{ResolvedSource: plugin.Status.ResolvedSource})
+	case v1alpha1.KindSkill:
+		skill, ok := obj.(*v1alpha1.Skill)
+		if !ok || skill.Status.ResolvedSource == nil {
+			return nil, nil
+		}
+		return json.Marshal(struct {
+			ResolvedSource *v1alpha1.SkillResolvedSource `json:"resolvedSource"`
+		}{ResolvedSource: skill.Status.ResolvedSource})
+	default:
+		return nil, nil
+	}
+}
+
+func materialHash(parts ...json.RawMessage) string {
+	hasMaterial := false
+	for _, part := range parts {
+		if len(part) > 0 {
+			hasMaterial = true
+			break
+		}
+	}
+	if !hasMaterial {
 		return ""
 	}
-	sum := sha256.Sum256(spec)
-	return "sha256:" + hex.EncodeToString(sum[:])
+	h := sha256.New()
+	for _, part := range parts {
+		if len(part) == 0 {
+			continue
+		}
+		h.Write([]byte{0})
+		h.Write(part)
+	}
+	return "sha256:" + hex.EncodeToString(h.Sum(nil))
 }
 
 func defaultApplyDependencies(ctx context.Context, in ApplyInput) ([]v1alpha1.Object, error) {
 	agent, ok := in.Target.(*v1alpha1.Agent)
-	if !ok || agent == nil || len(agent.Spec.MCPServers) == 0 {
+	if !ok || agent == nil {
 		return nil, nil
 	}
 	if in.Getter == nil {
-		return nil, fmt.Errorf("fingerprint: getter required to resolve Agent MCPServer refs")
+		if len(agent.Spec.MCPServers) > 0 || hasHarnessCompositionRefs(agent) {
+			return nil, fmt.Errorf("fingerprint: getter required to resolve Agent dependency refs")
+		}
+		return nil, nil
 	}
-	deps := make([]v1alpha1.Object, 0, len(agent.Spec.MCPServers))
-	for i, ref := range agent.Spec.MCPServers {
+	deps := make([]v1alpha1.Object, 0, len(agent.Spec.MCPServers)+len(agent.Spec.Plugins)+len(agent.Spec.Skills)+1)
+	var err error
+	deps, err = appendResolvedRefs(ctx, deps, in.Getter, agent.Metadata.NamespaceOrDefault(), agent.Spec.MCPServers, v1alpha1.KindMCPServer, "target spec.mcpServers")
+	if err != nil {
+		return nil, err
+	}
+	if agent.Spec.Source == nil || agent.Spec.Source.Harness == nil {
+		return deps, nil
+	}
+	deps, err = appendResolvedRefs(ctx, deps, in.Getter, agent.Metadata.NamespaceOrDefault(), agent.Spec.Plugins, v1alpha1.KindPlugin, "target spec.plugins")
+	if err != nil {
+		return nil, err
+	}
+	deps, err = appendResolvedRefs(ctx, deps, in.Getter, agent.Metadata.NamespaceOrDefault(), agent.Spec.Skills, v1alpha1.KindSkill, "target spec.skills")
+	if err != nil {
+		return nil, err
+	}
+	if agent.Spec.Instructions != nil {
+		deps, err = appendResolvedRefs(ctx, deps, in.Getter, agent.Metadata.NamespaceOrDefault(), []v1alpha1.ResourceRef{*agent.Spec.Instructions}, v1alpha1.KindPrompt, "target spec.instructions")
+		if err != nil {
+			return nil, err
+		}
+	}
+	return deps, nil
+}
+
+func hasHarnessCompositionRefs(agent *v1alpha1.Agent) bool {
+	return agent != nil && agent.Spec.Source != nil && agent.Spec.Source.Harness != nil &&
+		(len(agent.Spec.Plugins) > 0 || len(agent.Spec.Skills) > 0 || agent.Spec.Instructions != nil)
+}
+
+func appendResolvedRefs(
+	ctx context.Context,
+	deps []v1alpha1.Object,
+	getter v1alpha1.GetterFunc,
+	namespace string,
+	refs []v1alpha1.ResourceRef,
+	defaultKind string,
+	field string,
+) ([]v1alpha1.Object, error) {
+	for i, ref := range refs {
 		normalized := ref
 		if normalized.Kind == "" {
-			normalized.Kind = v1alpha1.KindMCPServer
+			normalized.Kind = defaultKind
 		}
 		if normalized.Namespace == "" {
-			normalized.Namespace = agent.Metadata.NamespaceOrDefault()
+			normalized.Namespace = namespace
 		}
-		obj, err := in.Getter(ctx, normalized)
+		obj, err := getter(ctx, normalized)
 		if err != nil {
-			return nil, fmt.Errorf("fingerprint: resolve target spec.mcpServers[%d] %s/%s: %w", i, normalized.Namespace, normalized.Name, err)
+			return nil, fmt.Errorf("fingerprint: resolve %s[%d] %s/%s: %w", field, i, normalized.Namespace, normalized.Name, err)
 		}
 		deps = append(deps, obj)
 	}
