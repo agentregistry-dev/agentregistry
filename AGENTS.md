@@ -46,17 +46,17 @@ agentregistry/
 4. **internal/registry/database/** - **ONLY** place that accesses the database directly
 5. **internal/registry/service/** - Business logic, receives database interface via constructor
 
-### Platform Ownership
+### Runtime Ownership
 
-Deployment/platform code should be organized by **clear ownership**, not by vague helper layers:
+Deployment/runtime code should be organized by **clear ownership**, not by vague helper layers:
 
-1. **`internal/registry/platforms/<platform>/` owns platform behavior** - local and kubernetes packages should contain their adapter plus the concrete platform-specific materialization/apply/discovery logic they need
-2. **`internal/registry/platforms/utils/` is for narrowly shared deployment utilities only** - use it for adapter-shared materialization helpers, validation, name generation, and request parsing that are truly cross-platform
-3. **`internal/registry/platforms/types/` is for shared contracts only** - keep shared schemas and DTO-style platform types here, not behavior-heavy logic
-4. **`internal/registry/api/handlers/` is transport only** - HTTP handlers should parse requests, call services/adapters, and map errors; they should not own deployment/platform behavior
-5. **`internal/registry/registry_app.go` is the composition root** - wire concrete platform adapters here explicitly instead of hiding registration/factory behavior in handler packages
+1. **`internal/registry/runtimes/<runtime>/` owns runtime behavior** - local and kubernetes packages should contain their adapter plus the concrete runtime-specific materialization/apply/discovery logic they need
+2. **`internal/registry/runtimes/utils/` is for narrowly shared deployment utilities only** - use it for adapter-shared materialization helpers, validation, name generation, and request parsing that are truly cross-runtime
+3. **`internal/registry/runtimes/types/` is for shared contracts only** - keep shared schemas and DTO-style runtime types here, not behavior-heavy logic
+4. **`internal/registry/api/handlers/` is transport only** - HTTP handlers should parse requests, call services/adapters, and map errors; they should not own deployment/runtime behavior
+5. **`internal/registry/registry_app.go` is the composition root** - wire concrete runtime adapters here explicitly instead of hiding registration/factory behavior in handler packages
 
-Avoid introducing broad "translator" layers or catch-all shared packages when the code really belongs to one concrete platform. Prefer concentrated platform packages with small, explicit shared utilities.
+Avoid introducing broad "translator" layers or catch-all shared packages when the code really belongs to one concrete runtime. Prefer concentrated runtime packages with small, explicit shared utilities.
 
 ---
 
@@ -92,7 +92,7 @@ Authz is enforced at the **database layer** by default — every store method ca
 
 **When to gate at the API or service layer instead:** only when the operation doesn't reach the DB with a check. Current cases:
 
-- External platform calls with no downstream DB write — e.g. `UndeployDeployment` and `CancelDeployment` hit adapters before any DB update, so the gate has to fire in the service before the adapter call.
+- External runtime calls with no downstream DB write — e.g. `UndeployDeployment` and `CancelDeployment` hit adapters before any DB update, so the gate has to fire in the service before the adapter call.
 - Admin-scope handlers with no per-resource authz — call `authz.IsRegistryAdmin` directly in the handler.
 
 **List operations intentionally skip per-row authz checks.** The DB's `List*` methods return what matches the SQL filter; they do not invoke `authz.Check` per row. The `AuthzProvider` interface only gates single-resource operations (`Check`, `IsRegistryAdmin`) — it has no row-filter hook. Per-row visibility filtering for Lists would require a custom `database.Store` implementation wired in at the composition root (`registry_app.go`), either joining against a permissions table in SQL or calling `authz.Check` per row.
