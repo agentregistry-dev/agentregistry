@@ -71,8 +71,9 @@ func ParseGitHubURL(rawURL string) (cloneURL, branch, subPath string, err error)
 	return cloneURL, branch, subPath, nil
 }
 
-// CloneAndCopy clones a GitHub repository URL and copies its contents to targetDir.
-// It handles parsing the URL, shallow cloning, navigating to subpaths, and cleanup.
+// CloneAndCopyContext clones a GitHub repository URL and copies its contents to
+// targetDir. It handles parsing the URL, shallow cloning, navigating to
+// subpaths, and cleanup.
 //
 // branch, commit, and subPath are explicit overrides. When branch and subPath
 // are empty, the values parsed from the URL (e.g.
@@ -80,14 +81,10 @@ func ParseGitHubURL(rawURL string) (cloneURL, branch, subPath string, err error)
 // always treated as a branch; callers wanting to pin a commit SHA must set the
 // commit argument explicitly. branch is passed to `git clone --branch`; commit
 // triggers a fetch + checkout after the clone.
-func CloneAndCopy(repoURL, branch, commit, subPath, targetDir string, verbose bool) error {
-	return CloneAndCopyContext(context.Background(), repoURL, branch, commit, subPath, targetDir, verbose)
-}
-
-// CloneAndCopyContext is CloneAndCopy with a context: every git invocation runs
-// under ctx, so a caller can bound clone/fetch/checkout time (and disk/CPU
-// runaway) by passing a context.WithTimeout. ctx cancellation kills the git
-// child process.
+//
+// Every git invocation runs under ctx, so a caller can bound
+// clone/fetch/checkout time (and disk/CPU runaway) by passing a
+// context.WithTimeout. ctx cancellation kills the git child process.
 func CloneAndCopyContext(ctx context.Context, repoURL, branch, commit, subPath, targetDir string, verbose bool) error {
 	cloneURL, urlBranch, urlSubPath, err := ParseGitHubURL(repoURL)
 	if err != nil {
@@ -176,17 +173,13 @@ func isFullCommitSHA(s string) bool {
 	return true
 }
 
-// ResolveRef resolves a branch, tag, or HEAD to a concrete commit SHA on the
-// remote WITHOUT cloning, using `git ls-remote`. A ref that is already a full
-// 40-char commit SHA is returned unchanged (lowercased). An empty ref (after
-// the URL-embedded branch is considered) resolves the remote's default branch
-// (HEAD). Only github.com URLs are supported (see ParseGitHubURL).
-func ResolveRef(repoURL, ref string) (string, error) {
-	return ResolveRefContext(context.Background(), repoURL, ref)
-}
-
-// ResolveRefContext is ResolveRef with a context bounding the ls-remote call.
-// A ref that resolves to no commit returns ErrRefNotFound (terminal).
+// ResolveRefContext resolves a branch, tag, or HEAD to a concrete commit SHA on
+// the remote WITHOUT cloning, using `git ls-remote`. A ref that is already a
+// full 40-char commit SHA is returned unchanged (lowercased). An empty ref
+// (after the URL-embedded branch is considered) resolves the remote's default
+// branch (HEAD). Only github.com URLs are supported (see ParseGitHubURL). ctx
+// bounds the ls-remote call. A ref that resolves to no commit returns
+// ErrRefNotFound (terminal).
 func ResolveRefContext(ctx context.Context, repoURL, ref string) (string, error) {
 	if isFullCommitSHA(ref) {
 		return strings.ToLower(ref), nil

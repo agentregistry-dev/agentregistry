@@ -78,15 +78,20 @@ type SkillController struct {
 	Resolve SkillResolveFunc
 	Wakeups <-chan struct{}
 
+	pool   *pgxpool.Pool
+	resync time.Duration
+
+	lifecycleMu sync.Mutex
+	cancel      context.CancelFunc
+	done        chan struct{}
+
 	queueMu sync.Mutex
 	queue   workqueue.TypedRateLimitingInterface[skillQueueKey]
 }
 
-// StartSkillController wires the Skill controller and starts it in the
-// background, opening its own control-plane LISTEN subscription (same mechanism
-// as the Plugin and Deployment controllers).
-func StartSkillController(
-	ctx context.Context,
+// NewSkillController wires the Skill controller without starting it. Start owns
+// the background goroutine and control-plane LISTEN subscription.
+func NewSkillController(
 	pool *pgxpool.Pool,
 	stores map[string]*v1alpha1store.Store,
 	deps SkillControllerDeps,
@@ -102,13 +107,65 @@ func StartSkillController(
 	if resolve == nil {
 		resolve = defaultSkillResolve
 	}
-	c := &SkillController{Store: store, Resolve: resolve, Wakeups: controlPlaneWakeups(ctx, pool)}
+	return &SkillController{
+		Store:   store,
+		Resolve: resolve,
+		pool:    pool,
+		resync:  defaultControllerResyncInterval,
+	}, nil
+}
+
+// Start begins the Skill controller's background reconcile loop. It owns the
+// goroutine and opens this controller's control-plane LISTEN subscription.
+func (c *SkillController) Start(ctx context.Context) error {
+	if c == nil || c.Store == nil {
+		return errors.New("skill controller: Skill store is required")
+	}
+	if c.Resolve == nil {
+		c.Resolve = defaultSkillResolve
+	}
+	c.lifecycleMu.Lock()
+	defer c.lifecycleMu.Unlock()
+	if c.done != nil {
+		return errors.New("skill controller: already started")
+	}
+	runCtx, cancel := context.WithCancel(ctx)
+	c.cancel = cancel
+	c.done = make(chan struct{})
+	if c.pool != nil {
+		c.Wakeups = controlPlaneWakeups(runCtx, c.pool)
+	}
+	resync := c.resync
+	if resync == 0 {
+		resync = defaultControllerResyncInterval
+	}
+	done := c.done
 	go func() {
-		if err := c.Run(ctx, defaultControllerResyncInterval); err != nil && !errors.Is(err, context.Canceled) {
+		defer close(done)
+		defer cancel()
+		if err := c.Run(runCtx, resync); err != nil && !errors.Is(err, context.Canceled) {
 			logger.Error("skill controller stopped", "error", err)
 		}
 	}()
-	return c, nil
+	return nil
+}
+
+// Stop requests the Skill controller's background loop to exit and waits for it
+// to stop. A controller is single-use; construct a new one to start again.
+func (c *SkillController) Stop() {
+	if c == nil {
+		return
+	}
+	c.lifecycleMu.Lock()
+	cancel := c.cancel
+	done := c.done
+	c.lifecycleMu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	if done != nil {
+		<-done
+	}
 }
 
 func (c *SkillController) workQueue() workqueue.TypedRateLimitingInterface[skillQueueKey] {

@@ -116,15 +116,29 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	// The Plugin controller resolves each plugin's pinned source pointer to a
 	// concrete commit/digest and records the manifest/inventory in PluginStatus
 	// out of band of the API write — same pattern as the Deployment controller.
-	if _, err := controller.StartPluginController(ctx, pool, stores, controller.PluginControllerDeps{Resolver: pluginsource.NewGitResolver()}); err != nil {
-		return fmt.Errorf("start plugin controller: %w", err)
+	pluginController, err := controller.NewPluginController(pool, stores, controller.PluginControllerDeps{Resolver: pluginsource.NewGitResolver()})
+	if err != nil {
+		return fmt.Errorf("create plugin controller: %w", err)
+	}
+	if pluginController != nil {
+		if err := pluginController.Start(ctx); err != nil {
+			return fmt.Errorf("start plugin controller: %w", err)
+		}
+		defer pluginController.Stop()
 	}
 	// The Skill controller resolves each skill's pinned git source ref to a
 	// concrete commit and records it in SkillStatus out of band of the API write
 	// — the resolve-and-pin counterpart to the Plugin controller, minus the
 	// manifest/inventory scan (a skill has no bundle to enumerate).
-	if _, err := controller.StartSkillController(ctx, pool, stores, controller.SkillControllerDeps{}); err != nil {
-		return fmt.Errorf("start skill controller: %w", err)
+	skillController, err := controller.NewSkillController(pool, stores, controller.SkillControllerDeps{})
+	if err != nil {
+		return fmt.Errorf("create skill controller: %w", err)
+	}
+	if skillController != nil {
+		if err := skillController.Start(ctx); err != nil {
+			return fmt.Errorf("start skill controller: %w", err)
+		}
+		defer skillController.Stop()
 	}
 
 	slog.Info("starting agentregistry", "version", version.Version, "commit", version.GitCommit)

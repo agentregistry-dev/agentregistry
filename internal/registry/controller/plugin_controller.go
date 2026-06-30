@@ -56,15 +56,20 @@ type PluginController struct {
 	Resolver source.Resolver
 	Wakeups  <-chan struct{}
 
+	pool   *pgxpool.Pool
+	resync time.Duration
+
+	lifecycleMu sync.Mutex
+	cancel      context.CancelFunc
+	done        chan struct{}
+
 	queueMu sync.Mutex
 	queue   workqueue.TypedRateLimitingInterface[pluginQueueKey]
 }
 
-// StartPluginController wires the Plugin controller and starts it in the
-// background, opening its own control-plane LISTEN subscription (same mechanism
-// as the Deployment controller).
-func StartPluginController(
-	ctx context.Context,
+// NewPluginController wires the Plugin controller without starting it. Start
+// owns the background goroutine and control-plane LISTEN subscription.
+func NewPluginController(
 	pool *pgxpool.Pool,
 	stores map[string]*v1alpha1store.Store,
 	deps PluginControllerDeps,
@@ -79,13 +84,65 @@ func StartPluginController(
 	if deps.Resolver == nil {
 		return nil, errors.New("plugin controller: Resolver is required")
 	}
-	c := &PluginController{Store: store, Resolver: deps.Resolver, Wakeups: controlPlaneWakeups(ctx, pool)}
+	return &PluginController{
+		Store:    store,
+		Resolver: deps.Resolver,
+		pool:     pool,
+		resync:   defaultControllerResyncInterval,
+	}, nil
+}
+
+// Start begins the Plugin controller's background reconcile loop. It owns the
+// goroutine and opens this controller's control-plane LISTEN subscription.
+func (c *PluginController) Start(ctx context.Context) error {
+	if c == nil || c.Store == nil {
+		return errors.New("plugin controller: Plugin store is required")
+	}
+	if c.Resolver == nil {
+		return errors.New("plugin controller: Resolver is required")
+	}
+	c.lifecycleMu.Lock()
+	defer c.lifecycleMu.Unlock()
+	if c.done != nil {
+		return errors.New("plugin controller: already started")
+	}
+	runCtx, cancel := context.WithCancel(ctx)
+	c.cancel = cancel
+	c.done = make(chan struct{})
+	if c.pool != nil {
+		c.Wakeups = controlPlaneWakeups(runCtx, c.pool)
+	}
+	resync := c.resync
+	if resync == 0 {
+		resync = defaultControllerResyncInterval
+	}
+	done := c.done
 	go func() {
-		if err := c.Run(ctx, defaultControllerResyncInterval); err != nil && !errors.Is(err, context.Canceled) {
+		defer close(done)
+		defer cancel()
+		if err := c.Run(runCtx, resync); err != nil && !errors.Is(err, context.Canceled) {
 			logger.Error("plugin controller stopped", "error", err)
 		}
 	}()
-	return c, nil
+	return nil
+}
+
+// Stop requests the Plugin controller's background loop to exit and waits for
+// it to stop. A controller is single-use; construct a new one to start again.
+func (c *PluginController) Stop() {
+	if c == nil {
+		return
+	}
+	c.lifecycleMu.Lock()
+	cancel := c.cancel
+	done := c.done
+	c.lifecycleMu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	if done != nil {
+		<-done
+	}
 }
 
 func (c *PluginController) workQueue() workqueue.TypedRateLimitingInterface[pluginQueueKey] {

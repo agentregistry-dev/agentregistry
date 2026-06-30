@@ -21,11 +21,24 @@ CREATE TABLE IF NOT EXISTS plugins (
     PRIMARY KEY (namespace, name, tag)
 );
 
-CREATE INDEX IF NOT EXISTS plugins_labels_gin ON plugins USING gin (labels);
-CREATE INDEX IF NOT EXISTS plugins_name_tag_updated_desc ON plugins USING btree (namespace, name, updated_at DESC, tag);
-CREATE INDEX IF NOT EXISTS plugins_spec_gin ON plugins USING gin (spec jsonb_path_ops);
-CREATE INDEX IF NOT EXISTS plugins_terminating ON plugins USING btree (deletion_timestamp) WHERE (deletion_timestamp IS NOT NULL);
-CREATE INDEX IF NOT EXISTS plugins_updated_at_desc ON plugins USING btree (updated_at DESC);
+-- list by labels
+CREATE INDEX IF NOT EXISTS plugins_labels_gin
+    ON plugins USING gin (labels);
+
+-- list live plugin rows
+CREATE INDEX IF NOT EXISTS plugins_list_alive
+    ON plugins USING btree (namespace, name, tag, updated_at)
+    WHERE deletion_timestamp IS NULL;
+
+-- list tags for one plugin
+CREATE INDEX IF NOT EXISTS plugins_tags_alive
+    ON plugins USING btree (namespace, name, updated_at DESC, tag DESC)
+    WHERE deletion_timestamp IS NULL;
+
+-- purge terminating rows
+CREATE INDEX IF NOT EXISTS plugins_terminating
+    ON plugins USING btree (deletion_timestamp)
+    WHERE deletion_timestamp IS NOT NULL;
 
 CREATE OR REPLACE TRIGGER plugins_set_updated_at
     BEFORE UPDATE ON plugins

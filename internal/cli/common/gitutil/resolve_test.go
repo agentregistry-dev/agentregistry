@@ -1,6 +1,7 @@
 package gitutil
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
@@ -67,19 +68,19 @@ func TestSafeGitRef(t *testing.T) {
 
 func TestResolveRefRejectsOptionInjection(t *testing.T) {
 	// A ref that git would parse as an option must be rejected before exec.
-	if _, err := ResolveRef("https://github.com/org/repo", "--upload-pack=touch /tmp/pwn"); err == nil {
-		t.Fatal("expected ResolveRef to reject an option-like ref")
+	if _, err := ResolveRefContext(context.Background(), "https://github.com/org/repo", "--upload-pack=touch /tmp/pwn"); err == nil {
+		t.Fatal("expected ResolveRefContext to reject an option-like ref")
 	}
 }
 
 func TestResolveRefPassesThroughFullSHA(t *testing.T) {
 	// A full SHA needs no network round-trip; it is returned lowercased.
 	sha := strings.Repeat("A", 40)
-	got, err := ResolveRef("https://github.com/org/repo", sha)
+	got, err := ResolveRefContext(context.Background(), "https://github.com/org/repo", sha)
 	if err != nil {
-		t.Fatalf("ResolveRef: %v", err)
+		t.Fatalf("ResolveRefContext: %v", err)
 	}
 	if got != strings.ToLower(sha) {
-		t.Fatalf("ResolveRef passthrough = %q, want lowercased SHA", got)
+		t.Fatalf("ResolveRefContext passthrough = %q, want lowercased SHA", got)
 	}
 }
