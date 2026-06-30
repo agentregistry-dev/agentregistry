@@ -3,6 +3,7 @@ package v1alpha1
 import (
 	"context"
 	"fmt"
+	"strings"
 )
 
 // Validate runs Deployment's structural checks.
@@ -76,6 +77,14 @@ func validateDeploymentSpec(s *DeploymentSpec) FieldErrors {
 	if s.TargetRef.Tag != "" {
 		if err := validateTag(s.TargetRef.Tag); err != nil {
 			errs.Append("spec.targetRef.tag", err)
+		}
+	}
+	if s.Harness != nil {
+		if s.TargetRef.Kind != KindAgent {
+			errs.Append("spec.harness", fmt.Errorf("%w: harness selection is only valid for Agent deployments", ErrInvalidFormat))
+		}
+		if strings.TrimSpace(s.Harness.Type) == "" {
+			errs.Append("spec.harness.type", fmt.Errorf("%w", ErrRequiredField))
 		}
 	}
 

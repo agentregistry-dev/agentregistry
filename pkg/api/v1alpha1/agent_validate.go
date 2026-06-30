@@ -67,6 +67,8 @@ func validateAgentSpec(s *AgentSpec) FieldErrors {
 			errs.Append("spec.source."+e.Path, e.Cause)
 		}
 	}
+	errs = append(errs, validateHarnessCompatibility(s.CompatibleHarnesses)...)
+
 	// Composition refs default their Kind IN PLACE — the deploy-time resolver
 	// does no defaulting, so the persisted ref must carry the kind. MCPServers
 	// are available to any MCP-capable runtime; plugins/skills/instructions are
@@ -81,31 +83,30 @@ func validateAgentSpec(s *AgentSpec) FieldErrors {
 		errs = append(errs, validateResourceRefs("spec.instructions", []ResourceRef{*s.Instructions}, KindPrompt)...)
 	}
 
-	// Plugins/skills/instructions only apply to harness agents — a prebuilt
-	// Image cannot consume injected files.
+	// Plugins/skills/instructions only apply to harness-compatible agents — a
+	// prebuilt Image cannot consume injected files by itself.
 	if (len(s.Plugins) > 0 || len(s.Skills) > 0 || s.Instructions != nil) &&
-		(s.Source == nil || s.Source.Harness == nil) {
-		errs.Append("spec", fmt.Errorf("%w: plugins/skills/instructions require a harness source (spec.source.harness)", ErrInvalidFormat))
-	}
-
-	if s.Source != nil && s.Source.Harness != nil {
-		if s.Source.Image != "" {
-			errs.Append("spec.source", fmt.Errorf("%w: harness and image are mutually exclusive", ErrInvalidFormat))
-		}
-		errs = append(errs, validateHarnessConfig(s.Source.Harness)...)
+		len(s.CompatibleHarnesses) == 0 {
+		errs.Append("spec", fmt.Errorf("%w: plugins/skills/instructions require compatibleHarnesses", ErrInvalidFormat))
 	}
 
 	return errs
 }
 
-// validateHarnessConfig runs structural checks on a harness-based agent's
-// source. Only the harness Type is required here; composition refs
-// (plugins/skills/instructions/mcpServers) live on AgentSpec and are validated
-// there.
-func validateHarnessConfig(h *HarnessConfig) FieldErrors {
+func validateHarnessCompatibility(harnesses []HarnessCompatibility) FieldErrors {
 	var errs FieldErrors
-	if h.Type == "" {
-		errs.Append("spec.source.harness.type", fmt.Errorf("%w", ErrRequiredField))
+	seen := map[string]struct{}{}
+	for i, harness := range harnesses {
+		path := fmt.Sprintf("spec.compatibleHarnesses[%d]", i)
+		if harness.Type == "" {
+			errs.Append(path+".type", fmt.Errorf("%w", ErrRequiredField))
+			continue
+		}
+		if _, ok := seen[harness.Type]; ok {
+			errs.Append(path+".type", fmt.Errorf("%w: duplicate harness type %q", ErrInvalidFormat, harness.Type))
+			continue
+		}
+		seen[harness.Type] = struct{}{}
 	}
 	return errs
 }

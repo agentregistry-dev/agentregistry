@@ -22,8 +22,6 @@ components:
     AgentSource:
       additionalProperties: false
       properties:
-        harness:
-          $ref: '#/components/schemas/HarnessConfig'
         image:
           type: string
         repository:
@@ -32,6 +30,12 @@ components:
     AgentSpec:
       additionalProperties: false
       properties:
+        compatibleHarnesses:
+          items:
+            $ref: '#/components/schemas/HarnessCompatibility'
+          type:
+          - array
+          - "null"
         description:
           type: string
         instructions:
@@ -166,6 +170,18 @@ components:
       - apiVersion
       - kind
       type: object
+    DeploymentHarness:
+      additionalProperties: false
+      properties:
+        permissionMode:
+          type: string
+        type:
+          type: string
+        version:
+          type: string
+      required:
+      - type
+      type: object
     DeploymentRef:
       additionalProperties: false
       properties:
@@ -191,8 +207,8 @@ components:
           additionalProperties:
             type: string
           type: object
-        harnessPolicy:
-          $ref: '#/components/schemas/HarnessPolicy'
+        harness:
+          $ref: '#/components/schemas/DeploymentHarness'
         runtimeConfig:
           additionalProperties: {}
           type: object
@@ -269,21 +285,13 @@ components:
       required:
       - name
       type: object
-    HarnessConfig:
+    HarnessCompatibility:
       additionalProperties: false
       properties:
         type:
           type: string
-        version:
-          type: string
       required:
       - type
-      type: object
-    HarnessPolicy:
-      additionalProperties: false
-      properties:
-        permissionMode:
-          type: string
       type: object
     HealthBody:
       additionalProperties: false

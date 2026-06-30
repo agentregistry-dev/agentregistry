@@ -105,6 +105,7 @@ func TestDefaultApplyFingerprintResultIncludesDependencySnapshot(t *testing.T) {
 
 func TestDefaultApplyFingerprintIncludesAgentHarnessCompositionDependencies(t *testing.T) {
 	in := testApplyInput()
+	in.Deployment.Spec.Harness = &v1alpha1.DeploymentHarness{Type: "claude-code", Version: "1.2.3"}
 	in.Target = &v1alpha1.Agent{
 		TypeMeta: v1alpha1.TypeMeta{Kind: v1alpha1.KindAgent},
 		Metadata: v1alpha1.ObjectMeta{
@@ -112,7 +113,7 @@ func TestDefaultApplyFingerprintIncludesAgentHarnessCompositionDependencies(t *t
 			Name:      "assistant",
 		},
 		Spec: v1alpha1.AgentSpec{
-			Source: &v1alpha1.AgentSource{Harness: &v1alpha1.HarnessConfig{Type: "claude-code"}},
+			CompatibleHarnesses: []v1alpha1.HarnessCompatibility{{Type: "claude-code"}},
 			Plugins: []v1alpha1.ResourceRef{{
 				Name: "deploy-tools",
 			}},
@@ -167,6 +168,36 @@ func TestDefaultApplyFingerprintIncludesAgentHarnessCompositionDependencies(t *t
 	}
 	if second.Fingerprint == first.Fingerprint {
 		t.Fatalf("fingerprint did not change after resolved Plugin source changed: %s", second.Fingerprint)
+	}
+}
+
+func TestDefaultApplyFingerprintIgnoresHarnessCompositionWhenDeploymentDoesNotSelectHarness(t *testing.T) {
+	in := testApplyInput()
+	in.Target = &v1alpha1.Agent{
+		TypeMeta: v1alpha1.TypeMeta{Kind: v1alpha1.KindAgent},
+		Metadata: v1alpha1.ObjectMeta{
+			Namespace: "team-a",
+			Name:      "assistant",
+		},
+		Spec: v1alpha1.AgentSpec{
+			CompatibleHarnesses: []v1alpha1.HarnessCompatibility{{Type: "claude-code"}},
+			Plugins:             []v1alpha1.ResourceRef{{Name: "deploy-tools"}},
+			Skills:              []v1alpha1.ResourceRef{{Name: "weather"}},
+			Instructions:        &v1alpha1.ResourceRef{Name: "writer-instructions"},
+		},
+	}
+
+	in.Getter = func(_ context.Context, ref v1alpha1.ResourceRef) (v1alpha1.Object, error) {
+		t.Fatalf("unexpected dependency resolution without deployment harness selection: %+v", ref)
+		return nil, nil
+	}
+
+	result, err := DefaultApplyFingerprintResult(context.Background(), in, ApplyFingerprintOptions{AdapterType: "test"})
+	if err != nil {
+		t.Fatalf("DefaultApplyFingerprintResult: %v", err)
+	}
+	if len(result.Dependencies) != 0 {
+		t.Fatalf("dependencies = %+v, want none without deployment harness selection", result.Dependencies)
 	}
 }
 
