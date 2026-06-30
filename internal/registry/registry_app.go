@@ -251,6 +251,9 @@ func deploymentControllerConfig(cfg *config.Config) controller.ControllerConfig 
 			EventKeepAfterRev:  cfg.ControllerEventKeepAfterRevision,
 			BatchLimit:         cfg.ControllerRetentionPruneBatchLimit,
 		},
+		DiscoveryInterval:          cfg.ControllerDiscoveryInterval,
+		DiscoveryStaleAfterMisses:  cfg.ControllerDiscoveryStaleAfterMisses,
+		DiscoveryDeleteAfterMisses: cfg.ControllerDiscoveryDeleteAfterMisses,
 	}
 }
 

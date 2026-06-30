@@ -61,6 +61,17 @@ type Config struct {
 	// ControllerRetentionPruneBatchLimit caps rows removed per retention pass so
 	// pruning cannot monopolize the database during startup or repair loops.
 	ControllerRetentionPruneBatchLimit int `env:"CONTROLLER_RETENTION_PRUNE_BATCH_LIMIT" envDefault:"500"`
+	// ControllerDiscoveryInterval is how often provider discovery snapshots are
+	// materialized into discovered Deployment rows. Provider-specific cache
+	// refreshes may have separate intervals.
+	ControllerDiscoveryInterval time.Duration `env:"CONTROLLER_DISCOVERY_INTERVAL" envDefault:"60s"`
+	// ControllerDiscoveryStaleAfterMisses is how many consecutive successful
+	// discovery polls may omit a discovered Deployment before it is marked
+	// not-ready/stale.
+	ControllerDiscoveryStaleAfterMisses int `env:"CONTROLLER_DISCOVERY_STALE_AFTER_MISSES" envDefault:"3"`
+	// ControllerDiscoveryDeleteAfterMisses is how many consecutive successful
+	// discovery polls may omit a discovered Deployment before it is deleted.
+	ControllerDiscoveryDeleteAfterMisses int `env:"CONTROLLER_DISCOVERY_DELETE_AFTER_MISSES" envDefault:"5"`
 
 	// SkipMigrations gates the server's Postgres migrator at startup.
 	// Set true when migrations are applied out-of-band (e.g. by

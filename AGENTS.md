@@ -7,7 +7,7 @@ This document provides guidelines for both AI coding assistants (Claude, Copilot
 AgentRegistry is a centralized registry for securely curating, discovering, deploying, and managing agentic infrastructure including MCP (Model Context Protocol) servers, agents, and skills.
 
 **Tech Stack:**
-- **Backend/CLI:** Go 1.25+
+- **Backend/CLI:** Go 1.26+
 - **Database:** PostgreSQL (accessed via pgx)
 - **Frontend:** Next.js 14 (App Router) with Tailwind CSS
 - **CLI Framework:** Cobra

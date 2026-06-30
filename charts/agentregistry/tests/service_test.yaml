@@ -16,6 +16,12 @@ tests:
           path: metadata.name
           value: RELEASE-NAME-agentregistry
 
+  - it: is created in the release namespace
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: NAMESPACE
+
   - it: has standard labels
     asserts:
       - isSubset:

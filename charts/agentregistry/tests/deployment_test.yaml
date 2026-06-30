@@ -15,6 +15,9 @@ tests:
           path: metadata.name
           value: RELEASE-NAME-agentregistry
       - equal:
+          path: metadata.namespace
+          value: NAMESPACE
+      - equal:
           path: spec.replicas
           value: 1
 
