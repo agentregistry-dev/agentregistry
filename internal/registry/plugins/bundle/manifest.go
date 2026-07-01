@@ -3,6 +3,7 @@ package bundle
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"path"
 	"slices"
 	"strings"
@@ -39,39 +40,21 @@ func ParseManifest(b *CanonicalBundle) (*v1alpha1.PluginManifest, error) {
 func BuildInventory(b *CanonicalBundle) *v1alpha1.PluginInventory {
 	m := &v1alpha1.PluginInventory{}
 
-	var skillPaths, agentPaths, cmdPaths, binPaths []string
-	for p := range b.Files {
+	for _, p := range slices.Sorted(maps.Keys(b.Files)) {
 		switch {
 		case p == "SKILL.md" || (strings.HasPrefix(p, "skills/") && strings.HasSuffix(p, "/SKILL.md")):
-			skillPaths = append(skillPaths, p)
+			name, desc := parseSkillFrontmatter(b.Files[p])
+			if name == "" {
+				name = skillNameFromPath(p)
+			}
+			m.Skills = append(m.Skills, v1alpha1.PluginSkill{Name: name, Description: desc})
 		case strings.HasPrefix(p, "agents/") && strings.HasSuffix(p, ".md"):
-			agentPaths = append(agentPaths, p)
+			m.Agents = append(m.Agents, baseNameNoExt(p))
 		case strings.HasPrefix(p, "commands/") && strings.HasSuffix(p, ".md"):
-			cmdPaths = append(cmdPaths, p)
+			m.Commands = append(m.Commands, baseNameNoExt(p))
 		case strings.HasPrefix(p, "bin/") && p != "bin/":
-			binPaths = append(binPaths, p)
+			m.Executables = append(m.Executables, strings.TrimPrefix(p, "bin/"))
 		}
-	}
-	slices.Sort(skillPaths)
-	slices.Sort(agentPaths)
-	slices.Sort(cmdPaths)
-	slices.Sort(binPaths)
-
-	for _, p := range skillPaths {
-		name, desc := parseSkillFrontmatter(b.Files[p])
-		if name == "" {
-			name = skillNameFromPath(p)
-		}
-		m.Skills = append(m.Skills, v1alpha1.PluginSkill{Name: name, Description: desc})
-	}
-	for _, p := range agentPaths {
-		m.Agents = append(m.Agents, baseNameNoExt(p))
-	}
-	for _, p := range cmdPaths {
-		m.Commands = append(m.Commands, baseNameNoExt(p))
-	}
-	for _, p := range binPaths {
-		m.Executables = append(m.Executables, strings.TrimPrefix(p, "bin/"))
 	}
 	if data, ok := b.Files[".mcp.json"]; ok {
 		m.MCPServers = parseMCPServers(data)
