@@ -13,12 +13,12 @@ export type Agent = {
 };
 
 export type AgentSource = {
-    harness?: HarnessConfig;
     image?: string;
     repository?: Repository;
 };
 
 export type AgentSpec = {
+    compatibleHarnesses?: Array<HarnessCompatibility> | null;
     description?: string;
     instructions?: ResourceRef;
     mcpServers?: Array<ResourceRef> | null;
@@ -76,6 +76,12 @@ export type Deployment = {
     status?: Status;
 };
 
+export type DeploymentHarness = {
+    permissionMode?: string;
+    type: string;
+    version?: string;
+};
+
 export type DeploymentRef = {
     name: string;
     namespace?: string;
@@ -87,7 +93,7 @@ export type DeploymentSpec = {
     env?: {
         [key: string]: string;
     };
-    harnessPolicy?: HarnessPolicy;
+    harness?: DeploymentHarness;
     runtimeConfig?: {
         [key: string]: unknown;
     };
@@ -142,13 +148,8 @@ export type HttpHeader = {
     value?: string;
 };
 
-export type HarnessConfig = {
+export type HarnessCompatibility = {
     type: string;
-    version?: string;
-};
-
-export type HarnessPolicy = {
-    permissionMode?: string;
 };
 
 export type HealthBody = {
