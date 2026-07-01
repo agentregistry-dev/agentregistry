@@ -159,14 +159,20 @@ type getFlags struct {
 	tag     string
 }
 
-// resolveOrigin validates and normalizes the CLI --origin value into the
-// form carried by scheme.ListOpts.Origin. "" (unset), managed, discovered,
-// and "all" all pass through (lowercased); the Deployment ListFunc resolves
-// their filter semantics. Any other value is a user error.
+// resolveOrigin validates the CLI --origin selector and normalizes it into
+// the server filter value carried by scheme.ListOpts.Origin: unset defaults
+// to managed (preserving historical `arctl get deployments` behavior), "all"
+// clears the filter to return both provenances, and managed/discovered pass
+// through. The Deployment ListFunc then uses the value verbatim. Any other
+// value is a user error.
 func resolveOrigin(origin string) (string, error) {
-	switch v := strings.ToLower(origin); v {
-	case "", v1alpha1.DeploymentOriginManaged, v1alpha1.DeploymentOriginDiscovered, "all":
-		return v, nil
+	switch strings.ToLower(origin) {
+	case "", v1alpha1.DeploymentOriginManaged:
+		return v1alpha1.DeploymentOriginManaged, nil
+	case v1alpha1.DeploymentOriginDiscovered:
+		return v1alpha1.DeploymentOriginDiscovered, nil
+	case "all":
+		return "", nil
 	default:
 		return "", fmt.Errorf("invalid --origin %q: must be managed, discovered, or all", origin)
 	}

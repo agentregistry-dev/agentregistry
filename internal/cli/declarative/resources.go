@@ -107,17 +107,9 @@ func deleteAny[T v1alpha1.Object](ctx context.Context, c *client.Client, kind, n
 }
 
 func listDeploymentResources(ctx context.Context, c *client.Client, opts scheme.ListOpts) ([]any, error) {
-	// Translate the CLI-facing origin into the server filter. Unset defaults
-	// to managed to preserve historical `arctl get deployments` behavior
-	// (and keep `get all` scoped to managed rows); "all" clears the filter
-	// so the server returns both provenances.
-	origin := opts.Origin
-	switch origin {
-	case "":
-		origin = v1alpha1.DeploymentOriginManaged
-	case "all":
-		origin = ""
-	}
+	// opts.Origin is already normalized to the server filter value by the get
+	// command (resolveOrigin): "" means both provenances, managed/discovered
+	// select one. The zero-value caller (`get all`) therefore lists both.
 	items, err := client.ListAllTyped(
 		ctx,
 		c,
@@ -125,7 +117,7 @@ func listDeploymentResources(ctx context.Context, c *client.Client, opts scheme.
 		client.ListOpts{
 			Namespace:          v1alpha1.DefaultNamespace,
 			Limit:              200,
-			Origin:             origin,
+			Origin:             opts.Origin,
 			IncludeTerminating: true,
 		},
 		func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} },
