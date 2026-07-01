@@ -33,6 +33,12 @@ type ListOpts struct {
 	// LatestOnly restricts the list to the literal "latest" tag (tagged
 	// content kinds) or the latest mutable-object row.
 	LatestOnly bool
+	// Origin filters Deployment rows by provenance. Recognized values:
+	// "managed", "discovered", "all" (both), and "" (unset — the Deployment
+	// list defaults to managed to preserve historical behavior). The
+	// Deployment ListFunc translates these to the server filter; only the
+	// Deployment kind honors this — other kinds ignore it.
+	Origin string
 }
 
 type ListFunc func(context.Context, *client.Client, ListOpts) ([]any, error)

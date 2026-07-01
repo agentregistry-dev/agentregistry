@@ -11,6 +11,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	cliruntime "github.com/agentregistry-dev/agentregistry/pkg/cli/runtime"
 	"github.com/agentregistry-dev/agentregistry/pkg/printer"
 )
@@ -36,6 +37,8 @@ Examples:
   arctl get agent acme-summarizer --tag stable
   arctl get agent acme-summarizer --all-tags
   arctl get deployment team-a/acme-summarizer
+  arctl get deployments --origin discovered  # list discovered (unmanaged) deployments
+  arctl get deployments --origin all         # list managed and discovered
   arctl get skills -o json`,
 		Args:         cobra.RangeArgs(1, 2),
 		SilenceUsage: true,
@@ -47,6 +50,7 @@ Examples:
 	cmd.Flags().String("tag", "", "Tagged kinds only. With NAME: fetch one tag (defaults to latest). Without NAME: filter the list to this tag.")
 	cmd.Flags().Bool("latest", false, "List mode only: restrict to rows pinned to the literal 'latest' tag (equivalent to --tag latest).")
 	cmd.Flags().Bool("all-tags", false, "List every tag of NAME (tagged content kinds only)")
+	cmd.Flags().String("origin", "", "Deployments only: filter by provenance — managed, discovered, or all (defaults to managed when unset).")
 	return cmd
 }
 
@@ -56,6 +60,7 @@ func runGet(cmd *cobra.Command, deps cliruntime.Deps, args []string) error {
 	allTags, _ := cmd.Flags().GetBool("all-tags")
 	latest, _ := cmd.Flags().GetBool("latest")
 	tag, _ := cmd.Flags().GetString("tag")
+	origin, _ := cmd.Flags().GetString("origin")
 	allTagsFlag := "--all-tags"
 	tagFlag := "--tag"
 	latestFlag := "--latest"
@@ -70,7 +75,15 @@ func runGet(cmd *cobra.Command, deps cliruntime.Deps, args []string) error {
 		return fmt.Errorf("%s and %s are mutually exclusive", tagFlag, latestFlag)
 	}
 
+	originOpt, err := resolveOrigin(origin)
+	if err != nil {
+		return err
+	}
+
 	if args[0] == "all" {
+		if origin != "" {
+			return fmt.Errorf("--origin cannot be used with `get all`")
+		}
 		return runGetAllArg(cmd, deps, kinds, outputFormat, getFlags{
 			allTags: allTags,
 			latest:  latest,
@@ -99,6 +112,14 @@ func runGet(cmd *cobra.Command, deps cliruntime.Deps, args []string) error {
 		return fmt.Errorf("%s not supported for kind %q (resource is not tagged)", latestFlag, k.Kind)
 	}
 
+	// --origin filters Deployment provenance and is meaningless elsewhere.
+	if origin != "" && !strings.EqualFold(k.Kind, v1alpha1.KindDeployment) {
+		return fmt.Errorf("--origin is only supported for %q, not %q", v1alpha1.KindDeployment, k.Kind)
+	}
+	if origin != "" && len(args) == 2 {
+		return fmt.Errorf("--origin is a list filter and cannot be combined with a resource NAME")
+	}
+
 	if deps.Runtime == nil {
 		return fmt.Errorf("registry runtime not configured")
 	}
@@ -120,7 +141,7 @@ func runGet(cmd *cobra.Command, deps cliruntime.Deps, args []string) error {
 		return printItem(cmd, k, item, outputFormat)
 	}
 
-	listOpts := scheme.ListOpts{Tag: tag, LatestOnly: latest}
+	listOpts := scheme.ListOpts{Tag: tag, LatestOnly: latest, Origin: originOpt}
 	items, err := listItems(cmd.Context(), c, k, listOpts)
 	if err != nil {
 		return fmt.Errorf("listing %s: %w", kindPlural(k), err)
@@ -136,6 +157,19 @@ type getFlags struct {
 	allTags bool
 	latest  bool
 	tag     string
+}
+
+// resolveOrigin validates and normalizes the CLI --origin value into the
+// form carried by scheme.ListOpts.Origin. "" (unset), managed, discovered,
+// and "all" all pass through (lowercased); the Deployment ListFunc resolves
+// their filter semantics. Any other value is a user error.
+func resolveOrigin(origin string) (string, error) {
+	switch v := strings.ToLower(origin); v {
+	case "", v1alpha1.DeploymentOriginManaged, v1alpha1.DeploymentOriginDiscovered, "all":
+		return v, nil
+	default:
+		return "", fmt.Errorf("invalid --origin %q: must be managed, discovered, or all", origin)
+	}
 }
 
 func runGetAllArg(cmd *cobra.Command, deps cliruntime.Deps, kinds *scheme.Registry, outputFormat string, flags getFlags) error {
