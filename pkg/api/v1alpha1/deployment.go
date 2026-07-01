@@ -81,10 +81,6 @@ type DeploymentHarness struct {
 	// Type is the selected harness family, e.g. "claude-code", "codex".
 	Type string `json:"type" yaml:"type"`
 
-	// Version pins the selected harness version for this rollout. Empty asks the
-	// target Runtime to use its default for Type.
-	Version string `json:"version,omitempty" yaml:"version,omitempty"`
-
 	// PermissionMode controls the harness tool-permission posture, e.g.
 	// "default", "acceptEdits", "bypassPermissions". Empty defaults to
 	// "bypassPermissions" for headless harness runtimes (no interactive

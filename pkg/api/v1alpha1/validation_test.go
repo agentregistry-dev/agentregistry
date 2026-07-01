@@ -246,7 +246,6 @@ func TestDeploymentValidate_HarnessSelectionOK(t *testing.T) {
 			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "agentcore"},
 			Harness: &DeploymentHarness{
 				Type:           "claude-code",
-				Version:        "1.2.3",
 				PermissionMode: "acceptEdits",
 			},
 		},

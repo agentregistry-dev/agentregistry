@@ -139,3 +139,12 @@ func TestHarnessCompatibilityIsMatrixOnly(t *testing.T) {
 		}
 	}
 }
+
+// TestDeploymentHarnessDoesNotExposeVersion asserts deployment harness
+// selection stays limited to fields the deploy path actually consumes.
+func TestDeploymentHarnessDoesNotExposeVersion(t *testing.T) {
+	harnessType := reflect.TypeFor[DeploymentHarness]()
+	if _, ok := harnessType.FieldByName("Version"); ok {
+		t.Fatalf("DeploymentHarness must not expose Version until runtime image resolution uses it")
+	}
+}
