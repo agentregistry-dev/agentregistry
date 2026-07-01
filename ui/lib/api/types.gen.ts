@@ -79,7 +79,6 @@ export type Deployment = {
 export type DeploymentHarness = {
     permissionMode?: string;
     type: string;
-    version?: string;
 };
 
 export type DeploymentRef = {

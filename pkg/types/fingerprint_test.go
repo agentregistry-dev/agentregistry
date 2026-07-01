@@ -105,7 +105,7 @@ func TestDefaultApplyFingerprintResultIncludesDependencySnapshot(t *testing.T) {
 
 func TestDefaultApplyFingerprintIncludesAgentHarnessCompositionDependencies(t *testing.T) {
 	in := testApplyInput()
-	in.Deployment.Spec.Harness = &v1alpha1.DeploymentHarness{Type: "claude-code", Version: "1.2.3"}
+	in.Deployment.Spec.Harness = &v1alpha1.DeploymentHarness{Type: "claude-code"}
 	in.Target = &v1alpha1.Agent{
 		TypeMeta: v1alpha1.TypeMeta{Kind: v1alpha1.KindAgent},
 		Metadata: v1alpha1.ObjectMeta{

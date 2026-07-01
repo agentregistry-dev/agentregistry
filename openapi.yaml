@@ -177,8 +177,6 @@ components:
           type: string
         type:
           type: string
-        version:
-          type: string
       required:
       - type
       type: object
