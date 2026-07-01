@@ -32,8 +32,8 @@ type PluginSpec struct {
 	Description string `json:"description,omitempty" yaml:"description,omitempty"`
 
 	// Harnesses lists the harness formats this bundle carries native manifests
-	// for (e.g. "claude-code", "codex"). Informational: translation can target
-	// other harnesses from the canonical form regardless of what's listed here.
+	// for (e.g. "claude-code", "codex"). It is informational in this phase;
+	// deploy-time adapters decide which harnesses they can consume.
 	Harnesses []string `json:"harnesses,omitempty" yaml:"harnesses,omitempty"`
 
 	// Source is where the bundle is ingested from, pinned (git commit / OCI

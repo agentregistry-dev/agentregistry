@@ -95,9 +95,9 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- This explicit trigger roster is scoped to the OSS Deployment-first
--- controller slice. Skill and Prompt events are retained for future
--- dependency-aware controllers, but the Deployment controller ignores them
--- today.
+-- controller slice. Agent, MCPServer, Plugin, Skill, and Prompt events can
+-- all affect a Deployment's desired fingerprint through direct refs or
+-- harness composition refs, so they wake the Deployment controller.
 CREATE OR REPLACE TRIGGER agents_control_plane_event
     AFTER INSERT OR UPDATE OR DELETE ON agents
     FOR EACH ROW EXECUTE FUNCTION record_control_plane_event('Agent');

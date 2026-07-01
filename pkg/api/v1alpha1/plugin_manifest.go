@@ -7,9 +7,11 @@ import (
 )
 
 // PluginManifest is a faithful, lossless Go representation of a Claude Code
-// plugin manifest (`.claude-plugin/plugin.json`) — the canonical lingua-franca
-// format AgentRegistry stores and translates between harnesses. It is grounded
-// in the official schema (json.schemastore.org/claude-code-plugin-manifest.json).
+// plugin manifest (`.claude-plugin/plugin.json`). The registry records it as
+// server-derived Plugin status after resolving and scanning the configured
+// source; it does not make the manifest or bundle bytes part of the user-owned
+// Plugin spec. It is grounded in the official schema
+// (json.schemastore.org/claude-code-plugin-manifest.json).
 //
 // Fidelity rules:
 //   - Every field maps to the real plugin.json key with an exact json tag.
@@ -27,8 +29,8 @@ import (
 // this author-supplied manifest. Unknown keys inside the open object forms of
 // dependencies/commands/monitors are not separately preserved.
 //
-// This type is NOT a registry kind; it is the canonical content parsed from a
-// plugin bundle and embedded in a Plugin resource (see plugin.go).
+// This type is NOT a registry kind; it is parsed from a plugin bundle and
+// embedded in Plugin status (see plugin.go).
 type PluginManifest struct {
 	Schema      string   `json:"$schema,omitempty" yaml:"$schema,omitempty"`
 	Name        string   `json:"name" yaml:"name"`
