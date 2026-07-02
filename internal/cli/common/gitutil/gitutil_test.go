@@ -109,6 +109,11 @@ func TestParseGitURL(t *testing.T) {
 			wantURL: "https://gitlab.com/owner/repo.git",
 		},
 		{
+			name:    "gitlab nested group repo root",
+			rawURL:  "https://gitlab.com/org/platform/team/skills",
+			wantURL: "https://gitlab.com/org/platform/team/skills.git",
+		},
+		{
 			name:     "self-hosted gitlab tree URL",
 			rawURL:   "https://gitlabe2.ext.net.nokia.com/chalapat/fpm-tools/-/tree/main/ai-skills/artifactory-auth-migration",
 			wantURL:  "https://gitlabe2.ext.net.nokia.com/chalapat/fpm-tools.git",
@@ -142,6 +147,11 @@ func TestParseGitURL(t *testing.T) {
 		{
 			name:    "invalid URL",
 			rawURL:  "://not-a-url",
+			wantErr: true,
+		},
+		{
+			name:    "unsupported scheme",
+			rawURL:  "ssh://github.com/owner/repo",
 			wantErr: true,
 		},
 	}
@@ -244,6 +254,26 @@ func TestCopyRepoContents(t *testing.T) {
 		}
 		if _, err := os.Stat(filepath.Join(outDir, "README.md")); !os.IsNotExist(err) {
 			t.Error("root README.md should not be copied with file subpath")
+		}
+	})
+
+	t.Run("rejects symlink file subpath before creating output directory", func(t *testing.T) {
+		repoDir := t.TempDir()
+		outDir := filepath.Join(t.TempDir(), "output")
+
+		os.MkdirAll(filepath.Join(repoDir, "skills"), 0o755)
+		os.WriteFile(filepath.Join(repoDir, "skills", "SKILL.md"), []byte("skill"), 0o644)
+		os.Symlink(filepath.Join(repoDir, "skills", "SKILL.md"), filepath.Join(repoDir, "skills", "LINK.md"))
+
+		err := CopyRepoContents(repoDir, "skills/LINK.md", outDir)
+		if err == nil {
+			t.Fatal("expected error for symlink file subpath")
+		}
+		if !strings.Contains(err.Error(), "refusing to copy symlink") {
+			t.Errorf("error = %q, want it to contain 'refusing to copy symlink'", err.Error())
+		}
+		if _, err := os.Stat(outDir); !os.IsNotExist(err) {
+			t.Error("output directory should not be created for rejected symlink file subpath")
 		}
 	})
 

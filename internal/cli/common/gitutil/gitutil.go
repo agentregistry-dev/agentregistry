@@ -9,32 +9,27 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 )
-
-// ParseGitHubURL parses a GitHub URL into its clone URL, branch, and subdirectory path.
-// Supported formats:
-//   - https://github.com/owner/repo/tree/branch/path/to/dir
-//   - https://github.com/owner/repo
-//
-// Branch names containing slashes (e.g. feature/my-branch) are supported when
-// encoded as %2F in the URL. The raw (escaped) path is used for splitting so
-// the encoded branch segment is preserved, then unescaped for the return value.
-func ParseGitHubURL(rawURL string) (cloneURL, branch, subPath string, err error) {
-	return ParseGitURL(rawURL)
-}
 
 // ParseGitURL parses a Git web URL into its clone URL, branch, and subdirectory
 // path. It supports GitHub URLs and GitLab-style URLs, including self-hosted
 // GitLab instances that use /-/tree/ and /-/blob/ routes.
+// Branch names containing slashes (e.g. feature/my-branch) are supported when
+// encoded as %2F in the URL. The raw (escaped) path is used for splitting so
+// the encoded branch segment is preserved, then unescaped for the return value.
 func ParseGitURL(rawURL string) (cloneURL, branch, subPath string, err error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return "", "", "", fmt.Errorf("invalid URL: %w", err)
 	}
 
-	if u.Scheme == "" || u.Host == "" {
+	if u.Host == "" {
 		return "", "", "", fmt.Errorf("invalid Git URL: expected absolute URL")
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return "", "", "", fmt.Errorf("invalid Git URL: unsupported scheme %q", u.Scheme)
 	}
 
 	// Use EscapedPath so that percent-encoded segments (e.g. %2F in branch
@@ -48,8 +43,11 @@ func ParseGitURL(rawURL string) (cloneURL, branch, subPath string, err error) {
 		return "", "", "", fmt.Errorf("invalid Git URL: expected at least namespace/repo in path")
 	}
 
-	if gitLabMarker := indexPart(parts, "-"); gitLabMarker >= 2 {
+	if gitLabMarker := slices.Index(parts, "-"); gitLabMarker >= 2 {
 		return parseGitLabStyleURL(u, parts, gitLabMarker)
+	}
+	if strings.Contains(strings.ToLower(u.Host), "gitlab") {
+		return parseGitLabRootURL(u, parts)
 	}
 
 	return parseGitHubStyleURL(u, parts)
@@ -74,6 +72,13 @@ func parseGitHubStyleURL(u *url.URL, parts []string) (cloneURL, branch, subPath 
 	return cloneURL, branch, subPath, nil
 }
 
+func parseGitLabRootURL(u *url.URL, parts []string) (cloneURL, branch, subPath string, err error) {
+	repoParts := append([]string(nil), parts...)
+	repoParts[len(repoParts)-1] = strings.TrimSuffix(repoParts[len(repoParts)-1], ".git")
+	cloneURL = fmt.Sprintf("%s://%s/%s.git", u.Scheme, u.Host, strings.Join(repoParts, "/"))
+	return cloneURL, "", "", nil
+}
+
 func parseGitLabStyleURL(u *url.URL, parts []string, marker int) (cloneURL, branch, subPath string, err error) {
 	repoParts := append([]string(nil), parts[:marker]...)
 	repoParts[len(repoParts)-1] = strings.TrimSuffix(repoParts[len(repoParts)-1], ".git")
@@ -88,15 +93,6 @@ func parseGitLabStyleURL(u *url.URL, parts []string, marker int) (cloneURL, bran
 	}
 
 	return cloneURL, branch, subPath, nil
-}
-
-func indexPart(parts []string, want string) int {
-	for i, part := range parts {
-		if part == want {
-			return i
-		}
-	}
-	return -1
 }
 
 // CloneAndCopy clones a Git repository URL and copies its contents to targetDir.
@@ -208,11 +204,11 @@ func CopyRepoContents(repoDir, subPath, targetDir string) error {
 		if info, err := os.Lstat(resolved); err != nil {
 			return fmt.Errorf("stat subpath %q: %w", subPath, err)
 		} else if !info.IsDir() {
-			if err := os.MkdirAll(targetDir, 0o755); err != nil {
-				return fmt.Errorf("create target directory: %w", err)
-			}
 			if info.Mode()&os.ModeSymlink != 0 {
 				return fmt.Errorf("refusing to copy symlink: %s", resolved)
+			}
+			if err := os.MkdirAll(targetDir, 0o755); err != nil {
+				return fmt.Errorf("create target directory: %w", err)
 			}
 			dstPath := filepath.Join(targetDir, filepath.Base(resolved))
 			return CopyFile(resolved, dstPath)
