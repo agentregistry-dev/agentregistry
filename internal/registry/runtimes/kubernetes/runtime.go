@@ -26,6 +26,7 @@ import (
 	runtimetypes "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
 	runtimeutils "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/utils"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/logging"
 )
 
 const (
@@ -43,6 +44,7 @@ var (
 	kubernetesNewClientForConfig   = func(restConfig *rest.Config) (client.Client, error) {
 		return client.New(restConfig, client.Options{Scheme: kubernetesScheme})
 	}
+	kubernetesLogger = logging.New("kubernetes-runtime")
 )
 
 func init() {
@@ -646,7 +648,7 @@ func sanitizeKubernetesName(value string) string {
 func kubernetesApplyResource(ctx context.Context, c client.Client, obj client.Object, verbose bool) error {
 	kind := obj.GetObjectKind().GroupVersionKind().Kind
 	if verbose {
-		fmt.Printf("Applying %s %s in namespace %s\n", kind, obj.GetName(), obj.GetNamespace())
+		kubernetesLogger.Info("applying kubernetes resource", "kind", kind, "name", obj.GetName(), "namespace", obj.GetNamespace())
 	}
 
 	raw, err := k8sruntime.DefaultUnstructuredConverter.ToUnstructured(obj)
@@ -661,7 +663,7 @@ func kubernetesApplyResource(ctx context.Context, c client.Client, obj client.Ob
 	}
 
 	if verbose {
-		fmt.Printf("Applied %s %s\n", kind, obj.GetName())
+		kubernetesLogger.Info("applied kubernetes resource", "kind", kind, "name", obj.GetName(), "namespace", obj.GetNamespace())
 	}
 	return nil
 }

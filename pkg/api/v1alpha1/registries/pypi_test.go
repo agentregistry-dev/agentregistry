@@ -12,6 +12,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1/registries"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1/registries/internal/testutil"
 )
 
 // TestValidatePyPI_MirrorOverride mirrors the NPM override test for PyPI.
@@ -74,7 +75,7 @@ func TestValidatePyPI_RealPackages(t *testing.T) {
 		},
 		{
 			name:          "non-existent package should fail",
-			packageName:   generateRandomPackageName(),
+			packageName:   testutil.GenerateRandomPackageName(),
 			version:       "1.0.0",
 			serverName:    "com.example/test",
 			expectError:   true,

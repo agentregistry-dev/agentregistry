@@ -13,8 +13,8 @@ import (
 func TestDeploymentControllerSyncReplaysIgnoredEvents(t *testing.T) {
 	reader := fakeEventReader{
 		events: []v1alpha1store.ControlPlaneEvent{
-			{Revision: 1, Key: v1alpha1store.ResourceKey{Kind: v1alpha1.KindSkill, Namespace: "default", Name: "skill"}, Operation: "insert"},
-			{Revision: 2, Key: v1alpha1store.ResourceKey{Kind: v1alpha1.KindPrompt, Namespace: "default", Name: "prompt"}, Operation: "insert"},
+			{Revision: 1, Key: v1alpha1store.ResourceKey{Kind: "Ignored", Namespace: "default", Name: "ignored"}, Operation: "insert"},
+			{Revision: 2, Key: v1alpha1store.ResourceKey{Kind: "Other", Namespace: "default", Name: "other"}, Operation: "insert"},
 		},
 	}
 	controller := &DeploymentController{Events: reader}
@@ -25,14 +25,27 @@ func TestDeploymentControllerSyncReplaysIgnoredEvents(t *testing.T) {
 	require.Equal(t, 2, res.Events)
 }
 
+func TestDeploymentControllerHandleHarnessDependencyEventsFullReconcile(t *testing.T) {
+	controller := &DeploymentController{}
+
+	for _, kind := range []string{v1alpha1.KindPlugin, v1alpha1.KindSkill, v1alpha1.KindPrompt} {
+		t.Run(kind, func(t *testing.T) {
+			_, err := controller.HandleEvent(context.Background(), v1alpha1store.ControlPlaneEvent{
+				Key: v1alpha1store.ResourceKey{Kind: kind, Namespace: "default", Name: "changed"},
+			})
+			require.ErrorContains(t, err, "no Deployment store registered")
+		})
+	}
+}
+
 func TestDeploymentControllerReplayDrainsMultipleBatches(t *testing.T) {
 	reader := fakeEventReader{
 		events: []v1alpha1store.ControlPlaneEvent{
-			{Revision: 1, Key: v1alpha1store.ResourceKey{Kind: v1alpha1.KindPrompt}},
-			{Revision: 2, Key: v1alpha1store.ResourceKey{Kind: v1alpha1.KindPrompt}},
-			{Revision: 3, Key: v1alpha1store.ResourceKey{Kind: v1alpha1.KindPrompt}},
-			{Revision: 4, Key: v1alpha1store.ResourceKey{Kind: v1alpha1.KindPrompt}},
-			{Revision: 5, Key: v1alpha1store.ResourceKey{Kind: v1alpha1.KindPrompt}},
+			{Revision: 1, Key: v1alpha1store.ResourceKey{Kind: "Ignored"}},
+			{Revision: 2, Key: v1alpha1store.ResourceKey{Kind: "Ignored"}},
+			{Revision: 3, Key: v1alpha1store.ResourceKey{Kind: "Ignored"}},
+			{Revision: 4, Key: v1alpha1store.ResourceKey{Kind: "Ignored"}},
+			{Revision: 5, Key: v1alpha1store.ResourceKey{Kind: "Ignored"}},
 		},
 	}
 	controller := &DeploymentController{Events: reader, BatchLimit: 2}

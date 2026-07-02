@@ -228,6 +228,18 @@ func TestDeploymentController_ReappliesAgentDeploymentWhenReferencedMCPServerCha
 	require.Equal(t, 1, processed)
 	require.Equal(t, int32(1), adapter.applyCalls.Load())
 
+	applied := loadDeployment(t, stores, "assistant-deploy")
+	var firstDetails deploymentControllerDetails
+	ok, err := applied.Status.GetDetailsKey(deploymentControllerDetailsKey, &firstDetails)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Len(t, firstDetails.Dependencies, 1)
+	require.Equal(t, v1alpha1.KindMCPServer, firstDetails.Dependencies[0].Kind)
+	require.Equal(t, "default", firstDetails.Dependencies[0].Namespace)
+	require.Equal(t, "weather", firstDetails.Dependencies[0].Name)
+	require.NotEmpty(t, firstDetails.Dependencies[0].MaterialHash)
+	firstDependencyHash := firstDetails.Dependencies[0].MaterialHash
+
 	seedMCPServerWithIdentifier(t, stores, "weather", "ghcr.io/example/weather:2.0.0")
 	_, err = controller.HandleEvent(ctx, v1alpha1store.ControlPlaneEvent{
 		Key: v1alpha1store.ResourceKey{
@@ -245,6 +257,16 @@ func TestDeploymentController_ReappliesAgentDeploymentWhenReferencedMCPServerCha
 		return err == nil && adapter.applyCalls.Load() == 2
 	}, time.Second, 10*time.Millisecond)
 	require.Equal(t, 1, processed)
+
+	reapplied := loadDeployment(t, stores, "assistant-deploy")
+	var secondDetails deploymentControllerDetails
+	ok, err = reapplied.Status.GetDetailsKey(deploymentControllerDetailsKey, &secondDetails)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Len(t, secondDetails.Dependencies, 1)
+	require.Equal(t, "weather", secondDetails.Dependencies[0].Name)
+	require.NotEqual(t, firstDependencyHash, secondDetails.Dependencies[0].MaterialHash,
+		"dependency material hash should change after the referenced MCPServer spec changes")
 }
 
 func TestDeploymentController_DeleteWaitsForRemoveThenPurgesFinalizedRow(t *testing.T) {

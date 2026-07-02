@@ -41,14 +41,14 @@ func getEnv(key, defaultVal string) string {
 }
 
 // arctlBinary returns the absolute path to the pre-built arctl binary.
-// Checks ARCTL_BINARY env var first, then falls back to ../bin/arctl.
+// Checks ARCTL_BINARY env var first, then falls back to ../../bin/arctl.
 // The path is resolved to an absolute path because exec.Command resolves
 // relative paths relative to cmd.Dir, not the process working directory.
 func arctlBinary(t *testing.T) string {
 	t.Helper()
 	bin := os.Getenv("ARCTL_BINARY")
 	if bin == "" {
-		bin = filepath.Join("..", "bin", "arctl")
+		bin = filepath.Join("..", "..", "bin", "arctl")
 	}
 	abs, err := filepath.Abs(bin)
 	if err != nil {

@@ -238,6 +238,48 @@ func TestDeploymentValidate_OK(t *testing.T) {
 	require.NoError(t, d.Validate())
 }
 
+func TestDeploymentValidate_HarnessSelectionOK(t *testing.T) {
+	d := &Deployment{
+		Metadata: ObjectMeta{Namespace: "default", Name: "prod"},
+		Spec: DeploymentSpec{
+			TargetRef:  ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
+			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "agentcore"},
+			Harness: &DeploymentHarness{
+				Type:           "claude-code",
+				Version:        "1.2.3",
+				PermissionMode: "acceptEdits",
+			},
+		},
+	}
+	require.NoError(t, d.Validate())
+}
+
+func TestDeploymentValidate_RejectsHarnessSelectionWithoutType(t *testing.T) {
+	d := &Deployment{
+		Metadata: ObjectMeta{Namespace: "default", Name: "prod"},
+		Spec: DeploymentSpec{
+			TargetRef:  ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
+			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "agentcore"},
+			Harness:    &DeploymentHarness{},
+		},
+	}
+	paths := failedFields(t, d.Validate())
+	require.Contains(t, paths, "spec.harness.type")
+}
+
+func TestDeploymentValidate_RejectsHarnessSelectionForMCPServer(t *testing.T) {
+	d := &Deployment{
+		Metadata: ObjectMeta{Namespace: "default", Name: "prod"},
+		Spec: DeploymentSpec{
+			TargetRef:  ResourceRef{Kind: KindMCPServer, Name: "weather", Tag: "stable"},
+			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "agentcore"},
+			Harness:    &DeploymentHarness{Type: "claude-code"},
+		},
+	}
+	paths := failedFields(t, d.Validate())
+	require.Contains(t, paths, "spec.harness")
+}
+
 func TestDeploymentValidate_RejectsBadTargetKind(t *testing.T) {
 	d := &Deployment{
 		Metadata: ObjectMeta{Namespace: "default", Name: "prod"},

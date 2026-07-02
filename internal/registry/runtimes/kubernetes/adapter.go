@@ -54,13 +54,13 @@ func (a *kubernetesDeploymentAdapter) Apply(ctx context.Context, in types.ApplyI
 	}
 	cfg, err := kubernetesTranslateRuntimeConfig(ctx, desired)
 	if err != nil {
-		return nil, fmt.Errorf("translate kubernetes platform config: %w", err)
+		return nil, fmt.Errorf("translate kubernetes runtime config: %w", err)
 	}
 	if cfg == nil {
-		return nil, fmt.Errorf("kubernetes platform config is required")
+		return nil, fmt.Errorf("kubernetes runtime config is required")
 	}
 	if err := kubernetesApplyRuntimeConfig(ctx, in.Runtime, cfg, false); err != nil {
-		return nil, fmt.Errorf("apply kubernetes platform config: %w", err)
+		return nil, fmt.Errorf("apply kubernetes runtime config: %w", err)
 	}
 
 	now := time.Now().UTC()
@@ -141,7 +141,7 @@ func (a *kubernetesDeploymentAdapter) buildDesiredStateFromV1Alpha1(
 
 	switch target := in.Target.(type) {
 	case *v1alpha1.MCPServer:
-		server, err := utils.SpecToPlatformMCPServer(ctx, target.Metadata, target.Spec, utils.MCPServerTranslateOpts{
+		server, err := utils.SpecToRuntimeMCPServer(ctx, target.Metadata, target.Spec, utils.MCPServerTranslateOpts{
 			DeploymentID: deploymentID,
 			Namespace:    namespace,
 			EnvValues:    envValues,
@@ -157,7 +157,7 @@ func (a *kubernetesDeploymentAdapter) buildDesiredStateFromV1Alpha1(
 		if in.Runtime != nil {
 			telemetryEndpoint = in.Runtime.Spec.TelemetryEndpoint
 		}
-		agent, servers, err := utils.SpecToPlatformAgent(ctx, target.Metadata, target.Spec, utils.AgentTranslateOpts{
+		agent, servers, err := utils.SpecToRuntimeAgent(ctx, target.Metadata, target.Spec, utils.AgentTranslateOpts{
 			DeploymentID:      deploymentID,
 			Namespace:         namespace,
 			KagentURL:         "http://kagent-controller.kagent.svc.cluster.local",

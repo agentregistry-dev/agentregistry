@@ -63,14 +63,17 @@ func runtimeFixture(name, runtimeType string, config map[string]any) v1alpha1.Ru
 	}
 }
 
-// (1) `-o yaml` emits the declarative envelope and strips server-managed fields
-// (id, timestamps) so the output round-trips through `arctl apply -f`.
-func TestRuntimeGet_YAMLOutputRoundTrips(t *testing.T) {
+// (1) `-o yaml` emits the canonical v1alpha1 envelope without projecting
+// metadata or spec through a CLI-specific DTO.
+func TestRuntimeGet_YAMLOutputPreservesCanonicalEnvelope(t *testing.T) {
 	runtimes := []v1alpha1.Runtime{
 		runtimeFixture("my-kagent", "Kagent", map[string]any{
 			"kagentUrl": "http://kagent-controller.kagent:8083",
 			"namespace": "kagent",
 		}),
+	}
+	runtimes[0].Metadata.Annotations = map[string]string{
+		"reconcile.agentregistry.dev/force": "2026-06-16T12:00:00Z",
 	}
 	srv := runtimeTestServer(t, runtimes)
 	setupClientForServer(t, srv)
@@ -86,13 +89,12 @@ func TestRuntimeGet_YAMLOutputRoundTrips(t *testing.T) {
 	assert.Contains(t, got, "apiVersion: ar.dev/v1alpha1")
 	assert.Contains(t, got, "kind: Runtime")
 	assert.Contains(t, got, "name: my-kagent")
+	assert.Contains(t, got, "annotations:")
+	assert.Contains(t, got, "reconcile.agentregistry.dev/force: \"2026-06-16T12:00:00Z\"")
 	// Declarative spec fields.
 	assert.Contains(t, got, "type: Kagent")
 	assert.Contains(t, got, "kagentUrl: http://kagent-controller.kagent:8083")
 	assert.Contains(t, got, "namespace: kagent")
-	// Server-managed fields must be stripped.
-	assert.NotContains(t, got, "createdAt", "spec must not leak server timestamps")
-	assert.NotContains(t, got, "updatedAt", "spec must not leak server timestamps")
 }
 
 // (2) Table output (default) still works — regression guard for the YAML-only change.

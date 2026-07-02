@@ -20,8 +20,8 @@ type AdapterResolver struct {
 
 // ResolverDependencies bundles the adapter resolver inputs.
 type ResolverDependencies struct {
-	// Adapters is the platform -> adapter map. AdapterResolver looks up by
-	// Runtime.Spec.Type; unmapped platforms surface
+	// Adapters is the runtime -> adapter map. AdapterResolver looks up by
+	// Runtime.Spec.Type; unmapped runtimes surface
 	// UnsupportedDeploymentRuntimeError.
 	Adapters map[string]types.DeploymentAdapter
 	// Getter fetches typed Objects by ref. Logs uses it to resolve

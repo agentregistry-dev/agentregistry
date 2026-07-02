@@ -56,7 +56,7 @@ type deploymentLogsInput struct {
 
 type deploymentLogLine struct {
 	Timestamp string `json:"timestamp,omitempty" doc:"RFC3339 timestamp."`
-	Stream    string `json:"stream,omitempty"     doc:"stdout | stderr | platform-specific."`
+	Stream    string `json:"stream,omitempty"     doc:"stdout | stderr | runtime-specific."`
 	Line      string `json:"line"                 doc:"Single log record."`
 }
 

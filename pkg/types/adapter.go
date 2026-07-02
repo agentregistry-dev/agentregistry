@@ -164,7 +164,7 @@ type LogsInput struct {
 // LogLine is a single emitted log record from the workload.
 type LogLine struct {
 	Timestamp time.Time
-	Stream    string // "stdout" | "stderr" | platform-specific
+	Stream    string // "stdout" | "stderr" | runtime-specific
 	Line      string
 }
 

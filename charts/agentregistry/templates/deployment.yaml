@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "agentregistry.fullname" . }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "agentregistry.labels" . | nindent 4 }}
   {{- $annotations := include "agentregistry.annotations" (dict "annotations" dict "context" $) }}

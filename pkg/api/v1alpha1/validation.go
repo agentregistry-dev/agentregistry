@@ -76,7 +76,7 @@ type ResolverFunc func(ctx context.Context, ref ResourceRef) error
 
 // GetterFunc fetches a ResourceRef as a typed Object. It returns
 // ErrDanglingRef when the referenced object is missing; other errors
-// propagate as-is. Used by reconcilers / platform adapters that need
+// propagate as-is. Used by reconcilers / runtime adapters that need
 // the target's Spec (not just an existence check) — for example, the
 // local adapter walking an AgentSpec.MCPServers entry to build
 // agentgateway upstream config.

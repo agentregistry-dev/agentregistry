@@ -36,6 +36,7 @@ func init() {
 	register(v1alpha1.KindAgent, func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
 	register(v1alpha1.KindMCPServer, func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} })
 	register(v1alpha1.KindSkill, func() *v1alpha1.Skill { return &v1alpha1.Skill{} })
+	register(v1alpha1.KindPlugin, func() *v1alpha1.Plugin { return &v1alpha1.Plugin{} })
 	register(v1alpha1.KindPrompt, func() *v1alpha1.Prompt { return &v1alpha1.Prompt{} })
 	register(v1alpha1.KindRuntime, func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} })
 	register(v1alpha1.KindDeployment, func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} })

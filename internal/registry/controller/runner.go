@@ -36,7 +36,10 @@ type ControllerHandle struct {
 
 // ControllerConfig controls optional controller maintenance loops.
 type ControllerConfig struct {
-	Retention RetentionPolicy
+	Retention                  RetentionPolicy
+	DiscoveryInterval          time.Duration
+	DiscoveryStaleAfterMisses  int
+	DiscoveryDeleteAfterMisses int
 }
 
 // StartDeploymentController constructs the Deployment controller, runs the
@@ -68,8 +71,10 @@ func StartDeploymentController(
 	}
 	controller.Wakeups = controlPlaneWakeups(ctx, pool)
 	discovery := &DeploymentDiscoveryController{
-		Stores:   stores,
-		Adapters: adapters,
+		Stores:            stores,
+		Adapters:          adapters,
+		StaleAfterMisses:  config.DiscoveryStaleAfterMisses,
+		DeleteAfterMisses: config.DiscoveryDeleteAfterMisses,
 	}
 
 	retention := &RetentionPruner{
@@ -86,7 +91,7 @@ func StartDeploymentController(
 		}
 	}()
 	go func() {
-		if err := discovery.Run(ctx, defaultControllerResyncInterval); err != nil && !errors.Is(err, context.Canceled) {
+		if err := discovery.Run(ctx, config.DiscoveryInterval); err != nil && !errors.Is(err, context.Canceled) {
 			logger.Error("deployment discovery controller stopped", "error", err)
 		}
 	}()

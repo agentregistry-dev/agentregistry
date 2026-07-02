@@ -1,8 +1,8 @@
 // Package utils hosts shared helpers used by both the local and
-// kubernetes platform adapters. The primary surface is
+// kubernetes runtime adapters. The primary surface is
 // TranslateMCPServer, which takes a v1alpha1.MCPServerSpec plus
 // per-deployment runtime overrides and projects it onto the
-// platform-internal *runtimetypes.MCPServer that adapters dispatch.
+// runtime-internal *runtimetypes.MCPServer that adapters dispatch.
 package utils
 
 import (
@@ -33,13 +33,13 @@ const DefaultLocalAgentPort uint16 = 8080
 // field is populated and produces MCPServerType=local or =remote accordingly.
 type MCPServerRunRequest struct {
 	// Name is metadata.name of the v1alpha1.MCPServer; used to derive the
-	// platform-internal container/resource name via generateInternalName.
+	// runtime-internal container/resource name via generateInternalName.
 	Name string
 	// Spec is the v1alpha1 MCPServerSpec authored in the manifest.
 	Spec v1alpha1.MCPServerSpec
 	// DeploymentID is the unique identifier this invocation carries; the
 	// same Spec deployed twice produces two distinct DeploymentIDs and
-	// therefore two distinct platform-internal names.
+	// therefore two distinct runtime-internal names.
 	DeploymentID string
 	// EnvValues, ArgValues carry per-deployment runtime overrides for the
 	// bundled local server. Nil is treated as an empty map.
@@ -50,7 +50,7 @@ type MCPServerRunRequest struct {
 	HeaderValues map[string]string
 }
 
-// TranslateMCPServer maps a v1alpha1 MCPServerSpec onto the platform-internal
+// TranslateMCPServer maps a v1alpha1 MCPServerSpec onto the runtime-internal
 // MCPServer. Dispatches on Spec.Source (bundled → local transport) vs
 // Spec.Remote (pre-running → remote transport). Validation enforces exactly
 // one of the two is set.
@@ -289,7 +289,7 @@ func BuildRemoteMCPURL(remote *runtimetypes.RemoteMCPTarget) string {
 }
 
 // generateInternalName normalizes an MCPServer or Agent name into a
-// platform-safe slug: lowercase, replace any of ~20 common punctuation
+// runtime-safe slug: lowercase, replace any of ~20 common punctuation
 // characters with '-'. Output is safe for Docker, Kubernetes DNS-1123,
 // and agentgateway labels.
 func generateInternalName(server string) string {
@@ -321,7 +321,7 @@ func generateInternalName(server string) string {
 
 // GenerateInternalNameForDeployment stamps the deploymentID suffix onto the
 // base internal name so two deployments of the same MCPServer don't collide
-// at the platform level.
+// at the runtime level.
 func GenerateInternalNameForDeployment(name, deploymentID string) string {
 	base := generateInternalName(name)
 	deploymentID = strings.TrimSpace(deploymentID)

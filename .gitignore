@@ -56,3 +56,5 @@ charts/agentregistry/Chart.yaml
 
 _output/
 
+# Default security scan report folder (make security-scan)
+scans/

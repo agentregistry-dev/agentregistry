@@ -1813,7 +1813,7 @@ spec:
 	// Status block — server-managed.
 	RequireOutputContains(t, result, "status:")
 	// phase may be "deploying" or "deployed" depending on how fast the
-	// reconciler runs for the local platform; both assert the status block.
+	// reconciler runs for the local runtime; both assert the status block.
 	if !strings.Contains(result.Stdout, "phase:") {
 		t.Fatalf("expected .status.phase in get output, got:\n%s", result.Stdout)
 	}

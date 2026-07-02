@@ -91,79 +91,36 @@ func init() {
 	// endpoints that don't exist. The Get / Delete / List closures match
 	// what typedKind would otherwise produce; ListTags / DeleteAllTags are
 	// intentionally omitted so the dispatch layer rejects --all-tags cleanly.
-	scheme.Register(&scheme.Kind{
-		Kind:         "runtime",
-		Plural:       "runtimes",
-		Aliases:      []string{"Runtime"},
-		TableColumns: []scheme.Column{{Header: "NAME"}, {Header: "TYPE"}},
-		ToYAMLFunc:   func(item any) any { return item },
-		RowFunc: func(item any) []string {
-			runtime, ok := item.(*v1alpha1.Runtime)
-			if !ok {
-				return []string{"<invalid>"}
-			}
-			return runtimeRow(runtime)
-		},
-		Get: func(ctx context.Context, c *client.Client, name, _ string) (any, error) {
-			ref, err := parseResourceLookupRef(name)
-			if err != nil {
-				return nil, err
-			}
-			return client.GetTyped(ctx, c, v1alpha1.KindRuntime, ref.Namespace, ref.Name, "", func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} })
-		},
-		ListFunc: func(ctx context.Context, c *client.Client, opts scheme.ListOpts) ([]any, error) {
-			return listAny(ctx, c, v1alpha1.KindRuntime, opts, func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} })
-		},
-		Delete: func(ctx context.Context, c *client.Client, name, tag string) error {
-			return deleteAny(ctx, c, v1alpha1.KindRuntime, name, tag, func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} })
-		},
-	})
+	scheme.Register(
+		mutableTypedKind(
+			"runtime", "runtimes", []string{"Runtime"},
+			[]scheme.Column{{Header: "NAME"}, {Header: "TYPE"}},
+			v1alpha1.KindRuntime,
+			func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} },
+			runtimeRow,
+		),
+	)
 
 	// Deployment is registered manually because it is a mutable namespace/name
 	// object: the server's deployment store does not expose /tags or
 	// DeleteAllTags endpoints. Explicit get/delete accept either NAME or
 	// NAMESPACE/NAME; ListTags / DeleteAllTags are intentionally omitted so
 	// the dispatch layer rejects --all-tags cleanly.
-	scheme.Register(&scheme.Kind{
-		Kind:    "deployment",
-		Plural:  "deployments",
-		Aliases: []string{"Deployment"},
-		Get: func(ctx context.Context, c *client.Client, name, _ string) (any, error) {
-			ref, err := parseResourceLookupRef(name)
-			if err != nil {
-				return nil, err
-			}
-			deployment, err := client.GetTyped(ctx, c, v1alpha1.KindDeployment, ref.Namespace, ref.Name, "", func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} })
-			if err != nil {
-				return nil, err
-			}
-			return cliCommon.DeploymentRecordFromObject(deployment), nil
-		},
-		Delete: func(ctx context.Context, c *client.Client, name, tag string) error {
-			return deleteAny(ctx, c, v1alpha1.KindDeployment, name, tag, func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} })
-		},
-		ListFunc: func(ctx context.Context, c *client.Client, _ scheme.ListOpts) ([]any, error) {
-			return listDeploymentAny(ctx, c)
-		},
-		RowFunc: func(item any) []string {
-			deployment, ok := item.(*cliCommon.DeploymentRecord)
-			if !ok {
-				return []string{"<invalid>"}
-			}
-			return deploymentRow(deployment)
-		},
-		ToYAMLFunc: func(item any) any {
-			deployment, ok := item.(*cliCommon.DeploymentRecord)
-			if !ok {
-				return nil
-			}
-			return deploymentToDocument(deployment)
-		},
-		TableColumns: []scheme.Column{
-			{Header: "NAME"}, {Header: "TARGET"}, {Header: "VERSION"},
-			{Header: "TYPE"}, {Header: "RUNTIME"}, {Header: "STATUS"},
-		},
-	})
+	scheme.Register(
+		mutableTypedKind(
+			"deployment", "deployments", []string{"Deployment"},
+			[]scheme.Column{
+				{Header: "NAME"}, {Header: "TARGET"}, {Header: "VERSION"},
+				{Header: "TYPE"}, {Header: "RUNTIME"}, {Header: "STATUS"},
+			},
+			v1alpha1.KindDeployment,
+			func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} },
+			func(deployment *v1alpha1.Deployment) []string {
+				return deploymentRow(cliCommon.DeploymentRecordFromObject(deployment))
+			},
+			withMutableListFunc(listDeploymentResources),
+		),
+	)
 }
 
 // typedKind builds a scheme.Kind whose Get / List / Delete dispatch
@@ -214,4 +171,63 @@ func typedKind[T v1alpha1.Object](
 			return deleteAllTagsAny(ctx, c, canonicalKind, name, newObj)
 		},
 	}
+}
+
+// mutableTypedKind is typedKind for namespace/name resources such as Runtime
+// and Deployment. These kinds use the generic v1alpha1 CRUD surface but do not
+// expose /tags, so the tag-specific callbacks are intentionally nil.
+type mutableTypedKindOption func(*scheme.Kind)
+
+// withMutableListFunc is an option to override the default ListFunc for a
+// mutableTypedKind.
+func withMutableListFunc(fn scheme.ListFunc) mutableTypedKindOption {
+	return func(k *scheme.Kind) {
+		k.ListFunc = fn
+	}
+}
+
+// mutableTypedKind builds a scheme.Kind for mutable namespace/name resources which
+// do not support tagging.
+func mutableTypedKind[T v1alpha1.Object](
+	cliName, plural string,
+	aliases []string,
+	columns []scheme.Column,
+	canonicalKind string,
+	newObj func() T,
+	row func(T) []string,
+	opts ...mutableTypedKindOption,
+) *scheme.Kind {
+	k := &scheme.Kind{
+		Kind:         cliName,
+		Plural:       plural,
+		Aliases:      aliases,
+		TableColumns: columns,
+		ToYAMLFunc:   func(item any) any { return item },
+		RowFunc: func(item any) []string {
+			t, ok := item.(T)
+			if !ok {
+				return []string{"<invalid>"}
+			}
+			return row(t)
+		},
+		Get: func(ctx context.Context, c *client.Client, name, _ string) (any, error) {
+			ref, err := parseResourceLookupRef(name)
+			if err != nil {
+				return nil, err
+			}
+			return client.GetTyped(ctx, c, canonicalKind, ref.Namespace, ref.Name, "", newObj)
+		},
+		ListFunc: func(ctx context.Context, c *client.Client, opts scheme.ListOpts) ([]any, error) {
+			return listAny(ctx, c, canonicalKind, opts, newObj)
+		},
+		Delete: func(ctx context.Context, c *client.Client, name, tag string) error {
+			return deleteAny(ctx, c, canonicalKind, name, tag, newObj)
+		},
+	}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(k)
+		}
+	}
+	return k
 }

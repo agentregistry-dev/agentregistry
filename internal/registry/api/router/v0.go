@@ -7,6 +7,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	mcpregistrycompat "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/mcpregistry"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/crud"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/deploymentlogs"
 	v0health "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/health"
@@ -135,6 +136,30 @@ func RegisterRoutes(
 
 	if opts.ExtraRoutes != nil {
 		opts.ExtraRoutes(api, pathPrefix)
+	}
+
+	// Read-only MCP Registry v0.1 compatibility surface. Re-exposes MCPServer
+	// rows in the official server.json shape at `/v0.1/servers` (plus an
+	// optional configured prefix) for registry-aware clients. Mounted here —
+	// not via ExtraRoutes — because it's a first-party OSS read feature that
+	// needs the MCPServer store already wired into opts.Stores.
+	if cfg.MCPRegistryCompatEnabled {
+		if store := opts.Stores[v1alpha1.KindMCPServer]; store != nil {
+			// Reuse the same per-kind RBAC hooks the native MCPServer read path
+			// uses, so a downstream build that gates MCPServer reads gates the
+			// compat endpoint identically. nil hooks = public OSS behavior.
+			//
+			// These routes are intentionally NOT in the authn skip list: where
+			// an authn provider is configured, the middleware must run so the
+			// caller's session reaches ListFilter/Authorize for per-caller
+			// scoping. OSS configures no authn provider, so they're anonymous.
+			mcpregistrycompat.Register(api, mcpregistrycompat.Config{
+				PathPrefix: cfg.MCPRegistryCompatPathPrefix,
+				Store:      store,
+				ListFilter: opts.PerKindHooks.ListFilters[v1alpha1.KindMCPServer],
+				Authorize:  opts.PerKindHooks.Authorizers[v1alpha1.KindMCPServer],
+			})
+		}
 	}
 	return nil
 }

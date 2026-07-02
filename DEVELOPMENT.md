@@ -110,7 +110,7 @@ The UI is available at `http://localhost:12121`.
 
 # Architecture Overview
 
-**Tech stack:** Go 1.25+ · PostgreSQL (pgx) · [Huma](https://huma.rocks/) (OpenAPI) · [Cobra](https://cobra.dev/) (CLI) · Next.js 14 (App Router) · Tailwind CSS · shadcn/ui
+**Tech stack:** Go 1.26+ · PostgreSQL (pgx) · [Huma](https://huma.rocks/) (OpenAPI) · [Cobra](https://cobra.dev/) (CLI) · Next.js 14 (App Router) · Tailwind CSS · shadcn/ui
 
 For a detailed breakdown of layers, conventions, and contribution guidelines see [`AGENTS.md`](AGENTS.md).
 

@@ -12,7 +12,7 @@ RUN mkdir -p internal/registry/api/ui/dist
 RUN make build-ui
 
 ARG BUILDPLATFORM
-FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
 
 # alpine install make
 RUN apk add --no-cache make
@@ -54,10 +54,10 @@ RUN DOCKER_ARCH=$(case "${TARGETARCH:-}" in \
         (arm64) echo "aarch64" ;; \
         (*) echo "x86_64" ;; \
     esac) && \
-    wget https://download.docker.com/linux/static/stable/${DOCKER_ARCH}/docker-28.5.1.tgz && \
-    tar -xvf docker-28.5.1.tgz && \
+    wget https://download.docker.com/linux/static/stable/${DOCKER_ARCH}/docker-29.6.0.tgz && \
+    tar -xvf docker-29.6.0.tgz && \
     mv docker/docker /usr/local/bin/docker && \
-    rm -rf docker-28.5.1.tgz docker
+    rm -rf docker-29.6.0.tgz docker
 
 # Install Docker Compose plugin
 ARG TARGETARCH
@@ -68,7 +68,7 @@ RUN set -eux; \
         (*) echo "x86_64" ;; \
     esac); \
     COMPOSE_NAME=docker-compose-linux-${COMPOSE_ARCH}; \
-    COMPOSE_URL=https://github.com/docker/compose/releases/download/v2.40.3; \
+    COMPOSE_URL=https://github.com/docker/compose/releases/download/v5.2.0; \
     COMPOSE_DIR=/tmp/docker-compose-download; \
     for attempt in 1 2 3 4 5; do \
         rm -rf ${COMPOSE_DIR}; \
@@ -93,5 +93,10 @@ COPY --from=builder /app/bin/arctl-server /app/bin/arctl-server
 LABEL org.opencontainers.image.source=https://github.com/agentregistry-dev/agentregistry
 LABEL org.opencontainers.image.description="Agent Registry Server"
 LABEL org.opencontainers.image.authors="Agent Registry Creators 🤖"
+
+# Skip the default Content-Type:application/json POST check to keep pre-1.4.1 MCP behavior.
+# As of 1.4.1 CORS protection has been changing in the mcp sdk a few times, so this is our safest bet
+# Ref: https://github.com/modelcontextprotocol/go-sdk/releases/tag/v1.6.1
+ENV MCPGODEBUG=disablecontenttypecheck=1
 
 CMD ["/app/bin/arctl-server"]
