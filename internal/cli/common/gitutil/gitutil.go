@@ -342,17 +342,12 @@ func CopyRepoContents(repoDir, subPath, targetDir string) error {
 		if err != nil {
 			return err
 		}
-		if info, err := os.Lstat(resolved); err != nil {
+		info, err := os.Lstat(resolved)
+		if err != nil {
 			return fmt.Errorf("stat subpath %q: %w", subPath, err)
-		} else if !info.IsDir() {
-			if info.Mode()&os.ModeSymlink != 0 {
-				return fmt.Errorf("refusing to copy symlink: %s", resolved)
-			}
-			if err := os.MkdirAll(targetDir, 0o755); err != nil {
-				return fmt.Errorf("create target directory: %w", err)
-			}
-			dstPath := filepath.Join(targetDir, filepath.Base(resolved))
-			return CopyFile(resolved, dstPath)
+		}
+		if !info.IsDir() {
+			return copyRepoFileSubPath(resolved, targetDir)
 		}
 		srcDir = resolved
 	}
@@ -391,6 +386,19 @@ func CopyRepoContents(repoDir, subPath, targetDir string) error {
 	}
 
 	return nil
+}
+
+func copyRepoFileSubPath(srcPath, targetDir string) error {
+	if info, err := os.Lstat(srcPath); err != nil {
+		return err
+	} else if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("refusing to copy symlink: %s", srcPath)
+	}
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		return fmt.Errorf("create target directory: %w", err)
+	}
+	dstPath := filepath.Join(targetDir, filepath.Base(srcPath))
+	return CopyFile(srcPath, dstPath)
 }
 
 // CopyDir recursively copies a directory tree, skipping symlinks.
