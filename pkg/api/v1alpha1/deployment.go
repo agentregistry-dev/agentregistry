@@ -68,4 +68,26 @@ type DeploymentSpec struct {
 	DeploymentRefs []DeploymentRef   `json:"deploymentRefs,omitempty" yaml:"deploymentRefs,omitempty"`
 	Env            map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
 	RuntimeConfig  map[string]any    `json:"runtimeConfig,omitempty" yaml:"runtimeConfig,omitempty"`
+	// Harness selects a compatible harness for Agent deployments and configures
+	// rollout-specific harness policy. Omitted for BYO image/source Agent
+	// deployments and MCPServer deployments.
+	Harness *DeploymentHarness `json:"harness,omitempty" yaml:"harness,omitempty"`
+}
+
+// DeploymentHarness selects the concrete harness to run for one Deployment.
+// The target Agent declares compatibility; the Runtime supplies concrete
+// runner support such as container images.
+type DeploymentHarness struct {
+	// Type is the selected harness family, e.g. "claude-code", "codex".
+	Type string `json:"type" yaml:"type"`
+
+	// Version pins the selected harness version for this rollout. Empty asks the
+	// target Runtime to use its default for Type.
+	Version string `json:"version,omitempty" yaml:"version,omitempty"`
+
+	// PermissionMode controls the harness tool-permission posture, e.g.
+	// "default", "acceptEdits", "bypassPermissions". Empty defaults to
+	// "bypassPermissions" for headless harness runtimes (no interactive
+	// approval is possible); subject to security review.
+	PermissionMode string `json:"permissionMode,omitempty" yaml:"permissionMode,omitempty"`
 }

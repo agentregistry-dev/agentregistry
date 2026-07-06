@@ -27,6 +27,7 @@ const (
 	KindAgent      = "Agent"
 	KindMCPServer  = "MCPServer"
 	KindSkill      = "Skill"
+	KindPlugin     = "Plugin"
 	KindPrompt     = "Prompt"
 	KindDeployment = "Deployment"
 	KindRuntime    = "Runtime"

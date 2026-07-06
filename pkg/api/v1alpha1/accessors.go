@@ -137,9 +137,103 @@ func (s *Skill) MarshalSpec() (json.RawMessage, error) { return json.Marshal(s.S
 func (s *Skill) UnmarshalSpec(data json.RawMessage) error {
 	return json.Unmarshal(data, &s.Spec)
 }
-func (s *Skill) MarshalStatus() (json.RawMessage, error) { return MarshalStatusForStorage(s.Status) }
+
+// MarshalStatus serializes the typed SkillStatus: the embedded Status via the
+// storage codec, with the controller-determined ResolvedSource spliced onto the
+// same object. A nil ResolvedSource is omitted (no stray null) so the store's
+// patch-skip byte comparison stays stable.
+func (s *Skill) MarshalStatus() (json.RawMessage, error) {
+	base, err := MarshalStatusForStorage(s.Status.Status)
+	if err != nil {
+		return nil, err
+	}
+	m := map[string]json.RawMessage{}
+	if err := json.Unmarshal(base, &m); err != nil {
+		return nil, err
+	}
+	if s.Status.ResolvedSource != nil {
+		if m["resolvedSource"], err = json.Marshal(s.Status.ResolvedSource); err != nil {
+			return nil, err
+		}
+	}
+	return json.Marshal(m)
+}
 func (s *Skill) UnmarshalStatus(data json.RawMessage) error {
-	return UnmarshalStatusFromStorage(data, &s.Status)
+	if len(data) == 0 {
+		s.Status = SkillStatus{}
+		return nil
+	}
+	if err := UnmarshalStatusFromStorage(data, &s.Status.Status); err != nil {
+		return err
+	}
+	var custom struct {
+		ResolvedSource *SkillResolvedSource `json:"resolvedSource"`
+	}
+	if err := json.Unmarshal(data, &custom); err != nil {
+		return err
+	}
+	s.Status.ResolvedSource = custom.ResolvedSource
+	return nil
+}
+
+func (p *Plugin) GetMetadata() *ObjectMeta { return &p.Metadata }
+func (p *Plugin) SetMetadata(meta ObjectMeta) {
+	p.Metadata = meta
+}
+func (p *Plugin) MarshalSpec() (json.RawMessage, error) { return json.Marshal(p.Spec) }
+func (p *Plugin) UnmarshalSpec(data json.RawMessage) error {
+	return json.Unmarshal(data, &p.Spec)
+}
+
+// MarshalStatus serializes the typed PluginStatus: the embedded Status via the
+// storage codec, with the server-determined ResolvedSource/Manifest/Inventory
+// spliced onto the same object. Nil custom fields are omitted (no stray nulls)
+// so the store's patch-skip byte comparison stays stable.
+func (p *Plugin) MarshalStatus() (json.RawMessage, error) {
+	base, err := MarshalStatusForStorage(p.Status.Status)
+	if err != nil {
+		return nil, err
+	}
+	m := map[string]json.RawMessage{}
+	if err := json.Unmarshal(base, &m); err != nil {
+		return nil, err
+	}
+	if p.Status.ResolvedSource != nil {
+		if m["resolvedSource"], err = json.Marshal(p.Status.ResolvedSource); err != nil {
+			return nil, err
+		}
+	}
+	if p.Status.Manifest != nil {
+		if m["manifest"], err = json.Marshal(p.Status.Manifest); err != nil {
+			return nil, err
+		}
+	}
+	if p.Status.Inventory != nil {
+		if m["inventory"], err = json.Marshal(p.Status.Inventory); err != nil {
+			return nil, err
+		}
+	}
+	return json.Marshal(m)
+}
+
+func (p *Plugin) UnmarshalStatus(data json.RawMessage) error {
+	if len(data) == 0 {
+		p.Status = PluginStatus{}
+		return nil
+	}
+	if err := UnmarshalStatusFromStorage(data, &p.Status.Status); err != nil {
+		return err
+	}
+	var custom struct {
+		ResolvedSource *PluginResolvedSource `json:"resolvedSource"`
+		Manifest       *PluginManifest       `json:"manifest"`
+		Inventory      *PluginInventory      `json:"inventory"`
+	}
+	if err := json.Unmarshal(data, &custom); err != nil {
+		return err
+	}
+	p.Status.ResolvedSource, p.Status.Manifest, p.Status.Inventory = custom.ResolvedSource, custom.Manifest, custom.Inventory
+	return nil
 }
 
 func (p *Prompt) GetMetadata() *ObjectMeta { return &p.Metadata }

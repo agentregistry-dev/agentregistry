@@ -116,18 +116,17 @@ func (c *DeploymentController) FullReconcile(ctx context.Context) (int, error) {
 	return count, nil
 }
 
-// HandleEvent maps a source invalidation to Deployment work. Dependency
-// changes intentionally use a full Deployment scan for this first controller
-// foundation; Skill and Prompt events are retained for future dependency-aware
-// controllers but do not affect Deployment reconciliation today.
+// HandleEvent maps a source invalidation to Deployment work. Dependency changes
+// intentionally use a full Deployment scan for this first controller foundation.
+// Agent harness composition refs (Plugins, Skills, and Prompt instructions) are
+// dependency events because their resolved material can change Deployment apply
+// fingerprints.
 func (c *DeploymentController) HandleEvent(ctx context.Context, event v1alpha1store.ControlPlaneEvent) (int, error) {
 	switch event.Key.Kind {
 	case v1alpha1.KindDeployment:
 		return c.reconcileDeployment(ctx, event.Key)
-	case v1alpha1.KindRuntime, v1alpha1.KindAgent, v1alpha1.KindMCPServer:
+	case v1alpha1.KindRuntime, v1alpha1.KindAgent, v1alpha1.KindMCPServer, v1alpha1.KindPlugin, v1alpha1.KindSkill, v1alpha1.KindPrompt:
 		return c.FullReconcile(ctx)
-	case v1alpha1.KindSkill, v1alpha1.KindPrompt:
-		return 0, nil
 	default:
 		return 0, nil
 	}

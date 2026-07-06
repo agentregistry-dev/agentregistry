@@ -106,7 +106,10 @@ func deleteAny[T v1alpha1.Object](ctx context.Context, c *client.Client, kind, n
 	return c.Delete(ctx, kind, ref.Namespace, ref.Name, targetTag)
 }
 
-func listDeploymentResources(ctx context.Context, c *client.Client, _ scheme.ListOpts) ([]any, error) {
+func listDeploymentResources(ctx context.Context, c *client.Client, opts scheme.ListOpts) ([]any, error) {
+	// opts.Origin is already normalized to the server filter value by the get
+	// command (resolveOrigin): "" means both provenances, managed/discovered
+	// select one. The zero-value caller (`get all`) therefore lists both.
 	items, err := client.ListAllTyped(
 		ctx,
 		c,
@@ -114,7 +117,7 @@ func listDeploymentResources(ctx context.Context, c *client.Client, _ scheme.Lis
 		client.ListOpts{
 			Namespace:          v1alpha1.DefaultNamespace,
 			Limit:              200,
-			Origin:             v1alpha1.DeploymentOriginManaged,
+			Origin:             opts.Origin,
 			IncludeTerminating: true,
 		},
 		func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} },

@@ -26,17 +26,31 @@ func (a *Agent) ResolveRefs(ctx context.Context, resolver ResolverFunc) error {
 		return nil
 	}
 	var errs FieldErrors
-	for i, ref := range a.Spec.MCPServers {
-		if ref.Kind == "" {
-			ref.Kind = KindMCPServer
-		}
-		if ref.Namespace == "" {
-			ref.Namespace = a.Metadata.Namespace
-		}
-		errs = append(errs, resolveRefWith(ctx, resolver, ref, fmt.Sprintf("spec.mcpServers[%d]", i))...)
+	ns := a.Metadata.Namespace
+	errs = append(errs, resolveResourceRefs(ctx, resolver, ns, "spec.mcpServers", a.Spec.MCPServers, KindMCPServer)...)
+	errs = append(errs, resolveResourceRefs(ctx, resolver, ns, "spec.plugins", a.Spec.Plugins, KindPlugin)...)
+	errs = append(errs, resolveResourceRefs(ctx, resolver, ns, "spec.skills", a.Spec.Skills, KindSkill)...)
+	if a.Spec.Instructions != nil {
+		errs = append(errs, resolveResourceRefs(ctx, resolver, ns, "spec.instructions", []ResourceRef{*a.Spec.Instructions}, KindPrompt)...)
 	}
 	if len(errs) == 0 {
 		return nil
+	}
+	return errs
+}
+
+// resolveResourceRefs resolves a slice of resource refs, defaulting Kind to
+// defaultKind and Namespace to the agent's namespace before each lookup.
+func resolveResourceRefs(ctx context.Context, resolver ResolverFunc, ns, path string, refs []ResourceRef, defaultKind string) FieldErrors {
+	var errs FieldErrors
+	for i, ref := range refs {
+		if ref.Kind == "" {
+			ref.Kind = defaultKind
+		}
+		if ref.Namespace == "" {
+			ref.Namespace = ns
+		}
+		errs = append(errs, resolveRefWith(ctx, resolver, ref, fmt.Sprintf("%s[%d]", path, i))...)
 	}
 	return errs
 }
@@ -53,23 +67,69 @@ func validateAgentSpec(s *AgentSpec) FieldErrors {
 			errs.Append("spec.source."+e.Path, e.Cause)
 		}
 	}
-	for i, ref := range s.MCPServers {
-		// References within Agent.Spec default Kind=MCPServer. MCPServer
-		// covers both bundled (spec.source) and remote (spec.remote) servers
-		// under a single kind.
-		kind := ref.Kind
-		if kind == "" {
-			kind = KindMCPServer
+	errs = append(errs, validateHarnessCompatibility(s.CompatibleHarnesses)...)
+
+	// Composition refs default their Kind IN PLACE — the deploy-time resolver
+	// does no defaulting, so the persisted ref must carry the kind. MCPServers
+	// are available to any MCP-capable runtime; plugins/skills/instructions are
+	// harness composition inputs and are gated below.
+	errs = append(errs, validateResourceRefs("spec.mcpServers", s.MCPServers, KindMCPServer)...)
+	errs = append(errs, validateResourceRefs("spec.plugins", s.Plugins, KindPlugin)...)
+	errs = append(errs, validateResourceRefs("spec.skills", s.Skills, KindSkill)...)
+	if s.Instructions != nil {
+		if s.Instructions.Kind == "" {
+			s.Instructions.Kind = KindPrompt
 		}
-		if kind != KindMCPServer {
-			errs.Append(fmt.Sprintf("spec.mcpServers[%d].kind", i),
-				fmt.Errorf("%w: must be %q, got %q",
-					ErrInvalidRef, KindMCPServer, ref.Kind))
-		}
-		for _, e := range validateRef(ref) {
-			errs.Append(fmt.Sprintf("spec.mcpServers[%d].%s", i, e.Path), e.Cause)
-		}
+		errs = append(errs, validateResourceRefs("spec.instructions", []ResourceRef{*s.Instructions}, KindPrompt)...)
 	}
 
+	// Plugins/skills/instructions only apply to harness-compatible agents — a
+	// prebuilt Image cannot consume injected files by itself.
+	if (len(s.Plugins) > 0 || len(s.Skills) > 0 || s.Instructions != nil) &&
+		len(s.CompatibleHarnesses) == 0 {
+		errs.Append("spec", fmt.Errorf("%w: plugins/skills/instructions require compatibleHarnesses", ErrInvalidFormat))
+	}
+
+	return errs
+}
+
+func validateHarnessCompatibility(harnesses []HarnessCompatibility) FieldErrors {
+	var errs FieldErrors
+	seen := map[string]struct{}{}
+	for i, harness := range harnesses {
+		path := fmt.Sprintf("spec.compatibleHarnesses[%d]", i)
+		if harness.Type == "" {
+			errs.Append(path+".type", fmt.Errorf("%w", ErrRequiredField))
+			continue
+		}
+		if _, ok := seen[harness.Type]; ok {
+			errs.Append(path+".type", fmt.Errorf("%w: duplicate harness type %q", ErrInvalidFormat, harness.Type))
+			continue
+		}
+		seen[harness.Type] = struct{}{}
+	}
+	return errs
+}
+
+// validateResourceRefs validates refs and defaults an empty Kind to expectKind
+// IN PLACE. The defaulting must persist into the stored spec: the deploy-time
+// resolver looks up stores[ref.Kind] with no defaulting of its own, so a ref
+// left with an empty Kind would resolve to no store and fail the deploy.
+// Slices share their backing array, so mutating refs[i] mutates the caller's
+// slice field.
+func validateResourceRefs(path string, refs []ResourceRef, expectKind string) FieldErrors {
+	var errs FieldErrors
+	for i := range refs {
+		if refs[i].Kind == "" {
+			refs[i].Kind = expectKind
+		}
+		if refs[i].Kind != expectKind {
+			errs.Append(fmt.Sprintf("%s[%d].kind", path, i),
+				fmt.Errorf("%w: must be %q, got %q", ErrInvalidRef, expectKind, refs[i].Kind))
+		}
+		for _, e := range validateRef(refs[i]) {
+			errs.Append(fmt.Sprintf("%s[%d].%s", path, i, e.Path), e.Cause)
+		}
+	}
 	return errs
 }

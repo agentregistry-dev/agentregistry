@@ -33,7 +33,9 @@ DECLARE
 BEGIN
     IF TG_OP = 'UPDATE' THEN
         -- Status-only writes already have their own public watch channel. They
-        -- do not change desired source state and must not wake controllers.
+        -- do not usually change desired source state and must not wake
+        -- controllers. Plugin/Skill resolvedSource is the narrow exception:
+        -- harness Deployments consume that material pin.
         IF NEW.spec = OLD.spec
            AND NEW.labels = OLD.labels
            AND NEW.annotations = OLD.annotations
@@ -43,7 +45,13 @@ BEGIN
            )
            AND COALESCE(to_jsonb(NEW)->'finalizers', '[]'::jsonb) =
                COALESCE(to_jsonb(OLD)->'finalizers', '[]'::jsonb) THEN
-            RETURN NEW;
+            IF NOT (
+                event_kind IN ('Plugin', 'Skill')
+                AND COALESCE(NEW.status->'resolvedSource', 'null'::jsonb)
+                    IS DISTINCT FROM COALESCE(OLD.status->'resolvedSource', 'null'::jsonb)
+            ) THEN
+                RETURN NEW;
+            END IF;
         END IF;
         event_op := 'update';
         row_json := to_jsonb(NEW);
@@ -87,9 +95,9 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- This explicit trigger roster is scoped to the OSS Deployment-first
--- controller slice. Skill and Prompt events are retained for future
--- dependency-aware controllers, but the Deployment controller ignores them
--- today.
+-- controller slice. Agent, MCPServer, Plugin, Skill, and Prompt events can
+-- all affect a Deployment's desired fingerprint through direct refs or
+-- harness composition refs, so they wake the Deployment controller.
 CREATE OR REPLACE TRIGGER agents_control_plane_event
     AFTER INSERT OR UPDATE OR DELETE ON agents
     FOR EACH ROW EXECUTE FUNCTION record_control_plane_event('Agent');

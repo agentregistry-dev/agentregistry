@@ -106,7 +106,7 @@ func pullResource(ctx context.Context, deps cliruntime.Deps, typ, name, tag, out
 	default:
 		fmt.Printf("Cloning %s into %s\n", repo.URL, outDir)
 	}
-	if err := gitutil.CloneAndCopy(repo.URL, repo.Branch, repo.Commit, repo.Subfolder, outDir, false); err != nil {
+	if err := gitutil.CloneAndCopyContext(ctx, repo.URL, repo.Branch, repo.Commit, repo.Subfolder, outDir, false); err != nil {
 		return err
 	}
 	if repo.Subfolder != "" {

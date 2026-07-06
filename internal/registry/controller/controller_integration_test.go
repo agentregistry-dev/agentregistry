@@ -63,7 +63,14 @@ func TestDeploymentControllerHandleMissingDeploymentEventNoops(t *testing.T) {
 
 func TestDeploymentControllerHandleDependencyEventsFullReconcileDeployments(t *testing.T) {
 	ctx := context.Background()
-	for _, kind := range []string{v1alpha1.KindRuntime, v1alpha1.KindAgent, v1alpha1.KindMCPServer} {
+	for _, kind := range []string{
+		v1alpha1.KindRuntime,
+		v1alpha1.KindAgent,
+		v1alpha1.KindMCPServer,
+		v1alpha1.KindPlugin,
+		v1alpha1.KindSkill,
+		v1alpha1.KindPrompt,
+	} {
 		t.Run(kind, func(t *testing.T) {
 			stores := newControllerTestStores(t)
 			seedRuntime(t, stores, "local")
@@ -79,23 +86,6 @@ func TestDeploymentControllerHandleDependencyEventsFullReconcileDeployments(t *t
 			require.Equal(t, 2, count)
 			require.Equal(t, 2, controller.workQueue().Len())
 		})
-	}
-}
-
-func TestDeploymentControllerHandleSkillPromptEventsNoop(t *testing.T) {
-	ctx := context.Background()
-	stores := newControllerTestStores(t)
-	seedRuntime(t, stores, "local")
-	seedMCPServer(t, stores, "weather")
-	seedDeployment(t, stores, "api", v1alpha1.DesiredStateDeployed)
-	controller := newDeploymentTestController(stores, &recordingDeploymentAdapter{})
-
-	for _, kind := range []string{v1alpha1.KindSkill, v1alpha1.KindPrompt} {
-		count, err := controller.HandleEvent(ctx, v1alpha1store.ControlPlaneEvent{
-			Key: v1alpha1store.ResourceKey{Kind: kind, Namespace: "default", Name: "changed"},
-		})
-		require.NoError(t, err)
-		require.Zero(t, count)
 	}
 }
 

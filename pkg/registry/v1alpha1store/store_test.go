@@ -647,6 +647,151 @@ func TestStore_ControlPlaneEventsTrackSourceWritesOnly(t *testing.T) {
 	require.Equal(t, "delete", batch[0].Operation)
 }
 
+func TestStore_ControlPlaneEventTracksResolvedSourceStatusChanges(t *testing.T) {
+	pool := NewTestPool(t)
+	events := NewControlPlaneEventStore(pool, TestSchema())
+	ctx := context.Background()
+
+	tests := []struct {
+		name      string
+		kind      string
+		rowName   string
+		store     *Store
+		upsert    func(*testing.T, *Store)
+		condition func(*testing.T, *Store)
+		resolve   func(*testing.T, *Store, string)
+	}{
+		{
+			name:    "plugin",
+			kind:    v1alpha1.KindPlugin,
+			rowName: "plugin",
+			store:   NewStore(pool, TestSchema(), "plugins"),
+			upsert: func(t *testing.T, store *Store) {
+				t.Helper()
+				_, err := store.Upsert(ctx, &v1alpha1.Plugin{
+					Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "plugin"},
+					Spec: v1alpha1.PluginSpec{
+						Source: &v1alpha1.PluginSource{
+							Type: v1alpha1.PluginSourceTypeGit,
+							Git:  &v1alpha1.PluginSourceGit{Repository: &v1alpha1.Repository{URL: "https://github.com/acme/plugin"}},
+						},
+					},
+				})
+				require.NoError(t, err)
+			},
+			condition: func(t *testing.T, store *Store) {
+				t.Helper()
+				err := store.ApplyPatch(ctx, testNS, "plugin", DefaultTag(), PatchOpts{
+					Status: func(current json.RawMessage) (json.RawMessage, error) {
+						p := &v1alpha1.Plugin{}
+						if err := p.UnmarshalStatus(current); err != nil {
+							return nil, err
+						}
+						p.Status.SetCondition(v1alpha1.Condition{Type: "Ready", Status: v1alpha1.ConditionFalse, Reason: "Progressing"})
+						return p.MarshalStatus()
+					},
+				})
+				require.NoError(t, err)
+			},
+			resolve: func(t *testing.T, store *Store, commit string) {
+				t.Helper()
+				err := store.ApplyPatch(ctx, testNS, "plugin", DefaultTag(), PatchOpts{
+					Status: func(current json.RawMessage) (json.RawMessage, error) {
+						p := &v1alpha1.Plugin{}
+						if err := p.UnmarshalStatus(current); err != nil {
+							return nil, err
+						}
+						p.Status.ResolvedSource = &v1alpha1.PluginResolvedSource{Type: v1alpha1.PluginSourceTypeGit, Commit: commit}
+						p.Status.SetCondition(v1alpha1.Condition{Type: "Ready", Status: v1alpha1.ConditionTrue, Reason: "Resolved"})
+						return p.MarshalStatus()
+					},
+				})
+				require.NoError(t, err)
+			},
+		},
+		{
+			name:    "skill",
+			kind:    v1alpha1.KindSkill,
+			rowName: "skill",
+			store:   NewStore(pool, TestSchema(), "skills"),
+			upsert: func(t *testing.T, store *Store) {
+				t.Helper()
+				_, err := store.Upsert(ctx, &v1alpha1.Skill{
+					Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "skill"},
+					Spec: v1alpha1.SkillSpec{
+						Source: &v1alpha1.SkillSource{Repository: &v1alpha1.Repository{URL: "https://github.com/acme/skill"}},
+					},
+				})
+				require.NoError(t, err)
+			},
+			condition: func(t *testing.T, store *Store) {
+				t.Helper()
+				err := store.ApplyPatch(ctx, testNS, "skill", DefaultTag(), PatchOpts{
+					Status: func(current json.RawMessage) (json.RawMessage, error) {
+						s := &v1alpha1.Skill{}
+						if err := s.UnmarshalStatus(current); err != nil {
+							return nil, err
+						}
+						s.Status.SetCondition(v1alpha1.Condition{Type: "Ready", Status: v1alpha1.ConditionFalse, Reason: "Progressing"})
+						return s.MarshalStatus()
+					},
+				})
+				require.NoError(t, err)
+			},
+			resolve: func(t *testing.T, store *Store, commit string) {
+				t.Helper()
+				err := store.ApplyPatch(ctx, testNS, "skill", DefaultTag(), PatchOpts{
+					Status: func(current json.RawMessage) (json.RawMessage, error) {
+						s := &v1alpha1.Skill{}
+						if err := s.UnmarshalStatus(current); err != nil {
+							return nil, err
+						}
+						s.Status.ResolvedSource = &v1alpha1.SkillResolvedSource{Commit: commit}
+						s.Status.SetCondition(v1alpha1.Condition{Type: "Ready", Status: v1alpha1.ConditionTrue, Reason: "Resolved"})
+						return s.MarshalStatus()
+					},
+				})
+				require.NoError(t, err)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.upsert(t, tt.store)
+			batch, err := events.ListAfter(ctx, 0, 100)
+			require.NoError(t, err)
+			insert := batch[len(batch)-1]
+			require.Equal(t, tt.kind, insert.Key.Kind)
+			require.Equal(t, tt.rowName, insert.Key.Name)
+
+			tt.condition(t, tt.store)
+			batch, err = events.ListAfter(ctx, insert.Revision, 100)
+			require.NoError(t, err)
+			require.Empty(t, batch, "condition-only status patches must not invalidate deployments")
+
+			tt.resolve(t, tt.store, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+			batch, err = events.ListAfter(ctx, insert.Revision, 100)
+			require.NoError(t, err)
+			require.Len(t, batch, 1)
+			require.Equal(t, tt.kind, batch[0].Key.Kind)
+			require.Equal(t, "update", batch[0].Operation)
+
+			tt.condition(t, tt.store)
+			next, err := events.ListAfter(ctx, batch[0].Revision, 100)
+			require.NoError(t, err)
+			require.Empty(t, next, "non-material status changes after resolution must not re-invalidate deployments")
+
+			tt.resolve(t, tt.store, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+			next, err = events.ListAfter(ctx, batch[0].Revision, 100)
+			require.NoError(t, err)
+			require.Len(t, next, 1)
+			require.Equal(t, tt.kind, next[0].Key.Kind)
+			require.Equal(t, "update", next[0].Operation)
+		})
+	}
+}
+
 func TestControlPlaneEventStore_PruneBeforeHonorsKeepAfterRevision(t *testing.T) {
 	pool := NewTestPool(t)
 	store := NewStore(pool, TestSchema(), testTable)

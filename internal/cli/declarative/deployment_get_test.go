@@ -179,27 +179,92 @@ func TestDeploymentGet_NotFoundError(t *testing.T) {
 		"missing deployment should surface a not-found error")
 }
 
-// (4) List mode (no name arg) returns registry-managed deployments, excluding
-// provider-discovered inventory rows.
-func TestDeploymentGet_ListReturnsManagedDeployments(t *testing.T) {
+// (4) --origin drives deployment list filtering. The table exercises the full
+// surface: the managed default (no flag / explicit), discovered, all, and the
+// validation/gating errors. The test server (deploymentTestServerV1Alpha1)
+// honors ?origin= the same way the real handler does.
+func TestDeploymentGet_OriginFiltering(t *testing.T) {
 	deployments := []v1alpha1.Deployment{
-		deploymentFixture("aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "deployed"),
-		deploymentFixture("gcp-v1", "other", "1.0.0", "my-gcp", "agent", "pending"),
+		deploymentFixture("aws-v1", "managed-agent", "1.0.0", "my-aws", "agent", "deployed"),
+		deploymentFixture("foundry-v1", "discovered-agent", "1.0.0", "my-foundry", "agent", "pending"),
 	}
 	deployments[1].Metadata.Annotations = map[string]string{
 		v1alpha1.DeploymentOriginAnnotation: v1alpha1.DeploymentOriginDiscovered,
 	}
-	srv := deploymentTestServerV1Alpha1(t, deployments)
-	setupClientForServer(t, srv)
 
-	out := &bytes.Buffer{}
-	cmd := declarative.NewGetCmd(declarativeTestDeps(nil))
-	cmd.SetOut(out)
-	cmd.SetArgs([]string{"deployments"})
-	require.NoError(t, cmd.Execute())
+	tests := []struct {
+		name            string
+		args            []string
+		wantContains    []string
+		wantNotContains []string
+		wantErr         string // substring; empty means success expected
+	}{
+		{
+			name:            "default lists managed only",
+			args:            []string{"deployments"},
+			wantContains:    []string{"managed-agent"},
+			wantNotContains: []string{"discovered-agent"},
+		},
+		{
+			name:            "explicit managed lists managed only",
+			args:            []string{"deployments", "--origin", "managed"},
+			wantContains:    []string{"managed-agent"},
+			wantNotContains: []string{"discovered-agent"},
+		},
+		{
+			name:            "discovered lists discovered only",
+			args:            []string{"deployments", "--origin", "discovered"},
+			wantContains:    []string{"discovered-agent"},
+			wantNotContains: []string{"managed-agent"},
+		},
+		{
+			name:         "all lists both origins",
+			args:         []string{"deployments", "--origin", "all"},
+			wantContains: []string{"managed-agent", "discovered-agent"},
+		},
+		{
+			name:    "invalid value rejected",
+			args:    []string{"deployments", "--origin", "bogus"},
+			wantErr: "invalid --origin",
+		},
+		{
+			name:    "rejected for non-deployment kind",
+			args:    []string{"agents", "--origin", "managed"},
+			wantErr: "only supported for",
+		},
+		{
+			name:    "rejected when combined with a NAME",
+			args:    []string{"deployment", "aws-v1", "--origin", "managed"},
+			wantErr: "cannot be combined with a resource NAME",
+		},
+	}
 
-	assert.Contains(t, out.String(), "summarizer")
-	assert.NotContains(t, out.String(), "other")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := deploymentTestServerV1Alpha1(t, deployments)
+			setupClientForServer(t, srv)
+
+			out := &bytes.Buffer{}
+			cmd := declarative.NewGetCmd(declarativeTestDeps(nil))
+			cmd.SetOut(out)
+			cmd.SetArgs(tt.args)
+			err := cmd.Execute()
+
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+
+			require.NoError(t, err)
+			for _, want := range tt.wantContains {
+				assert.Contains(t, out.String(), want)
+			}
+			for _, notWant := range tt.wantNotContains {
+				assert.NotContains(t, out.String(), notWant)
+			}
+		})
+	}
 }
 
 // (5) `-o yaml` emits the declarative envelope (apiVersion/kind/metadata/spec)
