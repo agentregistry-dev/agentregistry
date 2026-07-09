@@ -15,6 +15,9 @@ metadata:
     {{- $annotations | nindent 4 }}
   {{- end }}
 spec:
+  {{- if $pg.storageClass }}
+  storageClassName: {{ $pg.storageClass }}
+  {{- end }}
   accessModes:
     - ReadWriteOnce
   resources:

@@ -305,6 +305,8 @@ database:
         # -- Bundled PostgreSQL image pull policy
         pullPolicy: IfNotPresent
       # -- DB name, user, and password are hardcoded ("agentregistry") for the bundled instance.
+      # -- StorageClass for the bundled PostgreSQL PersistentVolumeClaim. Leave empty ("") to use the cluster default StorageClass.
+      storageClass: ""
       # -- PersistentVolumeClaim size for the bundled PostgreSQL data directory
       storage: 5Gi
       # -- Resource requests/limits for the bundled PostgreSQL container

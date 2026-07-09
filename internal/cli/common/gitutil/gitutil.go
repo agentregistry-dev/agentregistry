@@ -11,13 +11,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
 var (
-	// ErrUnsupportedHost is returned for a non-github.com host. It is a
-	// permanent (terminal) condition — callers can errors.Is it to avoid
-	// retrying a host that will never be supported.
+	// ErrUnsupportedHost is returned for a non-GitHub/non-GitLab host. It is a
+	// permanent condition: callers can errors.Is it to avoid retrying hosts that
+	// are not supported.
 	ErrUnsupportedHost = errors.New("unsupported git host")
 	// ErrRefNotFound is returned when a ref resolves to no commit on the remote
 	// (deleted branch/tag, typo, or a short/non-existent SHA). Terminal:
@@ -25,42 +26,58 @@ var (
 	ErrRefNotFound = errors.New("git ref not found")
 )
 
-// ParseGitHubURL parses a GitHub URL into its clone URL, branch, and subdirectory path.
-// Supported formats:
-//   - https://github.com/owner/repo/tree/branch/path/to/dir
-//   - https://github.com/owner/repo
-//
+// ParseGitURL parses a Git web URL into its clone URL, branch, and subdirectory
+// path. It supports GitHub URLs and GitLab-style URLs, including self-hosted
+// GitLab instances that use /-/tree/ and /-/blob/ routes.
 // Branch names containing slashes (e.g. feature/my-branch) are supported when
 // encoded as %2F in the URL. The raw (escaped) path is used for splitting so
 // the encoded branch segment is preserved, then unescaped for the return value.
-func ParseGitHubURL(rawURL string) (cloneURL, branch, subPath string, err error) {
+func ParseGitURL(rawURL string) (cloneURL, branch, subPath string, err error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return "", "", "", fmt.Errorf("invalid URL: %w", err)
 	}
 
-	if u.Host != "github.com" {
-		return "", "", "", fmt.Errorf("%w: %q, only github.com is supported", ErrUnsupportedHost, u.Host)
+	if u.Host == "" {
+		return "", "", "", fmt.Errorf("invalid Git URL: expected absolute URL")
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return "", "", "", fmt.Errorf("invalid Git URL: unsupported scheme %q", u.Scheme)
 	}
 
 	// Use EscapedPath so that percent-encoded segments (e.g. %2F in branch
 	// names) are not decoded before splitting on "/".
 	rawPath := u.EscapedPath()
 
-	// Path is like /owner/repo or /owner/repo/tree/branch/sub/path
+	// Path is like /owner/repo, /owner/repo/tree/branch/sub/path, or
+	// /group/project/-/tree/branch/sub/path for GitLab.
 	parts := strings.Split(strings.Trim(rawPath, "/"), "/")
 	if len(parts) < 2 {
-		return "", "", "", fmt.Errorf("invalid GitHub URL: expected at least owner/repo in path")
+		return "", "", "", fmt.Errorf("invalid Git URL: expected at least namespace/repo in path")
 	}
 
-	owner := parts[0]
+	if gitLabMarker := slices.Index(parts, "-"); gitLabMarker >= 2 {
+		return parseGitLabStyleURL(u, parts, gitLabMarker)
+	}
+	if strings.Contains(strings.ToLower(u.Host), "gitlab") {
+		return parseGitLabRootURL(u, parts)
+	}
+	if u.Host != "github.com" {
+		return "", "", "", fmt.Errorf("%w: %q", ErrUnsupportedHost, u.Host)
+	}
+
+	return parseGitHubStyleURL(u, parts)
+}
+
+func parseGitHubStyleURL(u *url.URL, parts []string) (cloneURL, branch, subPath string, err error) {
+	namespace := parts[0]
 	repo := strings.TrimSuffix(parts[1], ".git")
-	cloneURL = fmt.Sprintf("https://github.com/%s/%s.git", owner, repo)
+	cloneURL = fmt.Sprintf("%s://%s/%s/%s.git", u.Scheme, u.Host, namespace, repo)
 
 	// If URL contains /tree/<branch>/..., extract branch and subpath.
 	// The branch segment is unescaped so encoded slashes (%2F) become real
 	// slashes in the returned branch name.
-	if len(parts) >= 4 && parts[2] == "tree" {
+	if len(parts) >= 4 && (parts[2] == "tree" || parts[2] == "blob") {
 		branch, _ = url.PathUnescape(parts[3])
 		if len(parts) > 4 {
 			raw := strings.Join(parts[4:], "/")
@@ -71,7 +88,30 @@ func ParseGitHubURL(rawURL string) (cloneURL, branch, subPath string, err error)
 	return cloneURL, branch, subPath, nil
 }
 
-// CloneAndCopyContext clones a GitHub repository URL and copies its contents to
+func parseGitLabRootURL(u *url.URL, parts []string) (cloneURL, branch, subPath string, err error) {
+	repoParts := append([]string(nil), parts...)
+	repoParts[len(repoParts)-1] = strings.TrimSuffix(repoParts[len(repoParts)-1], ".git")
+	cloneURL = fmt.Sprintf("%s://%s/%s.git", u.Scheme, u.Host, strings.Join(repoParts, "/"))
+	return cloneURL, "", "", nil
+}
+
+func parseGitLabStyleURL(u *url.URL, parts []string, marker int) (cloneURL, branch, subPath string, err error) {
+	repoParts := append([]string(nil), parts[:marker]...)
+	repoParts[len(repoParts)-1] = strings.TrimSuffix(repoParts[len(repoParts)-1], ".git")
+	cloneURL = fmt.Sprintf("%s://%s/%s.git", u.Scheme, u.Host, strings.Join(repoParts, "/"))
+
+	if len(parts) >= marker+3 && (parts[marker+1] == "tree" || parts[marker+1] == "blob") {
+		branch, _ = url.PathUnescape(parts[marker+2])
+		if len(parts) > marker+3 {
+			raw := strings.Join(parts[marker+3:], "/")
+			subPath, _ = url.PathUnescape(raw)
+		}
+	}
+
+	return cloneURL, branch, subPath, nil
+}
+
+// CloneAndCopyContext clones a Git repository URL and copies its contents to
 // targetDir. It handles parsing the URL, shallow cloning, navigating to
 // subpaths, and cleanup.
 //
@@ -86,9 +126,9 @@ func ParseGitHubURL(rawURL string) (cloneURL, branch, subPath string, err error)
 // clone/fetch/checkout time (and disk/CPU runaway) by passing a
 // context.WithTimeout. ctx cancellation kills the git child process.
 func CloneAndCopyContext(ctx context.Context, repoURL, branch, commit, subPath, targetDir string, verbose bool) error {
-	cloneURL, urlBranch, urlSubPath, err := ParseGitHubURL(repoURL)
+	cloneURL, urlBranch, urlSubPath, err := ParseGitURL(repoURL)
 	if err != nil {
-		return fmt.Errorf("parse GitHub URL: %w", err)
+		return fmt.Errorf("parse Git URL: %w", err)
 	}
 	if branch == "" {
 		branch = urlBranch
@@ -177,16 +217,15 @@ func isFullCommitSHA(s string) bool {
 // the remote WITHOUT cloning, using `git ls-remote`. A ref that is already a
 // full 40-char commit SHA is returned unchanged (lowercased). An empty ref
 // (after the URL-embedded branch is considered) resolves the remote's default
-// branch (HEAD). Only github.com URLs are supported (see ParseGitHubURL). ctx
-// bounds the ls-remote call. A ref that resolves to no commit returns
-// ErrRefNotFound (terminal).
+// branch (HEAD). ctx bounds the ls-remote call. A ref that resolves to no
+// commit returns ErrRefNotFound (terminal).
 func ResolveRefContext(ctx context.Context, repoURL, ref string) (string, error) {
 	if isFullCommitSHA(ref) {
 		return strings.ToLower(ref), nil
 	}
-	cloneURL, urlBranch, _, err := ParseGitHubURL(repoURL)
+	cloneURL, urlBranch, _, err := ParseGitURL(repoURL)
 	if err != nil {
-		return "", fmt.Errorf("parse GitHub URL: %w", err)
+		return "", fmt.Errorf("parse Git URL: %w", err)
 	}
 	if ref == "" {
 		ref = urlBranch
@@ -263,7 +302,7 @@ func firstLSRemoteSHA(out, ref string) string {
 }
 
 // resolveSubPath validates and resolves a subPath within repoDir, returning
-// the resolved source directory. It rejects absolute paths and paths that
+// the resolved source path. It rejects absolute paths and paths that
 // escape the repository root via directory traversal.
 func resolveSubPath(repoDir, subPath string) (string, error) {
 	if filepath.IsAbs(subPath) {
@@ -292,7 +331,9 @@ func resolveSubPath(repoDir, subPath string) (string, error) {
 }
 
 // CopyRepoContents copies files from a cloned repository to the output directory.
-// It navigates to the subPath if specified and skips the .git directory.
+// It navigates to the subPath if specified and skips the .git directory. If the
+// subPath points to a file (for example a GitLab /-/blob/.../SKILL.md URL), the
+// file is copied into targetDir using its basename.
 // Symlinks are skipped to prevent symlink traversal attacks from untrusted repos.
 func CopyRepoContents(repoDir, subPath, targetDir string) error {
 	srcDir := repoDir
@@ -300,6 +341,13 @@ func CopyRepoContents(repoDir, subPath, targetDir string) error {
 		resolved, err := resolveSubPath(repoDir, subPath)
 		if err != nil {
 			return err
+		}
+		info, err := os.Lstat(resolved)
+		if err != nil {
+			return fmt.Errorf("stat subpath %q: %w", subPath, err)
+		}
+		if !info.IsDir() {
+			return copyRepoFileSubPath(resolved, targetDir)
 		}
 		srcDir = resolved
 	}
@@ -338,6 +386,19 @@ func CopyRepoContents(repoDir, subPath, targetDir string) error {
 	}
 
 	return nil
+}
+
+func copyRepoFileSubPath(srcPath, targetDir string) error {
+	if info, err := os.Lstat(srcPath); err != nil {
+		return err
+	} else if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("refusing to copy symlink: %s", srcPath)
+	}
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		return fmt.Errorf("create target directory: %w", err)
+	}
+	dstPath := filepath.Join(targetDir, filepath.Base(srcPath))
+	return CopyFile(srcPath, dstPath)
 }
 
 // CopyDir recursively copies a directory tree, skipping symlinks.

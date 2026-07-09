@@ -208,6 +208,29 @@ tests:
           path: spec.resources.requests.storage
           value: 10Gi
 
+  # ── StorageClass ──────────────────────────────────────────────────────────
+
+  - it: omits storageClassName by default (uses cluster default StorageClass)
+    template: postgresql.yaml
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: PersistentVolumeClaim
+      - notExists:
+          path: spec.storageClassName
+
+  - it: sets storageClassName when storageClass is provided
+    template: postgresql.yaml
+    set:
+      database.postgres.bundled.storageClass: fast-ssd
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: PersistentVolumeClaim
+      - equal:
+          path: spec.storageClassName
+          value: fast-ssd
+
   # ── postgresql-secret.yaml ────────────────────────────────────────────────
 
   - it: creates postgresql secret when type=bundled

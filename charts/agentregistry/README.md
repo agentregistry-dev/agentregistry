@@ -162,7 +162,7 @@ This creates a `Role`/`RoleBinding` in each listed namespace (plus the installat
 | containerSecurityContext.runAsNonRoot | bool | `true` | Prevent running as root |
 | containerSecurityContext.runAsUser | int | `1001` | User ID to run the container as |
 | containerSecurityContext.seccompProfile.type | string | `"RuntimeDefault"` | Seccomp profile type |
-| database.postgres.bundled | object | `{"image":{"name":"postgres","pullPolicy":"IfNotPresent","registry":"docker.io","repository":"library","tag":"18"},"resources":{"limits":{"cpu":"1","memory":"1Gi"},"requests":{"cpu":"250m","memory":"256Mi"}},"storage":"5Gi"}` | Bundled PostgreSQL — dev/eval only. Only consumed when `type: bundled`. |
+| database.postgres.bundled | object | `{"image":{"name":"postgres","pullPolicy":"IfNotPresent","registry":"docker.io","repository":"library","tag":"18"},"resources":{"limits":{"cpu":"1","memory":"1Gi"},"requests":{"cpu":"250m","memory":"256Mi"}},"storage":"5Gi","storageClass":""}` | Bundled PostgreSQL — dev/eval only. Only consumed when `type: bundled`. |
 | database.postgres.bundled.image.name | string | `"postgres"` | Bundled PostgreSQL image name |
 | database.postgres.bundled.image.pullPolicy | string | `"IfNotPresent"` | Bundled PostgreSQL image pull policy |
 | database.postgres.bundled.image.registry | string | `"docker.io"` | Bundled PostgreSQL image registry |
@@ -170,6 +170,7 @@ This creates a `Role`/`RoleBinding` in each listed namespace (plus the installat
 | database.postgres.bundled.image.tag | string | `"18"` | Bundled PostgreSQL image tag |
 | database.postgres.bundled.resources | object | `{"limits":{"cpu":"1","memory":"1Gi"},"requests":{"cpu":"250m","memory":"256Mi"}}` | Resource requests/limits for the bundled PostgreSQL container |
 | database.postgres.bundled.storage | string | `"5Gi"` | PersistentVolumeClaim size for the bundled PostgreSQL data directory |
+| database.postgres.bundled.storageClass | string | `""` | StorageClass for the bundled PostgreSQL PersistentVolumeClaim. Leave empty ("") to use the cluster default StorageClass. |
 | database.postgres.external | object | `{"secretRef":{"key":"AGENT_REGISTRY_DATABASE_URL","name":""},"url":""}` | External (BYO) PostgreSQL configuration. Only consumed when `type: external`. |
 | database.postgres.external.secretRef | object | `{"key":"AGENT_REGISTRY_DATABASE_URL","name":""}` | Source the connection string from an existing Secret instead of inlining it. Use this when credentials are managed by an external secret store (e.g. AWS Secrets Manager via External Secrets Operator) and synced into the cluster as a Secret. The chart does not create or manage this Secret. Mutually exclusive with `external.url`. On credential rotation, Kubernetes does NOT auto-restart the pod — pair with a controller such as stakater/Reloader if you need automatic restarts on Secret content changes. |
 | database.postgres.external.secretRef.key | string | `"AGENT_REGISTRY_DATABASE_URL"` | Key within the Secret that holds the connection string. |
