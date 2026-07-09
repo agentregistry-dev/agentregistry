@@ -20,6 +20,7 @@ export {
   listSkillsV0,
   listAgentsV0,
   listPromptsV0,
+  listPluginsV0,
   toServerResponse,
   toSkillResponse,
   toAgentResponse,
@@ -27,6 +28,7 @@ export {
   createServerV0,
   createSkillV0,
   createPromptV0,
+  createPluginV0,
   deployServer,
 } from './ui-shims'
 export type {
@@ -38,5 +40,6 @@ export type {
   SkillJson,
   PromptJson,
   AgentJson,
+  PluginJson,
   DeployServerBody,
 } from './ui-shims'

@@ -24,6 +24,8 @@ import type {
   Deployment,
   McpServer,
   McpServerSpec,
+  Plugin,
+  PluginSpec,
   Prompt,
   PromptSpec,
   Skill,
@@ -34,6 +36,7 @@ import {
   applyDeployment as applyDeploymentRaw,
   listAgents as listAgentsRaw,
   listMcpservers as listMcpserversRaw,
+  listPlugins as listPluginsRaw,
   listPrompts as listPromptsRaw,
   listSkills as listSkillsRaw,
 } from "@/lib/api/sdk.gen"
@@ -208,6 +211,25 @@ export async function listPromptsV0(opts?: LegacyListOpts): Promise<{
   }
 }
 
+// Plugins postdate the v1alpha1 refactor, so there is no legacy flat shape to
+// reconstruct — plugin components consume the K8s-style envelope directly
+// (spec + controller-written status). Only the list-call ergonomics (cursor
+// query + all-namespaces default) are shimmed to match the other kinds.
+export async function listPluginsV0(opts?: LegacyListOpts): Promise<{
+  data: { plugins: Plugin[]; metadata: LegacyListMetadata }
+}> {
+  const { data } = await listPluginsRaw({
+    throwOnError: true,
+    query: withAllNamespaces(opts?.query),
+  })
+  return {
+    data: {
+      plugins: data?.items ?? [],
+      metadata: { nextCursor: data?.nextCursor },
+    },
+  }
+}
+
 // ----------------------------------------------------------------------------
 // Create-function shims. Legacy callers pass a flat `{name: "ns/name", tag,
 // description, ...spec}` JSON. Wrap the spec in a K8s envelope, and apply the
@@ -231,6 +253,11 @@ export interface PromptJson extends PromptSpec {
 }
 
 export interface AgentJson extends AgentSpec {
+  name: string
+  tag: string
+}
+
+export interface PluginJson extends PluginSpec {
   name: string
   tag: string
 }
@@ -294,6 +321,24 @@ export async function createSkillV0(opts: LegacyCreateOpts<SkillJson>): Promise<
   }
   await applySingleDoc(envelope)
   return { data: toSkillResponse(envelope) }
+}
+
+// createPluginV0 applies a Plugin envelope through the shared declarative
+// endpoint. The spec is user intent only (title/description/harnesses +
+// source pointer); the Plugin controller resolves and pins the source out of
+// band and writes status.resolvedSource/manifest/inventory.
+export async function createPluginV0(opts: LegacyCreateOpts<PluginJson>): Promise<{
+  data: Plugin
+}> {
+  const spec = stripLegacy(opts.body) as PluginSpec
+  const envelope: Plugin = {
+    apiVersion: "ar.dev/v1alpha1",
+    kind: "Plugin",
+    metadata: { namespace: "default", name: opts.body.name, tag: opts.body.tag },
+    spec,
+  }
+  await applySingleDoc(envelope)
+  return { data: envelope }
 }
 
 export async function createPromptV0(opts: LegacyCreateOpts<PromptJson>): Promise<{

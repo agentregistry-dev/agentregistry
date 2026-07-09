@@ -22,17 +22,21 @@ import { ServerCard } from "@/components/server-card"
 import { SkillCard } from "@/components/skill-card"
 import { AgentCard } from "@/components/agent-card"
 import { PromptCard } from "@/components/prompt-card"
+import { PluginCard } from "@/components/plugin-card"
 import { ServerDetail } from "@/components/server-detail"
 import { SkillDetail } from "@/components/skill-detail"
 import { AgentDetail } from "@/components/agent-detail"
 import { PromptDetail } from "@/components/prompt-detail"
+import { PluginDetail } from "@/components/plugin-detail"
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 import { AddServerDialog } from "@/components/add-server-dialog"
 import { AddSkillDialog } from "@/components/add-skill-dialog"
 import { AddAgentDialog } from "@/components/add-agent-dialog"
 import { AddPromptDialog } from "@/components/add-prompt-dialog"
+import { AddPluginDialog } from "@/components/add-plugin-dialog"
 import { DeployDialog } from "@/components/deploy-dialog"
-import { listServersV0, listSkillsV0, listAgentsV0, listPromptsV0, ServerResponse, SkillResponse, AgentResponse, PromptResponse } from "@/lib/admin-api"
+import { listServersV0, listSkillsV0, listAgentsV0, listPromptsV0, listPluginsV0, ServerResponse, SkillResponse, AgentResponse, PromptResponse } from "@/lib/admin-api"
+import type { Plugin } from "@/lib/api/types.gen"
 import MCPIcon from "@/components/icons/mcp"
 import {
   Search,
@@ -43,6 +47,7 @@ import {
   ArrowUpDown,
   ChevronDown,
   FileText,
+  Blocks,
 } from "lucide-react"
 
 // Grouped server type
@@ -69,13 +74,21 @@ interface GroupedAgent extends AgentResponse {
   allTags: AgentResponse[]
 }
 
-type TabKey = "servers" | "skills" | "agents" | "prompts"
+// Grouped plugin type (envelope-shaped; plugins postdate the legacy flat types)
+interface GroupedPlugin {
+  plugin: Plugin
+  tagCount: number
+  allTags: Plugin[]
+}
+
+type TabKey = "servers" | "skills" | "agents" | "prompts" | "plugins"
 
 const TAB_CONFIG: { key: TabKey; label: string; icon: React.ReactNode }[] = [
   { key: "servers", label: "Servers", icon: <MCPIcon /> },
   { key: "skills", label: "Skills", icon: <Zap className="h-3.5 w-3.5" /> },
   { key: "agents", label: "Agents", icon: <Bot className="h-3.5 w-3.5" /> },
   { key: "prompts", label: "Prompts", icon: <FileText className="h-3.5 w-3.5" /> },
+  { key: "plugins", label: "Plugins", icon: <Blocks className="h-3.5 w-3.5" /> },
 ]
 
 export default function AdminPage() {
@@ -85,10 +98,12 @@ export default function AdminPage() {
   const [groupedSkills, setGroupedSkills] = useState<GroupedSkill[]>([])
   const [groupedAgents, setGroupedAgents] = useState<GroupedAgent[]>([])
   const [groupedPrompts, setGroupedPrompts] = useState<GroupedPrompt[]>([])
+  const [groupedPlugins, setGroupedPlugins] = useState<GroupedPlugin[]>([])
   const [filteredServers, setFilteredServers] = useState<GroupedServer[]>([])
   const [filteredSkills, setFilteredSkills] = useState<GroupedSkill[]>([])
   const [filteredAgents, setFilteredAgents] = useState<GroupedAgent[]>([])
   const [filteredPrompts, setFilteredPrompts] = useState<GroupedPrompt[]>([])
+  const [filteredPlugins, setFilteredPlugins] = useState<GroupedPlugin[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [sortBy, setSortBy] = useState<"name" | "stars" | "date">("name")
   const [filterVerifiedOrg, setFilterVerifiedOrg] = useState(false)
@@ -97,12 +112,14 @@ export default function AdminPage() {
   const [addSkillDialogOpen, setAddSkillDialogOpen] = useState(false)
   const [addAgentDialogOpen, setAddAgentDialogOpen] = useState(false)
   const [addPromptDialogOpen, setAddPromptDialogOpen] = useState(false)
+  const [addPluginDialogOpen, setAddPluginDialogOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedServer, setSelectedServer] = useState<ServerResponse | null>(null)
   const [selectedSkill, setSelectedSkill] = useState<GroupedSkill | null>(null)
   const [selectedAgent, setSelectedAgent] = useState<GroupedAgent | null>(null)
   const [selectedPrompt, setSelectedPrompt] = useState<GroupedPrompt | null>(null)
+  const [selectedPlugin, setSelectedPlugin] = useState<GroupedPlugin | null>(null)
   const [deployServerTarget, setDeployServerTarget] = useState<ServerResponse | null>(null)
   const [deployAgentTarget, setDeployAgentTarget] = useState<AgentResponse | null>(null)
 
@@ -242,6 +259,35 @@ export default function AdminPage() {
     })
   }
 
+  const groupPluginsByName = (plugins: Plugin[]): GroupedPlugin[] => {
+    const grouped = new Map<string, Plugin[]>()
+
+    plugins.forEach((plugin) => {
+      const name = plugin.metadata.name
+      if (!grouped.has(name)) {
+        grouped.set(name, [])
+      }
+      grouped.get(name)!.push(plugin)
+    })
+
+    return Array.from(grouped.entries()).map(([, tags]) => {
+      const sortedTags = [...tags].sort((a, b) => {
+        const dateA = a.metadata.createdAt
+        const dateB = b.metadata.createdAt
+        if (dateA && dateB) {
+          return new Date(dateB).getTime() - new Date(dateA).getTime()
+        }
+        return (b.metadata.tag || '').localeCompare(a.metadata.tag || '')
+      })
+
+      return {
+        plugin: sortedTags[0],
+        tagCount: tags.length,
+        allTags: sortedTags,
+      }
+    })
+  }
+
   const fetchData = async () => {
     try {
       setLoading(true)
@@ -298,6 +344,19 @@ export default function AdminPage() {
       const groupedP = groupPromptsByName(allPrompts)
       setGroupedPrompts(groupedP)
 
+      const allPlugins: Plugin[] = []
+      let pluginCursor: string | undefined
+      do {
+        const { data: pluginData } = await listPluginsV0({
+          query: { cursor: pluginCursor, limit: 100 },
+          throwOnError: true,
+        })
+        allPlugins.push(...pluginData.plugins)
+        pluginCursor = pluginData.metadata.nextCursor
+      } while (pluginCursor)
+      const groupedPl = groupPluginsByName(allPlugins)
+      setGroupedPlugins(groupedPl)
+
       const grouped = groupServersByName(allServers)
       setGroupedServers(grouped)
     } catch (err) {
@@ -309,12 +368,13 @@ export default function AdminPage() {
 
   useEffect(() => { fetchData() }, [])
 
-  const isSheetOpen = !!(selectedServer || selectedSkill || selectedAgent || selectedPrompt)
+  const isSheetOpen = !!(selectedServer || selectedSkill || selectedAgent || selectedPrompt || selectedPlugin)
   const closeSheet = () => {
     setSelectedServer(null)
     setSelectedSkill(null)
     setSelectedAgent(null)
     setSelectedPrompt(null)
+    setSelectedPlugin(null)
   }
 
   // Filter and sort servers
@@ -386,12 +446,18 @@ export default function AdminPage() {
         prompt.description?.toLowerCase().includes(query) ||
         prompt.content?.toLowerCase().includes(query)
       ))
+      setFilteredPlugins(groupedPlugins.filter(({plugin}) =>
+        plugin.metadata.name.toLowerCase().includes(query) ||
+        plugin.spec.title?.toLowerCase().includes(query) ||
+        plugin.spec.description?.toLowerCase().includes(query)
+      ))
     } else {
       setFilteredSkills(groupedSkills)
       setFilteredAgents(groupedAgents)
       setFilteredPrompts(groupedPrompts)
+      setFilteredPlugins(groupedPlugins)
     }
-  }, [searchQuery, groupedSkills, groupedAgents, groupedPrompts])
+  }, [searchQuery, groupedSkills, groupedAgents, groupedPrompts, groupedPlugins])
 
   const getCount = (tab: TabKey) => {
     switch (tab) {
@@ -399,6 +465,7 @@ export default function AdminPage() {
       case "skills": return groupedSkills.length
       case "agents": return groupedAgents.length
       case "prompts": return groupedPrompts.length
+      case "plugins": return groupedPlugins.length
     }
   }
 
@@ -486,6 +553,10 @@ export default function AdminPage() {
                 <DropdownMenuItem onClick={() => setAddPromptDialogOpen(true)}>
                   <FileText className="mr-2 h-4 w-4" />
                   Prompt
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setAddPluginDialogOpen(true)}>
+                  <Blocks className="mr-2 h-4 w-4" />
+                  Plugin
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -661,6 +732,32 @@ export default function AdminPage() {
               </div>
             )
           )}
+
+          {activeTab === "plugins" && (
+            filteredPlugins.length === 0 ? (
+              <EmptyState
+                icon={<Blocks className="h-8 w-8 text-muted-foreground" />}
+                title={groupedPlugins.length === 0 ? "No plugins in registry" : "No plugins match your filters"}
+                description={groupedPlugins.length === 0 ? "Register plugin bundles to get started" : "Try adjusting your search"}
+                action={groupedPlugins.length === 0 ? (
+                  <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setAddPluginDialogOpen(true)}>
+                    <Plus className="h-3.5 w-3.5" /> Add Plugin
+                  </Button>
+                ) : undefined}
+              />
+            ) : (
+              <div className="divide-y">
+                {filteredPlugins.map((grouped, index) => (
+                  <PluginCard
+                    key={`${grouped.plugin.metadata.name}-${grouped.plugin.metadata.tag}-${index}`}
+                    plugin={grouped.plugin}
+                    tagCount={grouped.tagCount}
+                    onClick={() => setSelectedPlugin(grouped)}
+                  />
+                ))}
+              </div>
+            )
+          )}
         </div>
       </div>
 
@@ -668,6 +765,7 @@ export default function AdminPage() {
       <AddSkillDialog open={addSkillDialogOpen} onOpenChange={setAddSkillDialogOpen} onSkillAdded={fetchData} />
       <AddAgentDialog open={addAgentDialogOpen} onOpenChange={setAddAgentDialogOpen} onAgentAdded={() => {}} />
       <AddPromptDialog open={addPromptDialogOpen} onOpenChange={setAddPromptDialogOpen} onPromptAdded={fetchData} />
+      <AddPluginDialog open={addPluginDialogOpen} onOpenChange={setAddPluginDialogOpen} onPluginAdded={fetchData} />
 
       <DeployDialog
         open={!!deployServerTarget}
@@ -690,7 +788,8 @@ export default function AdminPage() {
             {selectedServer ? (selectedServer.server.title || selectedServer.server.name) :
              selectedAgent ? selectedAgent.agent.name :
              selectedSkill ? (selectedSkill.skill.title || selectedSkill.skill.name) :
-             selectedPrompt ? selectedPrompt.prompt.name : 'Details'}
+             selectedPrompt ? selectedPrompt.prompt.name :
+             selectedPlugin ? (selectedPlugin.plugin.spec.title || selectedPlugin.plugin.metadata.name) : 'Details'}
           </SheetTitle>
           {selectedServer && (
             <ServerDetail
@@ -701,6 +800,7 @@ export default function AdminPage() {
           {selectedSkill && <SkillDetail skill={selectedSkill} allTags={selectedSkill.allTags} />}
           {selectedAgent && <AgentDetail agent={selectedAgent} allTags={selectedAgent.allTags} />}
           {selectedPrompt && <PromptDetail prompt={selectedPrompt} allTags={selectedPrompt.allTags} />}
+          {selectedPlugin && <PluginDetail plugin={selectedPlugin.plugin} allTags={selectedPlugin.allTags} />}
         </SheetContent>
       </Sheet>
     </main>
