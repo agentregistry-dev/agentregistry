@@ -29,7 +29,7 @@ type AgentSpec struct {
 	Source *AgentSource `json:"source,omitempty" yaml:"source,omitempty"`
 
 	// CompatibleHarnesses declares which coding harnesses this Agent can run
-	// under. The Deployment selects the concrete harness type/version for a
+	// under. The Deployment selects the concrete harness type for a
 	// rollout; Agent remains the portable compatibility contract.
 	CompatibleHarnesses []HarnessCompatibility `json:"compatibleHarnesses,omitempty" yaml:"compatibleHarnesses,omitempty"`
 

@@ -130,7 +130,7 @@ func TestCompositionRefKindDefaultingPersists(t *testing.T) {
 }
 
 // TestHarnessCompatibilityIsMatrixOnly asserts Agent compatibility is a
-// harness-type matrix; the deployment owns concrete version/policy selection.
+// harness-type matrix; the deployment owns concrete policy selection.
 func TestHarnessCompatibilityIsMatrixOnly(t *testing.T) {
 	harnessType := reflect.TypeFor[HarnessCompatibility]()
 	for _, removed := range []string{"Version", "Plugins", "Skills", "Instructions", "MCPServers"} {
