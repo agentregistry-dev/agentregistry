@@ -9,6 +9,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"net/url"
+	"os"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -21,18 +23,45 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
 
-const searchPathTestAdminURI = "postgres://agentregistry:agentregistry@localhost:5432/postgres?sslmode=disable"
+// testAdminDSN returns the admin connection URI:
+// AGENT_REGISTRY_TEST_DATABASE_URL when set, otherwise the local dev
+// default (localhost:5432, user/password agentregistry). The value must
+// be a URL-form DSN (postgres://...); keyword/value DSNs are not supported.
+func testAdminDSN() string {
+	if dsn := os.Getenv("AGENT_REGISTRY_TEST_DATABASE_URL"); dsn != "" {
+		return dsn
+	}
+	return "postgres://agentregistry:agentregistry@localhost:5432/postgres?sslmode=disable"
+}
 
-// freshDB creates a fresh per-test Postgres database. Skips when
-// localhost:5432 is unavailable.
+// redactDSN masks the password for log output.
+func redactDSN(dsn string) string {
+	if u, err := url.Parse(dsn); err == nil {
+		return u.Redacted()
+	}
+	return "(unparseable DSN)"
+}
+
+// testDBURI returns adminURI with its database replaced by dbName.
+func testDBURI(t *testing.T, adminURI, dbName string) string {
+	t.Helper()
+	u, err := url.Parse(adminURI)
+	require.NoError(t, err)
+	u.Path = "/" + dbName
+	return u.String()
+}
+
+// freshDB creates a fresh per-test Postgres database. Fails when
+// PostgreSQL is unavailable.
 func freshDB(t *testing.T) string {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
 
-	adminConn, err := pgx.Connect(ctx, searchPathTestAdminURI)
+	adminURI := testAdminDSN()
+	adminConn, err := pgx.Connect(ctx, adminURI)
 	if err != nil {
-		t.Skipf("PostgreSQL not available: %v", err)
+		t.Fatalf("PostgreSQL not available at %s: %v — start it (e.g. 'make run-docker') or run unit tests only ('make test-unit')", redactDSN(adminURI), err)
 	}
 	defer func() { _ = adminConn.Close(ctx) }()
 
@@ -47,7 +76,7 @@ func freshDB(t *testing.T) string {
 	t.Cleanup(func() {
 		cleanupCtx, ccancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer ccancel()
-		c, cerr := pgx.Connect(cleanupCtx, searchPathTestAdminURI)
+		c, cerr := pgx.Connect(cleanupCtx, adminURI)
 		if cerr != nil {
 			return
 		}
@@ -58,7 +87,7 @@ func freshDB(t *testing.T) string {
 		_, _ = c.Exec(cleanupCtx, fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbName))
 	})
 
-	return fmt.Sprintf("postgres://agentregistry:agentregistry@localhost:5432/%s?sslmode=disable", dbName)
+	return testDBURI(t, adminURI, dbName)
 }
 
 // TestNewMigrator_LandsTablesInTargetSchema asserts that unqualified
