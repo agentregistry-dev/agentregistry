@@ -34,12 +34,13 @@ func testAdminDSN() string {
 	return "postgres://agentregistry:agentregistry@localhost:5432/postgres?sslmode=disable"
 }
 
-// redactDSN masks the password for log output.
+// redactDSN masks the password for log output. Only URL-form DSNs can be
+// redacted reliably; anything else is masked wholesale.
 func redactDSN(dsn string) string {
-	if u, err := url.Parse(dsn); err == nil {
+	if u, err := url.Parse(dsn); err == nil && (u.Scheme == "postgres" || u.Scheme == "postgresql") {
 		return u.Redacted()
 	}
-	return "(unparseable DSN)"
+	return "(redacted non-URL DSN)"
 }
 
 // testDBURI returns adminURI with its database replaced by dbName.
