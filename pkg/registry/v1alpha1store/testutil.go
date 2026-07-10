@@ -9,8 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
-	"os"
 	"testing"
 	"time"
 
@@ -21,37 +19,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/database/dbtest"
 )
-
-// testAdminDSN returns the admin connection URI:
-// AGENT_REGISTRY_TEST_DATABASE_URL when set, otherwise the local dev
-// default (localhost:5432, user/password agentregistry). The value must
-// be a URL-form DSN (postgres://...); keyword/value DSNs are not supported.
-func testAdminDSN() string {
-	if dsn := os.Getenv("AGENT_REGISTRY_TEST_DATABASE_URL"); dsn != "" {
-		return dsn
-	}
-	return "postgres://agentregistry:agentregistry@localhost:5432/postgres?sslmode=disable"
-}
-
-// redactDSN masks the password for log output. Only URL-form DSNs can be
-// redacted reliably; anything else is masked wholesale.
-func redactDSN(dsn string) string {
-	if u, err := url.Parse(dsn); err == nil && (u.Scheme == "postgres" || u.Scheme == "postgresql") {
-		return u.Redacted()
-	}
-	return "(redacted non-URL DSN)"
-}
-
-// testDBURI returns adminURI with its database replaced by dbName.
-func testDBURI(adminURI, dbName string) (string, error) {
-	u, err := url.Parse(adminURI)
-	if err != nil {
-		return "", fmt.Errorf("parse admin URI: %w", err)
-	}
-	u.Path = "/" + dbName
-	return u.String(), nil
-}
 
 // NewTestPool spins up a fresh database with the v1alpha1 schema
 // applied and returns a connection pool scoped to it. Each test gets
@@ -67,10 +36,10 @@ func NewTestPool(t *testing.T) *pgxpool.Pool {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	adminURI := testAdminDSN()
+	adminURI := dbtest.AdminDSN()
 	adminConn, err := pgx.Connect(ctx, adminURI)
 	if err != nil {
-		t.Fatalf("PostgreSQL not available at %s: %v — start it (e.g. 'make run-docker') or run unit tests only ('make test-unit')", redactDSN(adminURI), err)
+		t.Fatalf("PostgreSQL not available at %s: %v — start it (e.g. 'make run-docker') or run unit tests only ('make test-unit')", dbtest.RedactDSN(adminURI), err)
 	}
 	defer func() { _ = adminConn.Close(ctx) }()
 
@@ -101,7 +70,7 @@ func NewTestPool(t *testing.T) *pgxpool.Pool {
 		_, _ = adminCleanup.Exec(cleanupCtx, fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbName))
 	})
 
-	testURI, err := testDBURI(adminURI, dbName)
+	testURI, err := dbtest.DBURI(adminURI, dbName)
 	require.NoError(t, err)
 	cfg, err := pgxpool.ParseConfig(testURI)
 	require.NoError(t, err)
@@ -168,7 +137,7 @@ func ensureTemplate(ctx context.Context, adminConn *pgx.Conn, adminURI string) e
 		}
 	}
 
-	templateURI, err := testDBURI(adminURI, v1alpha1TemplateDBName)
+	templateURI, err := dbtest.DBURI(adminURI, v1alpha1TemplateDBName)
 	if err != nil {
 		return err
 	}

@@ -9,8 +9,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"net/url"
-	"os"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -21,36 +19,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/database/dbtest"
 )
-
-// testAdminDSN returns the admin connection URI:
-// AGENT_REGISTRY_TEST_DATABASE_URL when set, otherwise the local dev
-// default (localhost:5432, user/password agentregistry). The value must
-// be a URL-form DSN (postgres://...); keyword/value DSNs are not supported.
-func testAdminDSN() string {
-	if dsn := os.Getenv("AGENT_REGISTRY_TEST_DATABASE_URL"); dsn != "" {
-		return dsn
-	}
-	return "postgres://agentregistry:agentregistry@localhost:5432/postgres?sslmode=disable"
-}
-
-// redactDSN masks the password for log output. Only URL-form DSNs can be
-// redacted reliably; anything else is masked wholesale.
-func redactDSN(dsn string) string {
-	if u, err := url.Parse(dsn); err == nil && (u.Scheme == "postgres" || u.Scheme == "postgresql") {
-		return u.Redacted()
-	}
-	return "(redacted non-URL DSN)"
-}
-
-// testDBURI returns adminURI with its database replaced by dbName.
-func testDBURI(t *testing.T, adminURI, dbName string) string {
-	t.Helper()
-	u, err := url.Parse(adminURI)
-	require.NoError(t, err)
-	u.Path = "/" + dbName
-	return u.String()
-}
 
 // freshDB creates a fresh per-test Postgres database. Fails when
 // PostgreSQL is unavailable.
@@ -59,10 +29,10 @@ func freshDB(t *testing.T) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
 
-	adminURI := testAdminDSN()
+	adminURI := dbtest.AdminDSN()
 	adminConn, err := pgx.Connect(ctx, adminURI)
 	if err != nil {
-		t.Fatalf("PostgreSQL not available at %s: %v — start it (e.g. 'make run-docker') or run unit tests only ('make test-unit')", redactDSN(adminURI), err)
+		t.Fatalf("PostgreSQL not available at %s: %v — start it (e.g. 'make run-docker') or run unit tests only ('make test-unit')", dbtest.RedactDSN(adminURI), err)
 	}
 	defer func() { _ = adminConn.Close(ctx) }()
 
@@ -88,7 +58,9 @@ func freshDB(t *testing.T) string {
 		_, _ = c.Exec(cleanupCtx, fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbName))
 	})
 
-	return testDBURI(t, adminURI, dbName)
+	uri, err := dbtest.DBURI(adminURI, dbName)
+	require.NoError(t, err)
+	return uri
 }
 
 // TestNewMigrator_LandsTablesInTargetSchema asserts that unqualified
