@@ -4,9 +4,13 @@
 package dbtest
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"os"
+	"testing"
+
+	"github.com/jackc/pgx/v5"
 )
 
 // AdminDSN returns the admin connection URI for integration-test DB helpers:
@@ -18,6 +22,33 @@ func AdminDSN() string {
 		return dsn
 	}
 	return "postgres://agentregistry:agentregistry@localhost:5432/postgres?sslmode=disable"
+}
+
+// validateAdminDSN rejects non-URL-form DSNs up front: pgx would accept a
+// keyword/value DSN for the admin connection, but every derived per-test URI
+// would then be broken in confusing ways.
+func validateAdminDSN(dsn string) error {
+	u, err := url.Parse(dsn)
+	if err != nil || (u.Scheme != "postgres" && u.Scheme != "postgresql") {
+		return fmt.Errorf("AGENT_REGISTRY_TEST_DATABASE_URL must be a URL-form DSN (postgres://...), got %s", RedactDSN(dsn))
+	}
+	return nil
+}
+
+// ConnectAdmin resolves and validates the admin DSN and connects to it,
+// failing the test with an actionable message when Postgres is unreachable.
+// Returns the connection and the resolved admin DSN.
+func ConnectAdmin(ctx context.Context, t *testing.T) (*pgx.Conn, string) {
+	t.Helper()
+	adminURI := AdminDSN()
+	if err := validateAdminDSN(adminURI); err != nil {
+		t.Fatal(err)
+	}
+	conn, err := pgx.Connect(ctx, adminURI)
+	if err != nil {
+		t.Fatalf("PostgreSQL not available at %s: %v — start it (e.g. 'make run-docker') or run unit tests only ('make test-unit')", RedactDSN(adminURI), err)
+	}
+	return conn, adminURI
 }
 
 // RedactDSN masks credentials for log output: the userinfo password and any

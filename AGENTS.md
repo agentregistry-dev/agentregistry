@@ -273,7 +273,7 @@ func TestAgentService_GetAgent(t *testing.T) {
 # Run unit tests (no database needed)
 make test-unit
 
-# Run all tests, including integration tests (requires Postgres: make run-docker)
+# Run tests, including Postgres-backed integration tests (requires Postgres: make run-docker)
 make test
 
 # Run with coverage

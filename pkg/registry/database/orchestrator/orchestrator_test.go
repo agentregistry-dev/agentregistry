@@ -33,15 +33,11 @@ func newDB(t *testing.T) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
 
-	adminURI := dbtest.AdminDSN()
-	adminConn, err := pgx.Connect(ctx, adminURI)
-	if err != nil {
-		t.Fatalf("PostgreSQL not available at %s: %v — start it (e.g. 'make run-docker') or run unit tests only ('make test-unit')", dbtest.RedactDSN(adminURI), err)
-	}
+	adminConn, adminURI := dbtest.ConnectAdmin(ctx, t)
 	defer func() { _ = adminConn.Close(ctx) }()
 
 	var randomBytes [8]byte
-	_, err = rand.Read(randomBytes[:])
+	_, err := rand.Read(randomBytes[:])
 	require.NoError(t, err)
 	dbName := fmt.Sprintf("test_orch_%d", binary.BigEndian.Uint64(randomBytes[:]))
 
