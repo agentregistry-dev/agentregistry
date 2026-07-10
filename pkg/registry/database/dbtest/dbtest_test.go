@@ -57,6 +57,15 @@ func TestDBURI(t *testing.T) {
 	}
 }
 
+func TestAdminDSN(t *testing.T) {
+	t.Setenv("AGENT_REGISTRY_TEST_DATABASE_URL", "postgres://u:p@custom:5433/postgres")
+	require.Equal(t, "postgres://u:p@custom:5433/postgres", AdminDSN())
+
+	t.Setenv("AGENT_REGISTRY_TEST_DATABASE_URL", "")
+	require.Equal(t, "postgres://agentregistry:agentregistry@localhost:5432/postgres?sslmode=disable", AdminDSN())
+	require.NoError(t, validateAdminDSN(AdminDSN()))
+}
+
 func TestValidateAdminDSN(t *testing.T) {
 	require.NoError(t, validateAdminDSN("postgres://u:p@h:5432/postgres"))
 	require.NoError(t, validateAdminDSN("postgresql://h/db"))

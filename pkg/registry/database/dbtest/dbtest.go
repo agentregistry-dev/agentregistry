@@ -5,6 +5,7 @@ package dbtest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -75,7 +76,12 @@ func RedactDSN(dsn string) string {
 func DBURI(adminURI, dbName string) (string, error) {
 	u, err := url.Parse(adminURI)
 	if err != nil {
-		return "", fmt.Errorf("parse admin URI: %w", err)
+		// url.Error embeds the full unredacted URI; unwrap before wrapping.
+		var uerr *url.Error
+		if errors.As(err, &uerr) {
+			err = uerr.Err
+		}
+		return "", fmt.Errorf("parse admin URI %s: %w", RedactDSN(adminURI), err)
 	}
 	u.Path = "/" + dbName
 	if q := u.Query(); q.Has("dbname") {
