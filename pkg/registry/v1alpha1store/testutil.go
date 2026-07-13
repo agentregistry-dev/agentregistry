@@ -77,10 +77,8 @@ func NewTestPool(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
-// NewTestPoolWithDSN is NewTestPool with an explicit admin DSN, for
-// suites that own their database configuration instead of using the
-// AGENT_REGISTRY_TEST_DATABASE_URL/default resolution. Also returns the
-// per-test database's DSN.
+// NewTestPoolWithDSN is NewTestPool with a caller-supplied admin DSN
+// (URL-form, postgres://...). Also returns the per-test database's DSN.
 func NewTestPoolWithDSN(t *testing.T, adminDSN string) (*pgxpool.Pool, string) {
 	t.Helper()
 
