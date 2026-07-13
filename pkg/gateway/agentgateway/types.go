@@ -1,4 +1,11 @@
-package types
+// This file defines agentgateway's native, on-disk config schema (the
+// agent-gateway.yaml wire format). These types are agentgateway-specific — they
+// carry Istio ambient-mesh concepts (HBONE, waypoints, the workload/service
+// discovery model) and their json/yaml tags are the literal keys agentgateway
+// parses. The Engine renders the generic gateway.Config into these types
+// internally; callers outside this package should depend on gateway.Config,
+// not on the types below.
+package agentgateway
 
 import (
 	"net"

@@ -5,6 +5,8 @@ import (
 	v1alpha2 "github.com/kagent-dev/kagent/go/api/v1alpha2"
 	kmcpv1alpha1 "github.com/kagent-dev/kmcp/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
+
+	"github.com/agentregistry-dev/agentregistry/pkg/gateway"
 )
 
 type DesiredState struct {
@@ -117,5 +119,8 @@ type DockerComposeConfig = composetypes.Project
 
 type LocalRuntimeConfig struct {
 	DockerCompose *DockerComposeConfig
-	AgentGateway  *AgentGatewayConfig
+	// GatewayConfig is the desired, gateway-agnostic config. The runtime's
+	// engine renders it into its native format at Apply time; the runtime never
+	// handles a concrete engine's native config.
+	GatewayConfig gateway.Config
 }

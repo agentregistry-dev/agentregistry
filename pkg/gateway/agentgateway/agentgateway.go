@@ -1,9 +1,11 @@
-// Package agentgateway is the concrete gateway.Engine implementation backed
-// by agentgateway's native config format. engine.Render translates a desired
-// gateway.Config into *types.AgentGatewayConfig; engine.Apply and
-// engine.Remove maintain that config on disk as agent-gateway.yaml, merging
-// or filtering routes by deployment id so multiple deployments can share one
-// gateway instance.
+// Package agentgateway is the concrete gateway.Engine implementation backed by
+// agentgateway's native config format. Render translates a desired
+// gateway.Config into *AgentGatewayConfig (the agent-gateway.yaml wire format);
+// engine.Apply renders the desired config and maintains it on disk as
+// agent-gateway.yaml, and engine.Remove strips it — both merging or filtering
+// routes by deployment id so multiple deployments can share one gateway
+// instance. The native config types live alongside this engine (see types.go);
+// callers outside this package depend only on gateway.Config.
 package agentgateway
 
 import (
@@ -18,8 +20,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/gateway"
-	types "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
+	"github.com/agentregistry-dev/agentregistry/pkg/gateway"
 )
 
 const agentGatewayFileName = "agent-gateway.yaml"
@@ -42,10 +43,12 @@ func NewEngine(dir string, port uint16) gateway.Engine {
 var _ gateway.Engine = (*engine)(nil)
 
 // Render translates a desired gateway.Config into the native
-// *types.AgentGatewayConfig. It performs no I/O and is deterministic: binds
-// are sorted by port, listeners within a bind by name, and routes by name, so
-// equal inputs always produce equal outputs.
-func (e *engine) Render(_ context.Context, desired gateway.Config) (*types.AgentGatewayConfig, error) {
+// *AgentGatewayConfig. It is a pure function: no I/O, no engine state, and
+// deterministic — binds are sorted by port, listeners within a bind by name,
+// and routes by name, so equal inputs always produce equal outputs. engine.Apply
+// calls it internally; it is exported so agentgateway-aware callers can render
+// (e.g. to preview or diff config) without applying.
+func Render(_ context.Context, desired gateway.Config) (*AgentGatewayConfig, error) {
 	backendURLs := make(map[string]string, len(desired.Backends))
 	for _, b := range desired.Backends {
 		backendURLs[b.Name] = b.URL
@@ -61,11 +64,11 @@ func (e *engine) Render(_ context.Context, desired gateway.Config) (*types.Agent
 		return nil, err
 	}
 
-	cfg := &types.AgentGatewayConfig{
+	cfg := &AgentGatewayConfig{
 		Config: struct{}{},
 	}
 
-	listenersByPort := make(map[int][]types.LocalListener)
+	listenersByPort := make(map[int][]LocalListener)
 	var ports []int
 	for _, l := range desired.Listeners {
 		if _, ok := listenersByPort[l.Port]; !ok {
@@ -75,10 +78,10 @@ func (e *engine) Render(_ context.Context, desired gateway.Config) (*types.Agent
 		if err != nil {
 			return nil, fmt.Errorf("listener %q: %w", l.Name, err)
 		}
-		listenersByPort[l.Port] = append(listenersByPort[l.Port], types.LocalListener{
+		listenersByPort[l.Port] = append(listenersByPort[l.Port], LocalListener{
 			Name:          l.Name,
 			GatewayName:   desired.ClassName,
-			Protocol:      types.LocalListenerProtocol(l.Protocol),
+			Protocol:      LocalListenerProtocol(l.Protocol),
 			TLS:           renderTLS(l.TLS),
 			AllowedRoutes: renderAllowedRoutes(l.AllowedRoutes),
 			Policies:      listenerPolicies,
@@ -92,7 +95,7 @@ func (e *engine) Render(_ context.Context, desired gateway.Config) (*types.Agent
 		sort.Slice(listeners, func(i, j int) bool {
 			return listeners[i].Name < listeners[j].Name
 		})
-		cfg.Binds = append(cfg.Binds, types.LocalBind{
+		cfg.Binds = append(cfg.Binds, LocalBind{
 			Port:      uint16(port),
 			Listeners: listeners,
 		})
@@ -104,18 +107,18 @@ func (e *engine) Render(_ context.Context, desired gateway.Config) (*types.Agent
 // renderRoutes translates desired routes into deterministically sorted native
 // routes. It returns nil when there are no routes so empty configs compare
 // cleanly as whole objects.
-func renderRoutes(routes []gateway.Route, backendURLs map[string]string, policies map[string]gateway.Policy) ([]types.LocalRoute, error) {
+func renderRoutes(routes []gateway.Route, backendURLs map[string]string, policies map[string]gateway.Policy) ([]LocalRoute, error) {
 	if len(routes) == 0 {
 		return nil, nil
 	}
-	out := make([]types.LocalRoute, 0, len(routes))
+	out := make([]LocalRoute, 0, len(routes))
 	for _, r := range routes {
 		backends, err := renderBackendRefs(r.BackendRefs, backendURLs)
 		if err != nil {
 			return nil, fmt.Errorf("route %q: %w", r.Name, err)
 		}
 		if r.MCP != nil {
-			backends = []types.RouteBackend{{
+			backends = []RouteBackend{{
 				Weight: 100,
 				MCP:    renderMCPBackend(r.MCP),
 			}}
@@ -124,11 +127,11 @@ func renderRoutes(routes []gateway.Route, backendURLs map[string]string, policie
 		if err != nil {
 			return nil, fmt.Errorf("route %q: %w", r.Name, err)
 		}
-		out = append(out, types.LocalRoute{
+		out = append(out, LocalRoute{
 			RouteName: r.Name,
 			Hostnames: r.Hostnames,
-			Matches: []types.RouteMatch{{
-				Path: types.PathMatch{PathPrefix: r.PathPrefix},
+			Matches: []RouteMatch{{
+				Path: PathMatch{PathPrefix: r.PathPrefix},
 			}},
 			Policies: routePolicies,
 			Backends: backends,
@@ -144,11 +147,11 @@ func renderRoutes(routes []gateway.Route, backendURLs map[string]string, policie
 // weight to 100 when unset. Input order is preserved. It errors when a ref
 // names a backend that Config.Backends never declared, instead of silently
 // rendering an empty host.
-func renderBackendRefs(refs []gateway.BackendRef, backendURLs map[string]string) ([]types.RouteBackend, error) {
+func renderBackendRefs(refs []gateway.BackendRef, backendURLs map[string]string) ([]RouteBackend, error) {
 	if len(refs) == 0 {
 		return nil, nil
 	}
-	out := make([]types.RouteBackend, 0, len(refs))
+	out := make([]RouteBackend, 0, len(refs))
 	for _, ref := range refs {
 		url, ok := backendURLs[ref.Name]
 		if !ok {
@@ -158,7 +161,7 @@ func renderBackendRefs(refs []gateway.BackendRef, backendURLs map[string]string)
 		if weight == 0 {
 			weight = 100
 		}
-		out = append(out, types.RouteBackend{
+		out = append(out, RouteBackend{
 			Weight: weight,
 			Host:   url,
 		})
@@ -169,13 +172,13 @@ func renderBackendRefs(refs []gateway.BackendRef, backendURLs map[string]string)
 // renderMCPBackend translates a desired MCPBackend into its native form,
 // sorting targets by name so equal desired inputs render identically
 // regardless of desired target order. It returns nil when mcp is nil.
-func renderMCPBackend(mcp *gateway.MCPBackend) *types.MCPBackend {
+func renderMCPBackend(mcp *gateway.MCPBackend) *MCPBackend {
 	if mcp == nil {
 		return nil
 	}
-	targets := make([]types.MCPTarget, 0, len(mcp.Targets))
+	targets := make([]MCPTarget, 0, len(mcp.Targets))
 	for _, t := range mcp.Targets {
-		targets = append(targets, types.MCPTarget{
+		targets = append(targets, MCPTarget{
 			Name:    t.Name,
 			SSE:     renderSSETargetSpec(t.SSE),
 			Stdio:   renderStdioTargetSpec(t.Stdio),
@@ -186,16 +189,16 @@ func renderMCPBackend(mcp *gateway.MCPBackend) *types.MCPBackend {
 	sort.Slice(targets, func(i, j int) bool {
 		return targets[i].Name < targets[j].Name
 	})
-	return &types.MCPBackend{Targets: targets}
+	return &MCPBackend{Targets: targets}
 }
 
 // renderSSETargetSpec maps a desired SSETargetSpec into its native form. It
 // returns nil when s is nil.
-func renderSSETargetSpec(s *gateway.SSETargetSpec) *types.SSETargetSpec {
+func renderSSETargetSpec(s *gateway.SSETargetSpec) *SSETargetSpec {
 	if s == nil {
 		return nil
 	}
-	return &types.SSETargetSpec{
+	return &SSETargetSpec{
 		Scheme: s.Scheme,
 		Host:   s.Host,
 		Port:   s.Port,
@@ -205,11 +208,11 @@ func renderSSETargetSpec(s *gateway.SSETargetSpec) *types.SSETargetSpec {
 
 // renderStdioTargetSpec maps a desired StdioTargetSpec into its native form.
 // It returns nil when s is nil.
-func renderStdioTargetSpec(s *gateway.StdioTargetSpec) *types.StdioTargetSpec {
+func renderStdioTargetSpec(s *gateway.StdioTargetSpec) *StdioTargetSpec {
 	if s == nil {
 		return nil
 	}
-	return &types.StdioTargetSpec{
+	return &StdioTargetSpec{
 		Cmd:  s.Cmd,
 		Args: s.Args,
 		Env:  s.Env,
@@ -218,20 +221,20 @@ func renderStdioTargetSpec(s *gateway.StdioTargetSpec) *types.StdioTargetSpec {
 
 // renderMCPTargetSpecField maps a desired MCPTargetSpec into its native
 // form. It returns nil when s is nil.
-func renderMCPTargetSpecField(s *gateway.MCPTargetSpec) *types.MCPTargetSpec {
+func renderMCPTargetSpecField(s *gateway.MCPTargetSpec) *MCPTargetSpec {
 	if s == nil {
 		return nil
 	}
-	return &types.MCPTargetSpec{Host: s.Host}
+	return &MCPTargetSpec{Host: s.Host}
 }
 
 // renderOpenAPITargetSpec maps a desired OpenAPITargetSpec into its native
 // form. It returns nil when s is nil.
-func renderOpenAPITargetSpec(s *gateway.OpenAPITargetSpec) *types.OpenAPITargetSpec {
+func renderOpenAPITargetSpec(s *gateway.OpenAPITargetSpec) *OpenAPITargetSpec {
 	if s == nil {
 		return nil
 	}
-	return &types.OpenAPITargetSpec{
+	return &OpenAPITargetSpec{
 		Host:   s.Host,
 		Port:   s.Port,
 		Schema: s.Schema,
@@ -241,18 +244,18 @@ func renderOpenAPITargetSpec(s *gateway.OpenAPITargetSpec) *types.OpenAPITargetS
 // renderTLS maps a desired TLSConfig into the native TLS server config,
 // including certificate refs and listener options. It returns nil when tls is
 // nil.
-func renderTLS(tls *gateway.TLSConfig) *types.LocalTLSServerConfig {
+func renderTLS(tls *gateway.TLSConfig) *LocalTLSServerConfig {
 	if tls == nil {
 		return nil
 	}
-	out := &types.LocalTLSServerConfig{
+	out := &LocalTLSServerConfig{
 		Mode:    tls.Mode,
 		Options: tls.Options,
 	}
 	if len(tls.CertificateRefs) > 0 {
-		refs := make([]types.LocalObjectReference, 0, len(tls.CertificateRefs))
+		refs := make([]LocalObjectReference, 0, len(tls.CertificateRefs))
 		for _, ref := range tls.CertificateRefs {
-			refs = append(refs, types.LocalObjectReference{
+			refs = append(refs, LocalObjectReference{
 				Group:     ref.Group,
 				Kind:      ref.Kind,
 				Name:      ref.Name,
@@ -266,11 +269,11 @@ func renderTLS(tls *gateway.TLSConfig) *types.LocalTLSServerConfig {
 
 // renderAllowedRoutes maps a desired AllowedRoutes selector into its native
 // form. It returns nil when ar is nil.
-func renderAllowedRoutes(ar *gateway.AllowedRoutes) *types.LocalAllowedRoutes {
+func renderAllowedRoutes(ar *gateway.AllowedRoutes) *LocalAllowedRoutes {
 	if ar == nil {
 		return nil
 	}
-	return &types.LocalAllowedRoutes{
+	return &LocalAllowedRoutes{
 		Namespaces: ar.Namespaces,
 		Kinds:      ar.Kinds,
 	}
@@ -282,11 +285,11 @@ func renderAllowedRoutes(ar *gateway.AllowedRoutes) *types.LocalAllowedRoutes {
 // when two referenced policies set the same PolicySpec field on the same
 // route/listener, rather than letting the later one silently overwrite the
 // earlier one.
-func renderPolicyRefs(refs []gateway.PolicyRef, policies map[string]gateway.Policy) (*types.FilterOrPolicy, error) {
+func renderPolicyRefs(refs []gateway.PolicyRef, policies map[string]gateway.Policy) (*FilterOrPolicy, error) {
 	if len(refs) == 0 {
 		return nil, nil
 	}
-	fp := &types.FilterOrPolicy{}
+	fp := &FilterOrPolicy{}
 	contributed := false
 	for _, ref := range refs {
 		p, ok := policies[ref.Name]
@@ -297,7 +300,7 @@ func renderPolicyRefs(refs []gateway.PolicyRef, policies map[string]gateway.Poli
 			if fp.MCPAuthorization != nil {
 				return nil, fmt.Errorf("policy %q: mcp authorization already set by another policy", ref.Name)
 			}
-			fp.MCPAuthorization = &types.MCPAuthorization{
+			fp.MCPAuthorization = &MCPAuthorization{
 				Rules: renderAuthzRules(a.Action, a.MatchExpressions),
 			}
 			contributed = true
@@ -306,7 +309,7 @@ func renderPolicyRefs(refs []gateway.PolicyRef, policies map[string]gateway.Poli
 			if fp.TrafficAuthorization != nil {
 				return nil, fmt.Errorf("policy %q: traffic authorization already set by another policy", ref.Name)
 			}
-			fp.TrafficAuthorization = &types.TrafficAuthorization{
+			fp.TrafficAuthorization = &TrafficAuthorization{
 				Rules: renderAuthzRules(a.Action, a.MatchExpressions),
 			}
 			contributed = true
@@ -315,7 +318,7 @@ func renderPolicyRefs(refs []gateway.PolicyRef, policies map[string]gateway.Poli
 			if fp.FrontendConnect != nil {
 				return nil, fmt.Errorf("policy %q: frontend connect already set by another policy", ref.Name)
 			}
-			native := &types.FrontendConnect{Enabled: fc.Enabled}
+			native := &FrontendConnect{Enabled: fc.Enabled}
 			if fc.Authorization != nil {
 				native.Rules = renderAuthzRules(fc.Authorization.Action, fc.Authorization.MatchExpressions)
 			}
@@ -326,14 +329,14 @@ func renderPolicyRefs(refs []gateway.PolicyRef, policies map[string]gateway.Poli
 			if fp.A2A != nil {
 				return nil, fmt.Errorf("policy %q: a2a already set by another policy", ref.Name)
 			}
-			fp.A2A = &types.A2APolicy{}
+			fp.A2A = &A2APolicy{}
 			contributed = true
 		}
 		if u := p.Spec.URLRewrite; u != nil {
 			if fp.URLRewrite != nil {
 				return nil, fmt.Errorf("policy %q: url rewrite already set by another policy", ref.Name)
 			}
-			fp.URLRewrite = &types.URLRewrite{Path: &types.PathRedirect{Prefix: u.PathPrefix}}
+			fp.URLRewrite = &URLRewrite{Path: &PathRedirect{Prefix: u.PathPrefix}}
 			contributed = true
 		}
 	}
@@ -352,11 +355,17 @@ func renderAuthzRules(action string, matchExpressions []string) any {
 	}
 }
 
-// Apply merges rendered targets/routes into the on-disk agent-gateway.yaml,
-// upserting by target/route name. A nil rendered config is a no-op.
-func (e *engine) Apply(_ context.Context, _ gateway.Target, rendered *types.AgentGatewayConfig) error {
-	if rendered == nil {
+// Apply renders the desired gateway.Config into agentgateway's native format
+// and merges its targets/routes into the on-disk agent-gateway.yaml, upserting
+// by target/route name. A desired config with no listeners and no routes is a
+// no-op, leaving the existing file untouched.
+func (e *engine) Apply(ctx context.Context, _ gateway.Target, desired gateway.Config) error {
+	if len(desired.Listeners) == 0 && len(desired.Routes) == 0 {
 		return nil
+	}
+	rendered, err := Render(ctx, desired)
+	if err != nil {
+		return err
 	}
 	existing, err := loadConfig(e.dir, e.port)
 	if err != nil {
@@ -385,7 +394,7 @@ func (e *engine) Remove(_ context.Context, target gateway.Target) error {
 	return writeConfig(e.dir, existing, e.port)
 }
 
-func loadConfig(dir string, port uint16) (*types.AgentGatewayConfig, error) {
+func loadConfig(dir string, port uint16) (*AgentGatewayConfig, error) {
 	path := filepath.Join(dir, agentGatewayFileName)
 	cfg := defaultConfig(port)
 	data, err := os.ReadFile(path)
@@ -402,7 +411,7 @@ func loadConfig(dir string, port uint16) (*types.AgentGatewayConfig, error) {
 	return cfg, nil
 }
 
-func writeConfig(dir string, cfg *types.AgentGatewayConfig, port uint16) error {
+func writeConfig(dir string, cfg *AgentGatewayConfig, port uint16) error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("create runtime directory: %w", err)
 	}
@@ -420,21 +429,21 @@ func writeConfig(dir string, cfg *types.AgentGatewayConfig, port uint16) error {
 	return nil
 }
 
-func defaultConfig(port uint16) *types.AgentGatewayConfig {
-	return &types.AgentGatewayConfig{
+func defaultConfig(port uint16) *AgentGatewayConfig {
+	return &AgentGatewayConfig{
 		Config: struct{}{},
-		Binds: []types.LocalBind{{
+		Binds: []LocalBind{{
 			Port: port,
-			Listeners: []types.LocalListener{{
+			Listeners: []LocalListener{{
 				Name:     "default",
-				Protocol: types.LocalListenerProtocolHTTP,
-				Routes:   []types.LocalRoute{},
+				Protocol: LocalListenerProtocolHTTP,
+				Routes:   []LocalRoute{},
 			}},
 		}},
 	}
 }
 
-func ensureDefaults(cfg *types.AgentGatewayConfig, port uint16) {
+func ensureDefaults(cfg *AgentGatewayConfig, port uint16) {
 	if cfg.Config == nil {
 		cfg.Config = struct{}{}
 	}
@@ -446,23 +455,23 @@ func ensureDefaults(cfg *types.AgentGatewayConfig, port uint16) {
 		cfg.Binds[0].Port = port
 	}
 	if len(cfg.Binds[0].Listeners) == 0 {
-		cfg.Binds[0].Listeners = []types.LocalListener{{
+		cfg.Binds[0].Listeners = []LocalListener{{
 			Name:     "default",
-			Protocol: types.LocalListenerProtocolHTTP,
-			Routes:   []types.LocalRoute{},
+			Protocol: LocalListenerProtocolHTTP,
+			Routes:   []LocalRoute{},
 		}}
 		return
 	}
 	if cfg.Binds[0].Listeners[0].Protocol == "" {
-		cfg.Binds[0].Listeners[0].Protocol = types.LocalListenerProtocolHTTP
+		cfg.Binds[0].Listeners[0].Protocol = LocalListenerProtocolHTTP
 	}
 }
 
-func extractNonMCPRoutes(config *types.AgentGatewayConfig) []types.LocalRoute {
+func extractNonMCPRoutes(config *AgentGatewayConfig) []LocalRoute {
 	if config == nil || len(config.Binds) == 0 || len(config.Binds[0].Listeners) == 0 {
 		return nil
 	}
-	var routes []types.LocalRoute
+	var routes []LocalRoute
 	for _, route := range config.Binds[0].Listeners[0].Routes {
 		if route.RouteName == gateway.MCPRouteName {
 			continue
@@ -472,7 +481,7 @@ func extractNonMCPRoutes(config *types.AgentGatewayConfig) []types.LocalRoute {
 	return routes
 }
 
-func extractMCPRouteTargets(config *types.AgentGatewayConfig) []types.MCPTarget {
+func extractMCPRouteTargets(config *AgentGatewayConfig) []MCPTarget {
 	if config == nil || len(config.Binds) == 0 || len(config.Binds[0].Listeners) == 0 {
 		return nil
 	}
@@ -483,15 +492,15 @@ func extractMCPRouteTargets(config *types.AgentGatewayConfig) []types.MCPTarget 
 		if len(route.Backends) == 0 || route.Backends[0].MCP == nil {
 			return nil
 		}
-		return append([]types.MCPTarget{}, route.Backends[0].MCP.Targets...)
+		return append([]MCPTarget{}, route.Backends[0].MCP.Targets...)
 	}
 	return nil
 }
 
 func mergeConfig(
-	existing *types.AgentGatewayConfig,
-	incomingTargets []types.MCPTarget,
-	incomingRoutes []types.LocalRoute,
+	existing *AgentGatewayConfig,
+	incomingTargets []MCPTarget,
+	incomingRoutes []LocalRoute,
 	port uint16,
 ) {
 	ensureDefaults(existing, port)
@@ -510,8 +519,8 @@ func mergeConfig(
 
 	l := &existing.Binds[0].Listeners[0]
 
-	var existingTargets []types.MCPTarget
-	var otherRoutes []types.LocalRoute
+	var existingTargets []MCPTarget
+	var otherRoutes []LocalRoute
 	for _, route := range l.Routes {
 		if route.RouteName == gateway.MCPRouteName {
 			if len(route.Backends) > 0 && route.Backends[0].MCP != nil {
@@ -532,23 +541,23 @@ func mergeConfig(
 	existingTargets = append(existingTargets, incomingTargets...)
 	otherRoutes = append(otherRoutes, incomingRoutes...)
 
-	slices.SortFunc(existingTargets, func(a, b types.MCPTarget) int {
+	slices.SortFunc(existingTargets, func(a, b MCPTarget) int {
 		return cmp.Compare(a.Name, b.Name)
 	})
-	slices.SortFunc(otherRoutes, func(a, b types.LocalRoute) int {
+	slices.SortFunc(otherRoutes, func(a, b LocalRoute) int {
 		return cmp.Compare(a.RouteName, b.RouteName)
 	})
 
-	routes := make([]types.LocalRoute, 0, len(otherRoutes)+1)
+	routes := make([]LocalRoute, 0, len(otherRoutes)+1)
 	if len(existingTargets) > 0 {
-		routes = append(routes, types.LocalRoute{
+		routes = append(routes, LocalRoute{
 			RouteName: gateway.MCPRouteName,
-			Matches: []types.RouteMatch{{
-				Path: types.PathMatch{PathPrefix: "/mcp"},
+			Matches: []RouteMatch{{
+				Path: PathMatch{PathPrefix: "/mcp"},
 			}},
-			Backends: []types.RouteBackend{{
+			Backends: []RouteBackend{{
 				Weight: 100,
-				MCP:    &types.MCPBackend{Targets: existingTargets},
+				MCP:    &MCPBackend{Targets: existingTargets},
 			}},
 		})
 	}
@@ -556,13 +565,13 @@ func mergeConfig(
 	l.Routes = routes
 }
 
-func filterRoutesByDeploymentID(cfg *types.AgentGatewayConfig, deploymentID string) {
+func filterRoutesByDeploymentID(cfg *AgentGatewayConfig, deploymentID string) {
 	l := listener(cfg)
 	if l == nil {
 		return
 	}
 
-	filteredRoutes := make([]types.LocalRoute, 0, len(l.Routes))
+	filteredRoutes := make([]LocalRoute, 0, len(l.Routes))
 	for _, route := range l.Routes {
 		filteredRoute, keep := filterRouteByDeploymentID(route, deploymentID)
 		if keep {
@@ -572,26 +581,26 @@ func filterRoutesByDeploymentID(cfg *types.AgentGatewayConfig, deploymentID stri
 	l.Routes = filteredRoutes
 }
 
-func listener(cfg *types.AgentGatewayConfig) *types.LocalListener {
+func listener(cfg *AgentGatewayConfig) *LocalListener {
 	if cfg == nil || len(cfg.Binds) == 0 || len(cfg.Binds[0].Listeners) == 0 {
 		return nil
 	}
 	return &cfg.Binds[0].Listeners[0]
 }
 
-func filterRouteByDeploymentID(route types.LocalRoute, deploymentID string) (types.LocalRoute, bool) {
+func filterRouteByDeploymentID(route LocalRoute, deploymentID string) (LocalRoute, bool) {
 	if route.RouteName == gateway.MCPRouteName {
 		return filterMCPRouteTargets(route, deploymentID)
 	}
 	return route, !matchesDeploymentID(route.RouteName, deploymentID)
 }
 
-func filterMCPRouteTargets(route types.LocalRoute, deploymentID string) (types.LocalRoute, bool) {
+func filterMCPRouteTargets(route LocalRoute, deploymentID string) (LocalRoute, bool) {
 	if len(route.Backends) == 0 || route.Backends[0].MCP == nil {
 		return route, false
 	}
 
-	filteredTargets := make([]types.MCPTarget, 0, len(route.Backends[0].MCP.Targets))
+	filteredTargets := make([]MCPTarget, 0, len(route.Backends[0].MCP.Targets))
 	for _, target := range route.Backends[0].MCP.Targets {
 		if matchesDeploymentID(target.Name, deploymentID) {
 			continue

@@ -2,17 +2,16 @@ package local
 
 import (
 	"context"
+	"slices"
 	"testing"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/gateway"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/gateway/agentgateway"
 	runtimetypes "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
 	runtimeutils "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/utils"
+	"github.com/agentregistry-dev/agentregistry/pkg/gateway"
 )
 
 func TestBuildLocalRuntimeConfig_UsesDefaultAgentPortInGatewayRoute(t *testing.T) {
-	engine := agentgateway.NewEngine("/tmp/test-runtime", 8081)
-	cfg, err := BuildLocalRuntimeConfig(context.Background(), engine, "/tmp/test-runtime", 8081, "test-project", &runtimetypes.DesiredState{
+	cfg, err := BuildLocalRuntimeConfig(context.Background(), "/tmp/test-runtime", 8081, "test-project", &runtimetypes.DesiredState{
 		Agents: []*runtimetypes.Agent{{
 			Name:       "demo-agent",
 			Tag:        "1.0.0",
@@ -22,28 +21,19 @@ func TestBuildLocalRuntimeConfig_UsesDefaultAgentPortInGatewayRoute(t *testing.T
 	if err != nil {
 		t.Fatalf("BuildLocalRuntimeConfig() unexpected error: %v", err)
 	}
-	if cfg == nil || cfg.AgentGateway == nil {
-		t.Fatal("expected agent gateway config")
+	if cfg == nil {
+		t.Fatal("expected local runtime config")
 	}
-	if len(cfg.AgentGateway.Binds) == 0 || len(cfg.AgentGateway.Binds[0].Listeners) == 0 {
-		t.Fatal("expected agent gateway listener")
+	if len(cfg.GatewayConfig.Backends) != 1 {
+		t.Fatalf("expected 1 backend, got %d", len(cfg.GatewayConfig.Backends))
 	}
-
-	routes := cfg.AgentGateway.Binds[0].Listeners[0].Routes
-	if len(routes) != 1 {
-		t.Fatalf("expected 1 route, got %d", len(routes))
-	}
-	if len(routes[0].Backends) != 1 {
-		t.Fatalf("expected 1 backend, got %d", len(routes[0].Backends))
-	}
-	if got := routes[0].Backends[0].Host; got != "demo-agent:8080" {
-		t.Fatalf("backend host = %q, want %q", got, "demo-agent:8080")
+	if got := cfg.GatewayConfig.Backends[0].URL; got != "demo-agent:8080" {
+		t.Fatalf("backend URL = %q, want %q", got, "demo-agent:8080")
 	}
 }
 
-func TestBuildLocalRuntimeConfig_MixedMCPAndAgentRoutesSortedByName(t *testing.T) {
-	engine := agentgateway.NewEngine("/tmp/test-runtime", 8081)
-	cfg, err := BuildLocalRuntimeConfig(context.Background(), engine, "/tmp/test-runtime", 8081, "test-project", &runtimetypes.DesiredState{
+func TestBuildLocalRuntimeConfig_MixedMCPAndAgentRoutesPresent(t *testing.T) {
+	cfg, err := BuildLocalRuntimeConfig(context.Background(), "/tmp/test-runtime", 8081, "test-project", &runtimetypes.DesiredState{
 		MCPServers: []*runtimetypes.MCPServer{{
 			Name:          "demo-server",
 			MCPServerType: runtimetypes.MCPServerTypeRemote,
@@ -63,13 +53,17 @@ func TestBuildLocalRuntimeConfig_MixedMCPAndAgentRoutesSortedByName(t *testing.T
 		t.Fatalf("BuildLocalRuntimeConfig() unexpected error: %v", err)
 	}
 
-	routes := cfg.AgentGateway.Binds[0].Listeners[0].Routes
-	if len(routes) != 2 {
-		t.Fatalf("expected 2 routes, got %d", len(routes))
+	// BuildLocalRuntimeConfig produces the generic desired config; deterministic
+	// ordering of routes is the engine's job at render time (see the agentgateway
+	// Render tests). Here we only assert both routes are present.
+	routeNames := make([]string, 0, len(cfg.GatewayConfig.Routes))
+	for _, r := range cfg.GatewayConfig.Routes {
+		routeNames = append(routeNames, r.Name)
 	}
-	names := []string{routes[0].RouteName, routes[1].RouteName}
-	if names[0] != "aaa-agent_route" || names[1] != gateway.MCPRouteName {
-		t.Fatalf("routes not sorted alphabetically by name: got %v", names)
+	slices.Sort(routeNames)
+	want := []string{"aaa-agent_route", gateway.MCPRouteName}
+	if !slices.Equal(routeNames, want) {
+		t.Fatalf("route names = %v, want %v", routeNames, want)
 	}
 }
 

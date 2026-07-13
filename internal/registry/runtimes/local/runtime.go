@@ -15,10 +15,10 @@ import (
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"go.yaml.in/yaml/v3"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/gateway"
 	runtimetypes "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
 	runtimeutils "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
+	"github.com/agentregistry-dev/agentregistry/pkg/gateway"
 )
 
 // agentRoutePolicyName names the shared policy attaching A2A + URL-rewrite
@@ -33,7 +33,6 @@ const (
 
 func BuildLocalRuntimeConfig(
 	ctx context.Context,
-	engine gateway.Engine,
 	runtimeDir string,
 	agentGatewayPort uint16,
 	projectName string,
@@ -90,14 +89,14 @@ func BuildLocalRuntimeConfig(
 		Services:   dockerComposeServices,
 	}
 
-	gatewayConfig, err := translateLocalAgentGatewayConfig(ctx, engine, agentGatewayPort, desired.MCPServers, desired.Agents)
+	gatewayConfig, err := buildDesiredAgentGatewayConfig(agentGatewayPort, desired.MCPServers, desired.Agents)
 	if err != nil {
-		return nil, fmt.Errorf("failed to translate agent gateway config: %w", err)
+		return nil, fmt.Errorf("failed to build desired agent gateway config: %w", err)
 	}
 
 	return &runtimetypes.LocalRuntimeConfig{
 		DockerCompose: dockerCompose,
-		AgentGateway:  gatewayConfig,
+		GatewayConfig: gatewayConfig,
 	}, nil
 }
 
@@ -323,20 +322,6 @@ func sanitizeVersion(version string) string {
 	return sanitized
 }
 
-func translateLocalAgentGatewayConfig(
-	ctx context.Context,
-	engine gateway.Engine,
-	agentGatewayPort uint16,
-	servers []*runtimetypes.MCPServer,
-	agents []*runtimetypes.Agent,
-) (*runtimetypes.AgentGatewayConfig, error) {
-	desired, err := buildDesiredAgentGatewayConfig(agentGatewayPort, servers, agents)
-	if err != nil {
-		return nil, err
-	}
-	return engine.Render(ctx, desired)
-}
-
 func buildDesiredAgentGatewayConfig(agentGatewayPort uint16, servers []*runtimetypes.MCPServer, agents []*runtimetypes.Agent) (gateway.Config, error) {
 	var targets []gateway.MCPTarget
 
@@ -421,7 +406,7 @@ func buildDesiredAgentGatewayConfig(agentGatewayPort uint16, servers []*runtimet
 		ClassName: "agentgateway",
 		Listeners: []gateway.Listener{{
 			Name:     "default",
-			Protocol: string(runtimetypes.LocalListenerProtocolHTTP),
+			Protocol: "HTTP",
 			Port:     int(agentGatewayPort),
 		}},
 		Routes:   routes,

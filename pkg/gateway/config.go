@@ -1,8 +1,9 @@
 // Package gateway defines a gateway-implementation-agnostic model for
 // describing desired gateway configuration — listeners, routes, backends,
-// and policies — plus the Engine contract for rendering that model and
-// applying it to a Target. Concrete engines (e.g. agentgateway) live in
-// subpackages such as gateway/agentgateway and implement Engine directly.
+// and policies — plus the Engine contract for applying that model to a
+// Target. Concrete engines (e.g. agentgateway) live in subpackages such as
+// gateway/agentgateway, translate this model into their native config format
+// internally, and implement Engine directly.
 package gateway
 
 // MCPRouteName is the well-known name of the single route that fans out to

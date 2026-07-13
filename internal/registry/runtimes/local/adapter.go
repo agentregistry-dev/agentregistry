@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/gateway"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/gateway/agentgateway"
 	runtimetypes "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/utils"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/gateway"
+	"github.com/agentregistry-dev/agentregistry/pkg/gateway/agentgateway"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
@@ -67,7 +67,7 @@ func (a *localDeploymentAdapter) Apply(ctx context.Context, in types.ApplyInput)
 	if err != nil {
 		return nil, err
 	}
-	cfg, err := BuildLocalRuntimeConfig(ctx, a.engine, a.runtimeDir, a.agentGatewayPort, "", desired)
+	cfg, err := BuildLocalRuntimeConfig(ctx, a.runtimeDir, a.agentGatewayPort, "", desired)
 	if err != nil {
 		return nil, fmt.Errorf("build local runtime config: %w", err)
 	}

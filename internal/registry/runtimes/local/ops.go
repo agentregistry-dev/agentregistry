@@ -6,8 +6,8 @@ import (
 	"maps"
 	"strings"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/gateway"
 	runtimetypes "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
+	"github.com/agentregistry-dev/agentregistry/pkg/gateway"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
 
@@ -39,7 +39,7 @@ func (a *localDeploymentAdapter) mergeAndApplyLocalRuntime(
 	}
 	maps.Copy(composeCfg.Services, config.DockerCompose.Services)
 
-	if err := a.engine.Apply(ctx, gateway.Target{Name: deploymentID}, config.AgentGateway); err != nil {
+	if err := a.engine.Apply(ctx, gateway.Target{Name: deploymentID}, config.GatewayConfig); err != nil {
 		return err
 	}
 	if err := writeLocalDockerComposeConfig(a.runtimeDir, composeCfg); err != nil {

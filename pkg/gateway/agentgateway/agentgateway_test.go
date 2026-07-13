@@ -5,20 +5,19 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/gateway"
-	types "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
+	"github.com/agentregistry-dev/agentregistry/pkg/gateway"
 )
 
 func TestAgentGatewayEngine_Render(t *testing.T) {
 	tests := []struct {
 		name    string
 		desired gateway.Config
-		want    *types.AgentGatewayConfig
+		want    *AgentGatewayConfig
 	}{
 		{
 			name:    "empty config renders no binds",
 			desired: gateway.Config{},
-			want:    &types.AgentGatewayConfig{Config: struct{}{}},
+			want:    &AgentGatewayConfig{Config: struct{}{}},
 		},
 		{
 			name: "single http listener",
@@ -30,14 +29,14 @@ func TestAgentGatewayEngine_Render(t *testing.T) {
 					Port:     8080,
 				}},
 			},
-			want: &types.AgentGatewayConfig{
+			want: &AgentGatewayConfig{
 				Config: struct{}{},
-				Binds: []types.LocalBind{{
+				Binds: []LocalBind{{
 					Port: 8080,
-					Listeners: []types.LocalListener{{
+					Listeners: []LocalListener{{
 						Name:        "http",
 						GatewayName: "agentgateway",
-						Protocol:    types.LocalListenerProtocolHTTP,
+						Protocol:    LocalListenerProtocolHTTP,
 					}},
 				}},
 			},
@@ -61,17 +60,17 @@ func TestAgentGatewayEngine_Render(t *testing.T) {
 					},
 				}},
 			},
-			want: &types.AgentGatewayConfig{
+			want: &AgentGatewayConfig{
 				Config: struct{}{},
-				Binds: []types.LocalBind{{
+				Binds: []LocalBind{{
 					Port: 8443,
-					Listeners: []types.LocalListener{{
+					Listeners: []LocalListener{{
 						Name:        "https",
 						GatewayName: "agentgateway",
-						Protocol:    types.LocalListenerProtocolHTTPS,
-						TLS: &types.LocalTLSServerConfig{
+						Protocol:    LocalListenerProtocolHTTPS,
+						TLS: &LocalTLSServerConfig{
 							Mode: "Terminate",
-							CertificateRefs: []types.LocalObjectReference{{
+							CertificateRefs: []LocalObjectReference{{
 								Kind:      "Secret",
 								Name:      "tls-cert",
 								Namespace: "default",
@@ -95,15 +94,15 @@ func TestAgentGatewayEngine_Render(t *testing.T) {
 					},
 				}},
 			},
-			want: &types.AgentGatewayConfig{
+			want: &AgentGatewayConfig{
 				Config: struct{}{},
-				Binds: []types.LocalBind{{
+				Binds: []LocalBind{{
 					Port: 8443,
-					Listeners: []types.LocalListener{{
+					Listeners: []LocalListener{{
 						Name:        "https",
 						GatewayName: "agentgateway",
-						Protocol:    types.LocalListenerProtocolHTTPS,
-						TLS: &types.LocalTLSServerConfig{
+						Protocol:    LocalListenerProtocolHTTPS,
+						TLS: &LocalTLSServerConfig{
 							Mode:    "Terminate",
 							Options: map[string]string{"minVersion": "1.3"},
 						},
@@ -125,15 +124,15 @@ func TestAgentGatewayEngine_Render(t *testing.T) {
 					},
 				}},
 			},
-			want: &types.AgentGatewayConfig{
+			want: &AgentGatewayConfig{
 				Config: struct{}{},
-				Binds: []types.LocalBind{{
+				Binds: []LocalBind{{
 					Port: 8080,
-					Listeners: []types.LocalListener{{
+					Listeners: []LocalListener{{
 						Name:        "http",
 						GatewayName: "agentgateway",
-						Protocol:    types.LocalListenerProtocolHTTP,
-						AllowedRoutes: &types.LocalAllowedRoutes{
+						Protocol:    LocalListenerProtocolHTTP,
+						AllowedRoutes: &LocalAllowedRoutes{
 							Namespaces: []string{"default"},
 							Kinds:      []string{"HTTPRoute"},
 						},
@@ -163,21 +162,21 @@ func TestAgentGatewayEngine_Render(t *testing.T) {
 					URL:  "http://svc:9000",
 				}},
 			},
-			want: &types.AgentGatewayConfig{
+			want: &AgentGatewayConfig{
 				Config: struct{}{},
-				Binds: []types.LocalBind{{
+				Binds: []LocalBind{{
 					Port: 8080,
-					Listeners: []types.LocalListener{{
+					Listeners: []LocalListener{{
 						Name:        "http",
 						GatewayName: "agentgateway",
-						Protocol:    types.LocalListenerProtocolHTTP,
-						Routes: []types.LocalRoute{{
+						Protocol:    LocalListenerProtocolHTTP,
+						Routes: []LocalRoute{{
 							RouteName: "api",
 							Hostnames: []string{"example.com"},
-							Matches: []types.RouteMatch{{
-								Path: types.PathMatch{PathPrefix: "/api"},
+							Matches: []RouteMatch{{
+								Path: PathMatch{PathPrefix: "/api"},
 							}},
-							Backends: []types.RouteBackend{{
+							Backends: []RouteBackend{{
 								Weight: 100,
 								Host:   "http://svc:9000",
 							}},
@@ -207,16 +206,16 @@ func TestAgentGatewayEngine_Render(t *testing.T) {
 					},
 				}},
 			},
-			want: &types.AgentGatewayConfig{
+			want: &AgentGatewayConfig{
 				Config: struct{}{},
-				Binds: []types.LocalBind{{
+				Binds: []LocalBind{{
 					Port: 8080,
-					Listeners: []types.LocalListener{{
+					Listeners: []LocalListener{{
 						Name:        "http",
 						GatewayName: "agentgateway",
-						Protocol:    types.LocalListenerProtocolHTTP,
-						Policies: &types.FilterOrPolicy{
-							MCPAuthorization: &types.MCPAuthorization{
+						Protocol:    LocalListenerProtocolHTTP,
+						Policies: &FilterOrPolicy{
+							MCPAuthorization: &MCPAuthorization{
 								Rules: map[string]any{
 									"action":           "ALLOW",
 									"matchExpressions": []string{"request.method == 'tools/call'"},
@@ -248,16 +247,16 @@ func TestAgentGatewayEngine_Render(t *testing.T) {
 					},
 				}},
 			},
-			want: &types.AgentGatewayConfig{
+			want: &AgentGatewayConfig{
 				Config: struct{}{},
-				Binds: []types.LocalBind{{
+				Binds: []LocalBind{{
 					Port: 8080,
-					Listeners: []types.LocalListener{{
+					Listeners: []LocalListener{{
 						Name:        "http",
 						GatewayName: "agentgateway",
-						Protocol:    types.LocalListenerProtocolHTTP,
-						Policies: &types.FilterOrPolicy{
-							TrafficAuthorization: &types.TrafficAuthorization{
+						Protocol:    LocalListenerProtocolHTTP,
+						Policies: &FilterOrPolicy{
+							TrafficAuthorization: &TrafficAuthorization{
 								Rules: map[string]any{
 									"action":           "DENY",
 									"matchExpressions": []string{"source.namespace != 'trusted'"},
@@ -292,16 +291,16 @@ func TestAgentGatewayEngine_Render(t *testing.T) {
 					},
 				}},
 			},
-			want: &types.AgentGatewayConfig{
+			want: &AgentGatewayConfig{
 				Config: struct{}{},
-				Binds: []types.LocalBind{{
+				Binds: []LocalBind{{
 					Port: 8080,
-					Listeners: []types.LocalListener{{
+					Listeners: []LocalListener{{
 						Name:        "http",
 						GatewayName: "agentgateway",
-						Protocol:    types.LocalListenerProtocolHTTP,
-						Policies: &types.FilterOrPolicy{
-							FrontendConnect: &types.FrontendConnect{
+						Protocol:    LocalListenerProtocolHTTP,
+						Policies: &FilterOrPolicy{
+							FrontendConnect: &FrontendConnect{
 								Enabled: true,
 								Rules: map[string]any{
 									"action":           "ALLOW",
@@ -323,20 +322,20 @@ func TestAgentGatewayEngine_Render(t *testing.T) {
 					{Name: "c", Protocol: "HTTP", Port: 8000},
 				},
 			},
-			want: &types.AgentGatewayConfig{
+			want: &AgentGatewayConfig{
 				Config: struct{}{},
-				Binds: []types.LocalBind{
+				Binds: []LocalBind{
 					{
 						Port: 8000,
-						Listeners: []types.LocalListener{{
-							Name: "c", GatewayName: "agentgateway", Protocol: types.LocalListenerProtocolHTTP,
+						Listeners: []LocalListener{{
+							Name: "c", GatewayName: "agentgateway", Protocol: LocalListenerProtocolHTTP,
 						}},
 					},
 					{
 						Port: 9000,
-						Listeners: []types.LocalListener{
-							{Name: "a", GatewayName: "agentgateway", Protocol: types.LocalListenerProtocolHTTP},
-							{Name: "b", GatewayName: "agentgateway", Protocol: types.LocalListenerProtocolHTTP},
+						Listeners: []LocalListener{
+							{Name: "a", GatewayName: "agentgateway", Protocol: LocalListenerProtocolHTTP},
+							{Name: "b", GatewayName: "agentgateway", Protocol: LocalListenerProtocolHTTP},
 						},
 					},
 				},
@@ -389,26 +388,26 @@ func TestAgentGatewayEngine_Render(t *testing.T) {
 					},
 				}},
 			},
-			want: &types.AgentGatewayConfig{
+			want: &AgentGatewayConfig{
 				Config: struct{}{},
-				Binds: []types.LocalBind{{
+				Binds: []LocalBind{{
 					Port: 8080,
-					Listeners: []types.LocalListener{{
+					Listeners: []LocalListener{{
 						Name:        "http",
 						GatewayName: "agentgateway",
-						Protocol:    types.LocalListenerProtocolHTTP,
-						Routes: []types.LocalRoute{{
+						Protocol:    LocalListenerProtocolHTTP,
+						Routes: []LocalRoute{{
 							RouteName: "mcp_route",
-							Matches: []types.RouteMatch{{
-								Path: types.PathMatch{PathPrefix: "/mcp"},
+							Matches: []RouteMatch{{
+								Path: PathMatch{PathPrefix: "/mcp"},
 							}},
-							Backends: []types.RouteBackend{{
+							Backends: []RouteBackend{{
 								Weight: 100,
-								MCP: &types.MCPBackend{
-									Targets: []types.MCPTarget{
+								MCP: &MCPBackend{
+									Targets: []MCPTarget{
 										{
 											Name: "a-stdio",
-											Stdio: &types.StdioTargetSpec{
+											Stdio: &StdioTargetSpec{
 												Cmd:  "server",
 												Args: []string{"--flag"},
 												Env:  map[string]string{"KEY": "VALUE"},
@@ -416,11 +415,11 @@ func TestAgentGatewayEngine_Render(t *testing.T) {
 										},
 										{
 											Name: "m-mcp",
-											MCP:  &types.MCPTargetSpec{Host: "mcp-host:9002"},
+											MCP:  &MCPTargetSpec{Host: "mcp-host:9002"},
 										},
 										{
 											Name: "o-openapi",
-											OpenAPI: &types.OpenAPITargetSpec{
+											OpenAPI: &OpenAPITargetSpec{
 												Host:   "openapi-host",
 												Port:   9003,
 												Schema: map[string]any{"openapi": "3.0.0"},
@@ -428,7 +427,7 @@ func TestAgentGatewayEngine_Render(t *testing.T) {
 										},
 										{
 											Name: "z-sse",
-											SSE: &types.SSETargetSpec{
+											SSE: &SSETargetSpec{
 												Scheme: "http",
 												Host:   "sse-host",
 												Port:   9001,
@@ -470,25 +469,25 @@ func TestAgentGatewayEngine_Render(t *testing.T) {
 					URL:  "http://svc:9000",
 				}},
 			},
-			want: &types.AgentGatewayConfig{
+			want: &AgentGatewayConfig{
 				Config: struct{}{},
-				Binds: []types.LocalBind{{
+				Binds: []LocalBind{{
 					Port: 8080,
-					Listeners: []types.LocalListener{{
+					Listeners: []LocalListener{{
 						Name:        "http",
 						GatewayName: "agentgateway",
-						Protocol:    types.LocalListenerProtocolHTTP,
-						Routes: []types.LocalRoute{{
+						Protocol:    LocalListenerProtocolHTTP,
+						Routes: []LocalRoute{{
 							RouteName: "mixed",
-							Matches: []types.RouteMatch{{
-								Path: types.PathMatch{PathPrefix: "/mixed"},
+							Matches: []RouteMatch{{
+								Path: PathMatch{PathPrefix: "/mixed"},
 							}},
-							Backends: []types.RouteBackend{{
+							Backends: []RouteBackend{{
 								Weight: 100,
-								MCP: &types.MCPBackend{
-									Targets: []types.MCPTarget{{
+								MCP: &MCPBackend{
+									Targets: []MCPTarget{{
 										Name: "target",
-										MCP:  &types.MCPTargetSpec{Host: "mcp-host"},
+										MCP:  &MCPTargetSpec{Host: "mcp-host"},
 									}},
 								},
 							}},
@@ -519,21 +518,21 @@ func TestAgentGatewayEngine_Render(t *testing.T) {
 					},
 				}},
 			},
-			want: &types.AgentGatewayConfig{
+			want: &AgentGatewayConfig{
 				Config: struct{}{},
-				Binds: []types.LocalBind{{
+				Binds: []LocalBind{{
 					Port: 8080,
-					Listeners: []types.LocalListener{{
+					Listeners: []LocalListener{{
 						Name:        "http",
 						GatewayName: "agentgateway",
-						Protocol:    types.LocalListenerProtocolHTTP,
-						Routes: []types.LocalRoute{{
+						Protocol:    LocalListenerProtocolHTTP,
+						Routes: []LocalRoute{{
 							RouteName: "agent-route",
-							Matches: []types.RouteMatch{{
-								Path: types.PathMatch{PathPrefix: "/agents/foo"},
+							Matches: []RouteMatch{{
+								Path: PathMatch{PathPrefix: "/agents/foo"},
 							}},
-							Policies: &types.FilterOrPolicy{
-								A2A: &types.A2APolicy{},
+							Policies: &FilterOrPolicy{
+								A2A: &A2APolicy{},
 							},
 						}},
 					}},
@@ -562,21 +561,21 @@ func TestAgentGatewayEngine_Render(t *testing.T) {
 					},
 				}},
 			},
-			want: &types.AgentGatewayConfig{
+			want: &AgentGatewayConfig{
 				Config: struct{}{},
-				Binds: []types.LocalBind{{
+				Binds: []LocalBind{{
 					Port: 8080,
-					Listeners: []types.LocalListener{{
+					Listeners: []LocalListener{{
 						Name:        "http",
 						GatewayName: "agentgateway",
-						Protocol:    types.LocalListenerProtocolHTTP,
-						Routes: []types.LocalRoute{{
+						Protocol:    LocalListenerProtocolHTTP,
+						Routes: []LocalRoute{{
 							RouteName: "agent-route",
-							Matches: []types.RouteMatch{{
-								Path: types.PathMatch{PathPrefix: "/agents/foo"},
+							Matches: []RouteMatch{{
+								Path: PathMatch{PathPrefix: "/agents/foo"},
 							}},
-							Policies: &types.FilterOrPolicy{
-								URLRewrite: &types.URLRewrite{Path: &types.PathRedirect{Prefix: "/"}},
+							Policies: &FilterOrPolicy{
+								URLRewrite: &URLRewrite{Path: &PathRedirect{Prefix: "/"}},
 							},
 						}},
 					}},
@@ -585,10 +584,9 @@ func TestAgentGatewayEngine_Render(t *testing.T) {
 		},
 	}
 
-	engine := NewEngine("", 0)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rendered, err := engine.Render(context.Background(), tt.desired)
+			rendered, err := Render(context.Background(), tt.desired)
 			if err != nil {
 				t.Fatalf("Render() unexpected error: %v", err)
 			}
@@ -611,13 +609,11 @@ func TestAgentGatewayEngine_RenderIsDeterministic(t *testing.T) {
 			{Name: "a", PathPrefix: "/a"},
 		},
 	}
-	engine := NewEngine("", 0)
-
-	first, err := engine.Render(context.Background(), desired)
+	first, err := Render(context.Background(), desired)
 	if err != nil {
 		t.Fatalf("Render() unexpected error: %v", err)
 	}
-	second, err := engine.Render(context.Background(), desired)
+	second, err := Render(context.Background(), desired)
 	if err != nil {
 		t.Fatalf("Render() unexpected error: %v", err)
 	}
@@ -629,25 +625,22 @@ func TestAgentGatewayEngine_RenderIsDeterministic(t *testing.T) {
 
 const engineTestPort = 21212
 
-func mcpRenderedConfig(targets ...types.MCPTarget) *types.AgentGatewayConfig {
-	return &types.AgentGatewayConfig{
-		Config: struct{}{},
-		Binds: []types.LocalBind{{
-			Port: engineTestPort,
-			Listeners: []types.LocalListener{{
-				Name:     "default",
-				Protocol: types.LocalListenerProtocolHTTP,
-				Routes: []types.LocalRoute{{
-					RouteName: gateway.MCPRouteName,
-					Matches: []types.RouteMatch{{
-						Path: types.PathMatch{PathPrefix: "/mcp"},
-					}},
-					Backends: []types.RouteBackend{{
-						Weight: 100,
-						MCP:    &types.MCPBackend{Targets: targets},
-					}},
-				}},
-			}},
+// mcpDesiredConfig builds a generic gateway.Config with the given MCP targets
+// under the well-known MCP route. Apply renders it into native config
+// internally, so these tests exercise Apply through the same path production
+// uses rather than hand-building native config.
+func mcpDesiredConfig(targets ...gateway.MCPTarget) gateway.Config {
+	return gateway.Config{
+		ClassName: "agentgateway",
+		Listeners: []gateway.Listener{{
+			Name:     "default",
+			Protocol: "HTTP",
+			Port:     engineTestPort,
+		}},
+		Routes: []gateway.Route{{
+			Name:       gateway.MCPRouteName,
+			PathPrefix: "/mcp",
+			MCP:        &gateway.MCPBackend{Targets: targets},
 		}},
 	}
 }
@@ -670,7 +663,7 @@ func TestEngine_ApplyWritesNewTargetsAndRoutes(t *testing.T) {
 	dir := t.TempDir()
 	engine := NewEngine(dir, engineTestPort)
 
-	rendered := mcpRenderedConfig(types.MCPTarget{Name: "dep-1_weather", MCP: &types.MCPTargetSpec{Host: "http://weather:8080/mcp"}})
+	rendered := mcpDesiredConfig(gateway.MCPTarget{Name: "dep-1_weather", MCP: &gateway.MCPTargetSpec{Host: "http://weather:8080/mcp"}})
 	if err := engine.Apply(context.Background(), gateway.Target{Name: "dep-1"}, rendered); err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
@@ -685,12 +678,12 @@ func TestEngine_ApplyUpsertsExistingTargetByName(t *testing.T) {
 	dir := t.TempDir()
 	engine := NewEngine(dir, engineTestPort)
 
-	first := mcpRenderedConfig(types.MCPTarget{Name: "dep-1_weather", MCP: &types.MCPTargetSpec{Host: "http://weather:8080/mcp"}})
+	first := mcpDesiredConfig(gateway.MCPTarget{Name: "dep-1_weather", MCP: &gateway.MCPTargetSpec{Host: "http://weather:8080/mcp"}})
 	if err := engine.Apply(context.Background(), gateway.Target{Name: "dep-1"}, first); err != nil {
 		t.Fatalf("Apply(first): %v", err)
 	}
 
-	second := mcpRenderedConfig(types.MCPTarget{Name: "dep-1_weather", MCP: &types.MCPTargetSpec{Host: "http://weather:9090/mcp"}})
+	second := mcpDesiredConfig(gateway.MCPTarget{Name: "dep-1_weather", MCP: &gateway.MCPTargetSpec{Host: "http://weather:9090/mcp"}})
 	if err := engine.Apply(context.Background(), gateway.Target{Name: "dep-1"}, second); err != nil {
 		t.Fatalf("Apply(second): %v", err)
 	}
@@ -712,11 +705,11 @@ func TestEngine_ApplyPreservesEntriesFromOtherDeployments(t *testing.T) {
 	dir := t.TempDir()
 	engine := NewEngine(dir, engineTestPort)
 
-	depA := mcpRenderedConfig(types.MCPTarget{Name: "dep-a_weather", MCP: &types.MCPTargetSpec{Host: "http://weather:8080/mcp"}})
+	depA := mcpDesiredConfig(gateway.MCPTarget{Name: "dep-a_weather", MCP: &gateway.MCPTargetSpec{Host: "http://weather:8080/mcp"}})
 	if err := engine.Apply(context.Background(), gateway.Target{Name: "dep-a"}, depA); err != nil {
 		t.Fatalf("Apply(dep-a): %v", err)
 	}
-	depB := mcpRenderedConfig(types.MCPTarget{Name: "dep-b_search", MCP: &types.MCPTargetSpec{Host: "http://search:8080/mcp"}})
+	depB := mcpDesiredConfig(gateway.MCPTarget{Name: "dep-b_search", MCP: &gateway.MCPTargetSpec{Host: "http://search:8080/mcp"}})
 	if err := engine.Apply(context.Background(), gateway.Target{Name: "dep-b"}, depB); err != nil {
 		t.Fatalf("Apply(dep-b): %v", err)
 	}
@@ -731,11 +724,11 @@ func TestEngine_RemoveStripsOnlyMatchingDeploymentID(t *testing.T) {
 	dir := t.TempDir()
 	engine := NewEngine(dir, engineTestPort)
 
-	depA := mcpRenderedConfig(types.MCPTarget{Name: "dep-a_weather", MCP: &types.MCPTargetSpec{Host: "http://weather:8080/mcp"}})
+	depA := mcpDesiredConfig(gateway.MCPTarget{Name: "dep-a_weather", MCP: &gateway.MCPTargetSpec{Host: "http://weather:8080/mcp"}})
 	if err := engine.Apply(context.Background(), gateway.Target{Name: "dep-a"}, depA); err != nil {
 		t.Fatalf("Apply(dep-a): %v", err)
 	}
-	depB := mcpRenderedConfig(types.MCPTarget{Name: "dep-b_search", MCP: &types.MCPTargetSpec{Host: "http://search:8080/mcp"}})
+	depB := mcpDesiredConfig(gateway.MCPTarget{Name: "dep-b_search", MCP: &gateway.MCPTargetSpec{Host: "http://search:8080/mcp"}})
 	if err := engine.Apply(context.Background(), gateway.Target{Name: "dep-b"}, depB); err != nil {
 		t.Fatalf("Apply(dep-b): %v", err)
 	}
@@ -754,11 +747,11 @@ func TestEngine_RemoveDoesNotStripDeploymentIDPrefixCollision(t *testing.T) {
 	dir := t.TempDir()
 	engine := NewEngine(dir, engineTestPort)
 
-	dep1 := mcpRenderedConfig(types.MCPTarget{Name: "weather-dep-1", MCP: &types.MCPTargetSpec{Host: "http://weather:8080/mcp"}})
+	dep1 := mcpDesiredConfig(gateway.MCPTarget{Name: "weather-dep-1", MCP: &gateway.MCPTargetSpec{Host: "http://weather:8080/mcp"}})
 	if err := engine.Apply(context.Background(), gateway.Target{Name: "dep-1"}, dep1); err != nil {
 		t.Fatalf("Apply(dep-1): %v", err)
 	}
-	dep10 := mcpRenderedConfig(types.MCPTarget{Name: "search-dep-10", MCP: &types.MCPTargetSpec{Host: "http://search:8080/mcp"}})
+	dep10 := mcpDesiredConfig(gateway.MCPTarget{Name: "search-dep-10", MCP: &gateway.MCPTargetSpec{Host: "http://search:8080/mcp"}})
 	if err := engine.Apply(context.Background(), gateway.Target{Name: "dep-10"}, dep10); err != nil {
 		t.Fatalf("Apply(dep-10): %v", err)
 	}
@@ -794,12 +787,12 @@ func TestEngine_RemoveRejectsEmptyTargetName(t *testing.T) {
 	}
 }
 
-func TestEngine_ApplyNilRenderedIsNoop(t *testing.T) {
+func TestEngine_ApplyEmptyConfigIsNoop(t *testing.T) {
 	dir := t.TempDir()
 	engine := NewEngine(dir, engineTestPort)
 
-	if err := engine.Apply(context.Background(), gateway.Target{Name: "dep-1"}, nil); err != nil {
-		t.Fatalf("Apply(nil): %v", err)
+	if err := engine.Apply(context.Background(), gateway.Target{Name: "dep-1"}, gateway.Config{}); err != nil {
+		t.Fatalf("Apply(empty): %v", err)
 	}
 
 	names := loadMCPTargetNames(t, dir)
