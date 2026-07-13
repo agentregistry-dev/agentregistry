@@ -32,11 +32,22 @@ import (
 // fail when it's unavailable.
 func NewTestPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
+	pool, _ := NewTestPoolWithDSN(t, dbtest.AdminDSN())
+	return pool
+}
+
+// NewTestPoolWithDSN is NewTestPool with an explicit admin DSN, for
+// suites that own their database configuration instead of using the
+// AGENT_REGISTRY_TEST_DATABASE_URL/default resolution. Also returns the
+// per-test database's DSN.
+func NewTestPoolWithDSN(t *testing.T, adminDSN string) (*pgxpool.Pool, string) {
+	t.Helper()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	adminConn, adminURI := dbtest.ConnectAdmin(ctx, t)
+	adminURI := adminDSN
+	adminConn := dbtest.ConnectAdminDSN(ctx, t, adminURI)
 	defer func() { _ = adminConn.Close(ctx) }()
 
 	if err := ensureTemplate(ctx, adminConn, adminURI); err != nil {
@@ -80,7 +91,7 @@ func NewTestPool(t *testing.T) *pgxpool.Pool {
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	require.NoError(t, err)
 	t.Cleanup(func() { pool.Close() })
-	return pool
+	return pool, testURI
 }
 
 // TestSchema resolves the OSS schema for tests that construct a Store

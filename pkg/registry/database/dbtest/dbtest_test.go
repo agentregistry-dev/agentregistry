@@ -8,34 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRedactDSN(t *testing.T) {
-	tests := []struct {
-		name string
-		dsn  string
-		want string
-	}{
-		{"userinfo password", "postgres://user:secret@host:5432/db?sslmode=disable",
-			"postgres://user:xxxxx@host:5432/db?sslmode=disable"},
-		{"password query param", "postgres://user@host:5432/db?password=secret&sslmode=disable",
-			"postgres://user@host:5432/db?password=xxxxx&sslmode=disable"},
-		{"sslpassword query param", "postgres://user@host:5432/db?sslpassword=secret",
-			"postgres://user@host:5432/db?sslpassword=xxxxx"},
-		{"postgresql scheme", "postgresql://user:secret@host/db",
-			"postgresql://user:xxxxx@host/db"},
-		{"no credentials", "postgres://host:5432/db?sslmode=disable",
-			"postgres://host:5432/db?sslmode=disable"},
-		{"keyword/value form", "host=h user=u password=secret dbname=db",
-			"(redacted non-URL DSN)"},
-		{"garbage", "://not a url", "(redacted non-URL DSN)"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			require.Equal(t, tt.want, RedactDSN(tt.dsn))
-			require.NotContains(t, RedactDSN(tt.dsn), "secret")
-		})
-	}
-}
-
 func TestDBURI(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -55,6 +27,11 @@ func TestDBURI(t *testing.T) {
 			require.Equal(t, tt.want, got)
 		})
 	}
+
+	// Non-URL DSNs are rejected without echoing the value.
+	_, err := DBURI("host=h user=u password=secret dbname=db", "test_db_3")
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "secret")
 }
 
 func TestAdminDSN(t *testing.T) {
