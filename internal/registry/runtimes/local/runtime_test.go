@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/agentregistry-dev/agentregistry/internal/registry/gateway"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/gateway/agentgateway"
 	runtimetypes "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
 	runtimeutils "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/utils"
@@ -67,7 +68,7 @@ func TestBuildLocalRuntimeConfig_MixedMCPAndAgentRoutesSortedByName(t *testing.T
 		t.Fatalf("expected 2 routes, got %d", len(routes))
 	}
 	names := []string{routes[0].RouteName, routes[1].RouteName}
-	if names[0] != "aaa-agent_route" || names[1] != agentgateway.MCPRouteName {
+	if names[0] != "aaa-agent_route" || names[1] != gateway.MCPRouteName {
 		t.Fatalf("routes not sorted alphabetically by name: got %v", names)
 	}
 }

@@ -22,12 +22,6 @@ import (
 	types "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
 )
 
-// MCPRouteName is the well-known name of the single route that fans out to
-// every MCP target. Render groups all desired MCP targets under a route with
-// this name; Apply/Remove key their merge/filter logic off it so multiple
-// deployments can share one route.
-const MCPRouteName = "mcp_route"
-
 const agentGatewayFileName = "agent-gateway.yaml"
 
 // engine implements gateway.Engine against agentgateway's native config
@@ -62,7 +56,10 @@ func (e *engine) Render(_ context.Context, desired gateway.Config) (*types.Agent
 		policies[p.Name] = p
 	}
 
-	routes := renderRoutes(desired.Routes, backendURLs, policies)
+	routes, err := renderRoutes(desired.Routes, backendURLs, policies)
+	if err != nil {
+		return nil, err
+	}
 
 	cfg := &types.AgentGatewayConfig{
 		Config: struct{}{},
@@ -74,13 +71,17 @@ func (e *engine) Render(_ context.Context, desired gateway.Config) (*types.Agent
 		if _, ok := listenersByPort[l.Port]; !ok {
 			ports = append(ports, l.Port)
 		}
+		listenerPolicies, err := renderPolicyRefs(l.Policies, policies)
+		if err != nil {
+			return nil, fmt.Errorf("listener %q: %w", l.Name, err)
+		}
 		listenersByPort[l.Port] = append(listenersByPort[l.Port], types.LocalListener{
 			Name:          l.Name,
 			GatewayName:   desired.ClassName,
 			Protocol:      types.LocalListenerProtocol(l.Protocol),
 			TLS:           renderTLS(l.TLS),
 			AllowedRoutes: renderAllowedRoutes(l.AllowedRoutes),
-			Policies:      renderPolicyRefs(l.Policies, policies),
+			Policies:      listenerPolicies,
 			Routes:        routes,
 		})
 	}
@@ -103,18 +104,25 @@ func (e *engine) Render(_ context.Context, desired gateway.Config) (*types.Agent
 // renderRoutes translates desired routes into deterministically sorted native
 // routes. It returns nil when there are no routes so empty configs compare
 // cleanly as whole objects.
-func renderRoutes(routes []gateway.Route, backendURLs map[string]string, policies map[string]gateway.Policy) []types.LocalRoute {
+func renderRoutes(routes []gateway.Route, backendURLs map[string]string, policies map[string]gateway.Policy) ([]types.LocalRoute, error) {
 	if len(routes) == 0 {
-		return nil
+		return nil, nil
 	}
 	out := make([]types.LocalRoute, 0, len(routes))
 	for _, r := range routes {
-		backends := renderBackendRefs(r.BackendRefs, backendURLs)
+		backends, err := renderBackendRefs(r.BackendRefs, backendURLs)
+		if err != nil {
+			return nil, fmt.Errorf("route %q: %w", r.Name, err)
+		}
 		if r.MCP != nil {
 			backends = []types.RouteBackend{{
 				Weight: 100,
 				MCP:    renderMCPBackend(r.MCP),
 			}}
+		}
+		routePolicies, err := renderPolicyRefs(r.Policies, policies)
+		if err != nil {
+			return nil, fmt.Errorf("route %q: %w", r.Name, err)
 		}
 		out = append(out, types.LocalRoute{
 			RouteName: r.Name,
@@ -122,34 +130,40 @@ func renderRoutes(routes []gateway.Route, backendURLs map[string]string, policie
 			Matches: []types.RouteMatch{{
 				Path: types.PathMatch{PathPrefix: r.PathPrefix},
 			}},
-			Policies: renderPolicyRefs(r.Policies, policies),
+			Policies: routePolicies,
 			Backends: backends,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].RouteName < out[j].RouteName
 	})
-	return out
+	return out, nil
 }
 
 // renderBackendRefs resolves each BackendRef to its backend URL, defaulting the
-// weight to 100 when unset. Input order is preserved.
-func renderBackendRefs(refs []gateway.BackendRef, backendURLs map[string]string) []types.RouteBackend {
+// weight to 100 when unset. Input order is preserved. It errors when a ref
+// names a backend that Config.Backends never declared, instead of silently
+// rendering an empty host.
+func renderBackendRefs(refs []gateway.BackendRef, backendURLs map[string]string) ([]types.RouteBackend, error) {
 	if len(refs) == 0 {
-		return nil
+		return nil, nil
 	}
 	out := make([]types.RouteBackend, 0, len(refs))
 	for _, ref := range refs {
+		url, ok := backendURLs[ref.Name]
+		if !ok {
+			return nil, fmt.Errorf("backend ref %q: no matching backend declared", ref.Name)
+		}
 		weight := ref.Weight
 		if weight == 0 {
 			weight = 100
 		}
 		out = append(out, types.RouteBackend{
 			Weight: weight,
-			Host:   backendURLs[ref.Name],
+			Host:   url,
 		})
 	}
-	return out
+	return out, nil
 }
 
 // renderMCPBackend translates a desired MCPBackend into its native form,
@@ -264,10 +278,13 @@ func renderAllowedRoutes(ar *gateway.AllowedRoutes) *types.LocalAllowedRoutes {
 
 // renderPolicyRefs merges the specs of the referenced policies into a single
 // native FilterOrPolicy. Unknown references and policies that contribute
-// nothing are ignored; it returns nil when no policy contributes.
-func renderPolicyRefs(refs []gateway.PolicyRef, policies map[string]gateway.Policy) *types.FilterOrPolicy {
+// nothing are ignored; it returns nil when no policy contributes. It errors
+// when two referenced policies set the same PolicySpec field on the same
+// route/listener, rather than letting the later one silently overwrite the
+// earlier one.
+func renderPolicyRefs(refs []gateway.PolicyRef, policies map[string]gateway.Policy) (*types.FilterOrPolicy, error) {
 	if len(refs) == 0 {
-		return nil
+		return nil, nil
 	}
 	fp := &types.FilterOrPolicy{}
 	contributed := false
@@ -277,18 +294,27 @@ func renderPolicyRefs(refs []gateway.PolicyRef, policies map[string]gateway.Poli
 			continue
 		}
 		if a := p.Spec.MCPAuthorization; a != nil {
+			if fp.MCPAuthorization != nil {
+				return nil, fmt.Errorf("policy %q: mcp authorization already set by another policy", ref.Name)
+			}
 			fp.MCPAuthorization = &types.MCPAuthorization{
 				Rules: renderAuthzRules(a.Action, a.MatchExpressions),
 			}
 			contributed = true
 		}
 		if a := p.Spec.TrafficAuthorization; a != nil {
+			if fp.TrafficAuthorization != nil {
+				return nil, fmt.Errorf("policy %q: traffic authorization already set by another policy", ref.Name)
+			}
 			fp.TrafficAuthorization = &types.TrafficAuthorization{
 				Rules: renderAuthzRules(a.Action, a.MatchExpressions),
 			}
 			contributed = true
 		}
 		if fc := p.Spec.FrontendConnect; fc != nil {
+			if fp.FrontendConnect != nil {
+				return nil, fmt.Errorf("policy %q: frontend connect already set by another policy", ref.Name)
+			}
 			native := &types.FrontendConnect{Enabled: fc.Enabled}
 			if fc.Authorization != nil {
 				native.Rules = renderAuthzRules(fc.Authorization.Action, fc.Authorization.MatchExpressions)
@@ -297,18 +323,24 @@ func renderPolicyRefs(refs []gateway.PolicyRef, policies map[string]gateway.Poli
 			contributed = true
 		}
 		if p.Spec.A2A != nil {
+			if fp.A2A != nil {
+				return nil, fmt.Errorf("policy %q: a2a already set by another policy", ref.Name)
+			}
 			fp.A2A = &types.A2APolicy{}
 			contributed = true
 		}
 		if u := p.Spec.URLRewrite; u != nil {
+			if fp.URLRewrite != nil {
+				return nil, fmt.Errorf("policy %q: url rewrite already set by another policy", ref.Name)
+			}
 			fp.URLRewrite = &types.URLRewrite{Path: &types.PathRedirect{Prefix: u.PathPrefix}}
 			contributed = true
 		}
 	}
 	if !contributed {
-		return nil
+		return nil, nil
 	}
-	return fp
+	return fp, nil
 }
 
 // renderAuthzRules builds the deterministic native rules payload for an
@@ -330,15 +362,16 @@ func (e *engine) Apply(_ context.Context, _ gateway.Target, rendered *types.Agen
 	if err != nil {
 		return err
 	}
-	targetNames := extractTargetNames(rendered)
-	routeNames := extractNonMCPRouteNames(rendered)
-	mergeConfig(existing, rendered, targetNames, routeNames, e.port)
+	incomingTargets := extractMCPRouteTargets(rendered)
+	incomingRoutes := extractNonMCPRoutes(rendered)
+	mergeConfig(existing, incomingTargets, incomingRoutes, e.port)
 	return writeConfig(e.dir, existing, e.port)
 }
 
-// Remove strips every gateway target/route whose name contains the
-// deployment id in target.Name. Idempotent: calling it again once nothing
-// matches is a no-op.
+// Remove strips every gateway target/route whose name contains
+// target.Name (the deployment id) as a "-"/"_"-delimited segment, anchored
+// so that e.g. deployment id "dep-1" does not also match "dep-10".
+// Idempotent: calling it again once nothing matches is a no-op.
 func (e *engine) Remove(_ context.Context, target gateway.Target) error {
 	deploymentID := strings.TrimSpace(target.Name)
 	if deploymentID == "" {
@@ -425,33 +458,13 @@ func ensureDefaults(cfg *types.AgentGatewayConfig, port uint16) {
 	}
 }
 
-func extractTargetNames(config *types.AgentGatewayConfig) []string {
-	targets := extractMCPRouteTargets(config)
-	names := make([]string, 0, len(targets))
-	for _, target := range targets {
-		names = append(names, target.Name)
-	}
-	slices.Sort(names)
-	return names
-}
-
-func extractNonMCPRouteNames(config *types.AgentGatewayConfig) []string {
-	routes := extractNonMCPRoutes(config)
-	names := make([]string, 0, len(routes))
-	for _, route := range routes {
-		names = append(names, route.RouteName)
-	}
-	slices.Sort(names)
-	return names
-}
-
 func extractNonMCPRoutes(config *types.AgentGatewayConfig) []types.LocalRoute {
 	if config == nil || len(config.Binds) == 0 || len(config.Binds[0].Listeners) == 0 {
 		return nil
 	}
 	var routes []types.LocalRoute
 	for _, route := range config.Binds[0].Listeners[0].Routes {
-		if route.RouteName == MCPRouteName {
+		if route.RouteName == gateway.MCPRouteName {
 			continue
 		}
 		routes = append(routes, route)
@@ -464,7 +477,7 @@ func extractMCPRouteTargets(config *types.AgentGatewayConfig) []types.MCPTarget 
 		return nil
 	}
 	for _, route := range config.Binds[0].Listeners[0].Routes {
-		if route.RouteName != MCPRouteName {
+		if route.RouteName != gateway.MCPRouteName {
 			continue
 		}
 		if len(route.Backends) == 0 || route.Backends[0].MCP == nil {
@@ -477,28 +490,30 @@ func extractMCPRouteTargets(config *types.AgentGatewayConfig) []types.MCPTarget 
 
 func mergeConfig(
 	existing *types.AgentGatewayConfig,
-	incoming *types.AgentGatewayConfig,
-	targetNames []string,
-	routeNames []string,
+	incomingTargets []types.MCPTarget,
+	incomingRoutes []types.LocalRoute,
 	port uint16,
 ) {
 	ensureDefaults(existing, port)
-	if incoming == nil || len(existing.Binds) == 0 || len(existing.Binds[0].Listeners) == 0 {
+	if len(existing.Binds) == 0 || len(existing.Binds[0].Listeners) == 0 {
 		return
 	}
 
-	l := &existing.Binds[0].Listeners[0]
-	l.Routes = filterRoutesByNames(l.Routes, routeNames)
-
-	targetSet := make(map[string]struct{}, len(targetNames))
-	for _, name := range targetNames {
-		targetSet[name] = struct{}{}
+	targetSet := make(map[string]struct{}, len(incomingTargets))
+	for _, target := range incomingTargets {
+		targetSet[target.Name] = struct{}{}
 	}
+	routeSet := make(map[string]struct{}, len(incomingRoutes))
+	for _, route := range incomingRoutes {
+		routeSet[route.RouteName] = struct{}{}
+	}
+
+	l := &existing.Binds[0].Listeners[0]
 
 	var existingTargets []types.MCPTarget
 	var otherRoutes []types.LocalRoute
 	for _, route := range l.Routes {
-		if route.RouteName == MCPRouteName {
+		if route.RouteName == gateway.MCPRouteName {
 			if len(route.Backends) > 0 && route.Backends[0].MCP != nil {
 				for _, target := range route.Backends[0].MCP.Targets {
 					if _, shouldRemove := targetSet[target.Name]; !shouldRemove {
@@ -508,11 +523,14 @@ func mergeConfig(
 			}
 			continue
 		}
+		if _, shouldRemove := routeSet[route.RouteName]; shouldRemove {
+			continue
+		}
 		otherRoutes = append(otherRoutes, route)
 	}
 
-	existingTargets = append(existingTargets, extractMCPRouteTargets(incoming)...)
-	otherRoutes = append(otherRoutes, extractNonMCPRoutes(incoming)...)
+	existingTargets = append(existingTargets, incomingTargets...)
+	otherRoutes = append(otherRoutes, incomingRoutes...)
 
 	slices.SortFunc(existingTargets, func(a, b types.MCPTarget) int {
 		return cmp.Compare(a.Name, b.Name)
@@ -524,7 +542,7 @@ func mergeConfig(
 	routes := make([]types.LocalRoute, 0, len(otherRoutes)+1)
 	if len(existingTargets) > 0 {
 		routes = append(routes, types.LocalRoute{
-			RouteName: MCPRouteName,
+			RouteName: gateway.MCPRouteName,
 			Matches: []types.RouteMatch{{
 				Path: types.PathMatch{PathPrefix: "/mcp"},
 			}},
@@ -536,24 +554,6 @@ func mergeConfig(
 	}
 	routes = append(routes, otherRoutes...)
 	l.Routes = routes
-}
-
-func filterRoutesByNames(routes []types.LocalRoute, names []string) []types.LocalRoute {
-	if len(names) == 0 {
-		return routes
-	}
-	nameSet := make(map[string]struct{}, len(names))
-	for _, name := range names {
-		nameSet[name] = struct{}{}
-	}
-	filtered := make([]types.LocalRoute, 0, len(routes))
-	for _, route := range routes {
-		if _, remove := nameSet[route.RouteName]; remove {
-			continue
-		}
-		filtered = append(filtered, route)
-	}
-	return filtered
 }
 
 func filterRoutesByDeploymentID(cfg *types.AgentGatewayConfig, deploymentID string) {
@@ -580,10 +580,10 @@ func listener(cfg *types.AgentGatewayConfig) *types.LocalListener {
 }
 
 func filterRouteByDeploymentID(route types.LocalRoute, deploymentID string) (types.LocalRoute, bool) {
-	if route.RouteName == MCPRouteName {
+	if route.RouteName == gateway.MCPRouteName {
 		return filterMCPRouteTargets(route, deploymentID)
 	}
-	return route, !strings.Contains(route.RouteName, deploymentID)
+	return route, !matchesDeploymentID(route.RouteName, deploymentID)
 }
 
 func filterMCPRouteTargets(route types.LocalRoute, deploymentID string) (types.LocalRoute, bool) {
@@ -593,11 +593,37 @@ func filterMCPRouteTargets(route types.LocalRoute, deploymentID string) (types.L
 
 	filteredTargets := make([]types.MCPTarget, 0, len(route.Backends[0].MCP.Targets))
 	for _, target := range route.Backends[0].MCP.Targets {
-		if strings.Contains(target.Name, deploymentID) {
+		if matchesDeploymentID(target.Name, deploymentID) {
 			continue
 		}
 		filteredTargets = append(filteredTargets, target)
 	}
 	route.Backends[0].MCP.Targets = filteredTargets
 	return route, len(filteredTargets) > 0
+}
+
+// matchesDeploymentID reports whether name was generated for deploymentID,
+// i.e. deploymentID occurs in name as a "-"/"_"-delimited segment (or at a
+// string edge). This is anchored so that deployment id "dep-1" does not also
+// match names generated for "dep-10".
+func matchesDeploymentID(name, deploymentID string) bool {
+	if deploymentID == "" {
+		return false
+	}
+	isDelim := func(b byte) bool { return b == '-' || b == '_' }
+	for start := 0; start < len(name); {
+		idx := strings.Index(name[start:], deploymentID)
+		if idx == -1 {
+			return false
+		}
+		idx += start
+		end := idx + len(deploymentID)
+		leftOK := idx == 0 || isDelim(name[idx-1])
+		rightOK := end == len(name) || isDelim(name[end])
+		if leftOK && rightOK {
+			return true
+		}
+		start = idx + 1
+	}
+	return false
 }

@@ -12,7 +12,6 @@ import (
 // boundary with no conflict.
 type Target struct {
 	Name string
-	UID  string
 }
 
 // Engine renders a desired Config into the native *types.AgentGatewayConfig

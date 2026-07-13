@@ -40,8 +40,8 @@ const (
 )
 
 type LocalTLSServerConfig struct {
-	Cert            string                 `json:"cert" yaml:"cert"`
-	Key             string                 `json:"key" yaml:"key"`
+	Cert            string                 `json:"cert,omitempty" yaml:"cert,omitempty"`
+	Key             string                 `json:"key,omitempty" yaml:"key,omitempty"`
 	Mode            string                 `json:"mode,omitempty" yaml:"mode,omitempty"`
 	CertificateRefs []LocalObjectReference `json:"certificateRefs,omitempty" yaml:"certificateRefs,omitempty"`
 	Options         map[string]string      `json:"options,omitempty" yaml:"options,omitempty"`

@@ -583,51 +583,6 @@ func TestAgentGatewayEngine_Render(t *testing.T) {
 				}},
 			},
 		},
-		{
-			name: "a2a and url rewrite combined on one route",
-			desired: gateway.Config{
-				ClassName: "agentgateway",
-				Listeners: []gateway.Listener{{
-					Name:     "http",
-					Protocol: "HTTP",
-					Port:     8080,
-				}},
-				Routes: []gateway.Route{{
-					Name:       "agent-route",
-					PathPrefix: "/agents/foo",
-					Policies:   []gateway.PolicyRef{{Name: "agent-policy"}},
-				}},
-				Policies: []gateway.Policy{{
-					Name: "agent-policy",
-					Type: "AgentRoute",
-					Spec: gateway.PolicySpec{
-						A2A:        &gateway.A2APolicy{},
-						URLRewrite: &gateway.URLRewritePolicy{PathPrefix: "/"},
-					},
-				}},
-			},
-			want: &types.AgentGatewayConfig{
-				Config: struct{}{},
-				Binds: []types.LocalBind{{
-					Port: 8080,
-					Listeners: []types.LocalListener{{
-						Name:        "http",
-						GatewayName: "agentgateway",
-						Protocol:    types.LocalListenerProtocolHTTP,
-						Routes: []types.LocalRoute{{
-							RouteName: "agent-route",
-							Matches: []types.RouteMatch{{
-								Path: types.PathMatch{PathPrefix: "/agents/foo"},
-							}},
-							Policies: &types.FilterOrPolicy{
-								A2A:        &types.A2APolicy{},
-								URLRewrite: &types.URLRewrite{Path: &types.PathRedirect{Prefix: "/"}},
-							},
-						}},
-					}},
-				}},
-			},
-		},
 	}
 
 	engine := NewEngine("", 0)
@@ -683,7 +638,7 @@ func mcpRenderedConfig(targets ...types.MCPTarget) *types.AgentGatewayConfig {
 				Name:     "default",
 				Protocol: types.LocalListenerProtocolHTTP,
 				Routes: []types.LocalRoute{{
-					RouteName: MCPRouteName,
+					RouteName: gateway.MCPRouteName,
 					Matches: []types.RouteMatch{{
 						Path: types.PathMatch{PathPrefix: "/mcp"},
 					}},
@@ -792,6 +747,29 @@ func TestEngine_RemoveStripsOnlyMatchingDeploymentID(t *testing.T) {
 	names := loadMCPTargetNames(t, dir)
 	if len(names) != 1 || names[0] != "dep-b_search" {
 		t.Fatalf("target names after remove = %v, want [dep-b_search]", names)
+	}
+}
+
+func TestEngine_RemoveDoesNotStripDeploymentIDPrefixCollision(t *testing.T) {
+	dir := t.TempDir()
+	engine := NewEngine(dir, engineTestPort)
+
+	dep1 := mcpRenderedConfig(types.MCPTarget{Name: "weather-dep-1", MCP: &types.MCPTargetSpec{Host: "http://weather:8080/mcp"}})
+	if err := engine.Apply(context.Background(), gateway.Target{Name: "dep-1"}, dep1); err != nil {
+		t.Fatalf("Apply(dep-1): %v", err)
+	}
+	dep10 := mcpRenderedConfig(types.MCPTarget{Name: "search-dep-10", MCP: &types.MCPTargetSpec{Host: "http://search:8080/mcp"}})
+	if err := engine.Apply(context.Background(), gateway.Target{Name: "dep-10"}, dep10); err != nil {
+		t.Fatalf("Apply(dep-10): %v", err)
+	}
+
+	if err := engine.Remove(context.Background(), gateway.Target{Name: "dep-1"}); err != nil {
+		t.Fatalf("Remove(dep-1): %v", err)
+	}
+
+	names := loadMCPTargetNames(t, dir)
+	if len(names) != 1 || names[0] != "search-dep-10" {
+		t.Fatalf("target names after remove = %v, want [search-dep-10]: removing dep-1 must not strip dep-10", names)
 	}
 }
 

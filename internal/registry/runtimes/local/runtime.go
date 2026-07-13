@@ -16,7 +16,6 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/gateway"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/gateway/agentgateway"
 	runtimetypes "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
 	runtimeutils "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
@@ -385,7 +384,7 @@ func buildDesiredAgentGatewayConfig(agentGatewayPort uint16, servers []*runtimet
 	var routes []gateway.Route
 	if len(targets) > 0 {
 		routes = append(routes, gateway.Route{
-			Name:       agentgateway.MCPRouteName,
+			Name:       gateway.MCPRouteName,
 			PathPrefix: "/mcp",
 			MCP:        &gateway.MCPBackend{Targets: targets},
 		})

@@ -5,6 +5,12 @@
 // subpackages such as gateway/agentgateway and implement Engine directly.
 package gateway
 
+// MCPRouteName is the well-known name of the single route that fans out to
+// every MCP target. Render groups all desired MCP targets under a route with
+// this name; concrete engines key their merge/filter logic off it so
+// multiple deployments can share one route.
+const MCPRouteName = "mcp_route"
+
 // Config is the desired, gateway-agnostic configuration model. Routes
 // reference Backends by name (BackendRef.Name) and reference Policies by name
 // (PolicyRef.Name); Policies are declared once at the top level and attached
