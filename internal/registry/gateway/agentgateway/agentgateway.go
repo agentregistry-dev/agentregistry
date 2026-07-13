@@ -1,39 +1,22 @@
-package gateway
+package agentgateway
 
 import (
 	"context"
 	"fmt"
 	"sort"
 
+	"github.com/agentregistry-dev/agentregistry/internal/registry/gateway"
 	types "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
 )
 
-// Applier applies or removes rendered native gateway config against a target.
-// It is injected into AgentGatewayEngine so that Render stays a pure, testable
-// translation and all side effects are delegated to the caller-provided
-// implementation.
-type Applier interface {
-	Apply(ctx context.Context, target Target, cfg *types.AgentGatewayConfig) error
-	Remove(ctx context.Context, target Target) error
-}
-
-// renderedAgentGatewayConfig is the opaque RenderedConfig produced by
-// AgentGatewayEngine. The native *types.AgentGatewayConfig is reachable only
-// within this package (in Apply), never through the RenderedConfig interface.
-type renderedAgentGatewayConfig struct {
-	config *types.AgentGatewayConfig
-}
-
-func (renderedAgentGatewayConfig) isRenderedConfig() {}
-
-// AgentGatewayEngine is the default ConfigEngine. It deterministically renders
-// a desired Config into the repo's native *types.AgentGatewayConfig and
-// delegates Apply/Remove to an injected Applier.
+// AgentGatewayEngine is the default Engine. It deterministically renders
+// a desired gateway.Config into the repo's native *types.AgentGatewayConfig
+// and delegates Apply/Remove to an injected Applier.
 type AgentGatewayEngine struct {
 	applier Applier
 }
 
-var _ ConfigEngine = (*AgentGatewayEngine)(nil)
+var _ Engine = (*AgentGatewayEngine)(nil)
 
 // NewAgentGatewayEngine constructs an AgentGatewayEngine. The applier may be
 // nil when only Render is needed; Apply and Remove then return an error.
@@ -41,17 +24,17 @@ func NewAgentGatewayEngine(applier Applier) *AgentGatewayEngine {
 	return &AgentGatewayEngine{applier: applier}
 }
 
-// Render translates a desired Config into an opaque RenderedConfig wrapping the
-// native *types.AgentGatewayConfig. It performs no I/O and is deterministic:
-// binds are sorted by port, listeners within a bind by name, and routes by
-// name, so equal inputs always produce equal outputs.
-func (e *AgentGatewayEngine) Render(_ context.Context, desired Config) (RenderedConfig, error) {
+// Render translates a desired gateway.Config into the native
+// *types.AgentGatewayConfig. It performs no I/O and is deterministic: binds
+// are sorted by port, listeners within a bind by name, and routes by name, so
+// equal inputs always produce equal outputs.
+func (e *AgentGatewayEngine) Render(_ context.Context, desired gateway.Config) (*types.AgentGatewayConfig, error) {
 	backendURLs := make(map[string]string, len(desired.Backends))
 	for _, b := range desired.Backends {
 		backendURLs[b.Name] = b.URL
 	}
 
-	policies := make(map[string]Policy, len(desired.Policies))
+	policies := make(map[string]gateway.Policy, len(desired.Policies))
 	for _, p := range desired.Policies {
 		policies[p.Name] = p
 	}
@@ -91,26 +74,21 @@ func (e *AgentGatewayEngine) Render(_ context.Context, desired Config) (Rendered
 		})
 	}
 
-	return renderedAgentGatewayConfig{config: cfg}, nil
+	return cfg, nil
 }
 
-// Apply unwraps the RenderedConfig produced by this engine and hands the native
-// config to the injected Applier. It returns an error when no applier is
-// configured or when rendered was not produced by this engine.
-func (e *AgentGatewayEngine) Apply(ctx context.Context, target Target, rendered RenderedConfig) error {
+// Apply hands the rendered native config to the injected Applier. It returns
+// an error when no applier is configured.
+func (e *AgentGatewayEngine) Apply(ctx context.Context, target gateway.Target, rendered *types.AgentGatewayConfig) error {
 	if e.applier == nil {
 		return fmt.Errorf("agentgateway engine: no applier configured")
 	}
-	rc, ok := rendered.(renderedAgentGatewayConfig)
-	if !ok {
-		return fmt.Errorf("agentgateway engine: unexpected rendered config type %T", rendered)
-	}
-	return e.applier.Apply(ctx, target, rc.config)
+	return e.applier.Apply(ctx, target, rendered)
 }
 
 // Remove delegates removal of previously-applied config to the injected
 // Applier. It returns an error when no applier is configured.
-func (e *AgentGatewayEngine) Remove(ctx context.Context, target Target) error {
+func (e *AgentGatewayEngine) Remove(ctx context.Context, target gateway.Target) error {
 	if e.applier == nil {
 		return fmt.Errorf("agentgateway engine: no applier configured")
 	}
@@ -120,12 +98,19 @@ func (e *AgentGatewayEngine) Remove(ctx context.Context, target Target) error {
 // renderRoutes translates desired routes into deterministically sorted native
 // routes. It returns nil when there are no routes so empty configs compare
 // cleanly as whole objects.
-func renderRoutes(routes []Route, backendURLs map[string]string, policies map[string]Policy) []types.LocalRoute {
+func renderRoutes(routes []gateway.Route, backendURLs map[string]string, policies map[string]gateway.Policy) []types.LocalRoute {
 	if len(routes) == 0 {
 		return nil
 	}
 	out := make([]types.LocalRoute, 0, len(routes))
 	for _, r := range routes {
+		backends := renderBackendRefs(r.BackendRefs, backendURLs)
+		if r.MCP != nil {
+			backends = []types.RouteBackend{{
+				Weight: 100,
+				MCP:    renderMCPBackend(r.MCP),
+			}}
+		}
 		out = append(out, types.LocalRoute{
 			RouteName: r.Name,
 			Hostnames: r.Hostnames,
@@ -133,7 +118,7 @@ func renderRoutes(routes []Route, backendURLs map[string]string, policies map[st
 				Path: types.PathMatch{PathPrefix: r.PathPrefix},
 			}},
 			Policies: renderPolicyRefs(r.Policies, policies),
-			Backends: renderBackendRefs(r.BackendRefs, backendURLs),
+			Backends: backends,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -144,7 +129,7 @@ func renderRoutes(routes []Route, backendURLs map[string]string, policies map[st
 
 // renderBackendRefs resolves each BackendRef to its backend URL, defaulting the
 // weight to 100 when unset. Input order is preserved.
-func renderBackendRefs(refs []BackendRef, backendURLs map[string]string) []types.RouteBackend {
+func renderBackendRefs(refs []gateway.BackendRef, backendURLs map[string]string) []types.RouteBackend {
 	if len(refs) == 0 {
 		return nil
 	}
@@ -162,10 +147,82 @@ func renderBackendRefs(refs []BackendRef, backendURLs map[string]string) []types
 	return out
 }
 
+// renderMCPBackend translates a desired MCPBackend into its native form,
+// sorting targets by name so equal desired inputs render identically
+// regardless of desired target order. It returns nil when mcp is nil.
+func renderMCPBackend(mcp *gateway.MCPBackend) *types.MCPBackend {
+	if mcp == nil {
+		return nil
+	}
+	targets := make([]types.MCPTarget, 0, len(mcp.Targets))
+	for _, t := range mcp.Targets {
+		targets = append(targets, types.MCPTarget{
+			Name:    t.Name,
+			SSE:     renderSSETargetSpec(t.SSE),
+			Stdio:   renderStdioTargetSpec(t.Stdio),
+			MCP:     renderMCPTargetSpecField(t.MCP),
+			OpenAPI: renderOpenAPITargetSpec(t.OpenAPI),
+		})
+	}
+	sort.Slice(targets, func(i, j int) bool {
+		return targets[i].Name < targets[j].Name
+	})
+	return &types.MCPBackend{Targets: targets}
+}
+
+// renderSSETargetSpec maps a desired SSETargetSpec into its native form. It
+// returns nil when s is nil.
+func renderSSETargetSpec(s *gateway.SSETargetSpec) *types.SSETargetSpec {
+	if s == nil {
+		return nil
+	}
+	return &types.SSETargetSpec{
+		Scheme: s.Scheme,
+		Host:   s.Host,
+		Port:   s.Port,
+		Path:   s.Path,
+	}
+}
+
+// renderStdioTargetSpec maps a desired StdioTargetSpec into its native form.
+// It returns nil when s is nil.
+func renderStdioTargetSpec(s *gateway.StdioTargetSpec) *types.StdioTargetSpec {
+	if s == nil {
+		return nil
+	}
+	return &types.StdioTargetSpec{
+		Cmd:  s.Cmd,
+		Args: s.Args,
+		Env:  s.Env,
+	}
+}
+
+// renderMCPTargetSpecField maps a desired MCPTargetSpec into its native
+// form. It returns nil when s is nil.
+func renderMCPTargetSpecField(s *gateway.MCPTargetSpec) *types.MCPTargetSpec {
+	if s == nil {
+		return nil
+	}
+	return &types.MCPTargetSpec{Host: s.Host}
+}
+
+// renderOpenAPITargetSpec maps a desired OpenAPITargetSpec into its native
+// form. It returns nil when s is nil.
+func renderOpenAPITargetSpec(s *gateway.OpenAPITargetSpec) *types.OpenAPITargetSpec {
+	if s == nil {
+		return nil
+	}
+	return &types.OpenAPITargetSpec{
+		Host:   s.Host,
+		Port:   s.Port,
+		Schema: s.Schema,
+	}
+}
+
 // renderTLS maps a desired TLSConfig into the native TLS server config,
 // including certificate refs and listener options. It returns nil when tls is
 // nil.
-func renderTLS(tls *TLSConfig) *types.LocalTLSServerConfig {
+func renderTLS(tls *gateway.TLSConfig) *types.LocalTLSServerConfig {
 	if tls == nil {
 		return nil
 	}
@@ -190,7 +247,7 @@ func renderTLS(tls *TLSConfig) *types.LocalTLSServerConfig {
 
 // renderAllowedRoutes maps a desired AllowedRoutes selector into its native
 // form. It returns nil when ar is nil.
-func renderAllowedRoutes(ar *AllowedRoutes) *types.LocalAllowedRoutes {
+func renderAllowedRoutes(ar *gateway.AllowedRoutes) *types.LocalAllowedRoutes {
 	if ar == nil {
 		return nil
 	}
@@ -203,7 +260,7 @@ func renderAllowedRoutes(ar *AllowedRoutes) *types.LocalAllowedRoutes {
 // renderPolicyRefs merges the specs of the referenced policies into a single
 // native FilterOrPolicy. Unknown references and policies that contribute
 // nothing are ignored; it returns nil when no policy contributes.
-func renderPolicyRefs(refs []PolicyRef, policies map[string]Policy) *types.FilterOrPolicy {
+func renderPolicyRefs(refs []gateway.PolicyRef, policies map[string]gateway.Policy) *types.FilterOrPolicy {
 	if len(refs) == 0 {
 		return nil
 	}
@@ -232,6 +289,14 @@ func renderPolicyRefs(refs []PolicyRef, policies map[string]Policy) *types.Filte
 				native.Rules = renderAuthzRules(fc.Authorization.Action, fc.Authorization.MatchExpressions)
 			}
 			fp.FrontendConnect = native
+			contributed = true
+		}
+		if p.Spec.A2A != nil {
+			fp.A2A = &types.A2APolicy{}
+			contributed = true
+		}
+		if u := p.Spec.URLRewrite; u != nil {
+			fp.URLRewrite = &types.URLRewrite{Path: &types.PathRedirect{Prefix: u.PathPrefix}}
 			contributed = true
 		}
 	}

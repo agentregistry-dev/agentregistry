@@ -143,6 +143,80 @@ func TestV1Alpha1Remove_CallsComposeDown(t *testing.T) {
 	}
 }
 
+func TestV1Alpha1Apply_MCPServerTarget_WritesAgentGatewayTarget(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	originalUp := runLocalComposeUp
+	originalDown := runLocalComposeDown
+	t.Cleanup(func() {
+		runLocalComposeUp = originalUp
+		runLocalComposeDown = originalDown
+	})
+	runLocalComposeUp = func(context.Context, string, bool) error { return nil }
+	runLocalComposeDown = func(context.Context, string, bool) error { return nil }
+
+	adapter := NewLocalDeploymentAdapter(tmpDir, 21212)
+
+	target := &v1alpha1.MCPServer{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindMCPServer},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather"},
+		Spec: v1alpha1.MCPServerSpec{
+			Source: &v1alpha1.MCPServerSource{
+				Package: &v1alpha1.MCPPackage{
+					Origin: v1alpha1.MCPPackageOrigin{
+						Type:       v1alpha1.MCPPackageOriginTypeOCI,
+						Identifier: "ghcr.io/example/weather:v1",
+						OCI:        &v1alpha1.MCPPackageOriginOCI{ServerName: "weather"},
+					},
+					Transport: v1alpha1.MCPTransport{Type: "stdio"},
+				},
+			},
+		},
+	}
+	deployment := &v1alpha1.Deployment{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindDeployment},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-local", Generation: 1},
+		Spec: v1alpha1.DeploymentSpec{
+			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather"},
+			RuntimeRef:   v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "local"},
+			DesiredState: v1alpha1.DesiredStateDeployed,
+		},
+	}
+	runtime := &v1alpha1.Runtime{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindRuntime},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "local"},
+	}
+
+	if _, err := adapter.Apply(context.Background(), types.ApplyInput{
+		Deployment: deployment,
+		Target:     target,
+		Runtime:    runtime,
+	}); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+
+	gatewayPath := filepath.Join(tmpDir, "agent-gateway.yaml")
+	contents, err := os.ReadFile(gatewayPath)
+	if err != nil {
+		t.Fatalf("read agent-gateway.yaml: %v", err)
+	}
+	if !containsAll(string(contents), "mcp_route", "weather-local") {
+		t.Fatalf("agent-gateway.yaml missing expected target keyed to deployment:\n%s", contents)
+	}
+
+	if _, err := adapter.Remove(context.Background(), types.RemoveInput{Deployment: deployment}); err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+
+	contents, err = os.ReadFile(gatewayPath)
+	if err != nil {
+		t.Fatalf("read agent-gateway.yaml after remove: %v", err)
+	}
+	if contains(string(contents), "weather-local") {
+		t.Fatalf("agent-gateway.yaml still contains removed deployment's target:\n%s", contents)
+	}
+}
+
 func TestV1Alpha1SupportedTargetKinds(t *testing.T) {
 	adapter := NewLocalDeploymentAdapter(t.TempDir(), 21212)
 	kinds := adapter.SupportedTargetKinds()

@@ -4,12 +4,14 @@ import (
 	"context"
 	"testing"
 
+	"github.com/agentregistry-dev/agentregistry/internal/registry/gateway/agentgateway"
 	runtimetypes "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
 	runtimeutils "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/utils"
 )
 
 func TestBuildLocalRuntimeConfig_UsesDefaultAgentPortInGatewayRoute(t *testing.T) {
-	cfg, err := BuildLocalRuntimeConfig(context.Background(), "/tmp/test-runtime", 8081, "test-project", &runtimetypes.DesiredState{
+	engine := agentgateway.NewAgentGatewayEngine(nil)
+	cfg, err := BuildLocalRuntimeConfig(context.Background(), engine, "/tmp/test-runtime", 8081, "test-project", &runtimetypes.DesiredState{
 		Agents: []*runtimetypes.Agent{{
 			Name:       "demo-agent",
 			Tag:        "1.0.0",
@@ -35,6 +37,38 @@ func TestBuildLocalRuntimeConfig_UsesDefaultAgentPortInGatewayRoute(t *testing.T
 	}
 	if got := routes[0].Backends[0].Host; got != "demo-agent:8080" {
 		t.Fatalf("backend host = %q, want %q", got, "demo-agent:8080")
+	}
+}
+
+func TestBuildLocalRuntimeConfig_MixedMCPAndAgentRoutesSortedByName(t *testing.T) {
+	engine := agentgateway.NewAgentGatewayEngine(nil)
+	cfg, err := BuildLocalRuntimeConfig(context.Background(), engine, "/tmp/test-runtime", 8081, "test-project", &runtimetypes.DesiredState{
+		MCPServers: []*runtimetypes.MCPServer{{
+			Name:          "demo-server",
+			MCPServerType: runtimetypes.MCPServerTypeRemote,
+			Remote: &runtimetypes.RemoteMCPTarget{
+				Scheme: "https",
+				Host:   "example.com",
+				Port:   443,
+				Path:   "/mcp",
+			},
+		}},
+		Agents: []*runtimetypes.Agent{{
+			Name:       "aaa-agent",
+			Deployment: runtimetypes.AgentDeployment{Image: "aaa-agent:latest"},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("BuildLocalRuntimeConfig() unexpected error: %v", err)
+	}
+
+	routes := cfg.AgentGateway.Binds[0].Listeners[0].Routes
+	if len(routes) != 2 {
+		t.Fatalf("expected 2 routes, got %d", len(routes))
+	}
+	names := []string{routes[0].RouteName, routes[1].RouteName}
+	if names[0] != "aaa-agent_route" || names[1] != localMCPRouteName {
+		t.Fatalf("routes not sorted alphabetically by name: got %v", names)
 	}
 }
 

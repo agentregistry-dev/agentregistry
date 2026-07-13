@@ -6,21 +6,23 @@ import (
 	"maps"
 	"strings"
 
+	"github.com/agentregistry-dev/agentregistry/internal/registry/gateway"
 	runtimetypes "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 )
 
-// mergeAndApplyLocalRuntime loads the current docker-compose +
-// agent-gateway on-disk state, overlays (or strips, when remove=true) the
-// services + gateway routes produced by BuildLocalRuntimeConfig, writes
-// the merged files back, and runs docker compose up/down accordingly.
+// mergeAndApplyLocalRuntime loads the current docker-compose on-disk state,
+// overlays the services produced by BuildLocalRuntimeConfig, writes the
+// merged compose file back, delegates the gateway-config half to the
+// adapter's engine keyed by deploymentID, and runs docker compose up/down
+// accordingly.
 //
 // Shared between the v1alpha1 Apply path and any future incremental
 // reconciler — no ties to the v1alpha1 envelope type.
 func (a *localDeploymentAdapter) mergeAndApplyLocalRuntime(
 	ctx context.Context,
+	deploymentID string,
 	config *runtimetypes.LocalRuntimeConfig,
-	remove bool,
 ) error {
 	if config == nil {
 		return runLocalComposeUp(ctx, a.runtimeDir, false)
@@ -30,28 +32,17 @@ func (a *localDeploymentAdapter) mergeAndApplyLocalRuntime(
 	if err != nil {
 		return err
 	}
-	gatewayCfg, err := LoadLocalAgentGatewayConfig(a.runtimeDir, a.agentGatewayPort)
-	if err != nil {
-		return err
-	}
 
 	serviceNames := extractServiceNames(config)
-	targetNames := extractTargetNames(config.AgentGateway)
-	routeNames := extractNonMCPRouteNames(config.AgentGateway)
-
 	for _, name := range serviceNames {
 		delete(composeCfg.Services, name)
 	}
-	if !remove {
-		maps.Copy(composeCfg.Services, config.DockerCompose.Services)
+	maps.Copy(composeCfg.Services, config.DockerCompose.Services)
+
+	if err := a.engine.Apply(ctx, gateway.Target{Name: deploymentID}, config.AgentGateway); err != nil {
+		return err
 	}
-
-	mergeAgentGatewayConfig(gatewayCfg, config.AgentGateway, targetNames, routeNames, remove, a.agentGatewayPort)
-
-	if err := WriteLocalRuntimeFiles(a.runtimeDir, &runtimetypes.LocalRuntimeConfig{
-		DockerCompose: composeCfg,
-		AgentGateway:  gatewayCfg,
-	}, a.agentGatewayPort); err != nil {
+	if err := writeLocalDockerComposeConfig(a.runtimeDir, composeCfg); err != nil {
 		return err
 	}
 	if len(composeCfg.Services) == 0 {
@@ -60,10 +51,10 @@ func (a *localDeploymentAdapter) mergeAndApplyLocalRuntime(
 	return runLocalComposeUp(ctx, a.runtimeDir, false)
 }
 
-// removeLocalDeploymentArtifactsByID strips every compose service + gateway
-// route whose name contains the deployment's id, then writes back and
-// converges docker compose. Safe to call repeatedly — no-op once the
-// deployment's artifacts are gone.
+// removeLocalDeploymentArtifactsByID strips every compose service whose name
+// contains the deployment's id, delegates gateway route removal to the
+// adapter's engine, writes back, and converges docker compose. Safe to call
+// repeatedly — no-op once the deployment's artifacts are gone.
 func (a *localDeploymentAdapter) removeLocalDeploymentArtifactsByID(ctx context.Context, deploymentID string) error {
 	deploymentID = strings.TrimSpace(deploymentID)
 	if deploymentID == "" {
@@ -74,10 +65,6 @@ func (a *localDeploymentAdapter) removeLocalDeploymentArtifactsByID(ctx context.
 	if err != nil {
 		return err
 	}
-	gatewayCfg, err := LoadLocalAgentGatewayConfig(a.runtimeDir, a.agentGatewayPort)
-	if err != nil {
-		return err
-	}
 
 	for serviceName := range composeCfg.Services {
 		if strings.Contains(serviceName, deploymentID) {
@@ -85,12 +72,10 @@ func (a *localDeploymentAdapter) removeLocalDeploymentArtifactsByID(ctx context.
 		}
 	}
 
-	filterGatewayRoutesByDeploymentID(gatewayCfg, deploymentID)
-
-	if err := WriteLocalRuntimeFiles(a.runtimeDir, &runtimetypes.LocalRuntimeConfig{
-		DockerCompose: composeCfg,
-		AgentGateway:  gatewayCfg,
-	}, a.agentGatewayPort); err != nil {
+	if err := a.engine.Remove(ctx, gateway.Target{Name: deploymentID}); err != nil {
+		return err
+	}
+	if err := writeLocalDockerComposeConfig(a.runtimeDir, composeCfg); err != nil {
 		return err
 	}
 	if len(composeCfg.Services) == 0 {

@@ -15,10 +15,16 @@ import (
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"go.yaml.in/yaml/v3"
 
+	"github.com/agentregistry-dev/agentregistry/internal/registry/gateway"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/gateway/agentgateway"
 	runtimetypes "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
 	runtimeutils "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/utils"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 )
+
+// agentRoutePolicyName names the shared policy attaching A2A + URL-rewrite
+// semantics to every agent route.
+const agentRoutePolicyName = "agent-a2a-rewrite"
 
 const (
 	localMCPRouteName         = "mcp_route"
@@ -30,12 +36,12 @@ const (
 
 func BuildLocalRuntimeConfig(
 	ctx context.Context,
+	engine agentgateway.Engine,
 	runtimeDir string,
 	agentGatewayPort uint16,
 	projectName string,
 	desired *runtimetypes.DesiredState,
 ) (*runtimetypes.LocalRuntimeConfig, error) {
-	_ = ctx
 	if strings.TrimSpace(projectName) == "" {
 		projectName = defaultLocalProjectName
 	}
@@ -87,7 +93,7 @@ func BuildLocalRuntimeConfig(
 		Services:   dockerComposeServices,
 	}
 
-	gatewayConfig, err := translateLocalAgentGatewayConfig(agentGatewayPort, desired.MCPServers, desired.Agents)
+	gatewayConfig, err := translateLocalAgentGatewayConfig(ctx, engine, agentGatewayPort, desired.MCPServers, desired.Agents)
 	if err != nil {
 		return nil, fmt.Errorf("failed to translate agent gateway config: %w", err)
 	}
@@ -406,110 +412,110 @@ func sanitizeVersion(version string) string {
 	return sanitized
 }
 
-func translateLocalAgentGatewayConfig(agentGatewayPort uint16, servers []*runtimetypes.MCPServer, agents []*runtimetypes.Agent) (*runtimetypes.AgentGatewayConfig, error) {
-	var targets []runtimetypes.MCPTarget
+func translateLocalAgentGatewayConfig(
+	ctx context.Context,
+	engine agentgateway.Engine,
+	agentGatewayPort uint16,
+	servers []*runtimetypes.MCPServer,
+	agents []*runtimetypes.Agent,
+) (*runtimetypes.AgentGatewayConfig, error) {
+	desired, err := buildDesiredAgentGatewayConfig(agentGatewayPort, servers, agents)
+	if err != nil {
+		return nil, err
+	}
+	return engine.Render(ctx, desired)
+}
+
+func buildDesiredAgentGatewayConfig(agentGatewayPort uint16, servers []*runtimetypes.MCPServer, agents []*runtimetypes.Agent) (gateway.Config, error) {
+	var targets []gateway.MCPTarget
 
 	for _, server := range servers {
 		targetName := localMCPServiceName(server)
-		mcpTarget := runtimetypes.MCPTarget{Name: targetName}
+		mcpTarget := gateway.MCPTarget{Name: targetName}
 
 		switch server.MCPServerType {
 		case runtimetypes.MCPServerTypeRemote:
-			mcpTarget.MCP = &runtimetypes.MCPTargetSpec{
+			mcpTarget.MCP = &gateway.MCPTargetSpec{
 				Host: runtimeutils.BuildRemoteMCPURL(server.Remote),
 			}
 		case runtimetypes.MCPServerTypeLocal:
 			switch server.Local.TransportType {
 			case runtimetypes.TransportTypeStdio:
 				if canRunInsideLocalAgentGateway(server.Local.Deployment.Cmd) {
-					mcpTarget.Stdio = &runtimetypes.StdioTargetSpec{
+					mcpTarget.Stdio = &gateway.StdioTargetSpec{
 						Cmd:  server.Local.Deployment.Cmd,
 						Args: server.Local.Deployment.Args,
 						Env:  server.Local.Deployment.Env,
 					}
 				} else {
-					mcpTarget.MCP = &runtimetypes.MCPTargetSpec{
+					mcpTarget.MCP = &gateway.MCPTargetSpec{
 						Host: fmt.Sprintf("http://%s:%d/mcp", targetName, localOCIServerPort),
 					}
 				}
 			case runtimetypes.TransportTypeHTTP:
 				httpTransportConfig := server.Local.HTTP
 				if httpTransportConfig == nil || httpTransportConfig.Port == 0 {
-					return nil, fmt.Errorf("HTTP transport requires a target port")
+					return gateway.Config{}, fmt.Errorf("HTTP transport requires a target port")
 				}
-				mcpTarget.SSE = &runtimetypes.SSETargetSpec{
+				mcpTarget.SSE = &gateway.SSETargetSpec{
 					Host: targetName,
 					Port: httpTransportConfig.Port,
 					Path: httpTransportConfig.Path,
 				}
 			default:
-				return nil, fmt.Errorf("unsupported transport type: %s", server.Local.TransportType)
+				return gateway.Config{}, fmt.Errorf("unsupported transport type: %s", server.Local.TransportType)
 			}
 		}
 
 		targets = append(targets, mcpTarget)
 	}
 
-	var agentRoutes []runtimetypes.LocalRoute
+	var routes []gateway.Route
+	if len(targets) > 0 {
+		routes = append(routes, gateway.Route{
+			Name:       localMCPRouteName,
+			PathPrefix: "/mcp",
+			MCP:        &gateway.MCPBackend{Targets: targets},
+		})
+	}
+
+	var backends []gateway.Backend
+	var policies []gateway.Policy
+	if len(agents) > 0 {
+		policies = append(policies, gateway.Policy{
+			Name: agentRoutePolicyName,
+			Type: "AgentRoute",
+			Spec: gateway.PolicySpec{
+				A2A:        &gateway.A2APolicy{},
+				URLRewrite: &gateway.URLRewritePolicy{PathPrefix: "/"},
+			},
+		})
+	}
 	for _, agent := range agents {
 		agentServiceName := localAgentServiceName(agent)
-		route := runtimetypes.LocalRoute{
-			RouteName: fmt.Sprintf("%s_route", agentServiceName),
-			Matches: []runtimetypes.RouteMatch{{
-				Path: runtimetypes.PathMatch{
-					PathPrefix: fmt.Sprintf("/agents/%s", agentServiceName),
-				},
-			}},
-			Backends: []runtimetypes.RouteBackend{{
-				Weight: 100,
-				Host:   fmt.Sprintf("%s:%d", agentServiceName, defaultAgentPort(agent)),
-			}},
-			Policies: &runtimetypes.FilterOrPolicy{
-				A2A: &runtimetypes.A2APolicy{},
-				URLRewrite: &runtimetypes.URLRewrite{
-					Path: &runtimetypes.PathRedirect{Prefix: "/"},
-				},
-			},
-		}
-		agentRoutes = append(agentRoutes, route)
+		backendName := fmt.Sprintf("%s_backend", agentServiceName)
+		backends = append(backends, gateway.Backend{
+			Name: backendName,
+			URL:  fmt.Sprintf("%s:%d", agentServiceName, defaultAgentPort(agent)),
+		})
+		routes = append(routes, gateway.Route{
+			Name:        fmt.Sprintf("%s_route", agentServiceName),
+			PathPrefix:  fmt.Sprintf("/agents/%s", agentServiceName),
+			BackendRefs: []gateway.BackendRef{{Name: backendName}},
+			Policies:    []gateway.PolicyRef{{Name: agentRoutePolicyName}},
+		})
 	}
 
-	slices.SortStableFunc(agentRoutes, func(a, b runtimetypes.LocalRoute) int {
-		return cmp.Compare(a.RouteName, b.RouteName)
-	})
-	slices.SortStableFunc(targets, func(a, b runtimetypes.MCPTarget) int {
-		return cmp.Compare(a.Name, b.Name)
-	})
-
-	mcpRoute := runtimetypes.LocalRoute{
-		RouteName: localMCPRouteName,
-		Matches: []runtimetypes.RouteMatch{{
-			Path: runtimetypes.PathMatch{PathPrefix: "/mcp"},
+	return gateway.Config{
+		ClassName: "agentgateway",
+		Listeners: []gateway.Listener{{
+			Name:     "default",
+			Protocol: string(runtimetypes.LocalListenerProtocolHTTP),
+			Port:     int(agentGatewayPort),
 		}},
-		Backends: []runtimetypes.RouteBackend{{
-			Weight: 100,
-			MCP: &runtimetypes.MCPBackend{
-				Targets: targets,
-			},
-		}},
-	}
-
-	var allRoutes []runtimetypes.LocalRoute
-	if len(targets) > 0 {
-		allRoutes = append([]runtimetypes.LocalRoute{}, mcpRoute)
-	}
-	allRoutes = append(allRoutes, agentRoutes...)
-
-	return &runtimetypes.AgentGatewayConfig{
-		Config: struct{}{},
-		Binds: []runtimetypes.LocalBind{{
-			Port: agentGatewayPort,
-			Listeners: []runtimetypes.LocalListener{{
-				Name:     "default",
-				Protocol: runtimetypes.LocalListenerProtocolHTTP,
-				Routes:   allRoutes,
-			}},
-		}},
+		Routes:   routes,
+		Backends: backends,
+		Policies: policies,
 	}, nil
 }
 
@@ -590,7 +596,6 @@ func mergeAgentGatewayConfig(
 	incoming *runtimetypes.AgentGatewayConfig,
 	targetNames []string,
 	routeNames []string,
-	remove bool,
 	port uint16,
 ) {
 	ensureLocalAgentGatewayDefaults(existing, port)
@@ -622,10 +627,8 @@ func mergeAgentGatewayConfig(
 		otherRoutes = append(otherRoutes, route)
 	}
 
-	if !remove {
-		existingTargets = append(existingTargets, extractMCPRouteTargets(incoming)...)
-		otherRoutes = append(otherRoutes, extractNonMCPRoutes(incoming)...)
-	}
+	existingTargets = append(existingTargets, extractMCPRouteTargets(incoming)...)
+	otherRoutes = append(otherRoutes, extractNonMCPRoutes(incoming)...)
 
 	slices.SortFunc(existingTargets, func(a, b runtimetypes.MCPTarget) int {
 		return cmp.Compare(a.Name, b.Name)

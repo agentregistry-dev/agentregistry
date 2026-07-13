@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/agentregistry-dev/agentregistry/internal/registry/gateway/agentgateway"
 	runtimetypes "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/utils"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
@@ -14,10 +15,12 @@ import (
 // localDeploymentAdapter serves Deployments onto a local docker-compose
 // runtime. Pinned at construction time to a runtime directory
 // (docker-compose.yaml + agent-gateway.yaml live there) and the port the
-// agentgateway service binds.
+// agentgateway service binds. Gateway config rendering and lifecycle are
+// delegated to engine, keyed by deployment id.
 type localDeploymentAdapter struct {
 	runtimeDir       string
 	agentGatewayPort uint16
+	engine           agentgateway.Engine
 }
 
 // runLocalComposeUp / runLocalComposeDown are package vars rather than
@@ -35,6 +38,7 @@ func NewLocalDeploymentAdapter(runtimeDir string, agentGatewayPort uint16) *loca
 	return &localDeploymentAdapter{
 		runtimeDir:       runtimeDir,
 		agentGatewayPort: agentGatewayPort,
+		engine:           agentgateway.NewAgentGatewayEngine(NewLocalApplier(runtimeDir, agentGatewayPort)),
 	}
 }
 
@@ -62,11 +66,11 @@ func (a *localDeploymentAdapter) Apply(ctx context.Context, in types.ApplyInput)
 	if err != nil {
 		return nil, err
 	}
-	cfg, err := BuildLocalRuntimeConfig(ctx, a.runtimeDir, a.agentGatewayPort, "", desired)
+	cfg, err := BuildLocalRuntimeConfig(ctx, a.engine, a.runtimeDir, a.agentGatewayPort, "", desired)
 	if err != nil {
 		return nil, fmt.Errorf("build local runtime config: %w", err)
 	}
-	if err := a.mergeAndApplyLocalRuntime(ctx, cfg, false); err != nil {
+	if err := a.mergeAndApplyLocalRuntime(ctx, in.Deployment.Metadata.Name, cfg); err != nil {
 		return nil, fmt.Errorf("apply local runtime: %w", err)
 	}
 

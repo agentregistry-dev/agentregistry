@@ -1,3 +1,7 @@
+// Package gateway defines a gateway-implementation-agnostic model for
+// describing desired gateway configuration — listeners, routes, backends,
+// and policies. Provider-specific rendering and lifecycle management (e.g.
+// for agentgateway) live in subpackages such as gateway/agentgateway.
 package gateway
 
 // Config is the desired, gateway-agnostic configuration model. Routes
@@ -51,13 +55,59 @@ type ObjectRef struct {
 }
 
 // Route describes a routing rule. BackendRef.Name resolves against
-// Config.Backends to obtain the backend URL.
+// Config.Backends to obtain the backend URL. Exactly one of BackendRefs or
+// MCP should be set; if both are set, MCP takes precedence during render.
 type Route struct {
 	Name        string
 	Hostnames   []string
 	PathPrefix  string
 	BackendRefs []BackendRef
+	MCP         *MCPBackend
 	Policies    []PolicyRef
+}
+
+// MCPBackend fans a route out to multiple named MCP targets instead of a
+// single weighted backend. Mutually exclusive with Route.BackendRefs.
+type MCPBackend struct {
+	Targets []MCPTarget
+}
+
+// MCPTarget is one named upstream inside an MCPBackend. Exactly one of SSE,
+// Stdio, MCP, or OpenAPI should be set, selecting the target's transport.
+type MCPTarget struct {
+	Name    string
+	SSE     *SSETargetSpec
+	Stdio   *StdioTargetSpec
+	MCP     *MCPTargetSpec
+	OpenAPI *OpenAPITargetSpec
+}
+
+// SSETargetSpec targets an MCP server speaking SSE at host:port/path.
+type SSETargetSpec struct {
+	Scheme string
+	Host   string
+	Port   uint32
+	Path   string
+}
+
+// StdioTargetSpec runs an MCP server as a local subprocess speaking stdio.
+type StdioTargetSpec struct {
+	Cmd  string
+	Args []string
+	Env  map[string]string
+}
+
+// MCPTargetSpec targets a pre-running MCP-over-HTTP server at Host.
+type MCPTargetSpec struct {
+	Host string
+}
+
+// OpenAPITargetSpec targets an OpenAPI-described HTTP backend; Schema is
+// translated into MCP tools.
+type OpenAPITargetSpec struct {
+	Host   string
+	Port   uint32
+	Schema any
 }
 
 // Backend is a named routing destination.
@@ -86,6 +136,18 @@ type PolicySpec struct {
 	MCPAuthorization     *AuthzPolicy
 	TrafficAuthorization *AuthzPolicy
 	FrontendConnect      *FrontendConnectPolicy
+	A2A                  *A2APolicy
+	URLRewrite           *URLRewritePolicy
+}
+
+// A2APolicy marks a route as serving the A2A (agent-to-agent) protocol; it
+// carries no configuration.
+type A2APolicy struct{}
+
+// URLRewritePolicy rewrites the request path before it reaches the backend.
+// PathPrefix replaces the matched path with this prefix.
+type URLRewritePolicy struct {
+	PathPrefix string
 }
 
 // AuthzPolicy describes an authorization decision. MatchExpressions carries
