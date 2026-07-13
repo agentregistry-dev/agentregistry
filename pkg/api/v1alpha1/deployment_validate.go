@@ -53,6 +53,14 @@ func (d *Deployment) ResolveRefs(ctx context.Context, resolver ResolverFunc) err
 		errs = append(errs, resolveRefWith(ctx, resolver, probe, fmt.Sprintf("spec.deploymentRefs[%d]", i))...)
 	}
 
+	if d.Spec.ModelRef != nil {
+		probe := ResourceRef{Kind: KindModel, Namespace: d.Spec.ModelRef.Namespace, Name: d.Spec.ModelRef.Name}
+		if probe.Namespace == "" {
+			probe.Namespace = d.Metadata.Namespace
+		}
+		errs = append(errs, resolveRefWith(ctx, resolver, probe, "spec.modelRef")...)
+	}
+
 	if len(errs) == 0 {
 		return nil
 	}
@@ -85,6 +93,20 @@ func validateDeploymentSpec(s *DeploymentSpec) FieldErrors {
 		}
 		if strings.TrimSpace(s.Harness.Type) == "" {
 			errs.Append("spec.harness.type", fmt.Errorf("%w", ErrRequiredField))
+		}
+		// Harness runners need a model backend; the Deployment must say
+		// which admin-owned Model to use.
+		if s.ModelRef == nil {
+			errs.Append("spec.modelRef", fmt.Errorf("%w: required for harness deployments", ErrRequiredField))
+		}
+	}
+
+	if s.ModelRef != nil {
+		if err := validateNameField(s.ModelRef.Name); err != nil {
+			errs.Append("spec.modelRef.name", err)
+		}
+		if s.ModelRef.Namespace != "" && !namespaceRegex.MatchString(s.ModelRef.Namespace) {
+			errs.Append("spec.modelRef.namespace", fmt.Errorf("%w: %q", ErrInvalidFormat, s.ModelRef.Namespace))
 		}
 	}
 

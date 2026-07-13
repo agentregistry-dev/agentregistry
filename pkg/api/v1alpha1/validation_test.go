@@ -248,6 +248,7 @@ func TestDeploymentValidate_HarnessSelectionOK(t *testing.T) {
 				Type:           "claude-code",
 				PermissionMode: "acceptEdits",
 			},
+			ModelRef: &ModelRef{Name: "claude-opus-4-8"},
 		},
 	}
 	require.NoError(t, d.Validate())

@@ -31,6 +31,7 @@ const (
 	KindPrompt     = "Prompt"
 	KindDeployment = "Deployment"
 	KindRuntime    = "Runtime"
+	KindModel      = "Model"
 )
 
 var (

@@ -93,6 +93,7 @@ export type DeploymentSpec = {
         [key: string]: string;
     };
     harness?: DeploymentHarness;
+    modelRef?: ModelRef;
     runtimeConfig?: {
         [key: string]: unknown;
     };
@@ -242,6 +243,11 @@ export type ListOutputMcpServerBody = {
     nextCursor?: string;
 };
 
+export type ListOutputModelBody = {
+    items: Array<Model> | null;
+    nextCursor?: string;
+};
+
 export type ListOutputPluginBody = {
     items: Array<Plugin> | null;
     nextCursor?: string;
@@ -370,6 +376,47 @@ export type McpTransport = {
     path?: string;
     port?: number;
     type: string;
+};
+
+export type Model = {
+    apiVersion: string;
+    kind: string;
+    metadata: ObjectMeta;
+    spec: ModelSpec;
+    status?: Status;
+};
+
+export type ModelAuthConfig = {
+    secretRef?: SecretKeyRef;
+    strategy?: string;
+};
+
+export type ModelEndpointConfig = {
+    baseUrl?: string;
+    defaultHeaders?: {
+        [key: string]: string;
+    };
+    region?: string;
+    tls?: ModelTlsConfig;
+};
+
+export type ModelRef = {
+    name: string;
+    namespace?: string;
+};
+
+export type ModelSpec = {
+    auth?: ModelAuthConfig;
+    description?: string;
+    endpoint?: ModelEndpointConfig;
+    model: string;
+    provider: string;
+    title?: string;
+};
+
+export type ModelTlsConfig = {
+    caCertSecretRef?: SecretKeyRef;
+    disableVerify?: boolean;
 };
 
 export type MonitorEntry = {
@@ -594,6 +641,12 @@ export type RuntimeSpec = {
     };
     telemetryEndpoint?: string;
     type: string;
+};
+
+export type SecretKeyRef = {
+    key?: string;
+    name: string;
+    namespace?: string;
 };
 
 export type ServerArgument = {
@@ -1428,6 +1481,156 @@ export type ListTagsMcpserverResponses = {
 };
 
 export type ListTagsMcpserverResponse = ListTagsMcpserverResponses[keyof ListTagsMcpserverResponses];
+
+export type ListModelsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Namespace (defaults to 'default'; 'all' lists across all namespaces).
+         */
+        namespace?: string;
+        /**
+         * Max items to return (default 50).
+         */
+        limit?: number;
+        /**
+         * Opaque pagination cursor.
+         */
+        cursor?: string;
+        /**
+         * Label selector: key=value,key2=value2.
+         */
+        labels?: string;
+        /**
+         * Restrict the result set to one tag value (tagged artifact kinds only).
+         */
+        tag?: string;
+        /**
+         * Only return the literal latest tag per (namespace, name). Equivalent to tag=latest for tagged kinds.
+         */
+        latestOnly?: boolean;
+        /**
+         * Include rows with a deletionTimestamp.
+         */
+        includeTerminating?: boolean;
+    };
+    url: '/v0/models';
+};
+
+export type ListModelsErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type ListModelsError = ListModelsErrors[keyof ListModelsErrors];
+
+export type ListModelsResponses = {
+    /**
+     * OK
+     */
+    200: ListOutputModelBody;
+};
+
+export type ListModelsResponse = ListModelsResponses[keyof ListModelsResponses];
+
+export type DeleteModelData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/models/{name}';
+};
+
+export type DeleteModelErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type DeleteModelError = DeleteModelErrors[keyof DeleteModelErrors];
+
+export type DeleteModelResponses = {
+    /**
+     * No Content
+     */
+    204: void;
+};
+
+export type DeleteModelResponse = DeleteModelResponses[keyof DeleteModelResponses];
+
+export type GetLatestModelData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/models/{name}';
+};
+
+export type GetLatestModelErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetLatestModelError = GetLatestModelErrors[keyof GetLatestModelErrors];
+
+export type GetLatestModelResponses = {
+    /**
+     * OK
+     */
+    200: Model;
+};
+
+export type GetLatestModelResponse = GetLatestModelResponses[keyof GetLatestModelResponses];
+
+export type ApplyModelData = {
+    body?: Model;
+    path: {
+        name: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/models/{name}';
+};
+
+export type ApplyModelErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type ApplyModelError = ApplyModelErrors[keyof ApplyModelErrors];
+
+export type ApplyModelResponses = {
+    /**
+     * OK
+     */
+    200: Model;
+};
+
+export type ApplyModelResponse = ApplyModelResponses[keyof ApplyModelResponses];
 
 export type PingV0Data = {
     body?: never;

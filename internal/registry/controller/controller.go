@@ -120,12 +120,14 @@ func (c *DeploymentController) FullReconcile(ctx context.Context) (int, error) {
 // intentionally use a full Deployment scan for this first controller foundation.
 // Agent harness composition refs (Plugins, Skills, and Prompt instructions) are
 // dependency events because their resolved material can change Deployment apply
-// fingerprints.
+// fingerprints. Model edits are dependency events for the same reason: adapters
+// fold the resolved Model into the apply fingerprint, so auth/endpoint changes
+// propagate to referencing Deployments.
 func (c *DeploymentController) HandleEvent(ctx context.Context, event v1alpha1store.ControlPlaneEvent) (int, error) {
 	switch event.Key.Kind {
 	case v1alpha1.KindDeployment:
 		return c.reconcileDeployment(ctx, event.Key)
-	case v1alpha1.KindRuntime, v1alpha1.KindAgent, v1alpha1.KindMCPServer, v1alpha1.KindPlugin, v1alpha1.KindSkill, v1alpha1.KindPrompt:
+	case v1alpha1.KindRuntime, v1alpha1.KindAgent, v1alpha1.KindMCPServer, v1alpha1.KindPlugin, v1alpha1.KindSkill, v1alpha1.KindPrompt, v1alpha1.KindModel:
 		return c.FullReconcile(ctx)
 	default:
 		return 0, nil

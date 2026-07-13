@@ -72,6 +72,12 @@ type DeploymentSpec struct {
 	// rollout-specific harness policy. Omitted for BYO image/source Agent
 	// deployments and MCPServer deployments.
 	Harness *DeploymentHarness `json:"harness,omitempty" yaml:"harness,omitempty"`
+	// ModelRef selects the Model for this rollout. Required for harness
+	// deployments (harness runners need a model backend). Namespace
+	// defaults to the Deployment's namespace. The ref is the whole
+	// developer surface: endpoint and auth live on the admin-owned Model
+	// and are not overridable at deployment time.
+	ModelRef *ModelRef `json:"modelRef,omitempty" yaml:"modelRef,omitempty"`
 }
 
 // DeploymentHarness selects the concrete harness to run for one Deployment.
