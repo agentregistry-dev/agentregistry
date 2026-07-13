@@ -630,7 +630,7 @@ func TestAgentGatewayEngine_Render(t *testing.T) {
 		},
 	}
 
-	engine := NewAgentGatewayEngine(nil)
+	engine := NewEngine("", 0)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			rendered, err := engine.Render(context.Background(), tt.desired)
@@ -656,7 +656,7 @@ func TestAgentGatewayEngine_RenderIsDeterministic(t *testing.T) {
 			{Name: "a", PathPrefix: "/a"},
 		},
 	}
-	engine := NewAgentGatewayEngine(nil)
+	engine := NewEngine("", 0)
 
 	first, err := engine.Render(context.Background(), desired)
 	if err != nil {
@@ -672,82 +672,160 @@ func TestAgentGatewayEngine_RenderIsDeterministic(t *testing.T) {
 	}
 }
 
-// recordingApplier captures the arguments of the most recent Apply/Remove call.
-type recordingApplier struct {
-	applyTarget  gateway.Target
-	applyConfig  *types.AgentGatewayConfig
-	removeTarget gateway.Target
-	removeCalled bool
+const engineTestPort = 21212
+
+func mcpRenderedConfig(targets ...types.MCPTarget) *types.AgentGatewayConfig {
+	return &types.AgentGatewayConfig{
+		Config: struct{}{},
+		Binds: []types.LocalBind{{
+			Port: engineTestPort,
+			Listeners: []types.LocalListener{{
+				Name:     "default",
+				Protocol: types.LocalListenerProtocolHTTP,
+				Routes: []types.LocalRoute{{
+					RouteName: MCPRouteName,
+					Matches: []types.RouteMatch{{
+						Path: types.PathMatch{PathPrefix: "/mcp"},
+					}},
+					Backends: []types.RouteBackend{{
+						Weight: 100,
+						MCP:    &types.MCPBackend{Targets: targets},
+					}},
+				}},
+			}},
+		}},
+	}
 }
 
-func (r *recordingApplier) Apply(_ context.Context, target gateway.Target, cfg *types.AgentGatewayConfig) error {
-	r.applyTarget = target
-	r.applyConfig = cfg
-	return nil
-}
-
-func (r *recordingApplier) Remove(_ context.Context, target gateway.Target) error {
-	r.removeTarget = target
-	r.removeCalled = true
-	return nil
-}
-
-func TestAgentGatewayEngine_ApplyDelegatesToApplier(t *testing.T) {
-	applier := &recordingApplier{}
-	engine := NewAgentGatewayEngine(applier)
-
-	rendered, err := engine.Render(context.Background(), gateway.Config{
-		ClassName: "agentgateway",
-		Listeners: []gateway.Listener{{Name: "http", Protocol: "HTTP", Port: 8080}},
-	})
+func loadMCPTargetNames(t *testing.T, dir string) []string {
+	t.Helper()
+	cfg, err := loadConfig(dir, engineTestPort)
 	if err != nil {
-		t.Fatalf("Render() unexpected error: %v", err)
+		t.Fatalf("loadConfig: %v", err)
+	}
+	targets := extractMCPRouteTargets(cfg)
+	names := make([]string, 0, len(targets))
+	for _, target := range targets {
+		names = append(names, target.Name)
+	}
+	return names
+}
+
+func TestEngine_ApplyWritesNewTargetsAndRoutes(t *testing.T) {
+	dir := t.TempDir()
+	engine := NewEngine(dir, engineTestPort)
+
+	rendered := mcpRenderedConfig(types.MCPTarget{Name: "dep-1_weather", MCP: &types.MCPTargetSpec{Host: "http://weather:8080/mcp"}})
+	if err := engine.Apply(context.Background(), gateway.Target{Name: "dep-1"}, rendered); err != nil {
+		t.Fatalf("Apply: %v", err)
 	}
 
-	target := gateway.Target{Name: "gw", UID: "uid-1"}
-	if err := engine.Apply(context.Background(), target, rendered); err != nil {
-		t.Fatalf("Apply() unexpected error: %v", err)
-	}
-
-	if applier.applyTarget != target {
-		t.Errorf("Apply() target = %+v, want %+v", applier.applyTarget, target)
-	}
-	if !reflect.DeepEqual(applier.applyConfig, rendered) {
-		t.Errorf("Apply() passed config %#v, want %#v", applier.applyConfig, rendered)
+	names := loadMCPTargetNames(t, dir)
+	if len(names) != 1 || names[0] != "dep-1_weather" {
+		t.Fatalf("target names = %v, want [dep-1_weather]", names)
 	}
 }
 
-func TestAgentGatewayEngine_RemoveDelegatesToApplier(t *testing.T) {
-	applier := &recordingApplier{}
-	engine := NewAgentGatewayEngine(applier)
+func TestEngine_ApplyUpsertsExistingTargetByName(t *testing.T) {
+	dir := t.TempDir()
+	engine := NewEngine(dir, engineTestPort)
 
-	target := gateway.Target{Name: "gw", UID: "uid-1"}
-	if err := engine.Remove(context.Background(), target); err != nil {
-		t.Fatalf("Remove() unexpected error: %v", err)
+	first := mcpRenderedConfig(types.MCPTarget{Name: "dep-1_weather", MCP: &types.MCPTargetSpec{Host: "http://weather:8080/mcp"}})
+	if err := engine.Apply(context.Background(), gateway.Target{Name: "dep-1"}, first); err != nil {
+		t.Fatalf("Apply(first): %v", err)
 	}
 
-	if !applier.removeCalled {
-		t.Fatalf("Remove() did not call applier")
+	second := mcpRenderedConfig(types.MCPTarget{Name: "dep-1_weather", MCP: &types.MCPTargetSpec{Host: "http://weather:9090/mcp"}})
+	if err := engine.Apply(context.Background(), gateway.Target{Name: "dep-1"}, second); err != nil {
+		t.Fatalf("Apply(second): %v", err)
 	}
-	if applier.removeTarget != target {
-		t.Errorf("Remove() target = %+v, want %+v", applier.removeTarget, target)
-	}
-}
 
-func TestAgentGatewayEngine_ApplyErrorsWithoutApplier(t *testing.T) {
-	engine := NewAgentGatewayEngine(nil)
-	rendered, err := engine.Render(context.Background(), gateway.Config{})
+	cfg, err := loadConfig(dir, engineTestPort)
 	if err != nil {
-		t.Fatalf("Render() unexpected error: %v", err)
+		t.Fatalf("loadConfig: %v", err)
 	}
-	if err := engine.Apply(context.Background(), gateway.Target{Name: "gw"}, rendered); err == nil {
-		t.Fatal("Apply() with nil applier should return an error")
+	targets := extractMCPRouteTargets(cfg)
+	if len(targets) != 1 {
+		t.Fatalf("expected 1 target after upsert, got %d: %+v", len(targets), targets)
+	}
+	if got := targets[0].MCP.Host; got != "http://weather:9090/mcp" {
+		t.Fatalf("target host = %q, want updated host", got)
 	}
 }
 
-func TestAgentGatewayEngine_RemoveErrorsWithoutApplier(t *testing.T) {
-	engine := NewAgentGatewayEngine(nil)
-	if err := engine.Remove(context.Background(), gateway.Target{Name: "gw"}); err == nil {
-		t.Fatal("Remove() with nil applier should return an error")
+func TestEngine_ApplyPreservesEntriesFromOtherDeployments(t *testing.T) {
+	dir := t.TempDir()
+	engine := NewEngine(dir, engineTestPort)
+
+	depA := mcpRenderedConfig(types.MCPTarget{Name: "dep-a_weather", MCP: &types.MCPTargetSpec{Host: "http://weather:8080/mcp"}})
+	if err := engine.Apply(context.Background(), gateway.Target{Name: "dep-a"}, depA); err != nil {
+		t.Fatalf("Apply(dep-a): %v", err)
+	}
+	depB := mcpRenderedConfig(types.MCPTarget{Name: "dep-b_search", MCP: &types.MCPTargetSpec{Host: "http://search:8080/mcp"}})
+	if err := engine.Apply(context.Background(), gateway.Target{Name: "dep-b"}, depB); err != nil {
+		t.Fatalf("Apply(dep-b): %v", err)
+	}
+
+	names := loadMCPTargetNames(t, dir)
+	if len(names) != 2 {
+		t.Fatalf("expected both deployments' targets present, got %v", names)
+	}
+}
+
+func TestEngine_RemoveStripsOnlyMatchingDeploymentID(t *testing.T) {
+	dir := t.TempDir()
+	engine := NewEngine(dir, engineTestPort)
+
+	depA := mcpRenderedConfig(types.MCPTarget{Name: "dep-a_weather", MCP: &types.MCPTargetSpec{Host: "http://weather:8080/mcp"}})
+	if err := engine.Apply(context.Background(), gateway.Target{Name: "dep-a"}, depA); err != nil {
+		t.Fatalf("Apply(dep-a): %v", err)
+	}
+	depB := mcpRenderedConfig(types.MCPTarget{Name: "dep-b_search", MCP: &types.MCPTargetSpec{Host: "http://search:8080/mcp"}})
+	if err := engine.Apply(context.Background(), gateway.Target{Name: "dep-b"}, depB); err != nil {
+		t.Fatalf("Apply(dep-b): %v", err)
+	}
+
+	if err := engine.Remove(context.Background(), gateway.Target{Name: "dep-a"}); err != nil {
+		t.Fatalf("Remove(dep-a): %v", err)
+	}
+
+	names := loadMCPTargetNames(t, dir)
+	if len(names) != 1 || names[0] != "dep-b_search" {
+		t.Fatalf("target names after remove = %v, want [dep-b_search]", names)
+	}
+}
+
+func TestEngine_RemoveIsIdempotent(t *testing.T) {
+	dir := t.TempDir()
+	engine := NewEngine(dir, engineTestPort)
+
+	if err := engine.Remove(context.Background(), gateway.Target{Name: "never-applied"}); err != nil {
+		t.Fatalf("Remove(never-applied) first call: %v", err)
+	}
+	if err := engine.Remove(context.Background(), gateway.Target{Name: "never-applied"}); err != nil {
+		t.Fatalf("Remove(never-applied) second call: %v", err)
+	}
+}
+
+func TestEngine_RemoveRejectsEmptyTargetName(t *testing.T) {
+	dir := t.TempDir()
+	engine := NewEngine(dir, engineTestPort)
+
+	if err := engine.Remove(context.Background(), gateway.Target{Name: "  "}); err == nil {
+		t.Fatal("expected error for empty target name, got nil")
+	}
+}
+
+func TestEngine_ApplyNilRenderedIsNoop(t *testing.T) {
+	dir := t.TempDir()
+	engine := NewEngine(dir, engineTestPort)
+
+	if err := engine.Apply(context.Background(), gateway.Target{Name: "dep-1"}, nil); err != nil {
+		t.Fatalf("Apply(nil): %v", err)
+	}
+
+	names := loadMCPTargetNames(t, dir)
+	if len(names) != 0 {
+		t.Fatalf("expected no targets written, got %v", names)
 	}
 }

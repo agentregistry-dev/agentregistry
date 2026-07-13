@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/agentregistry-dev/agentregistry/internal/registry/gateway"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/gateway/agentgateway"
 	runtimetypes "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/utils"
@@ -20,7 +21,7 @@ import (
 type localDeploymentAdapter struct {
 	runtimeDir       string
 	agentGatewayPort uint16
-	engine           agentgateway.Engine
+	engine           gateway.Engine
 }
 
 // runLocalComposeUp / runLocalComposeDown are package vars rather than
@@ -38,7 +39,7 @@ func NewLocalDeploymentAdapter(runtimeDir string, agentGatewayPort uint16) *loca
 	return &localDeploymentAdapter{
 		runtimeDir:       runtimeDir,
 		agentGatewayPort: agentGatewayPort,
-		engine:           agentgateway.NewAgentGatewayEngine(NewLocalApplier(runtimeDir, agentGatewayPort)),
+		engine:           agentgateway.NewEngine(runtimeDir, agentGatewayPort),
 	}
 }
 

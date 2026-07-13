@@ -10,7 +10,7 @@ import (
 )
 
 func TestBuildLocalRuntimeConfig_UsesDefaultAgentPortInGatewayRoute(t *testing.T) {
-	engine := agentgateway.NewAgentGatewayEngine(nil)
+	engine := agentgateway.NewEngine("/tmp/test-runtime", 8081)
 	cfg, err := BuildLocalRuntimeConfig(context.Background(), engine, "/tmp/test-runtime", 8081, "test-project", &runtimetypes.DesiredState{
 		Agents: []*runtimetypes.Agent{{
 			Name:       "demo-agent",
@@ -41,7 +41,7 @@ func TestBuildLocalRuntimeConfig_UsesDefaultAgentPortInGatewayRoute(t *testing.T
 }
 
 func TestBuildLocalRuntimeConfig_MixedMCPAndAgentRoutesSortedByName(t *testing.T) {
-	engine := agentgateway.NewAgentGatewayEngine(nil)
+	engine := agentgateway.NewEngine("/tmp/test-runtime", 8081)
 	cfg, err := BuildLocalRuntimeConfig(context.Background(), engine, "/tmp/test-runtime", 8081, "test-project", &runtimetypes.DesiredState{
 		MCPServers: []*runtimetypes.MCPServer{{
 			Name:          "demo-server",
@@ -67,7 +67,7 @@ func TestBuildLocalRuntimeConfig_MixedMCPAndAgentRoutesSortedByName(t *testing.T
 		t.Fatalf("expected 2 routes, got %d", len(routes))
 	}
 	names := []string{routes[0].RouteName, routes[1].RouteName}
-	if names[0] != "aaa-agent_route" || names[1] != localMCPRouteName {
+	if names[0] != "aaa-agent_route" || names[1] != agentgateway.MCPRouteName {
 		t.Fatalf("routes not sorted alphabetically by name: got %v", names)
 	}
 }

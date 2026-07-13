@@ -27,16 +27,14 @@ import (
 const agentRoutePolicyName = "agent-a2a-rewrite"
 
 const (
-	localMCPRouteName         = "mcp_route"
-	localComposeFileName      = "docker-compose.yaml"
-	localAgentGatewayFileName = "agent-gateway.yaml"
-	defaultLocalProjectName   = "agentregistry_runtime"
-	localOCIServerPort        = 3000
+	localComposeFileName    = "docker-compose.yaml"
+	defaultLocalProjectName = "agentregistry_runtime"
+	localOCIServerPort      = 3000
 )
 
 func BuildLocalRuntimeConfig(
 	ctx context.Context,
-	engine agentgateway.Engine,
+	engine gateway.Engine,
 	runtimeDir string,
 	agentGatewayPort uint16,
 	projectName string,
@@ -102,19 +100,6 @@ func BuildLocalRuntimeConfig(
 		DockerCompose: dockerCompose,
 		AgentGateway:  gatewayConfig,
 	}, nil
-}
-
-func WriteLocalRuntimeFiles(runtimeDir string, cfg *runtimetypes.LocalRuntimeConfig, port uint16) error {
-	if cfg == nil {
-		return nil
-	}
-	if err := writeLocalDockerComposeConfig(runtimeDir, cfg.DockerCompose); err != nil {
-		return err
-	}
-	if err := writeLocalAgentGatewayConfig(runtimeDir, cfg.AgentGateway, port); err != nil {
-		return err
-	}
-	return nil
 }
 
 func ComposeUpLocalRuntime(ctx context.Context, runtimeDir string, verbose bool) error {
@@ -184,23 +169,6 @@ func LoadLocalDockerComposeConfig(runtimeDir string) (*runtimetypes.DockerCompos
 	return project, nil
 }
 
-func LoadLocalAgentGatewayConfig(runtimeDir string, port uint16) (*runtimetypes.AgentGatewayConfig, error) {
-	path := filepath.Join(runtimeDir, localAgentGatewayFileName)
-	cfg := defaultLocalAgentGatewayConfig(port)
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return cfg, nil
-		}
-		return nil, fmt.Errorf("read agent gateway config: %w", err)
-	}
-	if err := yaml.Unmarshal(data, cfg); err != nil {
-		return nil, fmt.Errorf("unmarshal agent gateway config: %w", err)
-	}
-	ensureLocalAgentGatewayDefaults(cfg, port)
-	return cfg, nil
-}
-
 func writeLocalDockerComposeConfig(runtimeDir string, project *runtimetypes.DockerComposeConfig) error {
 	if err := os.MkdirAll(runtimeDir, 0755); err != nil {
 		return fmt.Errorf("create runtime directory: %w", err)
@@ -229,62 +197,6 @@ func writeLocalDockerComposeConfig(runtimeDir string, project *runtimetypes.Dock
 		return fmt.Errorf("write docker compose config: %w", err)
 	}
 	return nil
-}
-
-func writeLocalAgentGatewayConfig(runtimeDir string, cfg *runtimetypes.AgentGatewayConfig, port uint16) error {
-	if err := os.MkdirAll(runtimeDir, 0755); err != nil {
-		return fmt.Errorf("create runtime directory: %w", err)
-	}
-	if cfg == nil {
-		cfg = defaultLocalAgentGatewayConfig(port)
-	}
-	ensureLocalAgentGatewayDefaults(cfg, port)
-	content, err := yaml.Marshal(cfg)
-	if err != nil {
-		return fmt.Errorf("marshal agent gateway config: %w", err)
-	}
-	if err := os.WriteFile(filepath.Join(runtimeDir, localAgentGatewayFileName), content, 0644); err != nil {
-		return fmt.Errorf("write agent gateway config: %w", err)
-	}
-	return nil
-}
-
-func defaultLocalAgentGatewayConfig(port uint16) *runtimetypes.AgentGatewayConfig {
-	return &runtimetypes.AgentGatewayConfig{
-		Config: struct{}{},
-		Binds: []runtimetypes.LocalBind{{
-			Port: port,
-			Listeners: []runtimetypes.LocalListener{{
-				Name:     "default",
-				Protocol: runtimetypes.LocalListenerProtocolHTTP,
-				Routes:   []runtimetypes.LocalRoute{},
-			}},
-		}},
-	}
-}
-
-func ensureLocalAgentGatewayDefaults(cfg *runtimetypes.AgentGatewayConfig, port uint16) {
-	if cfg.Config == nil {
-		cfg.Config = struct{}{}
-	}
-	if len(cfg.Binds) == 0 {
-		cfg.Binds = defaultLocalAgentGatewayConfig(port).Binds
-		return
-	}
-	if cfg.Binds[0].Port == 0 {
-		cfg.Binds[0].Port = port
-	}
-	if len(cfg.Binds[0].Listeners) == 0 {
-		cfg.Binds[0].Listeners = []runtimetypes.LocalListener{{
-			Name:     "default",
-			Protocol: runtimetypes.LocalListenerProtocolHTTP,
-			Routes:   []runtimetypes.LocalRoute{},
-		}}
-		return
-	}
-	if cfg.Binds[0].Listeners[0].Protocol == "" {
-		cfg.Binds[0].Listeners[0].Protocol = runtimetypes.LocalListenerProtocolHTTP
-	}
 }
 
 func canRunInsideLocalAgentGateway(cmd string) bool {
@@ -414,7 +326,7 @@ func sanitizeVersion(version string) string {
 
 func translateLocalAgentGatewayConfig(
 	ctx context.Context,
-	engine agentgateway.Engine,
+	engine gateway.Engine,
 	agentGatewayPort uint16,
 	servers []*runtimetypes.MCPServer,
 	agents []*runtimetypes.Agent,
@@ -473,7 +385,7 @@ func buildDesiredAgentGatewayConfig(agentGatewayPort uint16, servers []*runtimet
 	var routes []gateway.Route
 	if len(targets) > 0 {
 		routes = append(routes, gateway.Route{
-			Name:       localMCPRouteName,
+			Name:       agentgateway.MCPRouteName,
 			PathPrefix: "/mcp",
 			MCP:        &gateway.MCPBackend{Targets: targets},
 		})
@@ -539,135 +451,4 @@ func extractServiceNames(config *runtimetypes.LocalRuntimeConfig) []string {
 	}
 	slices.Sort(names)
 	return names
-}
-
-func extractTargetNames(config *runtimetypes.AgentGatewayConfig) []string {
-	targets := extractMCPRouteTargets(config)
-	names := make([]string, 0, len(targets))
-	for _, target := range targets {
-		names = append(names, target.Name)
-	}
-	slices.Sort(names)
-	return names
-}
-
-func extractNonMCPRouteNames(config *runtimetypes.AgentGatewayConfig) []string {
-	routes := extractNonMCPRoutes(config)
-	names := make([]string, 0, len(routes))
-	for _, route := range routes {
-		names = append(names, route.RouteName)
-	}
-	slices.Sort(names)
-	return names
-}
-
-func extractNonMCPRoutes(config *runtimetypes.AgentGatewayConfig) []runtimetypes.LocalRoute {
-	if config == nil || len(config.Binds) == 0 || len(config.Binds[0].Listeners) == 0 {
-		return nil
-	}
-	var routes []runtimetypes.LocalRoute
-	for _, route := range config.Binds[0].Listeners[0].Routes {
-		if route.RouteName == localMCPRouteName {
-			continue
-		}
-		routes = append(routes, route)
-	}
-	return routes
-}
-
-func extractMCPRouteTargets(config *runtimetypes.AgentGatewayConfig) []runtimetypes.MCPTarget {
-	if config == nil || len(config.Binds) == 0 || len(config.Binds[0].Listeners) == 0 {
-		return nil
-	}
-	for _, route := range config.Binds[0].Listeners[0].Routes {
-		if route.RouteName != localMCPRouteName {
-			continue
-		}
-		if len(route.Backends) == 0 || route.Backends[0].MCP == nil {
-			return nil
-		}
-		return append([]runtimetypes.MCPTarget{}, route.Backends[0].MCP.Targets...)
-	}
-	return nil
-}
-
-func mergeAgentGatewayConfig(
-	existing *runtimetypes.AgentGatewayConfig,
-	incoming *runtimetypes.AgentGatewayConfig,
-	targetNames []string,
-	routeNames []string,
-	port uint16,
-) {
-	ensureLocalAgentGatewayDefaults(existing, port)
-	if incoming == nil || len(existing.Binds) == 0 || len(existing.Binds[0].Listeners) == 0 {
-		return
-	}
-
-	listener := &existing.Binds[0].Listeners[0]
-	listener.Routes = filterRoutes(listener.Routes, routeNames)
-
-	targetSet := make(map[string]struct{}, len(targetNames))
-	for _, name := range targetNames {
-		targetSet[name] = struct{}{}
-	}
-
-	var existingTargets []runtimetypes.MCPTarget
-	var otherRoutes []runtimetypes.LocalRoute
-	for _, route := range listener.Routes {
-		if route.RouteName == localMCPRouteName {
-			if len(route.Backends) > 0 && route.Backends[0].MCP != nil {
-				for _, target := range route.Backends[0].MCP.Targets {
-					if _, shouldRemove := targetSet[target.Name]; !shouldRemove {
-						existingTargets = append(existingTargets, target)
-					}
-				}
-			}
-			continue
-		}
-		otherRoutes = append(otherRoutes, route)
-	}
-
-	existingTargets = append(existingTargets, extractMCPRouteTargets(incoming)...)
-	otherRoutes = append(otherRoutes, extractNonMCPRoutes(incoming)...)
-
-	slices.SortFunc(existingTargets, func(a, b runtimetypes.MCPTarget) int {
-		return cmp.Compare(a.Name, b.Name)
-	})
-	slices.SortFunc(otherRoutes, func(a, b runtimetypes.LocalRoute) int {
-		return cmp.Compare(a.RouteName, b.RouteName)
-	})
-
-	routes := make([]runtimetypes.LocalRoute, 0, len(otherRoutes)+1)
-	if len(existingTargets) > 0 {
-		routes = append(routes, runtimetypes.LocalRoute{
-			RouteName: localMCPRouteName,
-			Matches: []runtimetypes.RouteMatch{{
-				Path: runtimetypes.PathMatch{PathPrefix: "/mcp"},
-			}},
-			Backends: []runtimetypes.RouteBackend{{
-				Weight: 100,
-				MCP:    &runtimetypes.MCPBackend{Targets: existingTargets},
-			}},
-		})
-	}
-	routes = append(routes, otherRoutes...)
-	listener.Routes = routes
-}
-
-func filterRoutes(routes []runtimetypes.LocalRoute, names []string) []runtimetypes.LocalRoute {
-	if len(names) == 0 {
-		return routes
-	}
-	nameSet := make(map[string]struct{}, len(names))
-	for _, name := range names {
-		nameSet[name] = struct{}{}
-	}
-	filtered := make([]runtimetypes.LocalRoute, 0, len(routes))
-	for _, route := range routes {
-		if _, remove := nameSet[route.RouteName]; remove {
-			continue
-		}
-		filtered = append(filtered, route)
-	}
-	return filtered
 }

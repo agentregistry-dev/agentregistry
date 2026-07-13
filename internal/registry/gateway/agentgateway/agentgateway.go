@@ -1,34 +1,24 @@
+// Package agentgateway is the concrete gateway.Engine implementation backed
+// by agentgateway's native config format. Engine.Render translates a desired
+// gateway.Config into *types.AgentGatewayConfig; Engine.Apply and
+// Engine.Remove maintain that config on disk as agent-gateway.yaml, merging
+// or filtering routes by deployment id so multiple deployments can share one
+// gateway instance.
 package agentgateway
 
 import (
 	"context"
-	"fmt"
 	"sort"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/gateway"
 	types "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
 )
 
-// AgentGatewayEngine is the default Engine. It deterministically renders
-// a desired gateway.Config into the repo's native *types.AgentGatewayConfig
-// and delegates Apply/Remove to an injected Applier.
-type AgentGatewayEngine struct {
-	applier Applier
-}
-
-var _ Engine = (*AgentGatewayEngine)(nil)
-
-// NewAgentGatewayEngine constructs an AgentGatewayEngine. The applier may be
-// nil when only Render is needed; Apply and Remove then return an error.
-func NewAgentGatewayEngine(applier Applier) *AgentGatewayEngine {
-	return &AgentGatewayEngine{applier: applier}
-}
-
 // Render translates a desired gateway.Config into the native
 // *types.AgentGatewayConfig. It performs no I/O and is deterministic: binds
 // are sorted by port, listeners within a bind by name, and routes by name, so
 // equal inputs always produce equal outputs.
-func (e *AgentGatewayEngine) Render(_ context.Context, desired gateway.Config) (*types.AgentGatewayConfig, error) {
+func (e *Engine) Render(_ context.Context, desired gateway.Config) (*types.AgentGatewayConfig, error) {
 	backendURLs := make(map[string]string, len(desired.Backends))
 	for _, b := range desired.Backends {
 		backendURLs[b.Name] = b.URL
@@ -75,24 +65,6 @@ func (e *AgentGatewayEngine) Render(_ context.Context, desired gateway.Config) (
 	}
 
 	return cfg, nil
-}
-
-// Apply hands the rendered native config to the injected Applier. It returns
-// an error when no applier is configured.
-func (e *AgentGatewayEngine) Apply(ctx context.Context, target gateway.Target, rendered *types.AgentGatewayConfig) error {
-	if e.applier == nil {
-		return fmt.Errorf("agentgateway engine: no applier configured")
-	}
-	return e.applier.Apply(ctx, target, rendered)
-}
-
-// Remove delegates removal of previously-applied config to the injected
-// Applier. It returns an error when no applier is configured.
-func (e *AgentGatewayEngine) Remove(ctx context.Context, target gateway.Target) error {
-	if e.applier == nil {
-		return fmt.Errorf("agentgateway engine: no applier configured")
-	}
-	return e.applier.Remove(ctx, target)
 }
 
 // renderRoutes translates desired routes into deterministically sorted native

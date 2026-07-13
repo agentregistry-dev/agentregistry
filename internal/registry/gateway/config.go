@@ -1,7 +1,8 @@
 // Package gateway defines a gateway-implementation-agnostic model for
 // describing desired gateway configuration — listeners, routes, backends,
-// and policies. Provider-specific rendering and lifecycle management (e.g.
-// for agentgateway) live in subpackages such as gateway/agentgateway.
+// and policies — plus the Engine contract for rendering that model and
+// applying it to a Target. Concrete engines (e.g. agentgateway) live in
+// subpackages such as gateway/agentgateway and implement Engine directly.
 package gateway
 
 // Config is the desired, gateway-agnostic configuration model. Routes
