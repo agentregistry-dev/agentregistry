@@ -18,13 +18,15 @@ type LocalBind struct {
 }
 
 type LocalListener struct {
-	Name        string                `json:"name,omitempty" yaml:"name,omitempty"`
-	GatewayName string                `json:"gatewayName,omitempty" yaml:"gatewayName,omitempty"`
-	Hostname    string                `json:"hostname,omitempty" yaml:"hostname,omitempty"`
-	Protocol    LocalListenerProtocol `json:"protocol" yaml:"protocol"`
-	TLS         *LocalTLSServerConfig `json:"tls,omitempty" yaml:"tls,omitempty"`
-	Routes      []LocalRoute          `json:"routes,omitempty" yaml:"routes,omitempty"`
-	TCPRoutes   []LocalTCPRoute       `json:"tcpRoutes,omitempty" yaml:"tcpRoutes,omitempty"`
+	Name          string                `json:"name,omitempty" yaml:"name,omitempty"`
+	GatewayName   string                `json:"gatewayName,omitempty" yaml:"gatewayName,omitempty"`
+	Hostname      string                `json:"hostname,omitempty" yaml:"hostname,omitempty"`
+	Protocol      LocalListenerProtocol `json:"protocol" yaml:"protocol"`
+	TLS           *LocalTLSServerConfig `json:"tls,omitempty" yaml:"tls,omitempty"`
+	Routes        []LocalRoute          `json:"routes,omitempty" yaml:"routes,omitempty"`
+	TCPRoutes     []LocalTCPRoute       `json:"tcpRoutes,omitempty" yaml:"tcpRoutes,omitempty"`
+	AllowedRoutes *LocalAllowedRoutes   `json:"allowedRoutes,omitempty" yaml:"allowedRoutes,omitempty"`
+	Policies      *FilterOrPolicy       `json:"policies,omitempty" yaml:"policies,omitempty"`
 }
 
 type LocalListenerProtocol string
@@ -38,8 +40,11 @@ const (
 )
 
 type LocalTLSServerConfig struct {
-	Cert string `json:"cert" yaml:"cert"`
-	Key  string `json:"key" yaml:"key"`
+	Cert            string                 `json:"cert" yaml:"cert"`
+	Key             string                 `json:"key" yaml:"key"`
+	Mode            string                 `json:"mode,omitempty" yaml:"mode,omitempty"`
+	CertificateRefs []LocalObjectReference `json:"certificateRefs,omitempty" yaml:"certificateRefs,omitempty"`
+	Options         map[string]string      `json:"options,omitempty" yaml:"options,omitempty"`
 }
 
 type LocalRoute struct {
@@ -81,8 +86,10 @@ type FilterOrPolicy struct {
 	RemoteRateLimit        any               `json:"remoteRateLimit,omitempty" yaml:"remoteRateLimit,omitempty"`
 	JWTAuth                any               `json:"jwtAuth,omitempty" yaml:"jwtAuth,omitempty"`
 	ExtAuthz               any               `json:"extAuthz,omitempty" yaml:"extAuthz,omitempty"`
-	Timeout                *TimeoutPolicy    `json:"timeout,omitempty" yaml:"timeout,omitempty"`
-	Retry                  *RetryPolicy      `json:"retry,omitempty" yaml:"retry,omitempty"`
+	Timeout                *TimeoutPolicy        `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	Retry                  *RetryPolicy          `json:"retry,omitempty" yaml:"retry,omitempty"`
+	TrafficAuthorization   *TrafficAuthorization `json:"trafficAuthorization,omitempty" yaml:"trafficAuthorization,omitempty"`
+	FrontendConnect        *FrontendConnect      `json:"frontendConnect,omitempty" yaml:"frontendConnect,omitempty"`
 }
 
 type TCPFilterOrPolicy struct {
@@ -266,6 +273,27 @@ type PathRedirect struct {
 
 type MCPAuthorization struct {
 	Rules any `json:"rules" yaml:"rules"`
+}
+
+type TrafficAuthorization struct {
+	Rules any `json:"rules" yaml:"rules"`
+}
+
+type FrontendConnect struct {
+	Enabled bool `json:"enabled,omitempty" yaml:"enabled,omitempty"`
+	Rules   any  `json:"rules,omitempty" yaml:"rules,omitempty"`
+}
+
+type LocalObjectReference struct {
+	Group     string `json:"group,omitempty" yaml:"group,omitempty"`
+	Kind      string `json:"kind,omitempty" yaml:"kind,omitempty"`
+	Name      string `json:"name" yaml:"name"`
+	Namespace string `json:"namespace,omitempty" yaml:"namespace,omitempty"`
+}
+
+type LocalAllowedRoutes struct {
+	Namespaces []string `json:"namespaces,omitempty" yaml:"namespaces,omitempty"`
+	Kinds      []string `json:"kinds,omitempty" yaml:"kinds,omitempty"`
 }
 
 type A2APolicy struct{}
