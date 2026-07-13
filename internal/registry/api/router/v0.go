@@ -149,10 +149,11 @@ func RegisterRoutes(
 			// uses, so a downstream build that gates MCPServer reads gates the
 			// compat endpoint identically. nil hooks = public OSS behavior.
 			//
-			// These routes are intentionally NOT in the authn skip list: where
-			// an authn provider is configured, the middleware must run so the
-			// caller's session reaches ListFilter/Authorize for per-caller
-			// scoping. OSS configures no authn provider, so they're anonymous.
+			// These routes are registered as authn public paths (see
+			// NewHumaAPI): where an authn provider is configured, requests
+			// under them carry an auth.PublicSession instead of requiring
+			// credentials, so ListFilter/Authorize still receive a session and
+			// scope what anonymous callers may see.
 			mcpregistrycompat.Register(api, mcpregistrycompat.Config{
 				PathPrefix: cfg.MCPRegistryCompatPathPrefix,
 				Store:      store,

@@ -73,17 +73,22 @@ type Config struct {
 	Authorize func(ctx context.Context, in resource.AuthorizeInput) error
 }
 
-// Register mounts the v0.1 compatibility routes on api. cfg.PathPrefix is
-// prepended to the standard `/v0.1` base (empty serves the spec paths at root).
-func Register(api huma.API, cfg Config) {
-	// Normalize the optional prefix: ServeMux patterns must start with "/",
-	// and a trailing "/" would double up against the "/v0.1" we append. So
-	// "registry", "/registry", and "registry/" all yield "/registry/v0.1".
-	prefix := cfg.PathPrefix
+// BasePath returns the mount point of the compatibility API for the given
+// optional path prefix. It normalizes the prefix. Shared with the router's
+// authn public-path middleware wiring so the mount point and the public prefix
+// don't drift.
+func BasePath(pathPrefix string) string {
+	prefix := pathPrefix
 	if prefix != "" {
 		prefix = "/" + strings.Trim(prefix, "/")
 	}
-	base := prefix + "/v0.1"
+	return prefix + "/v0.1"
+}
+
+// Register mounts the v0.1 compatibility routes on api. cfg.PathPrefix is
+// prepended to the standard `/v0.1` base (empty serves the spec paths at root).
+func Register(api huma.API, cfg Config) {
+	base := BasePath(cfg.PathPrefix)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "mcp-registry-list-servers",
@@ -282,9 +287,9 @@ func getServerVersion(cfg Config) func(context.Context, *getServerVersionInput) 
 	}
 }
 
-// authorizeRead applies the optional single-server read gate. A forbidden
-// result is surfaced as 404 so the endpoint never reveals the existence of
-// servers the caller may not read; any other error is a 500.
+// authorizeRead applies the optional single-server read gate. A forbidden or
+// unauthenticated result is surfaced as 404 so the endpoint never reveals the
+// existence of servers the caller may not read; any other error is a 500.
 func authorizeRead(ctx context.Context, cfg Config, displayName, ns, name, tag string) error {
 	if cfg.Authorize == nil {
 		return nil
@@ -294,7 +299,7 @@ func authorizeRead(ctx context.Context, cfg Config, displayName, ns, name, tag s
 	}); {
 	case err == nil:
 		return nil
-	case errors.Is(err, auth.ErrForbidden):
+	case errors.Is(err, auth.ErrForbidden), errors.Is(err, auth.ErrUnauthenticated):
 		return huma.Error404NotFound(fmt.Sprintf("MCP server %q not found", displayName))
 	default:
 		return huma.Error500InternalServerError("authz check", err)

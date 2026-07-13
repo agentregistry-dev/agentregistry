@@ -296,3 +296,38 @@ func TestListServerVersions_ForbiddenIs404(t *testing.T) {
 	srv.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
+
+// An unauthenticated single-server read is surfaced as 404, same as
+// forbidden, so the endpoint neither leaks existence nor turns an authz
+// outcome into a server error.
+func TestGetServerVersion_UnauthenticatedIs404(t *testing.T) {
+	store := &fakeStore{rows: []*v1alpha1.RawObject{
+		rawMCPServer(t, "team-a", "weather", "latest", npmSpec("Weather")),
+	}}
+	srv := newAPIConfig(t, handler.Config{
+		Store:     store,
+		Authorize: func(_ context.Context, _ resource.AuthorizeInput) error { return auth.ErrUnauthenticated },
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v0.1/servers/team-a%2Fweather/versions/latest", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestBasePath(t *testing.T) {
+	tests := []struct {
+		prefix string
+		want   string
+	}{
+		{prefix: "", want: "/v0.1"},
+		{prefix: "registry", want: "/registry/v0.1"},
+		{prefix: "/registry", want: "/registry/v0.1"},
+		{prefix: "registry/", want: "/registry/v0.1"},
+	}
+	for _, tt := range tests {
+		t.Run("prefix="+tt.prefix, func(t *testing.T) {
+			assert.Equal(t, tt.want, handler.BasePath(tt.prefix))
+		})
+	}
+}
