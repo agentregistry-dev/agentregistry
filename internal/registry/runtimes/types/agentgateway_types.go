@@ -70,22 +70,22 @@ type LocalWorkload struct {
 }
 
 type FilterOrPolicy struct {
-	RequestHeaderModifier  *HeaderModifier   `json:"requestHeaderModifier,omitempty" yaml:"requestHeaderModifier,omitempty"`
-	ResponseHeaderModifier *HeaderModifier   `json:"responseHeaderModifier,omitempty" yaml:"responseHeaderModifier,omitempty"`
-	RequestRedirect        *RequestRedirect  `json:"requestRedirect,omitempty" yaml:"requestRedirect,omitempty"`
-	URLRewrite             *URLRewrite       `json:"urlRewrite,omitempty" yaml:"urlRewrite,omitempty"`
-	RequestMirror          *RequestMirror    `json:"requestMirror,omitempty" yaml:"requestMirror,omitempty"`
-	DirectResponse         *DirectResponse   `json:"directResponse,omitempty" yaml:"directResponse,omitempty"`
-	CORS                   *CORS             `json:"cors,omitempty" yaml:"cors,omitempty"`
-	MCPAuthorization       *MCPAuthorization `json:"mcpAuthorization,omitempty" yaml:"mcpAuthorization,omitempty"`
-	A2A                    *A2APolicy        `json:"a2a,omitempty" yaml:"a2a,omitempty"`
-	AI                     any               `json:"ai,omitempty" yaml:"ai,omitempty"`
-	BackendTLS             *BackendTLS       `json:"backendTLS,omitempty" yaml:"backendTLS,omitempty"`
-	BackendAuth            *BackendAuth      `json:"backendAuth,omitempty" yaml:"backendAuth,omitempty"`
-	LocalRateLimit         []any             `json:"localRateLimit,omitempty" yaml:"localRateLimit,omitempty"`
-	RemoteRateLimit        any               `json:"remoteRateLimit,omitempty" yaml:"remoteRateLimit,omitempty"`
-	JWTAuth                any               `json:"jwtAuth,omitempty" yaml:"jwtAuth,omitempty"`
-	ExtAuthz               any               `json:"extAuthz,omitempty" yaml:"extAuthz,omitempty"`
+	RequestHeaderModifier  *HeaderModifier       `json:"requestHeaderModifier,omitempty" yaml:"requestHeaderModifier,omitempty"`
+	ResponseHeaderModifier *HeaderModifier       `json:"responseHeaderModifier,omitempty" yaml:"responseHeaderModifier,omitempty"`
+	RequestRedirect        *RequestRedirect      `json:"requestRedirect,omitempty" yaml:"requestRedirect,omitempty"`
+	URLRewrite             *URLRewrite           `json:"urlRewrite,omitempty" yaml:"urlRewrite,omitempty"`
+	RequestMirror          *RequestMirror        `json:"requestMirror,omitempty" yaml:"requestMirror,omitempty"`
+	DirectResponse         *DirectResponse       `json:"directResponse,omitempty" yaml:"directResponse,omitempty"`
+	CORS                   *CORS                 `json:"cors,omitempty" yaml:"cors,omitempty"`
+	MCPAuthorization       *MCPAuthorization     `json:"mcpAuthorization,omitempty" yaml:"mcpAuthorization,omitempty"`
+	A2A                    *A2APolicy            `json:"a2a,omitempty" yaml:"a2a,omitempty"`
+	AI                     any                   `json:"ai,omitempty" yaml:"ai,omitempty"`
+	BackendTLS             *BackendTLS           `json:"backendTLS,omitempty" yaml:"backendTLS,omitempty"`
+	BackendAuth            *BackendAuth          `json:"backendAuth,omitempty" yaml:"backendAuth,omitempty"`
+	LocalRateLimit         []any                 `json:"localRateLimit,omitempty" yaml:"localRateLimit,omitempty"`
+	RemoteRateLimit        any                   `json:"remoteRateLimit,omitempty" yaml:"remoteRateLimit,omitempty"`
+	JWTAuth                any                   `json:"jwtAuth,omitempty" yaml:"jwtAuth,omitempty"`
+	ExtAuthz               any                   `json:"extAuthz,omitempty" yaml:"extAuthz,omitempty"`
 	Timeout                *TimeoutPolicy        `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 	Retry                  *RetryPolicy          `json:"retry,omitempty" yaml:"retry,omitempty"`
 	TrafficAuthorization   *TrafficAuthorization `json:"trafficAuthorization,omitempty" yaml:"trafficAuthorization,omitempty"`
