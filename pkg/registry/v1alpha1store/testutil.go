@@ -79,7 +79,7 @@ func NewTestPool(t *testing.T) *pgxpool.Pool {
 
 // NewTestPoolWithDSN is NewTestPool with a caller-supplied admin DSN
 // (URL-form, postgres://...). Also returns the per-test database's DSN.
-func NewTestPoolWithDSN(t *testing.T, adminDSN string) (*pgxpool.Pool, string) {
+func NewTestPoolWithDSN(t *testing.T, adminDSN string) (pool *pgxpool.Pool, testDSN string) {
 	t.Helper()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -133,7 +133,7 @@ func NewTestPoolWithDSN(t *testing.T, adminDSN string) (*pgxpool.Pool, string) {
 		_, err := conn.Exec(ctx, "SET search_path TO "+TestSchema().Quoted())
 		return err
 	}
-	pool, err := pgxpool.NewWithConfig(ctx, cfg)
+	pool, err = pgxpool.NewWithConfig(ctx, cfg)
 	require.NoError(t, err)
 	t.Cleanup(func() { pool.Close() })
 	return pool, testURI
