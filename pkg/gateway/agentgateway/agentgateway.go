@@ -15,7 +15,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 
 	"go.yaml.in/yaml/v3"
@@ -89,11 +88,11 @@ func Render(_ context.Context, desired gateway.Config) (*AgentGatewayConfig, err
 		})
 	}
 
-	sort.Ints(ports)
+	slices.Sort(ports)
 	for _, port := range ports {
 		listeners := listenersByPort[port]
-		sort.Slice(listeners, func(i, j int) bool {
-			return listeners[i].Name < listeners[j].Name
+		slices.SortFunc(listeners, func(a, b LocalListener) int {
+			return cmp.Compare(a.Name, b.Name)
 		})
 		cfg.Binds = append(cfg.Binds, LocalBind{
 			Port:      uint16(port),
@@ -137,8 +136,8 @@ func renderRoutes(routes []gateway.Route, backendURLs map[string]string, policie
 			Backends: backends,
 		})
 	}
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].RouteName < out[j].RouteName
+	slices.SortFunc(out, func(a, b LocalRoute) int {
+		return cmp.Compare(a.RouteName, b.RouteName)
 	})
 	return out, nil
 }
@@ -186,8 +185,8 @@ func renderMCPBackend(mcp *gateway.MCPBackend) *MCPBackend {
 			OpenAPI: renderOpenAPITargetSpec(t.OpenAPI),
 		})
 	}
-	sort.Slice(targets, func(i, j int) bool {
-		return targets[i].Name < targets[j].Name
+	slices.SortFunc(targets, func(a, b MCPTarget) int {
+		return cmp.Compare(a.Name, b.Name)
 	})
 	return &MCPBackend{Targets: targets}
 }
