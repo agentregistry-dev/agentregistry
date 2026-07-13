@@ -1,6 +1,6 @@
 //go:build integration
 
-package dbtest
+package v1alpha1store
 
 import (
 	"testing"
@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestDBURI(t *testing.T) {
+func TestTestDBURI(t *testing.T) {
 	tests := []struct {
 		name     string
 		adminURI string
@@ -22,25 +22,25 @@ func TestDBURI(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := DBURI(tt.adminURI, tt.dbName)
+			got, err := testDBURI(tt.adminURI, tt.dbName)
 			require.NoError(t, err)
 			require.Equal(t, tt.want, got)
 		})
 	}
 
 	// Non-URL DSNs are rejected without echoing the value.
-	_, err := DBURI("host=h user=u password=secret dbname=db", "test_db_3")
+	_, err := testDBURI("host=h user=u password=secret dbname=db", "test_db_3")
 	require.Error(t, err)
 	require.NotContains(t, err.Error(), "secret")
 }
 
 func TestAdminDSN(t *testing.T) {
 	t.Setenv("AGENT_REGISTRY_TEST_DATABASE_URL", "postgres://u:p@custom:5433/postgres")
-	require.Equal(t, "postgres://u:p@custom:5433/postgres", AdminDSN())
+	require.Equal(t, "postgres://u:p@custom:5433/postgres", adminDSN())
 
 	t.Setenv("AGENT_REGISTRY_TEST_DATABASE_URL", "")
-	require.Equal(t, "postgres://agentregistry:agentregistry@localhost:5432/postgres?sslmode=disable", AdminDSN())
-	require.NoError(t, validateAdminDSN(AdminDSN()))
+	require.Equal(t, "postgres://agentregistry:agentregistry@localhost:5432/postgres?sslmode=disable", adminDSN())
+	require.NoError(t, validateAdminDSN(adminDSN()))
 }
 
 func TestValidateAdminDSN(t *testing.T) {

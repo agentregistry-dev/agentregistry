@@ -1,64 +1,23 @@
 //go:build integration
 
-package legacymigrate_test
+package database
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"testing"
 	"time"
 
 	"github.com/golang-migrate/migrate/v4"
-	"github.com/jackc/pgx/v5"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/stretchr/testify/require"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
-	"github.com/agentregistry-dev/agentregistry/pkg/registry/database/dbtest"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database/legacymigrate"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
-
-// freshDB creates a fresh per-test database and returns its DSN. Fails when
-// PostgreSQL is not reachable.
-func freshDB(t *testing.T) string {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	t.Cleanup(cancel)
-
-	adminConn, adminURI := dbtest.ConnectAdmin(ctx, t)
-	defer func() { _ = adminConn.Close(ctx) }()
-
-	var randomBytes [8]byte
-	_, err := rand.Read(randomBytes[:])
-	require.NoError(t, err)
-	dbName := fmt.Sprintf("test_ossbridge_%d", binary.BigEndian.Uint64(randomBytes[:]))
-
-	_, err = adminConn.Exec(ctx, fmt.Sprintf("CREATE DATABASE %s", dbName))
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		cctx, ccancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer ccancel()
-		c, cerr := pgx.Connect(cctx, adminURI)
-		if cerr != nil {
-			return
-		}
-		defer func() { _ = c.Close(cctx) }()
-		_, _ = c.Exec(cctx,
-			"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()",
-			dbName)
-		_, _ = c.Exec(cctx, fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbName))
-	})
-
-	uri, err := dbtest.DBURI(adminURI, dbName)
-	require.NoError(t, err)
-	return uri
-}
 
 // applyOSSSchema brings the destination `agentregistry` schema up to 001 so
 // RunOSS has somewhere to copy into.

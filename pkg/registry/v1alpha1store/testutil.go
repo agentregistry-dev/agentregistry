@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
+	"os"
 	"testing"
 	"time"
 
@@ -19,8 +21,47 @@ import (
 	"github.com/stretchr/testify/require"
 
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
-	"github.com/agentregistry-dev/agentregistry/pkg/registry/database/dbtest"
 )
+
+// adminDSN returns the admin connection URI: AGENT_REGISTRY_TEST_DATABASE_URL
+// when set, otherwise the local dev default. Must be a URL-form DSN
+// (postgres://...); keyword/value DSNs are not supported.
+func adminDSN() string {
+	if dsn := os.Getenv("AGENT_REGISTRY_TEST_DATABASE_URL"); dsn != "" {
+		return dsn
+	}
+	return "postgres://agentregistry:agentregistry@localhost:5432/postgres?sslmode=disable"
+}
+
+// validateAdminDSN rejects non-URL-form DSNs up front: pgx would accept a
+// keyword/value DSN for the admin connection, but every derived per-test URI
+// would then be broken in confusing ways. The value is not echoed.
+func validateAdminDSN(dsn string) error {
+	u, err := url.Parse(dsn)
+	if err != nil || (u.Scheme != "postgres" && u.Scheme != "postgresql") {
+		return errors.New("admin DSN must be a URL-form DSN (postgres://...)")
+	}
+	return nil
+}
+
+// testDBURI returns adminURI with its database replaced by dbName. A dbname
+// query parameter is dropped — pgx would apply it after the path, silently
+// redirecting every per-test URI back to the override's database.
+func testDBURI(adminURI, dbName string) (string, error) {
+	if err := validateAdminDSN(adminURI); err != nil {
+		return "", err
+	}
+	u, err := url.Parse(adminURI)
+	if err != nil {
+		return "", errors.New("parse admin URI: invalid URL")
+	}
+	u.Path = "/" + dbName
+	if q := u.Query(); q.Has("dbname") {
+		q.Del("dbname")
+		u.RawQuery = q.Encode()
+	}
+	return u.String(), nil
+}
 
 // NewTestPool spins up a fresh database with the v1alpha1 schema
 // applied and returns a connection pool scoped to it. Each test gets
@@ -32,7 +73,7 @@ import (
 // fail when it's unavailable.
 func NewTestPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	pool, _ := NewTestPoolWithDSN(t, dbtest.AdminDSN())
+	pool, _ := NewTestPoolWithDSN(t, adminDSN())
 	return pool
 }
 
@@ -47,7 +88,13 @@ func NewTestPoolWithDSN(t *testing.T, adminDSN string) (*pgxpool.Pool, string) {
 	defer cancel()
 
 	adminURI := adminDSN
-	adminConn := dbtest.ConnectAdminDSN(ctx, t, adminURI)
+	if err := validateAdminDSN(adminURI); err != nil {
+		t.Fatal(err)
+	}
+	adminConn, err := pgx.Connect(ctx, adminURI)
+	if err != nil {
+		t.Fatalf("PostgreSQL not available: %v — start it (e.g. 'make run-docker') or run unit tests only ('make test-unit')", err)
+	}
 	defer func() { _ = adminConn.Close(ctx) }()
 
 	if err := ensureTemplate(ctx, adminConn, adminURI); err != nil {
@@ -55,7 +102,7 @@ func NewTestPoolWithDSN(t *testing.T, adminDSN string) (*pgxpool.Pool, string) {
 	}
 
 	var randomBytes [8]byte
-	_, err := rand.Read(randomBytes[:])
+	_, err = rand.Read(randomBytes[:])
 	require.NoError(t, err)
 	dbName := fmt.Sprintf("test_v1alpha1_%d", binary.BigEndian.Uint64(randomBytes[:]))
 
@@ -77,7 +124,7 @@ func NewTestPoolWithDSN(t *testing.T, adminDSN string) (*pgxpool.Pool, string) {
 		_, _ = adminCleanup.Exec(cleanupCtx, fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbName))
 	})
 
-	testURI, err := dbtest.DBURI(adminURI, dbName)
+	testURI, err := testDBURI(adminURI, dbName)
 	require.NoError(t, err)
 	cfg, err := pgxpool.ParseConfig(testURI)
 	require.NoError(t, err)
@@ -144,7 +191,7 @@ func ensureTemplate(ctx context.Context, adminConn *pgx.Conn, adminURI string) e
 		}
 	}
 
-	templateURI, err := dbtest.DBURI(adminURI, v1alpha1TemplateDBName)
+	templateURI, err := testDBURI(adminURI, v1alpha1TemplateDBName)
 	if err != nil {
 		return err
 	}
