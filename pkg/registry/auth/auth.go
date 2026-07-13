@@ -53,7 +53,7 @@ func AuthSessionTo(ctx context.Context, session Session) context.Context {
 // Middleware configuration options
 type middlewareConfig struct {
 	skipPaths      map[string]bool // paths that should skip authentication and don't require any authorization (e.g. no need to fetch registry content)
-	publicPrefixes []string // path prefixes for paths that skip authentication, but require access to content (e.g. MCP /v0.1 requires server public listing)
+	publicPrefixes []string        // path prefixes for paths that skip authentication, but require access to content (e.g. MCP /v0.1 requires server public listing)
 }
 
 type MiddlewareOption func(*middlewareConfig)
