@@ -17,6 +17,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
 const (
@@ -29,9 +30,19 @@ const (
 // the namespace, the server searches across all namespaces for backward
 // compatibility with pre-namespaced clients.
 //
+// authorizers and listFilters are the same per-kind RBAC hooks the HTTP
+// CRUD handler consumes, keyed by canonical Kind name. They make the MCP
+// read tools honor authz instead of reading the raw Stores. Pass nil maps
+// for the OSS default, where a kind with no hook is un-gated (a nil-map
+// lookup yields a nil hook) — matching the CRUD handler's default-permit.
+//
 // Tool names are preserved across builds (`list_servers` not
 // `list_mcpservers`) so saved Claude MCP configs keep working.
-func NewServer(stores map[string]*v1alpha1store.Store) *mcp.Server {
+func NewServer(
+	stores map[string]*v1alpha1store.Store,
+	authorizers map[string]types.Authorizer,
+	listFilters map[string]types.ListFilter,
+) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "agentregistry-mcp",
 		Version: version.Version,
@@ -41,36 +52,44 @@ func NewServer(stores map[string]*v1alpha1store.Store) *mcp.Server {
 	})
 
 	addKindTools(server, stores[v1alpha1.KindAgent], kindTools[*v1alpha1.Agent]{
-		Kind:     v1alpha1.KindAgent,
-		ListName: "list_agents",
-		GetName:  "get_agent",
-		ListDesc: "List published agents as v1alpha1 envelopes with optional namespace, substring-name, and tag filters.",
-		GetDesc:  "Fetch a published agent as a v1alpha1 envelope (defaults to the latest tag).",
-		NewObj:   func() *v1alpha1.Agent { return &v1alpha1.Agent{} },
+		Kind:       v1alpha1.KindAgent,
+		ListName:   "list_agents",
+		GetName:    "get_agent",
+		ListDesc:   "List published agents as v1alpha1 envelopes with optional namespace, substring-name, and tag filters.",
+		GetDesc:    "Fetch a published agent as a v1alpha1 envelope (defaults to the latest tag).",
+		NewObj:     func() *v1alpha1.Agent { return &v1alpha1.Agent{} },
+		Authorize:  authorizers[v1alpha1.KindAgent],
+		ListFilter: listFilters[v1alpha1.KindAgent],
 	})
 	addKindTools(server, stores[v1alpha1.KindMCPServer], kindTools[*v1alpha1.MCPServer]{
-		Kind:     v1alpha1.KindMCPServer,
-		ListName: "list_servers",
-		GetName:  "get_server",
-		ListDesc: "List published MCP servers as v1alpha1 envelopes with optional namespace, substring-name, and tag filters.",
-		GetDesc:  "Fetch a published MCP server as a v1alpha1 envelope (defaults to the latest tag).",
-		NewObj:   func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} },
+		Kind:       v1alpha1.KindMCPServer,
+		ListName:   "list_servers",
+		GetName:    "get_server",
+		ListDesc:   "List published MCP servers as v1alpha1 envelopes with optional namespace, substring-name, and tag filters.",
+		GetDesc:    "Fetch a published MCP server as a v1alpha1 envelope (defaults to the latest tag).",
+		NewObj:     func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} },
+		Authorize:  authorizers[v1alpha1.KindMCPServer],
+		ListFilter: listFilters[v1alpha1.KindMCPServer],
 	})
 	addKindTools(server, stores[v1alpha1.KindSkill], kindTools[*v1alpha1.Skill]{
-		Kind:     v1alpha1.KindSkill,
-		ListName: "list_skills",
-		GetName:  "get_skill",
-		ListDesc: "List published skills as v1alpha1 envelopes with optional namespace, substring-name, and tag filters.",
-		GetDesc:  "Fetch a published skill as a v1alpha1 envelope (defaults to the latest tag).",
-		NewObj:   func() *v1alpha1.Skill { return &v1alpha1.Skill{} },
+		Kind:       v1alpha1.KindSkill,
+		ListName:   "list_skills",
+		GetName:    "get_skill",
+		ListDesc:   "List published skills as v1alpha1 envelopes with optional namespace, substring-name, and tag filters.",
+		GetDesc:    "Fetch a published skill as a v1alpha1 envelope (defaults to the latest tag).",
+		NewObj:     func() *v1alpha1.Skill { return &v1alpha1.Skill{} },
+		Authorize:  authorizers[v1alpha1.KindSkill],
+		ListFilter: listFilters[v1alpha1.KindSkill],
 	})
 	addKindTools(server, stores[v1alpha1.KindDeployment], kindTools[*v1alpha1.Deployment]{
-		Kind:     v1alpha1.KindDeployment,
-		ListName: "list_deployments",
-		GetName:  "get_deployment",
-		ListDesc: "List deployments as v1alpha1 envelopes with optional namespace and substring-name filters.",
-		GetDesc:  "Fetch a deployment as a v1alpha1 envelope by namespace/name.",
-		NewObj:   func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} },
+		Kind:       v1alpha1.KindDeployment,
+		ListName:   "list_deployments",
+		GetName:    "get_deployment",
+		ListDesc:   "List deployments as v1alpha1 envelopes with optional namespace and substring-name filters.",
+		GetDesc:    "Fetch a deployment as a v1alpha1 envelope by namespace/name.",
+		NewObj:     func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} },
+		Authorize:  authorizers[v1alpha1.KindDeployment],
+		ListFilter: listFilters[v1alpha1.KindDeployment],
 	})
 	addMetaTools(server)
 	addServerPrompts(server)
@@ -89,6 +108,11 @@ type kindTools[T v1alpha1.Object] struct {
 	ListDesc string
 	GetDesc  string
 	NewObj   func() T
+	// Authorize gates both tools for this kind (nil = no gate). ListFilter
+	// injects a row-level predicate into the list query (nil = no filter).
+	// Both mirror the hooks the HTTP resource handler consumes.
+	Authorize  types.Authorizer
+	ListFilter types.ListFilter
 }
 
 // addKindTools registers list_X + get_X MCP tools for a v1alpha1 kind.
@@ -102,7 +126,7 @@ func addKindTools[T v1alpha1.Object](server *mcp.Server, store *v1alpha1store.St
 		Name:        cfg.ListName,
 		Description: cfg.ListDesc,
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, args listInput) (*mcp.CallToolResult, listOutput[T], error) {
-		raws, next, err := runList(ctx, store, args)
+		raws, next, err := runList(ctx, store, cfg.Kind, cfg.Authorize, cfg.ListFilter, args)
 		if err != nil {
 			return nil, listOutput[T]{}, err
 		}
@@ -116,7 +140,7 @@ func addKindTools[T v1alpha1.Object](server *mcp.Server, store *v1alpha1store.St
 		Name:        cfg.GetName,
 		Description: cfg.GetDesc,
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, args getByRefInput) (*mcp.CallToolResult, T, error) {
-		return getEnvelope(ctx, store, cfg.Kind, args, cfg.NewObj)
+		return getEnvelope(ctx, store, cfg.Kind, cfg.Authorize, args, cfg.NewObj)
 	})
 }
 
@@ -174,15 +198,41 @@ func addMetaTools(server *mcp.Server) {
 // Internal glue — generic list + get helpers shared across kinds.
 // -----------------------------------------------------------------------------
 
-func runList(ctx context.Context, store *v1alpha1store.Store, args listInput) ([]*v1alpha1.RawObject, string, error) {
+// runList mirrors the HTTP resource handler's list path: it gates the
+// operation with the per-kind authorizer, then folds the per-kind list
+// filter into the Store query as ExtraWhere / ExtraArgs. Both hooks may
+// be nil (OSS default: no gate, no filter). See handleList in
+// pkg/registry/resource/handler.go for the canonical semantics.
+func runList(
+	ctx context.Context,
+	store *v1alpha1store.Store,
+	kind string,
+	authorize types.Authorizer,
+	listFilter types.ListFilter,
+	args listInput,
+) ([]*v1alpha1.RawObject, string, error) {
+	namespace := strings.TrimSpace(args.Namespace)
+	if authorize != nil {
+		if err := authorize(ctx, types.AuthorizeInput{Verb: "list", Kind: kind, Namespace: namespace}); err != nil {
+			return nil, "", err
+		}
+	}
 	opts := v1alpha1store.ListOpts{
-		Namespace: strings.TrimSpace(args.Namespace),
+		Namespace: namespace,
 		Limit:     clampLimit(args.Limit),
 		Cursor:    args.Cursor,
 	}
 	tag := strings.TrimSpace(args.Tag)
 	if strings.EqualFold(tag, "latest") {
 		opts.LatestOnly = true
+	}
+	if listFilter != nil {
+		extra, extraArgs, err := listFilter(ctx, types.AuthorizeInput{Verb: "list", Kind: kind, Namespace: namespace})
+		if err != nil {
+			return nil, "", err
+		}
+		opts.ExtraWhere = extra
+		opts.ExtraArgs = extraArgs
 	}
 	raws, next, err := store.List(ctx, opts)
 	if err != nil {
@@ -219,6 +269,7 @@ func getEnvelope[T v1alpha1.Object](
 	ctx context.Context,
 	store *v1alpha1store.Store,
 	kind string,
+	authorize types.Authorizer,
 	args getByRefInput,
 	newObj func() T,
 ) (*mcp.CallToolResult, T, error) {
@@ -231,6 +282,20 @@ func getEnvelope[T v1alpha1.Object](
 		namespace = v1alpha1.DefaultNamespace
 	}
 	tag := strings.TrimSpace(args.Tag)
+
+	// Gate the read before touching the Store, mirroring the resource
+	// handler's get path. "latest"/"" carries no Tag in the authz input
+	// (matches handler.go get-latest); an explicit tag is passed through.
+	if authorize != nil {
+		in := types.AuthorizeInput{Verb: "get", Kind: kind, Namespace: namespace, Name: args.Name}
+		if !(tag == "" || strings.EqualFold(tag, "latest")) {
+			in.Tag = tag
+		}
+		if err := authorize(ctx, in); err != nil {
+			var zero T
+			return nil, zero, err
+		}
+	}
 
 	var (
 		raw *v1alpha1.RawObject

@@ -180,7 +180,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		options.OnHTTPServerCreated(server)
 	}
 
-	mcpHTTPServer := startMCPServer(cfg, stores, authnProvider)
+	mcpHTTPServer := startMCPServer(cfg, stores, authnProvider, options.Authorizers, options.ListFilters)
 
 	// Start server in a goroutine so it doesn't block signal handling
 	go func() {
@@ -504,11 +504,17 @@ func startMCPServer(
 	cfg *config.Config,
 	stores map[string]*v1alpha1store.Store,
 	authnProvider auth.AuthnProvider,
+	authorizers map[string]types.Authorizer,
+	listFilters map[string]types.ListFilter,
 ) *http.Server {
 	if cfg.MCPPort <= 0 {
 		return nil
 	}
-	mcpServer := mcpregistry.NewServer(stores)
+	// Feed the same per-kind RBAC hooks the CRUD handler uses so the MCP
+	// read tools honor authz instead of reading the raw Stores. authn is
+	// attached to ctx by mcpAuthnMiddleware below; these hooks then filter
+	// on the resulting session.
+	mcpServer := mcpregistry.NewServer(stores, authorizers, listFilters)
 	var handler http.Handler = mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server {
 		return mcpServer
 	}, &mcp.StreamableHTTPOptions{})
