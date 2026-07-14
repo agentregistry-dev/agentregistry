@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
+	mcpregistrycompat "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/mcpregistry"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
@@ -154,10 +155,18 @@ func NewHumaAPI(
 
 	// Add authn middleware if configured
 	if authnProvider != nil {
-		api.UseMiddleware(auth.AuthnMiddleware(authnProvider,
-			// don't authenticate on public paths
-			auth.WithSkipPaths("/health", "/metrics", "/ping", "/docs", "/version")),
-		)
+		middlewareOpts := []auth.MiddlewareOption{
+			// don't authenticate on public paths which require no authorization
+			auth.WithSkipPaths("/health", "/metrics", "/ping", "/docs", "/version"),
+		}
+		if cfg.MCPRegistryCompatEnabled {
+			// The /v0.1 compatibility API is a public catalogue that still goes through
+			// authorization (for listing resources), so add to public paths with append a
+			// PublicSession, allowing it to successfully pass authz hooks on anonymous sessions.
+			middlewareOpts = append(middlewareOpts, auth.WithPublicPaths(
+				mcpregistrycompat.BasePath(cfg.MCPRegistryCompatPathPrefix)+"/"))
+		}
+		api.UseMiddleware(auth.AuthnMiddleware(authnProvider, middlewareOpts...))
 	}
 
 	// Add OpenAPI tag metadata with descriptions
