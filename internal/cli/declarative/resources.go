@@ -109,7 +109,7 @@ func deleteAny[T v1alpha1.Object](ctx context.Context, c *client.Client, kind, n
 func listDeploymentResources(ctx context.Context, c *client.Client, opts scheme.ListOpts) ([]any, error) {
 	// opts.Origin is already normalized to the server filter value by the get
 	// command (resolveOrigin): "" means both provenances, managed/discovered
-	// select one. The zero-value caller (`get all`) therefore lists both.
+	// select one. `get all` always passes "managed".
 	items, err := client.ListAllTyped(
 		ctx,
 		c,

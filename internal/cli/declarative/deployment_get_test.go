@@ -267,7 +267,30 @@ func TestDeploymentGet_OriginFiltering(t *testing.T) {
 	}
 }
 
-// (5) `-o yaml` emits the declarative envelope (apiVersion/kind/metadata/spec)
+// (5) `get all` always lists managed-only deployments; there is no flag to
+// include discovered ones (use `get deployments --origin all/discovered`).
+func TestGetAll_DeploymentOriginDefaults(t *testing.T) {
+	deployments := []v1alpha1.Deployment{
+		deploymentFixture("aws-v1", "managed-agent", "1.0.0", "my-aws", "agent", "deployed"),
+		deploymentFixture("foundry-v1", "discovered-agent", "1.0.0", "my-foundry", "agent", "pending"),
+	}
+	deployments[1].Metadata.Annotations = map[string]string{
+		v1alpha1.DeploymentOriginAnnotation: v1alpha1.DeploymentOriginDiscovered,
+	}
+	srv := deploymentTestServerV1Alpha1(t, deployments)
+	setupClientForServer(t, srv)
+
+	out := &bytes.Buffer{}
+	cmd := declarative.NewGetCmd(declarativeTestDeps(nil))
+	cmd.SetOut(out)
+	cmd.SetArgs([]string{"all"})
+	require.NoError(t, cmd.Execute())
+
+	assert.Contains(t, out.String(), "managed-agent")
+	assert.NotContains(t, out.String(), "discovered-agent")
+}
+
+// (6) `-o yaml` emits the declarative envelope (apiVersion/kind/metadata/spec)
 // plus a .status block with server-managed runtime state. Spec itself stays
 // clean so `get -o yaml | apply -f -` round-trips without leaking server
 // fields back into the stored spec.

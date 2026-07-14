@@ -233,7 +233,11 @@ func runGetAll(cmd *cobra.Command, kinds *scheme.Registry, c *client.Client, out
 	allKinds := kinds.All()
 	first := true
 	for _, k := range allKinds {
-		items, err := listItems(cmd.Context(), c, k, scheme.ListOpts{})
+		opts := scheme.ListOpts{}
+		if strings.EqualFold(k.Kind, v1alpha1.KindDeployment) {
+			opts.Origin = v1alpha1.DeploymentOriginManaged
+		}
+		items, err := listItems(cmd.Context(), c, k, opts)
 		if errors.Is(err, errNotListable) {
 			continue
 		}
