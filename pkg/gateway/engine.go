@@ -4,8 +4,16 @@ import "context"
 
 // Target identifies the gateway instance that config should be applied to or
 // removed from, keyed by deployment id (Target.Name).
+//
+// Attributes carries optional, provider-neutral routing coordinates that a
+// concrete engine may need to locate its backing environment — for example an
+// enterprise runtime id used to resolve a cloud connection, or an account or
+// region hint. The generic model never interprets Attributes; each engine
+// reads only the keys it understands and ignores the rest. This lets a single
+// engine serve many targets without a per-target constructor.
 type Target struct {
-	Name string
+	Name       string
+	Attributes map[string]string
 }
 
 // Engine applies a desired, gateway-agnostic Config to a Target and removes
