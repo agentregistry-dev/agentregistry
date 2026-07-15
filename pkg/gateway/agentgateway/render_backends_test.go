@@ -104,13 +104,13 @@ func TestRender_NamedBackendsAndRawPassthrough(t *testing.T) {
 			},
 			{
 				Name: "weather-aws",
-				Raw: &gateway.RawBackend{
+				Extensions: []gateway.Extension{{
 					Type: "aws",
 					Spec: map[string]any{"agentCore": map[string]any{
 						"agentRuntimeArn": "arn:aws:bedrock-agentcore:us-west-2:1234:runtime/weather",
 						"qualifier":       "DEFAULT",
 					}},
-				},
+				}},
 			},
 		},
 		Policies: []gateway.Policy{{
@@ -184,13 +184,13 @@ func TestRender_RawBackendMarshalsUnderNativeKey(t *testing.T) {
 		Listeners: []gateway.Listener{{Name: "default", Protocol: "HTTP", Port: 3000}},
 		Backends: []gateway.Backend{{
 			Name: "weather-aws",
-			Raw: &gateway.RawBackend{
+			Extensions: []gateway.Extension{{
 				Type: "aws",
 				Spec: map[string]any{"agentCore": map[string]any{
 					"agentRuntimeArn": "arn:aws:bedrock-agentcore:us-west-2:1234:runtime/weather",
 					"qualifier":       "DEFAULT",
 				}},
-			},
+			}},
 		}},
 	}
 
@@ -306,10 +306,10 @@ func awsBackendDesiredConfig(name string) gateway.Config {
 			},
 			{
 				Name: name + "-aws",
-				Raw: &gateway.RawBackend{
+				Extensions: []gateway.Extension{{
 					Type: "aws",
 					Spec: map[string]any{"agentCore": map[string]any{"agentRuntimeArn": "arn:" + name}},
-				},
+				}},
 			},
 		},
 	}

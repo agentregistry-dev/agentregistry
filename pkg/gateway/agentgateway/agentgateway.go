@@ -163,7 +163,7 @@ func renderBackendRefs(refs []gateway.BackendRef, backends map[string]gateway.Ba
 		if weight == 0 {
 			weight = 100
 		}
-		if b.MCP != nil || b.Raw != nil {
+		if b.MCP != nil || len(b.Extensions) > 0 {
 			out = append(out, RouteBackend{Weight: weight, Backend: backendRef(ref.Name)})
 			continue
 		}
@@ -183,11 +183,12 @@ func renderBackends(backends []gateway.Backend) []LocalBackend {
 		switch {
 		case b.MCP != nil:
 			out = append(out, LocalBackend{Name: b.Name, MCP: renderMCPBackend(b.MCP)})
-		case b.Raw != nil:
-			out = append(out, LocalBackend{
-				Name:  b.Name,
-				Extra: map[string]any{b.Raw.Type: b.Raw.Spec},
-			})
+		case len(b.Extensions) > 0:
+			extra := make(map[string]any, len(b.Extensions))
+			for _, ext := range b.Extensions {
+				extra[ext.Type] = ext.Spec
+			}
+			out = append(out, LocalBackend{Name: b.Name, Extra: extra})
 		}
 	}
 	if len(out) == 0 {

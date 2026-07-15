@@ -72,6 +72,35 @@ type Route struct {
 	BackendRefs []BackendRef
 	MCP         *MCPBackend
 	Policies    []PolicyRef
+	// ParentRefs attaches this route to parent routes or gateways (Gateway API
+	// route delegation). Engines without a parent concept (e.g. the file-config
+	// standalone engine) ignore it.
+	ParentRefs []RouteParentRef
+	// Extensions carry engine-specific route configuration the neutral model
+	// does not describe (see Extension).
+	Extensions []Extension
+}
+
+// RouteParentRef identifies a parent this route attaches to — e.g. a parent
+// HTTPRoute (for delegation) or a Gateway. SectionName optionally selects a
+// listener/section on the parent.
+type RouteParentRef struct {
+	Group       string
+	Kind        string
+	Namespace   string
+	Name        string
+	SectionName string
+}
+
+// Extension is the plug-in point that lets a gateway-specific engine carry
+// configuration the neutral model does not describe, without expanding this
+// API. Type identifies the consuming engine/feature; Spec is the opaque
+// payload. Engines that recognize Type interpret Spec; all others ignore it.
+// This is how new gateway implementations plug into the existing Engine
+// contract instead of growing the shared Config surface.
+type Extension struct {
+	Type string
+	Spec map[string]any
 }
 
 // MCPBackend fans a route out to multiple named MCP targets instead of a
@@ -130,25 +159,16 @@ type OpenAPITargetSpec struct {
 //   - MCP: a named top-level MCP backend, emitted at Config top level and
 //     referenced by name from routes; its targets may themselves reference
 //     another Backend by name.
-//   - Raw: a provider-neutral escape hatch for backend kinds this model does
-//     not describe natively (e.g. cloud-provider backends). The engine passes
-//     Raw.Spec through to the native config keyed under Raw.Type without
-//     interpreting it, so provider-specific concerns stay out of this model.
+//   - Extensions: engine-specific backend kinds this model does not describe
+//     natively (e.g. a cloud-provider or enterprise backend). The engine passes
+//     each Extension.Spec through to the native config keyed under
+//     Extension.Type without interpreting it, so those concerns stay out of
+//     this model (see Extension).
 type Backend struct {
-	Name string
-	URL  string
-	MCP  *MCPBackend
-	Raw  *RawBackend
-}
-
-// RawBackend is a provider-neutral, top-level backend whose native
-// representation this model does not describe. Type is the native backend
-// discriminator key and Spec is the opaque payload placed under it. Callers
-// that own a provider integration build the Spec; the engine only carries it
-// through, so no provider-specific types leak into this package.
-type RawBackend struct {
-	Type string
-	Spec map[string]any
+	Name       string
+	URL        string
+	MCP        *MCPBackend
+	Extensions []Extension
 }
 
 // BackendRef references a Backend by name with an optional weight. Weight
