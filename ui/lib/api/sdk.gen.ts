@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, TDataShape } from './client';
 import { client } from './client.gen';
-import type { ApplyBatchData, ApplyBatchErrors, ApplyBatchResponses, ApplyDeploymentData, ApplyDeploymentErrors, ApplyDeploymentResponses, ApplyRuntimeData, ApplyRuntimeErrors, ApplyRuntimeResponses, DeleteAgentData, DeleteAgentErrors, DeleteAgentResponses, DeleteBatchData, DeleteBatchErrors, DeleteBatchResponses, DeleteDeploymentData, DeleteDeploymentErrors, DeleteDeploymentResponses, DeleteMcpserverData, DeleteMcpserverErrors, DeleteMcpserverResponses, DeletePluginData, DeletePluginErrors, DeletePluginResponses, DeletePromptData, DeletePromptErrors, DeletePromptResponses, DeleteRuntimeData, DeleteRuntimeErrors, DeleteRuntimeResponses, DeleteSkillData, DeleteSkillErrors, DeleteSkillResponses, GetAgentData, GetAgentErrors, GetAgentResponses, GetHealthV0Data, GetHealthV0Errors, GetHealthV0Responses, GetLatestAgentData, GetLatestAgentErrors, GetLatestAgentResponses, GetLatestDeploymentData, GetLatestDeploymentErrors, GetLatestDeploymentResponses, GetLatestMcpserverData, GetLatestMcpserverErrors, GetLatestMcpserverResponses, GetLatestPluginData, GetLatestPluginErrors, GetLatestPluginResponses, GetLatestPromptData, GetLatestPromptErrors, GetLatestPromptResponses, GetLatestRuntimeData, GetLatestRuntimeErrors, GetLatestRuntimeResponses, GetLatestSkillData, GetLatestSkillErrors, GetLatestSkillResponses, GetMcpserverData, GetMcpserverErrors, GetMcpserverResponses, GetPluginData, GetPluginErrors, GetPluginResponses, GetPromptData, GetPromptErrors, GetPromptResponses, GetSkillData, GetSkillErrors, GetSkillResponses, GetVersionV0Data, GetVersionV0Errors, GetVersionV0Responses, ListAgentsData, ListAgentsErrors, ListAgentsResponses, ListDeploymentsData, ListDeploymentsErrors, ListDeploymentsResponses, ListMcpserversData, ListMcpserversErrors, ListMcpserversResponses, ListPluginsData, ListPluginsErrors, ListPluginsResponses, ListPromptsData, ListPromptsErrors, ListPromptsResponses, ListRuntimesData, ListRuntimesErrors, ListRuntimesResponses, ListSkillsData, ListSkillsErrors, ListSkillsResponses, ListTagsAgentData, ListTagsAgentErrors, ListTagsAgentResponses, ListTagsMcpserverData, ListTagsMcpserverErrors, ListTagsMcpserverResponses, ListTagsPluginData, ListTagsPluginErrors, ListTagsPluginResponses, ListTagsPromptData, ListTagsPromptErrors, ListTagsPromptResponses, ListTagsSkillData, ListTagsSkillErrors, ListTagsSkillResponses, McpRegistryGetServerVersionData, McpRegistryGetServerVersionErrors, McpRegistryGetServerVersionResponses, McpRegistryListServersData, McpRegistryListServersErrors, McpRegistryListServersResponses, McpRegistryListServerVersionsData, McpRegistryListServerVersionsErrors, McpRegistryListServerVersionsResponses, PingV0Data, PingV0Errors, PingV0Responses } from './types.gen';
+import type { ApplyBatchData, ApplyBatchErrors, ApplyBatchResponses, ApplyDeploymentData, ApplyDeploymentErrors, ApplyDeploymentResponses, ApplyModelData, ApplyModelErrors, ApplyModelResponses, ApplyRuntimeData, ApplyRuntimeErrors, ApplyRuntimeResponses, DeleteAgentData, DeleteAgentErrors, DeleteAgentResponses, DeleteBatchData, DeleteBatchErrors, DeleteBatchResponses, DeleteDeploymentData, DeleteDeploymentErrors, DeleteDeploymentResponses, DeleteMcpserverData, DeleteMcpserverErrors, DeleteMcpserverResponses, DeleteModelData, DeleteModelErrors, DeleteModelResponses, DeletePluginData, DeletePluginErrors, DeletePluginResponses, DeletePromptData, DeletePromptErrors, DeletePromptResponses, DeleteRuntimeData, DeleteRuntimeErrors, DeleteRuntimeResponses, DeleteSkillData, DeleteSkillErrors, DeleteSkillResponses, GetAgentData, GetAgentErrors, GetAgentResponses, GetHealthV0Data, GetHealthV0Errors, GetHealthV0Responses, GetLatestAgentData, GetLatestAgentErrors, GetLatestAgentResponses, GetLatestDeploymentData, GetLatestDeploymentErrors, GetLatestDeploymentResponses, GetLatestMcpserverData, GetLatestMcpserverErrors, GetLatestMcpserverResponses, GetLatestModelData, GetLatestModelErrors, GetLatestModelResponses, GetLatestPluginData, GetLatestPluginErrors, GetLatestPluginResponses, GetLatestPromptData, GetLatestPromptErrors, GetLatestPromptResponses, GetLatestRuntimeData, GetLatestRuntimeErrors, GetLatestRuntimeResponses, GetLatestSkillData, GetLatestSkillErrors, GetLatestSkillResponses, GetMcpserverData, GetMcpserverErrors, GetMcpserverResponses, GetPluginData, GetPluginErrors, GetPluginResponses, GetPromptData, GetPromptErrors, GetPromptResponses, GetSkillData, GetSkillErrors, GetSkillResponses, GetVersionV0Data, GetVersionV0Errors, GetVersionV0Responses, ListAgentsData, ListAgentsErrors, ListAgentsResponses, ListDeploymentsData, ListDeploymentsErrors, ListDeploymentsResponses, ListMcpserversData, ListMcpserversErrors, ListMcpserversResponses, ListModelsData, ListModelsErrors, ListModelsResponses, ListPluginsData, ListPluginsErrors, ListPluginsResponses, ListPromptsData, ListPromptsErrors, ListPromptsResponses, ListRuntimesData, ListRuntimesErrors, ListRuntimesResponses, ListSkillsData, ListSkillsErrors, ListSkillsResponses, ListTagsAgentData, ListTagsAgentErrors, ListTagsAgentResponses, ListTagsMcpserverData, ListTagsMcpserverErrors, ListTagsMcpserverResponses, ListTagsPluginData, ListTagsPluginErrors, ListTagsPluginResponses, ListTagsPromptData, ListTagsPromptErrors, ListTagsPromptResponses, ListTagsSkillData, ListTagsSkillErrors, ListTagsSkillResponses, McpRegistryGetServerVersionData, McpRegistryGetServerVersionErrors, McpRegistryGetServerVersionResponses, McpRegistryListServersData, McpRegistryListServersErrors, McpRegistryListServersResponses, McpRegistryListServerVersionsData, McpRegistryListServerVersionsErrors, McpRegistryListServerVersionsResponses, PingV0Data, PingV0Errors, PingV0Responses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -144,6 +144,33 @@ export const getMcpserver = <ThrowOnError extends boolean = false>(options: Opti
  * List all tags of a MCPServer
  */
 export const listTagsMcpserver = <ThrowOnError extends boolean = false>(options: Options<ListTagsMcpserverData, ThrowOnError>) => (options.client ?? client).get<ListTagsMcpserverResponses, ListTagsMcpserverErrors, ThrowOnError>({ url: '/v0/mcpservers/{name}/tags', ...options });
+
+/**
+ * List Model (scoped by ?namespace)
+ */
+export const listModels = <ThrowOnError extends boolean = false>(options?: Options<ListModelsData, ThrowOnError>) => (options?.client ?? client).get<ListModelsResponses, ListModelsErrors, ThrowOnError>({ url: '/v0/models', ...options });
+
+/**
+ * Delete a Model (soft-delete: sets deletionTimestamp)
+ */
+export const deleteModel = <ThrowOnError extends boolean = false>(options: Options<DeleteModelData, ThrowOnError>) => (options.client ?? client).delete<DeleteModelResponses, DeleteModelErrors, ThrowOnError>({ url: '/v0/models/{name}', ...options });
+
+/**
+ * Get the latest Model
+ */
+export const getLatestModel = <ThrowOnError extends boolean = false>(options: Options<GetLatestModelData, ThrowOnError>) => (options.client ?? client).get<GetLatestModelResponses, GetLatestModelErrors, ThrowOnError>({ url: '/v0/models/{name}', ...options });
+
+/**
+ * Apply a Model (idempotent upsert)
+ */
+export const applyModel = <ThrowOnError extends boolean = false>(options: Options<ApplyModelData, ThrowOnError>) => (options.client ?? client).put<ApplyModelResponses, ApplyModelErrors, ThrowOnError>({
+    url: '/v0/models/{name}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Ping

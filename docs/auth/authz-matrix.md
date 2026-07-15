@@ -2,7 +2,7 @@
 
 Permissions listed are what the configured `AuthzProvider` is called with. The OSS public provider allows everything; the matrix describes what a non-public provider evaluates.
 
-Resource types recognized by the authz system: `agent`, `server` (MCP server), `plugin`, `skill`, `prompt`, `provider`, `runtime`. **There is no `deployment` resource type**: deployment endpoints authorize against the underlying MCP server or agent the deployment references.
+Resource types recognized by the authz system: `agent`, `server` (MCP server), `plugin`, `skill`, `prompt`, `provider`, `runtime`, `model`. **There is no `deployment` resource type**: deployment endpoints authorize against the underlying MCP server or agent the deployment references.
 
 ## Agents, servers, plugins, skills, prompts
 
@@ -29,6 +29,17 @@ These five kinds share the same endpoint shape. `{kind}` = `agent` | `server` | 
 | Get | `GET /v0/runtimes/{runtimeId}` | `Read` on `runtime:{id}` | |
 | Delete | `DELETE /v0/runtimes/{runtimeId}` | `Read` + `Delete` on `runtime:{id}` | Service resolves the runtime before deletion, requiring `read`. |
 
+## Models
+
+Model is a mutable namespace/name kind (no tags) served by the generic CRUD surface. Models are intended to be admin-writable: they carry platform connection posture (auth strategy, endpoint, secret refs), so a non-public provider should grant `Publish`/`Edit`/`Delete` on `model:{name}` to platform admins only. Secret values never live on the Model — only `SecretKeyRef` names — so `Read` does not expose key material.
+
+| Operation | HTTP | Required permissions | Notes |
+| --- | --- | --- | --- |
+| List | `GET /v0/models` | none | Filtering is delegated to the provider implementation; the list boundary intentionally skips checks. |
+| Get | `GET /v0/models/{name}` | `Read` on `model:{name}` | |
+| Apply | `POST /v0/apply` | `Read` + `Publish` (new) or `Read` + `Edit` (existing) on `model:{name}` | Mutable object: apply replaces the (namespace, name) row. |
+| Delete | `DELETE /v0/models/{name}` | `Delete` on `model:{name}` | |
+
 ## Deployments
 
 Deployments are identified by `{namespace}/{name}` and authz always evaluates against the underlying artifact (`server` or `agent`) the deployment references. Artifact kind is inferred from `Deployment.Spec.TargetRef.Kind`.
@@ -51,8 +62,8 @@ Agent deployments additionally invoke `Read` on each referenced `plugin:{ref}`, 
 
 | Operation | HTTP | Required permissions | Notes |
 | --- | --- | --- | --- |
-| Apply | `POST /v0/apply` | Per-document; depends on kind and whether the row already exists | Each document dispatches to its kind handler individually; partial failure is allowed. Artifacts (`agent`/`server`/`plugin`/`skill`/`prompt`): `Read` + `Publish` if the tag is new, `Read` + `Edit` if it already exists. `provider`: `Read` + `Edit` if it exists, `Read` + `Publish` if new. `deployment`: same as `PUT /v0/deployments/{name}?namespace={namespace}`. |
-| Delete | `DELETE /v0/apply` | Per-document; depends on kind | Artifacts: `Delete` on `{kind}:{name}`. `provider`: `Read` + `Delete` on `provider:{name}`. `deployment`: `Deploy` on target (see Deployments section). |
+| Apply | `POST /v0/apply` | Per-document; depends on kind and whether the row already exists | Each document dispatches to its kind handler individually; partial failure is allowed. Artifacts (`agent`/`server`/`plugin`/`skill`/`prompt`): `Read` + `Publish` if the tag is new, `Read` + `Edit` if it already exists. Mutable `model`: `Read` + `Publish` if new, `Read` + `Edit` if it exists. `provider`: `Read` + `Edit` if it exists, `Read` + `Publish` if new. `deployment`: same as `PUT /v0/deployments/{name}?namespace={namespace}`. |
+| Delete | `DELETE /v0/apply` | Per-document; depends on kind | Artifacts and `model`: `Delete` on `{kind}:{name}`. `provider`: `Read` + `Delete` on `provider:{name}`. `deployment`: `Deploy` on target (see Deployments section). |
 
 ## Public
 

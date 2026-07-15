@@ -185,6 +185,22 @@ func runtimeRow(runtime *v1alpha1.Runtime) []string {
 	return []string{runtime.Metadata.Name, runtime.Spec.Type}
 }
 
+func modelRow(model *v1alpha1.Model) []string {
+	if model == nil {
+		return []string{"<invalid>"}
+	}
+	auth := ""
+	if model.Spec.Auth != nil {
+		auth = model.Spec.Auth.Strategy
+	}
+	return []string{
+		printer.TruncateString(model.Metadata.Name, 40),
+		model.Spec.Provider,
+		printer.TruncateString(model.Spec.Model, 50),
+		printer.EmptyValueOrDefault(auth, "<provider default>"),
+	}
+}
+
 func deploymentRow(dep *cliCommon.DeploymentRecord) []string {
 	if dep == nil {
 		return []string{"<invalid>"}
