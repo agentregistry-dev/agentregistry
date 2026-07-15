@@ -15,8 +15,19 @@ import (
 type AgentGatewayConfig struct {
 	Config    any             `json:"config" yaml:"config"`
 	Binds     []LocalBind     `json:"binds,omitempty" yaml:"binds,omitempty"`
+	Backends  []LocalBackend  `json:"backends,omitempty" yaml:"backends,omitempty"`
 	Workloads []LocalWorkload `json:"workloads,omitempty" yaml:"workloads,omitempty"`
 	Services  []Service       `json:"services,omitempty" yaml:"services,omitempty"`
+}
+
+// LocalBackend is a top-level, named backend that routes (and other backends'
+// MCP targets) reference by name. Exactly one shape is populated: MCP for an
+// MCP backend, or Extra for a provider-native backend the generic model does
+// not describe (carried through verbatim under its native key).
+type LocalBackend struct {
+	Name  string         `json:"name,omitempty" yaml:"name,omitempty"`
+	MCP   *MCPBackend    `json:"mcp,omitempty" yaml:"mcp,omitempty"`
+	Extra map[string]any `json:"-" yaml:",inline"`
 }
 
 type LocalBind struct {
@@ -91,7 +102,8 @@ type FilterOrPolicy struct {
 	BackendAuth            *BackendAuth          `json:"backendAuth,omitempty" yaml:"backendAuth,omitempty"`
 	LocalRateLimit         []any                 `json:"localRateLimit,omitempty" yaml:"localRateLimit,omitempty"`
 	RemoteRateLimit        any                   `json:"remoteRateLimit,omitempty" yaml:"remoteRateLimit,omitempty"`
-	JWTAuth                any                   `json:"jwtAuth,omitempty" yaml:"jwtAuth,omitempty"`
+	JWTAuth                *ListenerJWTAuth      `json:"jwtAuth,omitempty" yaml:"jwtAuth,omitempty"`
+	Transformations        *TransformationPolicy `json:"transformations,omitempty" yaml:"transformations,omitempty"`
 	ExtAuthz               any                   `json:"extAuthz,omitempty" yaml:"extAuthz,omitempty"`
 	Timeout                *TimeoutPolicy        `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 	Retry                  *RetryPolicy          `json:"retry,omitempty" yaml:"retry,omitempty"`
@@ -153,6 +165,8 @@ type RouteBackend struct {
 	Invalid bool            `json:"invalid,omitempty" yaml:"invalid,omitempty"`
 	Filters []RouteFilter   `json:"filters,omitempty" yaml:"filters,omitempty"`
 	Host    string          `json:"host,omitempty" yaml:"host,omitempty"`
+	// Backend references a top-level LocalBackend by name (e.g. "/weather").
+	Backend string `json:"backend,omitempty" yaml:"backend,omitempty"`
 }
 
 type TCPRouteBackend struct {
@@ -200,7 +214,11 @@ type SSETargetSpec struct {
 }
 
 type MCPTargetSpec struct {
-	Host string `json:"host" yaml:"host"`
+	Host string `json:"host,omitempty" yaml:"host,omitempty"`
+	// Backend references a top-level LocalBackend by name (e.g. "/weather")
+	// instead of dialing Host directly; Path is appended when set.
+	Backend string `json:"backend,omitempty" yaml:"backend,omitempty"`
+	Path    string `json:"path,omitempty" yaml:"path,omitempty"`
 }
 
 type StdioTargetSpec struct {
@@ -289,6 +307,30 @@ type TrafficAuthorization struct {
 type FrontendConnect struct {
 	Enabled bool `json:"enabled,omitempty" yaml:"enabled,omitempty"`
 	Rules   any  `json:"rules,omitempty" yaml:"rules,omitempty"`
+}
+
+type ListenerJWTAuth struct {
+	Mode      string        `json:"mode,omitempty" yaml:"mode,omitempty"`
+	Providers []JWTProvider `json:"providers,omitempty" yaml:"providers,omitempty"`
+}
+
+type JWTProvider struct {
+	Issuer    string     `json:"issuer" yaml:"issuer"`
+	Audiences []string   `json:"audiences,omitempty" yaml:"audiences,omitempty"`
+	JWKS      JWKSSource `json:"jwks" yaml:"jwks"`
+}
+
+type JWKSSource struct {
+	URL  string `json:"url,omitempty" yaml:"url,omitempty"`
+	File string `json:"file,omitempty" yaml:"file,omitempty"`
+}
+
+type TransformationPolicy struct {
+	Request *TransformStage `json:"request,omitempty" yaml:"request,omitempty"`
+}
+
+type TransformStage struct {
+	Metadata map[string]string `json:"metadata,omitempty" yaml:"metadata,omitempty"`
 }
 
 type LocalObjectReference struct {

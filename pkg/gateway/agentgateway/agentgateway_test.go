@@ -200,8 +200,7 @@ func TestAgentGatewayEngine_Render(t *testing.T) {
 					Type: "MCPAuthorization",
 					Spec: gateway.PolicySpec{
 						MCPAuthorization: &gateway.AuthzPolicy{
-							Action:           "ALLOW",
-							MatchExpressions: []string{"request.method == 'tools/call'"},
+							Rules: []string{"request.method == 'tools/call'"},
 						},
 					},
 				}},
@@ -216,10 +215,7 @@ func TestAgentGatewayEngine_Render(t *testing.T) {
 						Protocol:    LocalListenerProtocolHTTP,
 						Policies: &FilterOrPolicy{
 							MCPAuthorization: &MCPAuthorization{
-								Rules: map[string]any{
-									"action":           "ALLOW",
-									"matchExpressions": []string{"request.method == 'tools/call'"},
-								},
+								Rules: []string{"request.method == 'tools/call'"},
 							},
 						},
 					}},
@@ -241,8 +237,7 @@ func TestAgentGatewayEngine_Render(t *testing.T) {
 					Type: "TrafficAuthorization",
 					Spec: gateway.PolicySpec{
 						TrafficAuthorization: &gateway.AuthzPolicy{
-							Action:           "DENY",
-							MatchExpressions: []string{"source.namespace != 'trusted'"},
+							Rules: []string{"source.namespace != 'trusted'"},
 						},
 					},
 				}},
@@ -257,10 +252,7 @@ func TestAgentGatewayEngine_Render(t *testing.T) {
 						Protocol:    LocalListenerProtocolHTTP,
 						Policies: &FilterOrPolicy{
 							TrafficAuthorization: &TrafficAuthorization{
-								Rules: map[string]any{
-									"action":           "DENY",
-									"matchExpressions": []string{"source.namespace != 'trusted'"},
-								},
+								Rules: []string{"source.namespace != 'trusted'"},
 							},
 						},
 					}},
@@ -284,8 +276,7 @@ func TestAgentGatewayEngine_Render(t *testing.T) {
 						FrontendConnect: &gateway.FrontendConnectPolicy{
 							Enabled: true,
 							Authorization: &gateway.AuthzPolicy{
-								Action:           "ALLOW",
-								MatchExpressions: []string{"connect.host == 'upstream:443'"},
+								Rules: []string{"connect.host == 'upstream:443'"},
 							},
 						},
 					},
@@ -302,10 +293,7 @@ func TestAgentGatewayEngine_Render(t *testing.T) {
 						Policies: &FilterOrPolicy{
 							FrontendConnect: &FrontendConnect{
 								Enabled: true,
-								Rules: map[string]any{
-									"action":           "ALLOW",
-									"matchExpressions": []string{"connect.host == 'upstream:443'"},
-								},
+								Rules:   []string{"connect.host == 'upstream:443'"},
 							},
 						},
 					}},

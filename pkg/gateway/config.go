@@ -105,9 +105,16 @@ type StdioTargetSpec struct {
 	Env  map[string]string
 }
 
-// MCPTargetSpec targets a pre-running MCP-over-HTTP server at Host.
+// MCPTargetSpec targets a pre-running MCP-over-HTTP server. Set Host to reach
+// the server directly at a URL, or set Backend to route through another named
+// Backend with Path appended. Host and Backend are mutually exclusive.
 type MCPTargetSpec struct {
 	Host string
+	// Backend names a Config.Backend to route this target through instead of
+	// dialing Host directly. Rendered as a backend reference.
+	Backend string
+	// Path is the MCP path appended when routing through Backend (e.g. "/mcp").
+	Path string
 }
 
 // OpenAPITargetSpec targets an OpenAPI-described HTTP backend; Schema is
@@ -118,10 +125,30 @@ type OpenAPITargetSpec struct {
 	Schema any
 }
 
-// Backend is a named routing destination.
+// Backend is a named routing destination. Set exactly one shape:
+//   - URL: a simple weighted HTTP host, inlined into the referencing route.
+//   - MCP: a named top-level MCP backend, emitted at Config top level and
+//     referenced by name from routes; its targets may themselves reference
+//     another Backend by name.
+//   - Raw: a provider-neutral escape hatch for backend kinds this model does
+//     not describe natively (e.g. cloud-provider backends). The engine passes
+//     Raw.Spec through to the native config keyed under Raw.Type without
+//     interpreting it, so provider-specific concerns stay out of this model.
 type Backend struct {
 	Name string
 	URL  string
+	MCP  *MCPBackend
+	Raw  *RawBackend
+}
+
+// RawBackend is a provider-neutral, top-level backend whose native
+// representation this model does not describe. Type is the native backend
+// discriminator key and Spec is the opaque payload placed under it. Callers
+// that own a provider integration build the Spec; the engine only carries it
+// through, so no provider-specific types leak into this package.
+type RawBackend struct {
+	Type string
+	Spec map[string]any
 }
 
 // BackendRef references a Backend by name with an optional weight. Weight
@@ -146,6 +173,41 @@ type PolicySpec struct {
 	FrontendConnect      *FrontendConnectPolicy
 	A2A                  *A2APolicy
 	URLRewrite           *URLRewritePolicy
+	JWTAuth              *JWTAuthPolicy
+	Transformation       *TransformationPolicy
+	CORS                 *CORSPolicy
+}
+
+// JWTAuthPolicy authenticates incoming JWTs against one or more providers.
+// Mode is the enforcement mode (e.g. "strict"). Attach it to a listener to
+// gate every route beneath it.
+type JWTAuthPolicy struct {
+	Mode      string
+	Providers []JWTProvider
+}
+
+// JWTProvider describes one JWT issuer trusted by a JWTAuthPolicy: the expected
+// Issuer, the accepted Audiences, and the JWKS source used to verify
+// signatures.
+type JWTProvider struct {
+	Issuer    string
+	Audiences []string
+	JWKS      JWKSSource
+}
+
+// JWKSSource locates the JSON Web Key Set used to verify JWT signatures.
+// Exactly one of URL or File should be set.
+type JWKSSource struct {
+	URL  string
+	File string
+}
+
+// TransformationPolicy rewrites requests before they reach the backend.
+// RequestMetadata sets per-request metadata entries whose values are CEL
+// expressions evaluated by the gateway (e.g. mapping a JWT claim into a
+// `role` used by authorization rules).
+type TransformationPolicy struct {
+	RequestMetadata map[string]string
 }
 
 // A2APolicy marks a route as serving the A2A (agent-to-agent) protocol; it
@@ -158,11 +220,21 @@ type URLRewritePolicy struct {
 	PathPrefix string
 }
 
-// AuthzPolicy describes an authorization decision. MatchExpressions carries
-// CEL expressions evaluated to select matching requests.
+// AuthzPolicy is a set of CEL rules; a request is allowed when any rule
+// evaluates true (an empty set denies). It maps onto agentgateway's RuleSet
+// wire shape (a flat list of CEL expression strings) for MCP, traffic, and
+// frontend-connect authorization alike.
 type AuthzPolicy struct {
-	Action           string
-	MatchExpressions []string
+	Rules []string
+}
+
+// CORSPolicy describes cross-origin resource sharing for a route. Empty slices
+// render as absent. Attach it to a route to allow browser-based MCP clients.
+type CORSPolicy struct {
+	AllowOrigins  []string
+	AllowMethods  []string
+	AllowHeaders  []string
+	ExposeHeaders []string
 }
 
 // FrontendConnectPolicy describes frontend CONNECT handling. Authorization is

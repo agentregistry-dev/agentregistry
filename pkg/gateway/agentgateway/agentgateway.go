@@ -48,9 +48,9 @@ var _ gateway.Engine = (*engine)(nil)
 // calls it internally; it is exported so agentgateway-aware callers can render
 // (e.g. to preview or diff config) without applying.
 func Render(_ context.Context, desired gateway.Config) (*AgentGatewayConfig, error) {
-	backendURLs := make(map[string]string, len(desired.Backends))
+	backends := make(map[string]gateway.Backend, len(desired.Backends))
 	for _, b := range desired.Backends {
-		backendURLs[b.Name] = b.URL
+		backends[b.Name] = b
 	}
 
 	policies := make(map[string]gateway.Policy, len(desired.Policies))
@@ -58,13 +58,14 @@ func Render(_ context.Context, desired gateway.Config) (*AgentGatewayConfig, err
 		policies[p.Name] = p
 	}
 
-	routes, err := renderRoutes(desired.Routes, backendURLs, policies)
+	routes, err := renderRoutes(desired.Routes, backends, policies)
 	if err != nil {
 		return nil, err
 	}
 
 	cfg := &AgentGatewayConfig{
-		Config: struct{}{},
+		Config:   struct{}{},
+		Backends: renderBackends(desired.Backends),
 	}
 
 	listenersByPort := make(map[int][]LocalListener)
@@ -106,18 +107,18 @@ func Render(_ context.Context, desired gateway.Config) (*AgentGatewayConfig, err
 // renderRoutes translates desired routes into deterministically sorted native
 // routes. It returns nil when there are no routes so empty configs compare
 // cleanly as whole objects.
-func renderRoutes(routes []gateway.Route, backendURLs map[string]string, policies map[string]gateway.Policy) ([]LocalRoute, error) {
+func renderRoutes(routes []gateway.Route, backends map[string]gateway.Backend, policies map[string]gateway.Policy) ([]LocalRoute, error) {
 	if len(routes) == 0 {
 		return nil, nil
 	}
 	out := make([]LocalRoute, 0, len(routes))
 	for _, r := range routes {
-		backends, err := renderBackendRefs(r.BackendRefs, backendURLs)
+		routeBackends, err := renderBackendRefs(r.BackendRefs, backends)
 		if err != nil {
 			return nil, fmt.Errorf("route %q: %w", r.Name, err)
 		}
 		if r.MCP != nil {
-			backends = []RouteBackend{{
+			routeBackends = []RouteBackend{{
 				Weight: 100,
 				MCP:    renderMCPBackend(r.MCP),
 			}}
@@ -133,7 +134,7 @@ func renderRoutes(routes []gateway.Route, backendURLs map[string]string, policie
 				Path: PathMatch{PathPrefix: r.PathPrefix},
 			}},
 			Policies: routePolicies,
-			Backends: backends,
+			Backends: routeBackends,
 		})
 	}
 	slices.SortFunc(out, func(a, b LocalRoute) int {
@@ -142,17 +143,19 @@ func renderRoutes(routes []gateway.Route, backendURLs map[string]string, policie
 	return out, nil
 }
 
-// renderBackendRefs resolves each BackendRef to its backend URL, defaulting the
-// weight to 100 when unset. Input order is preserved. It errors when a ref
-// names a backend that Config.Backends never declared, instead of silently
-// rendering an empty host.
-func renderBackendRefs(refs []gateway.BackendRef, backendURLs map[string]string) ([]RouteBackend, error) {
+// renderBackendRefs resolves each BackendRef against Config.Backends, defaulting
+// the weight to 100 when unset. Plain URL backends are inlined as a host; named
+// top-level backends (MCP or Raw) are emitted separately by renderBackends and
+// referenced here by name. Input order is preserved. It errors when a ref names
+// a backend that Config.Backends never declared, instead of silently rendering
+// an empty host.
+func renderBackendRefs(refs []gateway.BackendRef, backends map[string]gateway.Backend) ([]RouteBackend, error) {
 	if len(refs) == 0 {
 		return nil, nil
 	}
 	out := make([]RouteBackend, 0, len(refs))
 	for _, ref := range refs {
-		url, ok := backendURLs[ref.Name]
+		b, ok := backends[ref.Name]
 		if !ok {
 			return nil, fmt.Errorf("backend ref %q: no matching backend declared", ref.Name)
 		}
@@ -160,12 +163,46 @@ func renderBackendRefs(refs []gateway.BackendRef, backendURLs map[string]string)
 		if weight == 0 {
 			weight = 100
 		}
-		out = append(out, RouteBackend{
-			Weight: weight,
-			Host:   url,
-		})
+		if b.MCP != nil || b.Raw != nil {
+			out = append(out, RouteBackend{Weight: weight, Backend: backendRef(ref.Name)})
+			continue
+		}
+		out = append(out, RouteBackend{Weight: weight, Host: b.URL})
 	}
 	return out, nil
+}
+
+// renderBackends emits the top-level native backends for every named backend
+// (MCP or Raw) in the desired config; plain URL backends are not emitted here
+// because renderBackendRefs inlines them into the referencing route. Backends
+// are sorted by name so equal inputs render identically. Raw backends carry
+// their opaque spec through under their native type key without interpretation.
+func renderBackends(backends []gateway.Backend) []LocalBackend {
+	out := make([]LocalBackend, 0, len(backends))
+	for _, b := range backends {
+		switch {
+		case b.MCP != nil:
+			out = append(out, LocalBackend{Name: b.Name, MCP: renderMCPBackend(b.MCP)})
+		case b.Raw != nil:
+			out = append(out, LocalBackend{
+				Name:  b.Name,
+				Extra: map[string]any{b.Raw.Type: b.Raw.Spec},
+			})
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	slices.SortFunc(out, func(a, b LocalBackend) int {
+		return cmp.Compare(a.Name, b.Name)
+	})
+	return out
+}
+
+// backendRef formats a backend name as a native backend reference. Agentgateway
+// references top-level backends by a leading-slash name (e.g. "/weather").
+func backendRef(name string) string {
+	return "/" + name
 }
 
 // renderMCPBackend translates a desired MCPBackend into its native form,
@@ -218,13 +255,19 @@ func renderStdioTargetSpec(s *gateway.StdioTargetSpec) *StdioTargetSpec {
 	}
 }
 
-// renderMCPTargetSpecField maps a desired MCPTargetSpec into its native
-// form. It returns nil when s is nil.
+// renderMCPTargetSpecField maps a desired MCPTargetSpec into its native form.
+// A target may either dial Host directly or route through a named Backend (with
+// Path appended); Backend is emitted as a native backend reference. It returns
+// nil when s is nil.
 func renderMCPTargetSpecField(s *gateway.MCPTargetSpec) *MCPTargetSpec {
 	if s == nil {
 		return nil
 	}
-	return &MCPTargetSpec{Host: s.Host}
+	out := &MCPTargetSpec{Host: s.Host, Path: s.Path}
+	if s.Backend != "" {
+		out.Backend = backendRef(s.Backend)
+	}
+	return out
 }
 
 // renderOpenAPITargetSpec maps a desired OpenAPITargetSpec into its native
@@ -299,18 +342,14 @@ func renderPolicyRefs(refs []gateway.PolicyRef, policies map[string]gateway.Poli
 			if fp.MCPAuthorization != nil {
 				return nil, fmt.Errorf("policy %q: mcp authorization already set by another policy", ref.Name)
 			}
-			fp.MCPAuthorization = &MCPAuthorization{
-				Rules: renderAuthzRules(a.Action, a.MatchExpressions),
-			}
+			fp.MCPAuthorization = &MCPAuthorization{Rules: authzRules(a)}
 			contributed = true
 		}
 		if a := p.Spec.TrafficAuthorization; a != nil {
 			if fp.TrafficAuthorization != nil {
 				return nil, fmt.Errorf("policy %q: traffic authorization already set by another policy", ref.Name)
 			}
-			fp.TrafficAuthorization = &TrafficAuthorization{
-				Rules: renderAuthzRules(a.Action, a.MatchExpressions),
-			}
+			fp.TrafficAuthorization = &TrafficAuthorization{Rules: authzRules(a)}
 			contributed = true
 		}
 		if fc := p.Spec.FrontendConnect; fc != nil {
@@ -319,9 +358,21 @@ func renderPolicyRefs(refs []gateway.PolicyRef, policies map[string]gateway.Poli
 			}
 			native := &FrontendConnect{Enabled: fc.Enabled}
 			if fc.Authorization != nil {
-				native.Rules = renderAuthzRules(fc.Authorization.Action, fc.Authorization.MatchExpressions)
+				native.Rules = authzRules(fc.Authorization)
 			}
 			fp.FrontendConnect = native
+			contributed = true
+		}
+		if c := p.Spec.CORS; c != nil {
+			if fp.CORS != nil {
+				return nil, fmt.Errorf("policy %q: cors already set by another policy", ref.Name)
+			}
+			fp.CORS = &CORS{
+				AllowOrigins:  c.AllowOrigins,
+				AllowMethods:  c.AllowMethods,
+				AllowHeaders:  c.AllowHeaders,
+				ExposeHeaders: c.ExposeHeaders,
+			}
 			contributed = true
 		}
 		if p.Spec.A2A != nil {
@@ -338,6 +389,20 @@ func renderPolicyRefs(refs []gateway.PolicyRef, policies map[string]gateway.Poli
 			fp.URLRewrite = &URLRewrite{Path: &PathRedirect{Prefix: u.PathPrefix}}
 			contributed = true
 		}
+		if j := p.Spec.JWTAuth; j != nil {
+			if fp.JWTAuth != nil {
+				return nil, fmt.Errorf("policy %q: jwt auth already set by another policy", ref.Name)
+			}
+			fp.JWTAuth = renderJWTAuth(j)
+			contributed = true
+		}
+		if tr := p.Spec.Transformation; tr != nil {
+			if fp.Transformations != nil {
+				return nil, fmt.Errorf("policy %q: transformation already set by another policy", ref.Name)
+			}
+			fp.Transformations = renderTransformation(tr)
+			contributed = true
+		}
 	}
 	if !contributed {
 		return nil, nil
@@ -345,13 +410,38 @@ func renderPolicyRefs(refs []gateway.PolicyRef, policies map[string]gateway.Poli
 	return fp, nil
 }
 
-// renderAuthzRules builds the deterministic native rules payload for an
-// authorization policy from its action and CEL match expressions.
-func renderAuthzRules(action string, matchExpressions []string) any {
-	return map[string]any{
-		"action":           action,
-		"matchExpressions": matchExpressions,
+// renderJWTAuth maps a desired JWTAuthPolicy into the native listener JWT auth
+// config, preserving provider order.
+func renderJWTAuth(j *gateway.JWTAuthPolicy) *ListenerJWTAuth {
+	providers := make([]JWTProvider, 0, len(j.Providers))
+	for _, p := range j.Providers {
+		providers = append(providers, JWTProvider{
+			Issuer:    p.Issuer,
+			Audiences: p.Audiences,
+			JWKS:      JWKSSource{URL: p.JWKS.URL, File: p.JWKS.File},
+		})
 	}
+	return &ListenerJWTAuth{Mode: j.Mode, Providers: providers}
+}
+
+// renderTransformation maps a desired TransformationPolicy into the native
+// request transformation stage.
+func renderTransformation(t *gateway.TransformationPolicy) *TransformationPolicy {
+	return &TransformationPolicy{
+		Request: &TransformStage{Metadata: t.RequestMetadata},
+	}
+}
+
+// authzRules builds the native rules payload for an authorization policy. It
+// populates the RuleSet's `rules` field (the native MCPAuthorization /
+// TrafficAuthorization / FrontendConnect types carry that key) with the flat
+// list of CEL expression strings; a request is allowed when any rule matches.
+// An empty policy renders as an empty list rather than null.
+func authzRules(a *gateway.AuthzPolicy) any {
+	if a.Rules == nil {
+		return []string{}
+	}
+	return a.Rules
 }
 
 // Apply renders the desired gateway.Config into agentgateway's native format
@@ -373,6 +463,7 @@ func (e *engine) Apply(ctx context.Context, _ gateway.Target, desired gateway.Co
 	incomingTargets := extractMCPRouteTargets(rendered)
 	incomingRoutes := extractNonMCPRoutes(rendered)
 	mergeConfig(existing, incomingTargets, incomingRoutes, e.port)
+	existing.Backends = mergeBackends(existing.Backends, rendered.Backends)
 	return writeConfig(e.dir, existing, e.port)
 }
 
@@ -390,6 +481,7 @@ func (e *engine) Remove(_ context.Context, target gateway.Target) error {
 		return err
 	}
 	filterRoutesByDeploymentID(existing, deploymentID)
+	existing.Backends = filterBackendsByDeploymentID(existing.Backends, deploymentID)
 	return writeConfig(e.dir, existing, e.port)
 }
 
@@ -562,6 +654,58 @@ func mergeConfig(
 	}
 	routes = append(routes, otherRoutes...)
 	l.Routes = routes
+}
+
+// mergeBackends upserts the incoming top-level backends into existing by name:
+// an incoming backend replaces any existing entry with the same name, and other
+// deployments' backends are preserved. The result is sorted by name so equal
+// inputs write identically. Returns nil when nothing remains so empty configs
+// omit the backends key. An Apply that renders no top-level backends leaves the
+// existing set untouched (deletion happens via Remove, mirroring route merge).
+func mergeBackends(existing, incoming []LocalBackend) []LocalBackend {
+	if len(existing) == 0 && len(incoming) == 0 {
+		return nil
+	}
+	incomingSet := make(map[string]struct{}, len(incoming))
+	for _, b := range incoming {
+		incomingSet[b.Name] = struct{}{}
+	}
+	merged := make([]LocalBackend, 0, len(existing)+len(incoming))
+	for _, b := range existing {
+		if _, replace := incomingSet[b.Name]; replace {
+			continue
+		}
+		merged = append(merged, b)
+	}
+	merged = append(merged, incoming...)
+	slices.SortFunc(merged, func(a, b LocalBackend) int {
+		return cmp.Compare(a.Name, b.Name)
+	})
+	if len(merged) == 0 {
+		return nil
+	}
+	return merged
+}
+
+// filterBackendsByDeploymentID drops every top-level backend whose name matches
+// deploymentID as a "-"/"_"-delimited segment, mirroring route removal so a
+// deployment's backends are torn down alongside its routes. Returns nil when
+// nothing remains.
+func filterBackendsByDeploymentID(backends []LocalBackend, deploymentID string) []LocalBackend {
+	if len(backends) == 0 {
+		return nil
+	}
+	out := make([]LocalBackend, 0, len(backends))
+	for _, b := range backends {
+		if matchesDeploymentID(b.Name, deploymentID) {
+			continue
+		}
+		out = append(out, b)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func filterRoutesByDeploymentID(cfg *AgentGatewayConfig, deploymentID string) {
