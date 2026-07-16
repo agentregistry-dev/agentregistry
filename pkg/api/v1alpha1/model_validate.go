@@ -8,15 +8,12 @@ import (
 
 // KnownModelProviders is the set of provider families the validator
 // recognizes. Keys are the canonical lowercase provider names. The value
-// records whether the provider supports ambient runtime identity (bedrock,
-// vertex) — key-based providers must declare an explicit auth strategy.
+// records whether the provider supports ambient runtime identity. Add a
+// provider only after its runtime adapter and end-to-end coverage exist.
 var KnownModelProviders = map[string]struct {
 	AmbientIdentity bool
 }{
-	ModelProviderBedrock:   {AmbientIdentity: true},
-	ModelProviderVertex:    {AmbientIdentity: true},
-	ModelProviderAnthropic: {AmbientIdentity: false},
-	ModelProviderOpenAI:    {AmbientIdentity: false},
+	ModelProviderBedrock: {AmbientIdentity: true},
 }
 
 // Validate runs Model's structural checks.
@@ -26,7 +23,7 @@ var KnownModelProviders = map[string]struct {
 //   - provider in the known set; model non-empty.
 //   - auth.strategy in {runtime, secretRef, passthrough}; secretRef present
 //     iff strategy is secretRef.
-//   - "runtime" only for ambient-identity providers (bedrock, vertex);
+//   - "runtime" only for ambient-identity providers (currently bedrock);
 //     key-based providers must declare secretRef or passthrough.
 //
 // Model is unversioned: identity is (namespace, name). Auth/endpoint edits
@@ -44,15 +41,13 @@ func (m *Model) Validate() error {
 func validateModelSpec(s *ModelSpec) FieldErrors {
 	var errs FieldErrors
 
-	provider := strings.ToLower(strings.TrimSpace(s.Provider))
+	provider := s.Provider
 	providerInfo, providerKnown := KnownModelProviders[provider]
 	if provider == "" {
 		errs.Append("spec.provider", fmt.Errorf("%w", ErrRequiredField))
 	} else if !providerKnown {
 		errs.Append("spec.provider",
 			fmt.Errorf("%w: %q (known: %v)", ErrInvalidFormat, s.Provider, knownModelProviderNames()))
-	} else {
-		s.Provider = provider
 	}
 
 	if strings.TrimSpace(s.Model) == "" {
@@ -95,7 +90,7 @@ func validateModelSpec(s *ModelSpec) FieldErrors {
 			}
 		} else if strategy == ModelAuthStrategyRuntime && !providerInfo.AmbientIdentity {
 			errs.Append("spec.auth.strategy",
-				fmt.Errorf("%w: strategy %q is only valid for ambient-identity providers (bedrock, vertex), not %q",
+				fmt.Errorf("%w: strategy %q is only valid for ambient-identity providers (currently bedrock), not %q",
 					ErrInvalidFormat, ModelAuthStrategyRuntime, provider))
 		}
 	}

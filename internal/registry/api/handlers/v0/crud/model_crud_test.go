@@ -25,7 +25,7 @@ func TestModelCRUD(t *testing.T) {
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindModel},
 		Metadata: v1alpha1.ObjectMeta{Name: "claude-opus"},
 		Spec: v1alpha1.ModelSpec{
-			Provider: "Bedrock",
+			Provider: v1alpha1.ModelProviderBedrock,
 			Model:    "us.anthropic.claude-opus-4-8",
 			Auth:     &v1alpha1.ModelAuthConfig{Strategy: v1alpha1.ModelAuthStrategyRuntime},
 		},

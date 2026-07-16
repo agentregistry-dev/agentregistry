@@ -10,21 +10,3 @@ spec:
   model: us.anthropic.claude-opus-4-8
   auth:
     strategy: runtime # ambient AWS/IAM identity
----
-# A dev-environment entry for the same underlying model, key-based through a
-# gateway. OSS stores the secretRef opaquely; distributions with a secret
-# store resolve it when needed.
-apiVersion: ar.dev/v1alpha1
-kind: Model
-metadata:
-  name: claude-opus-4-8-dev
-spec:
-  provider: anthropic
-  model: claude-opus-4-8
-  auth:
-    strategy: secretRef
-    secretRef:
-      name: anthropic-dev-key
-      key: api-key
-  endpoint:
-    baseUrl: https://litellm.dev.internal

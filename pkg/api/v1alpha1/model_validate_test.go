@@ -6,7 +6,7 @@ import (
 )
 
 func TestModelValidate(t *testing.T) {
-	secretRef := &SecretKeyRef{Name: "anthropic-key", Key: "api-key"}
+	secretRef := &SecretKeyRef{Name: "bedrock-key", Key: "api-key"}
 
 	tests := []struct {
 		name    string
@@ -22,24 +22,40 @@ func TestModelValidate(t *testing.T) {
 			spec: ModelSpec{Provider: "bedrock", Model: "us.anthropic.claude-opus-4-8"},
 		},
 		{
-			name: "valid anthropic secretRef auth",
-			spec: ModelSpec{Provider: "anthropic", Model: "claude-opus-4-8", Auth: &ModelAuthConfig{Strategy: ModelAuthStrategySecretRef, SecretRef: secretRef}},
+			name: "valid bedrock secretRef auth",
+			spec: ModelSpec{Provider: "bedrock", Model: "us.anthropic.claude-opus-4-8", Auth: &ModelAuthConfig{Strategy: ModelAuthStrategySecretRef, SecretRef: secretRef}},
 		},
 		{
-			name: "valid anthropic passthrough auth with endpoint override",
+			name: "valid bedrock passthrough auth with endpoint override",
 			spec: ModelSpec{
-				Provider: "anthropic", Model: "claude-opus-4-8",
+				Provider: "bedrock", Model: "us.anthropic.claude-opus-4-8",
 				Auth:     &ModelAuthConfig{Strategy: ModelAuthStrategyPassthrough},
 				Endpoint: &ModelEndpointConfig{BaseURL: "https://litellm.dev.internal"},
 			},
 		},
 		{
-			name: "provider canonicalized to lowercase",
-			spec: ModelSpec{Provider: "Bedrock", Model: "us.anthropic.claude-opus-4-8"},
+			name:    "provider must use canonical enum value",
+			spec:    ModelSpec{Provider: "Bedrock", Model: "us.anthropic.claude-opus-4-8"},
+			wantErr: "spec.provider",
 		},
 		{
 			name:    "missing provider",
 			spec:    ModelSpec{Model: "claude-opus-4-8"},
+			wantErr: "spec.provider",
+		},
+		{
+			name:    "unsupported anthropic provider",
+			spec:    ModelSpec{Provider: "anthropic", Model: "claude-opus-4-8", Auth: &ModelAuthConfig{Strategy: ModelAuthStrategySecretRef, SecretRef: secretRef}},
+			wantErr: "spec.provider",
+		},
+		{
+			name:    "unsupported openai provider",
+			spec:    ModelSpec{Provider: "openai", Model: "gpt-5", Auth: &ModelAuthConfig{Strategy: ModelAuthStrategySecretRef, SecretRef: secretRef}},
+			wantErr: "spec.provider",
+		},
+		{
+			name:    "unsupported vertex provider",
+			spec:    ModelSpec{Provider: "vertex", Model: "gemini-2.5-pro", Auth: &ModelAuthConfig{Strategy: ModelAuthStrategyRuntime}},
 			wantErr: "spec.provider",
 		},
 		{
@@ -53,18 +69,8 @@ func TestModelValidate(t *testing.T) {
 			wantErr: "spec.model",
 		},
 		{
-			name:    "key-based provider with omitted auth",
-			spec:    ModelSpec{Provider: "anthropic", Model: "claude-opus-4-8"},
-			wantErr: "spec.auth",
-		},
-		{
-			name:    "key-based provider with runtime auth",
-			spec:    ModelSpec{Provider: "openai", Model: "gpt-5", Auth: &ModelAuthConfig{Strategy: ModelAuthStrategyRuntime}},
-			wantErr: "spec.auth.strategy",
-		},
-		{
 			name:    "secretRef strategy without secretRef",
-			spec:    ModelSpec{Provider: "anthropic", Model: "claude-opus-4-8", Auth: &ModelAuthConfig{Strategy: ModelAuthStrategySecretRef}},
+			spec:    ModelSpec{Provider: "bedrock", Model: "us.anthropic.claude-opus-4-8", Auth: &ModelAuthConfig{Strategy: ModelAuthStrategySecretRef}},
 			wantErr: "spec.auth.secretRef",
 		},
 		{
@@ -84,7 +90,7 @@ func TestModelValidate(t *testing.T) {
 		},
 		{
 			name:    "secretRef with invalid name",
-			spec:    ModelSpec{Provider: "anthropic", Model: "m", Auth: &ModelAuthConfig{Strategy: ModelAuthStrategySecretRef, SecretRef: &SecretKeyRef{Name: "Not A Name!"}}},
+			spec:    ModelSpec{Provider: "bedrock", Model: "m", Auth: &ModelAuthConfig{Strategy: ModelAuthStrategySecretRef, SecretRef: &SecretKeyRef{Name: "Not A Name!"}}},
 			wantErr: "spec.auth.secretRef.name",
 		},
 		{
@@ -118,18 +124,5 @@ func TestModelValidate(t *testing.T) {
 				t.Fatalf("Validate() error = %v, want substring %q", err, tt.wantErr)
 			}
 		})
-	}
-}
-
-func TestModelValidateCanonicalizesProvider(t *testing.T) {
-	m := &Model{
-		Metadata: ObjectMeta{Namespace: "default", Name: "m"},
-		Spec:     ModelSpec{Provider: "  Bedrock ", Model: "us.anthropic.claude-opus-4-8"},
-	}
-	if err := m.Validate(); err != nil {
-		t.Fatalf("Validate() unexpected error: %v", err)
-	}
-	if m.Spec.Provider != ModelProviderBedrock {
-		t.Fatalf("Validate() provider = %q, want %q", m.Spec.Provider, ModelProviderBedrock)
 	}
 }

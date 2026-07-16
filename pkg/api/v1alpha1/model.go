@@ -15,14 +15,10 @@ func init() {
 	MustRegisterKind[*Model, ModelSpec](KindModel, WithMutableObjectStorage())
 }
 
-// Known provider families. Model identifiers are provider-scoped (a Bedrock
-// model ID is not an Anthropic API ID), so Provider disambiguates how the
-// identifier and auth material are interpreted downstream.
+// Supported provider families. Expand this enum only when the provider has a
+// working runtime adapter and end-to-end coverage.
 const (
-	ModelProviderBedrock   = "bedrock"
-	ModelProviderAnthropic = "anthropic"
-	ModelProviderOpenAI    = "openai"
-	ModelProviderVertex    = "vertex"
+	ModelProviderBedrock = "bedrock"
 )
 
 // Model auth strategies. See ModelAuthConfig.
@@ -42,17 +38,15 @@ type ModelSpec struct {
 	Title       string `json:"title,omitempty" yaml:"title,omitempty"`
 	Description string `json:"description,omitempty" yaml:"description,omitempty"`
 
-	// Provider family: "bedrock", "anthropic", "openai", "vertex".
-	Provider string `json:"provider" yaml:"provider"`
+	// Provider family. Currently only "bedrock" is supported.
+	Provider string `json:"provider" yaml:"provider" enum:"bedrock"`
 
 	// Model is the provider-scoped model identifier, e.g.
 	// "us.anthropic.claude-opus-4-8".
 	Model string `json:"model" yaml:"model"`
 
-	// Auth is how the platform authenticates to the provider. Omitted
-	// means the provider default: "runtime" for ambient-identity
-	// providers (bedrock, vertex); key-based providers (anthropic,
-	// openai) must declare a strategy.
+	// Auth is how the platform authenticates to the provider. Omitted means
+	// the provider default: ambient runtime identity for Bedrock.
 	Auth *ModelAuthConfig `json:"auth,omitempty" yaml:"auth,omitempty"`
 
 	// Endpoint overrides how the provider is reached. Omitted means

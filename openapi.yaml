@@ -851,6 +851,8 @@ components:
         model:
           type: string
         provider:
+          enum:
+          - bedrock
           type: string
         title:
           type: string

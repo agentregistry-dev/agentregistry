@@ -404,7 +404,7 @@ export type ModelSpec = {
     description?: string;
     endpoint?: ModelEndpointConfig;
     model: string;
-    provider: string;
+    provider: 'bedrock';
     title?: string;
 };
 
