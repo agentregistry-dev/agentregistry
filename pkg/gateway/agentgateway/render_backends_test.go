@@ -173,47 +173,21 @@ func TestRender_NamedBackendsAndRawPassthrough(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Render() mismatch\n got: %#v\nwant: %#v", got, want)
 	}
-}
 
-// TestRender_RawBackendMarshalsUnderNativeKey proves the Raw backend spec is
-// carried through into the marshaled wire YAML under its native type key,
-// inlined alongside the backend name — the format agentgateway parses.
-func TestRender_RawBackendMarshalsUnderNativeKey(t *testing.T) {
-	desired := gateway.Config{
-		ClassName: "agentgateway",
-		Listeners: []gateway.Listener{{Name: "default", Protocol: "HTTP", Port: 3000}},
-		Backends: []gateway.Backend{{
-			Name: "weather-aws",
-			Extensions: []gateway.Extension{{
-				Type: "aws",
-				Spec: map[string]any{"agentCore": map[string]any{
-					"agentRuntimeArn": "arn:aws:bedrock-agentcore:us-west-2:1234:runtime/weather",
-					"qualifier":       "DEFAULT",
-				}},
-			}},
-		}},
-	}
-
-	rendered, err := Render(context.Background(), desired)
-	if err != nil {
-		t.Fatalf("Render() unexpected error: %v", err)
-	}
-	out, err := yaml.Marshal(rendered)
+	out, err := yaml.Marshal(got)
 	if err != nil {
 		t.Fatalf("yaml.Marshal: %v", err)
 	}
 
-	// Round-trip the YAML back into a plain map and assert the backend carries
-	// both its name and the inlined native "aws" key.
 	var decoded map[string]any
 	if err := yaml.Unmarshal(out, &decoded); err != nil {
 		t.Fatalf("yaml.Unmarshal: %v", err)
 	}
 	backends, ok := decoded["backends"].([]any)
-	if !ok || len(backends) != 1 {
-		t.Fatalf("expected 1 top-level backend, got %#v", decoded["backends"])
+	if !ok || len(backends) != 2 {
+		t.Fatalf("expected 2 top-level backends, got %#v", decoded["backends"])
 	}
-	backend := backends[0].(map[string]any)
+	backend := backends[1].(map[string]any)
 	if backend["name"] != "weather-aws" {
 		t.Errorf("backend name = %v, want weather-aws", backend["name"])
 	}
@@ -328,49 +302,7 @@ func loadBackendNames(t *testing.T, dir string) []string {
 	return names
 }
 
-func TestEngine_ApplyMergesTopLevelBackendsAcrossDeployments(t *testing.T) {
-	dir := t.TempDir()
-	engine := NewEngine(dir, engineTestPort)
-
-	if err := engine.Apply(context.Background(), gateway.Target{Name: "dep-a"}, awsBackendDesiredConfig("dep-a")); err != nil {
-		t.Fatalf("Apply(dep-a): %v", err)
-	}
-	if err := engine.Apply(context.Background(), gateway.Target{Name: "dep-b"}, awsBackendDesiredConfig("dep-b")); err != nil {
-		t.Fatalf("Apply(dep-b): %v", err)
-	}
-
-	got := loadBackendNames(t, dir)
-	want := []string{"dep-a", "dep-a-aws", "dep-b", "dep-b-aws"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("backend names = %v, want %v", got, want)
-	}
-}
-
-func TestEngine_RemoveStripsMatchingDeploymentBackends(t *testing.T) {
-	dir := t.TempDir()
-	engine := NewEngine(dir, engineTestPort)
-
-	if err := engine.Apply(context.Background(), gateway.Target{Name: "dep-a"}, awsBackendDesiredConfig("dep-a")); err != nil {
-		t.Fatalf("Apply(dep-a): %v", err)
-	}
-	if err := engine.Apply(context.Background(), gateway.Target{Name: "dep-b"}, awsBackendDesiredConfig("dep-b")); err != nil {
-		t.Fatalf("Apply(dep-b): %v", err)
-	}
-	if err := engine.Remove(context.Background(), gateway.Target{Name: "dep-a"}); err != nil {
-		t.Fatalf("Remove(dep-a): %v", err)
-	}
-
-	got := loadBackendNames(t, dir)
-	want := []string{"dep-b", "dep-b-aws"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("backend names after remove = %v, want %v", got, want)
-	}
-}
-
-// TestEngine_ApplyWithoutBackendsPreservesExistingBackends ensures a plain
-// MCP-target Apply (no top-level backends) leaves another deployment's backends
-// in place rather than wiping them.
-func TestEngine_ApplyWithoutBackendsPreservesExistingBackends(t *testing.T) {
+func TestEngine_MergesPreservesAndRemovesTopLevelBackends(t *testing.T) {
 	dir := t.TempDir()
 	engine := NewEngine(dir, engineTestPort)
 
@@ -381,10 +313,22 @@ func TestEngine_ApplyWithoutBackendsPreservesExistingBackends(t *testing.T) {
 	if err := engine.Apply(context.Background(), gateway.Target{Name: "dep-b"}, mcpOnly); err != nil {
 		t.Fatalf("Apply(dep-b): %v", err)
 	}
+	if err := engine.Apply(context.Background(), gateway.Target{Name: "dep-c"}, awsBackendDesiredConfig("dep-c")); err != nil {
+		t.Fatalf("Apply(dep-c): %v", err)
+	}
 
 	got := loadBackendNames(t, dir)
-	want := []string{"dep-a", "dep-a-aws"}
+	want := []string{"dep-a", "dep-a-aws", "dep-c", "dep-c-aws"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("backend names = %v, want %v", got, want)
+	}
+
+	if err := engine.Remove(context.Background(), gateway.Target{Name: "dep-a"}); err != nil {
+		t.Fatalf("Remove(dep-a): %v", err)
+	}
+	got = loadBackendNames(t, dir)
+	want = []string{"dep-c", "dep-c-aws"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("backend names after remove = %v, want %v", got, want)
 	}
 }
