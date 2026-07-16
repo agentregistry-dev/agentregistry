@@ -197,10 +197,6 @@ func assertEqual(t *testing.T, got, want any, label string) {
 	}
 }
 
-// mcpDesiredConfig builds a generic gateway.Config with the given MCP targets
-// under the well-known MCP route. Apply renders it into native config
-// internally, so these tests exercise Apply through the same path production
-// uses rather than hand-building native config.
 func mcpDesiredConfig(targets ...gateway.MCPTarget) gateway.Config {
 	return gateway.Config{
 		ClassName: "agentgateway",

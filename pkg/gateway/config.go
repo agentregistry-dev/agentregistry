@@ -1,13 +1,10 @@
-// Package gateway defines a gateway-implementation-agnostic desired
-// configuration model plus the Engine contract for applying that model to a
-// Target. Concrete engines translate this small DTO into their native format.
+// Package gateway defines the engine contract and desired config model.
 package gateway
 
-// MCPRouteName is the well-known name of the single route that fans out to
-// every MCP target.
+// MCPRouteName is the well-known route name for MCP target fanout.
 const MCPRouteName = "mcp_route"
 
-// Config is the desired gateway configuration model.
+// Config is the desired gateway configuration.
 type Config struct {
 	ClassName string
 	Listeners []Listener
@@ -25,7 +22,7 @@ type Listener struct {
 	Policies      PolicySpec
 }
 
-// TLSConfig describes TLS termination for a listener.
+// TLSConfig describes listener TLS termination.
 type TLSConfig struct {
 	Mode            string
 	CertificateRefs []ObjectRef
@@ -38,13 +35,12 @@ type AllowedRoutes struct {
 	Kinds      []string
 }
 
-// AllowedRouteNamespaces describes namespace selection for listener route
-// attachment. From matches Gateway API values such as "Same" or "All".
+// AllowedRouteNamespaces describes namespace route attachment.
 type AllowedRouteNamespaces struct {
 	From string
 }
 
-// ObjectRef references another object, e.g. a TLS certificate.
+// ObjectRef references another object.
 type ObjectRef struct {
 	Group     string
 	Kind      string
@@ -53,8 +49,7 @@ type ObjectRef struct {
 }
 
 // Route describes a routing rule. BackendRef.Name resolves against
-// Config.Backends. Exactly one of BackendRefs or MCP should be set; if both are
-// set, MCP takes precedence during render.
+// Config.Backends. MCP takes precedence over BackendRefs when both are set.
 type Route struct {
 	Name        string
 	Hostnames   []string
@@ -66,9 +61,7 @@ type Route struct {
 	Extensions  map[string]any
 }
 
-// RouteParentRef identifies a parent this route attaches to, e.g. a parent
-// HTTPRoute for delegation or a Gateway. SectionName optionally selects a
-// listener/section on the parent.
+// RouteParentRef identifies a route parent.
 type RouteParentRef struct {
 	Group       string
 	Kind        string
@@ -77,14 +70,12 @@ type RouteParentRef struct {
 	SectionName string
 }
 
-// MCPBackend fans a route out to multiple named MCP targets instead of a single
-// weighted backend. Mutually exclusive with Route.BackendRefs.
+// MCPBackend fans a route out to MCP targets.
 type MCPBackend struct {
 	Targets []MCPTarget
 }
 
-// MCPTarget is one named upstream inside an MCPBackend. Exactly one of SSE,
-// Stdio, MCP, or OpenAPI should be set, selecting the target's transport.
+// MCPTarget is one named upstream inside an MCPBackend.
 type MCPTarget struct {
 	Name    string
 	SSE     *SSETargetSpec
@@ -93,7 +84,7 @@ type MCPTarget struct {
 	OpenAPI *OpenAPITargetSpec
 }
 
-// SSETargetSpec targets an MCP server speaking SSE at host:port/path.
+// SSETargetSpec targets an SSE MCP server.
 type SSETargetSpec struct {
 	Scheme string
 	Host   string
@@ -101,32 +92,28 @@ type SSETargetSpec struct {
 	Path   string
 }
 
-// StdioTargetSpec runs an MCP server as a local subprocess speaking stdio.
+// StdioTargetSpec targets a stdio MCP server.
 type StdioTargetSpec struct {
 	Cmd  string
 	Args []string
 	Env  map[string]string
 }
 
-// MCPTargetSpec targets a pre-running MCP-over-HTTP server. Set Host to reach
-// the server directly at a URL, or set Backend to route through another named
-// Backend with Path appended. Host and Backend are mutually exclusive.
+// MCPTargetSpec targets a pre-running MCP-over-HTTP server.
 type MCPTargetSpec struct {
 	Host    string
 	Backend string
 	Path    string
 }
 
-// OpenAPITargetSpec targets an OpenAPI-described HTTP backend; Schema is
-// translated into MCP tools.
+// OpenAPITargetSpec targets an OpenAPI-described backend.
 type OpenAPITargetSpec struct {
 	Host   string
 	Port   uint32
 	Schema any
 }
 
-// Backend is a named routing destination. Set exactly one shape:
-// URL, MCP, or Extensions.
+// Backend is a named routing destination.
 type Backend struct {
 	Name       string
 	URL        string
@@ -134,15 +121,13 @@ type Backend struct {
 	Extensions map[string]any
 }
 
-// BackendRef references a Backend by name with an optional weight. Weight
-// defaults to 100 when zero during render.
+// BackendRef references a named Backend.
 type BackendRef struct {
 	Name   string
 	Weight int
 }
 
 // PolicySpec carries typed policy payloads directly on listeners and routes.
-// Each field is optional and nil when the policy does not include that concern.
 type PolicySpec struct {
 	MCPAuthorization     *AuthzPolicy
 	TrafficAuthorization *AuthzPolicy
@@ -154,46 +139,44 @@ type PolicySpec struct {
 	CORS                 *CORSPolicy
 }
 
-// JWTAuthPolicy authenticates incoming JWTs against one or more providers.
+// JWTAuthPolicy authenticates incoming JWTs.
 type JWTAuthPolicy struct {
 	Mode      string
 	Providers []JWTProvider
 }
 
-// JWTProvider describes one JWT issuer trusted by a JWTAuthPolicy.
+// JWTProvider describes one trusted JWT issuer.
 type JWTProvider struct {
 	Issuer    string
 	Audiences []string
 	JWKS      JWKSSource
 }
 
-// JWKSSource locates the JSON Web Key Set used to verify JWT signatures.
-// Exactly one of URL or File should be set.
+// JWKSSource locates a JSON Web Key Set.
 type JWKSSource struct {
 	URL  string
 	File string
 }
 
-// TransformationPolicy rewrites requests before they reach the backend.
+// TransformationPolicy rewrites requests.
 type TransformationPolicy struct {
 	RequestMetadata map[string]string
 }
 
-// A2APolicy marks a route as serving the A2A protocol.
+// A2APolicy marks an A2A route.
 type A2APolicy struct{}
 
-// URLRewritePolicy rewrites the request path before it reaches the backend.
+// URLRewritePolicy rewrites request paths.
 type URLRewritePolicy struct {
 	PathPrefix string
 }
 
-// AuthzPolicy is a set of CEL rules; a request is allowed when any rule
-// evaluates true (an empty set denies).
+// AuthzPolicy is a set of CEL allow rules.
 type AuthzPolicy struct {
 	Rules []string
 }
 
-// CORSPolicy describes cross-origin resource sharing for a route.
+// CORSPolicy describes cross-origin resource sharing.
 type CORSPolicy struct {
 	AllowOrigins  []string
 	AllowMethods  []string
@@ -201,7 +184,7 @@ type CORSPolicy struct {
 	ExposeHeaders []string
 }
 
-// FrontendConnectPolicy describes frontend CONNECT handling.
+// FrontendConnectPolicy enables frontend CONNECT handling.
 type FrontendConnectPolicy struct {
 	Enabled       bool
 	Authorization *AuthzPolicy
