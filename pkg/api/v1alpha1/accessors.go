@@ -264,6 +264,21 @@ func (r *Runtime) UnmarshalStatus(data json.RawMessage) error {
 	return UnmarshalStatusFromStorage(data, &r.Status)
 }
 
+func (m *Model) GetMetadata() *ObjectMeta { return &m.Metadata }
+func (m *Model) SetMetadata(meta ObjectMeta) {
+	m.Metadata = meta
+}
+func (m *Model) MarshalSpec() (json.RawMessage, error) { return json.Marshal(m.Spec) }
+func (m *Model) UnmarshalSpec(data json.RawMessage) error {
+	return json.Unmarshal(data, &m.Spec)
+}
+func (m *Model) MarshalStatus() (json.RawMessage, error) {
+	return MarshalStatusForStorage(m.Status)
+}
+func (m *Model) UnmarshalStatus(data json.RawMessage) error {
+	return UnmarshalStatusFromStorage(data, &m.Status)
+}
+
 func (d *Deployment) GetMetadata() *ObjectMeta { return &d.Metadata }
 func (d *Deployment) SetMetadata(meta ObjectMeta) {
 	d.Metadata = meta

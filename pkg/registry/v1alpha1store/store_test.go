@@ -815,3 +815,61 @@ func TestControlPlaneEventStore_PruneBeforeHonorsKeepAfterRevision(t *testing.T)
 	require.Len(t, remaining, 1)
 	require.Equal(t, keep, remaining[0].Revision)
 }
+
+// TestStore_ModelMutableObjectCRUD covers the Model kind's mutable-object
+// storage: upsert by (namespace, name), spec replacement on re-apply, and
+// standard control-plane event recording (migration 011).
+func TestStore_ModelMutableObjectCRUD(t *testing.T) {
+	pool := NewTestPool(t)
+	models := NewMutableObjectStore(pool, TestSchema(), "models")
+	events := NewControlPlaneEventStore(pool, TestSchema())
+	ctx := context.Background()
+
+	_, err := models.Upsert(ctx, &v1alpha1.Model{
+		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "claude-opus-4-8"},
+		Spec: v1alpha1.ModelSpec{
+			Provider: v1alpha1.ModelProviderBedrock,
+			Model:    "us.anthropic.claude-opus-4-8",
+			Auth:     &v1alpha1.ModelAuthConfig{Strategy: v1alpha1.ModelAuthStrategyRuntime},
+		},
+	})
+	require.NoError(t, err)
+
+	got, err := models.GetLatest(ctx, testNS, "claude-opus-4-8")
+	require.NoError(t, err)
+	var spec v1alpha1.ModelSpec
+	require.NoError(t, json.Unmarshal(got.Spec, &spec))
+	require.Equal(t, v1alpha1.ModelProviderBedrock, spec.Provider)
+	require.Equal(t, "us.anthropic.claude-opus-4-8", spec.Model)
+
+	// Mutable object: re-apply with a changed endpoint replaces the row in
+	// place (same identity, bumped generation).
+	_, err = models.Upsert(ctx, &v1alpha1.Model{
+		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "claude-opus-4-8"},
+		Spec: v1alpha1.ModelSpec{
+			Provider: v1alpha1.ModelProviderBedrock,
+			Model:    "us.anthropic.claude-opus-4-8",
+			Auth:     &v1alpha1.ModelAuthConfig{Strategy: v1alpha1.ModelAuthStrategyRuntime},
+			Endpoint: &v1alpha1.ModelEndpointConfig{Region: "us-west-2"},
+		},
+	})
+	require.NoError(t, err)
+	got, err = models.GetLatest(ctx, testNS, "claude-opus-4-8")
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(got.Spec, &spec))
+	require.NotNil(t, spec.Endpoint)
+	require.Equal(t, "us-west-2", spec.Endpoint.Region)
+	require.Greater(t, got.Metadata.Generation, int64(1))
+
+	// The models table records standard control-plane events.
+	recorded, err := events.ListAfter(ctx, 0, 100)
+	require.NoError(t, err)
+	found := false
+	for _, ev := range recorded {
+		if ev.Key.Kind == v1alpha1.KindModel && ev.Key.Name == "claude-opus-4-8" {
+			found = true
+			break
+		}
+	}
+	require.True(t, found, "expected a control-plane event for the Model write")
+}

@@ -1,0 +1,12 @@
+# Admin-owned model identity plus how the platform reaches and authenticates
+# to it.
+apiVersion: ar.dev/v1alpha1
+kind: Model
+metadata:
+  name: claude-opus-4-8
+spec:
+  title: Claude Opus 4.8 (Bedrock)
+  provider: bedrock
+  model: us.anthropic.claude-opus-4-8
+  auth:
+    strategy: runtime # ambient AWS/IAM identity
