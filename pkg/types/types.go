@@ -18,6 +18,8 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"github.com/modelcontextprotocol/go-sdk/oauthex"
+
 	v0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
@@ -348,6 +350,16 @@ type AppOptions struct {
 
 	// AuthzProvider is an optional authorization provider.
 	AuthzProvider auth.AuthzProvider
+
+	// MCPProtectedResourceMetadata, when non-nil, makes the MCP bridge serve
+	// RFC 9728 protected-resource metadata at the well-known path. Nil disables
+	// OAuth discovery only, although the bridge stays fail-closed and RBAC-enforced.
+	MCPProtectedResourceMetadata *oauthex.ProtectedResourceMetadata
+
+	// MCPResourceMetadataURL is the external URL of that metadata document,
+	// emitted as the resource_metadata parameter of the bridge's 401
+	// WWW-Authenticate challenge. Empty omits the hint.
+	MCPResourceMetadataURL string
 
 	// Auditor receives audit events from the v1alpha1 store layer
 	// (e.g. ResourceTagCreated on Upsert creates). The default OSS
