@@ -146,7 +146,7 @@ Move from discovery to usage without reinventing the same delivery path for ever
 
 Make approved artifacts easier to consume from the tools developers already use.
 
-- Generate configuration for Claude Desktop, Cursor, and VS Code
+- Generate configuration for Claude Desktop, Cursor, Kiro IDE, and VS Code
 - Pair with agentgateway for a consistent access layer to deployed MCP infrastructure
 - Reduce manual setup for AI clients and shared environments
 
