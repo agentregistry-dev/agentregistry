@@ -1,21 +1,15 @@
 //go:build integration
 
-package orchestrator_test
+package database
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
-	"encoding/binary"
-	"errors"
 	"fmt"
 	"sync"
 	"testing"
 	"testing/fstest"
-	"time"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/stretchr/testify/require"
 
@@ -25,55 +19,11 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
-const adminURI = "postgres://agentregistry:agentregistry@localhost:5432/postgres?sslmode=disable"
-
-// newDB creates a fresh per-test Postgres database. Skips when
-// localhost:5432 is unavailable.
-func newDB(t *testing.T) string {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	t.Cleanup(cancel)
-
-	adminConn, err := pgx.Connect(ctx, adminURI)
-	if err != nil {
-		t.Skipf("PostgreSQL not available: %v", err)
-	}
-	defer func() { _ = adminConn.Close(ctx) }()
-
-	var randomBytes [8]byte
-	_, err = rand.Read(randomBytes[:])
-	require.NoError(t, err)
-	dbName := fmt.Sprintf("test_orch_%d", binary.BigEndian.Uint64(randomBytes[:]))
-
-	if _, err := adminConn.Exec(ctx, fmt.Sprintf("CREATE DATABASE %s", dbName)); err != nil {
-		var pgErr *pgconn.PgError
-		if !errors.As(err, &pgErr) || pgErr.Code != "42P04" {
-			t.Fatalf("CREATE DATABASE: %v", err)
-		}
-	}
-
-	t.Cleanup(func() {
-		cleanupCtx, ccancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer ccancel()
-		c, cerr := pgx.Connect(cleanupCtx, adminURI)
-		if cerr != nil {
-			return
-		}
-		defer func() { _ = c.Close(cleanupCtx) }()
-		_, _ = c.Exec(cleanupCtx,
-			"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()",
-			dbName)
-		_, _ = c.Exec(cleanupCtx, fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbName))
-	})
-
-	return fmt.Sprintf("postgres://agentregistry:agentregistry@localhost:5432/%s?sslmode=disable", dbName)
-}
-
 // TestRunUp_FreshInstall: no public.schema_migrations, no legacy data
 // — orchestrator applies the migration and produces a single row in
 // agentregistry.schema_migrations.
 func TestRunUp_FreshInstall(t *testing.T) {
-	dsn := newDB(t)
+	dsn := freshDB(t)
 	ctx := context.Background()
 
 	require.NoError(t, orchestrator.RunUp(ctx, dsn, []orchestrator.Source{legacymigrate.OSSSource()}))
@@ -96,7 +46,7 @@ func TestRunUp_FreshInstall(t *testing.T) {
 // TestRunUp_Idempotent: a second RunUp against an up-to-date database
 // returns nil and doesn't add migration rows or re-fire LegacyRun.
 func TestRunUp_Idempotent(t *testing.T) {
-	dsn := newDB(t)
+	dsn := freshDB(t)
 	ctx := context.Background()
 	src := legacymigrate.OSSSource()
 
@@ -116,7 +66,7 @@ func TestRunUp_Idempotent(t *testing.T) {
 // confirm LegacyRun copies data, rows land in agentregistry.*, the
 // rename fires, and the v1alpha1.* tables retain the original rows.
 func TestRunUp_LegacyBridge(t *testing.T) {
-	dsn := newDB(t)
+	dsn := freshDB(t)
 	ctx := context.Background()
 
 	db, err := sql.Open("pgx", dsn)
@@ -177,7 +127,7 @@ func TestRunUp_LegacyBridge(t *testing.T) {
 // rename in RunUp #1 moved public.schema_migrations aside, closing
 // the LegacyRun gate on subsequent invocations.
 func TestRunUp_LegacyBridgeIdempotent(t *testing.T) {
-	dsn := newDB(t)
+	dsn := freshDB(t)
 	ctx := context.Background()
 
 	db, err := sql.Open("pgx", dsn)
@@ -206,7 +156,7 @@ func TestRunUp_LegacyBridgeIdempotent(t *testing.T) {
 // next invocation as long as public.schema_migrations remains intact.
 // This is the failure mode the gate fix prevents.
 func TestRunUp_LegacyBridgeAfterPartialRun(t *testing.T) {
-	dsn := newDB(t)
+	dsn := freshDB(t)
 	ctx := context.Background()
 
 	db, err := sql.Open("pgx", dsn)
@@ -246,7 +196,7 @@ func TestRunUp_LegacyBridgeAfterPartialRun(t *testing.T) {
 // the same database; the advisory lock serializes them and the final
 // state is exactly one applied migration.
 func TestRunUp_MultiPodRace(t *testing.T) {
-	dsn := newDB(t)
+	dsn := freshDB(t)
 	ctx := context.Background()
 	src := legacymigrate.OSSSource()
 
@@ -357,7 +307,7 @@ func firstLine(s string) string {
 // to v2 fails on track_b — track_a must end back at v1 with 002's table
 // dropped.
 func TestRunUp_RollsBackPriorSourcesOnLaterFailure(t *testing.T) {
-	dsn := newDB(t)
+	dsn := freshDB(t)
 	ctx := context.Background()
 
 	upOnlyDown := []byte("DO $$ BEGIN RAISE EXCEPTION 'up-only'; END $$;")
@@ -421,7 +371,7 @@ func TestRunUp_RollsBackPriorSourcesOnLaterFailure(t *testing.T) {
 // failure must be reversed back to the entry version — not left applied,
 // and not over-rolled past the entry floor.
 func TestRunUp_RestoresUpgradedFailingSourceToEntry(t *testing.T) {
-	dsn := newDB(t)
+	dsn := freshDB(t)
 	ctx := context.Background()
 	upOnlyDown := []byte("DO $$ BEGIN RAISE EXCEPTION 'up-only'; END $$;")
 
@@ -478,7 +428,7 @@ func TestRunUp_RestoresUpgradedFailingSourceToEntry(t *testing.T) {
 // converge. The source is fresh, so there is no prior-release version to
 // return to — only the dirty marker must be cleared.
 func TestRunUp_RestoresFreshInstallWithIntermediateCommit(t *testing.T) {
-	dsn := newDB(t)
+	dsn := freshDB(t)
 	ctx := context.Background()
 
 	// track_e is installed fresh this run: 001 + 002 commit, 003 fails.
@@ -538,7 +488,7 @@ func TestRunUp_RestoresFreshInstallWithIntermediateCommit(t *testing.T) {
 // start of a run is not migrated; RunUp surfaces it for operator `force`
 // rather than guessing a restore target.
 func TestRunUp_RefusesSourceAlreadyDirty(t *testing.T) {
-	dsn := newDB(t)
+	dsn := freshDB(t)
 	ctx := context.Background()
 
 	v1 := fstest.MapFS{

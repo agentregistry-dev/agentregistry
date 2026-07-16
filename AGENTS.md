@@ -270,7 +270,10 @@ func TestAgentService_GetAgent(t *testing.T) {
 ### Running Tests
 
 ```bash
-# Run unit tests
+# Run unit tests (no database needed)
+make test-unit
+
+# Run tests, including Postgres-backed integration tests (requires Postgres: make run-docker)
 make test
 
 # Run with coverage
@@ -278,9 +281,6 @@ make test-coverage
 
 # Run with HTML coverage report
 make test-coverage-report
-
-# Run integration tests
-make test-integration
 ```
 
 ---

@@ -515,10 +515,18 @@ func startMCPServer(
 	if authnProvider != nil {
 		handler = mcpAuthnMiddleware(authnProvider)(handler)
 	}
+	// Mount the MCP handler under a mux that reserves /healthz for a 200-OK liveness probe.
+	// The bridge listener otherwise has no plain-HTTP endpoint that returns 200 (a bare GET
+	// yields 400).
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	mux.Handle("/", handler)
 	addr := ":" + strconv.Itoa(int(cfg.MCPPort))
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           handler,
+		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	go func() {

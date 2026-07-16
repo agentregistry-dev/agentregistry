@@ -219,9 +219,11 @@ test-unit: ## Run Go unit tests
 	@echo "Running Go unit tests..."
 	$(GOTESTSUM) --format testdox -- -tags=unit -timeout 5m ./...
 
-# Run Go tests with integration tests
+# Run Go tests, including the Postgres-backed integration tests. Requires
+# Postgres (start via `make run-docker`, or point
+# AGENT_REGISTRY_TEST_DATABASE_URL elsewhere); tests fail when it is unreachable.
 .PHONY: test
-test: ## Run Go integration tests
+test: ## Run Go integration tests (requires Postgres; see run-docker)
 	@echo "Running Go tests with integration..."
 	$(GOTESTSUM) --format testdox -- -tags=integration -timeout 10m ./...
 
