@@ -25,3 +25,14 @@ type DeploymentRef struct {
 	Namespace string `json:"namespace,omitempty" yaml:"namespace,omitempty"`
 	Name      string `json:"name" yaml:"name"`
 }
+
+// ModelRef selects a Model by namespace/name. Kind is implicit (always Model)
+// and Tag is omitted because Model is a mutable-object kind keyed by
+// namespace/name.
+//
+// Namespace is optional: blank means "same namespace as the referencing
+// Deployment".
+type ModelRef struct {
+	Namespace string `json:"namespace,omitempty" yaml:"namespace,omitempty"`
+	Name      string `json:"name" yaml:"name"`
+}

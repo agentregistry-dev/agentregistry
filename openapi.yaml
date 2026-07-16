@@ -207,6 +207,8 @@ components:
           type: object
         harness:
           $ref: '#/components/schemas/DeploymentHarness'
+        modelRef:
+          $ref: '#/components/schemas/ModelRef'
         runtimeConfig:
           additionalProperties: {}
           type: object
@@ -840,6 +842,16 @@ components:
           type: string
         tls:
           $ref: '#/components/schemas/ModelTLSConfig'
+      type: object
+    ModelRef:
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+        namespace:
+          type: string
+      required:
+      - name
       type: object
     ModelSpec:
       additionalProperties: false

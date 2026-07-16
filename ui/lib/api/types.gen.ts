@@ -93,6 +93,7 @@ export type DeploymentSpec = {
         [key: string]: string;
     };
     harness?: DeploymentHarness;
+    modelRef?: ModelRef;
     runtimeConfig?: {
         [key: string]: unknown;
     };
@@ -394,6 +395,11 @@ export type ModelEndpointConfig = {
     baseUrl?: string;
     region?: string;
     tls?: ModelTlsConfig;
+};
+
+export type ModelRef = {
+    name: string;
+    namespace?: string;
 };
 
 export type ModelSpec = {

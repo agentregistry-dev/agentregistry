@@ -25,10 +25,10 @@ func TestDeploymentControllerSyncReplaysIgnoredEvents(t *testing.T) {
 	require.Equal(t, 2, res.Events)
 }
 
-func TestDeploymentControllerHandleHarnessDependencyEventsFullReconcile(t *testing.T) {
+func TestDeploymentControllerHandleDependencyEventsFullReconcile(t *testing.T) {
 	controller := &DeploymentController{}
 
-	for _, kind := range []string{v1alpha1.KindPlugin, v1alpha1.KindSkill, v1alpha1.KindPrompt} {
+	for _, kind := range []string{v1alpha1.KindPlugin, v1alpha1.KindSkill, v1alpha1.KindPrompt, v1alpha1.KindModel} {
 		t.Run(kind, func(t *testing.T) {
 			_, err := controller.HandleEvent(context.Background(), v1alpha1store.ControlPlaneEvent{
 				Key: v1alpha1store.ResourceKey{Kind: kind, Namespace: "default", Name: "changed"},

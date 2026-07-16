@@ -22,11 +22,11 @@ func (d *Deployment) Validate() error {
 	return errs
 }
 
-// ResolveRefs checks that TargetRef, RuntimeRef, and every entry in
-// DeploymentRefs resolve. The referenced objects must live in the
-// referenced namespace; when ref.Namespace is blank on the wire we
-// inherit the Deployment's own namespace (mirroring how kubectl treats
-// blank metadata.namespace).
+// ResolveRefs checks that TargetRef, RuntimeRef, the optional ModelRef, and
+// every entry in DeploymentRefs resolve. The referenced objects must live in
+// the referenced namespace; when ref.Namespace is blank on the wire we inherit
+// the Deployment's own namespace (mirroring how kubectl treats blank
+// metadata.namespace).
 func (d *Deployment) ResolveRefs(ctx context.Context, resolver ResolverFunc) error {
 	if resolver == nil {
 		return nil
@@ -44,6 +44,14 @@ func (d *Deployment) ResolveRefs(ctx context.Context, resolver ResolverFunc) err
 		runtime.Namespace = d.Metadata.Namespace
 	}
 	errs = append(errs, resolveRefWith(ctx, resolver, runtime, "spec.runtimeRef")...)
+
+	if d.Spec.ModelRef != nil {
+		model := ResourceRef{Kind: KindModel, Namespace: d.Spec.ModelRef.Namespace, Name: d.Spec.ModelRef.Name}
+		if model.Namespace == "" {
+			model.Namespace = d.Metadata.Namespace
+		}
+		errs = append(errs, resolveRefWith(ctx, resolver, model, "spec.modelRef")...)
+	}
 
 	for i, ref := range d.Spec.DeploymentRefs {
 		probe := ResourceRef{Kind: KindDeployment, Namespace: ref.Namespace, Name: ref.Name}
@@ -85,6 +93,15 @@ func validateDeploymentSpec(s *DeploymentSpec) FieldErrors {
 		}
 		if strings.TrimSpace(s.Harness.Type) == "" {
 			errs.Append("spec.harness.type", fmt.Errorf("%w", ErrRequiredField))
+		}
+	}
+
+	if s.ModelRef != nil {
+		if err := validateNameField(s.ModelRef.Name); err != nil {
+			errs.Append("spec.modelRef.name", err)
+		}
+		if s.ModelRef.Namespace != "" && !namespaceRegex.MatchString(s.ModelRef.Namespace) {
+			errs.Append("spec.modelRef.namespace", fmt.Errorf("%w: %q", ErrInvalidFormat, s.ModelRef.Namespace))
 		}
 	}
 
