@@ -21,10 +21,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/gateway"
 )
 
-// agentRoutePolicyName names the shared policy attaching A2A + URL-rewrite
-// semantics to every agent route.
-const agentRoutePolicyName = "agent-a2a-rewrite"
-
 const (
 	localComposeFileName    = "docker-compose.yaml"
 	defaultLocalProjectName = "agentregistry_runtime"
@@ -376,17 +372,6 @@ func buildDesiredAgentGatewayConfig(agentGatewayPort uint16, servers []*runtimet
 	}
 
 	var backends []gateway.Backend
-	var policies []gateway.Policy
-	if len(agents) > 0 {
-		policies = append(policies, gateway.Policy{
-			Name: agentRoutePolicyName,
-			Type: "AgentRoute",
-			Spec: gateway.PolicySpec{
-				A2A:        &gateway.A2APolicy{},
-				URLRewrite: &gateway.URLRewritePolicy{PathPrefix: "/"},
-			},
-		})
-	}
 	for _, agent := range agents {
 		agentServiceName := localAgentServiceName(agent)
 		backendName := fmt.Sprintf("%s_backend", agentServiceName)
@@ -398,7 +383,10 @@ func buildDesiredAgentGatewayConfig(agentGatewayPort uint16, servers []*runtimet
 			Name:        fmt.Sprintf("%s_route", agentServiceName),
 			PathPrefix:  fmt.Sprintf("/agents/%s", agentServiceName),
 			BackendRefs: []gateway.BackendRef{{Name: backendName}},
-			Policies:    []gateway.PolicyRef{{Name: agentRoutePolicyName}},
+			Policies: gateway.PolicySpec{
+				A2A:        &gateway.A2APolicy{},
+				URLRewrite: &gateway.URLRewritePolicy{PathPrefix: "/"},
+			},
 		})
 	}
 
@@ -411,7 +399,6 @@ func buildDesiredAgentGatewayConfig(agentGatewayPort uint16, servers []*runtimet
 		}},
 		Routes:   routes,
 		Backends: backends,
-		Policies: policies,
 	}, nil
 }
 

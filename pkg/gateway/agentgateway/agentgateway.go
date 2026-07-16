@@ -1,11 +1,6 @@
-// Package agentgateway is the concrete gateway.Engine implementation backed by
-// agentgateway's native config format. Render translates a desired
-// gateway.Config into *AgentGatewayConfig (the agent-gateway.yaml wire format);
-// engine.Apply renders the desired config and maintains it on disk as
-// agent-gateway.yaml, and engine.Remove strips it — both merging or filtering
-// routes by deployment id so multiple deployments can share one gateway
-// instance. The native config types live alongside this engine (see types.go);
-// callers outside this package depend only on gateway.Config.
+// Package agentgateway renders gateway.Config into agentgateway's native
+// agent-gateway.yaml wire format and provides the local file-backed Engine used
+// by the local runtime.
 package agentgateway
 
 import (
@@ -41,24 +36,27 @@ func NewEngine(dir string, port uint16) gateway.Engine {
 
 var _ gateway.Engine = (*engine)(nil)
 
-// Render translates a desired gateway.Config into the native
-// *AgentGatewayConfig. It is a pure function: no I/O, no engine state, and
-// deterministic — binds are sorted by port, listeners within a bind by name,
-// and routes by name, so equal inputs always produce equal outputs. engine.Apply
-// calls it internally; it is exported so agentgateway-aware callers can render
-// (e.g. to preview or diff config) without applying.
-func Render(_ context.Context, desired gateway.Config) (*AgentGatewayConfig, error) {
+// RenderYAML translates a desired gateway.Config into deterministic
+// agent-gateway.yaml bytes.
+func RenderYAML(ctx context.Context, desired gateway.Config) ([]byte, error) {
+	cfg, err := renderConfig(ctx, desired)
+	if err != nil {
+		return nil, err
+	}
+	out, err := yaml.Marshal(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("marshal agent gateway config: %w", err)
+	}
+	return out, nil
+}
+
+func renderConfig(_ context.Context, desired gateway.Config) (*AgentGatewayConfig, error) {
 	backends := make(map[string]gateway.Backend, len(desired.Backends))
 	for _, b := range desired.Backends {
 		backends[b.Name] = b
 	}
 
-	policies := make(map[string]gateway.Policy, len(desired.Policies))
-	for _, p := range desired.Policies {
-		policies[p.Name] = p
-	}
-
-	routes, err := renderRoutes(desired.Routes, backends, policies)
+	routes, err := renderRoutes(desired.Routes, backends)
 	if err != nil {
 		return nil, err
 	}
@@ -74,17 +72,13 @@ func Render(_ context.Context, desired gateway.Config) (*AgentGatewayConfig, err
 		if _, ok := listenersByPort[l.Port]; !ok {
 			ports = append(ports, l.Port)
 		}
-		listenerPolicies, err := renderPolicyRefs(l.Policies, policies)
-		if err != nil {
-			return nil, fmt.Errorf("listener %q: %w", l.Name, err)
-		}
 		listenersByPort[l.Port] = append(listenersByPort[l.Port], LocalListener{
 			Name:          l.Name,
 			GatewayName:   desired.ClassName,
 			Protocol:      LocalListenerProtocol(l.Protocol),
 			TLS:           renderTLS(l.TLS),
 			AllowedRoutes: renderAllowedRoutes(l.AllowedRoutes),
-			Policies:      listenerPolicies,
+			Policies:      renderPolicySpec(l.Policies),
 			Routes:        routes,
 		})
 	}
@@ -107,7 +101,7 @@ func Render(_ context.Context, desired gateway.Config) (*AgentGatewayConfig, err
 // renderRoutes translates desired routes into deterministically sorted native
 // routes. It returns nil when there are no routes so empty configs compare
 // cleanly as whole objects.
-func renderRoutes(routes []gateway.Route, backends map[string]gateway.Backend, policies map[string]gateway.Policy) ([]LocalRoute, error) {
+func renderRoutes(routes []gateway.Route, backends map[string]gateway.Backend) ([]LocalRoute, error) {
 	if len(routes) == 0 {
 		return nil, nil
 	}
@@ -123,17 +117,13 @@ func renderRoutes(routes []gateway.Route, backends map[string]gateway.Backend, p
 				MCP:    renderMCPBackend(r.MCP),
 			}}
 		}
-		routePolicies, err := renderPolicyRefs(r.Policies, policies)
-		if err != nil {
-			return nil, fmt.Errorf("route %q: %w", r.Name, err)
-		}
 		out = append(out, LocalRoute{
 			RouteName: r.Name,
 			Hostnames: r.Hostnames,
 			Matches: []RouteMatch{{
 				Path: PathMatch{PathPrefix: r.PathPrefix},
 			}},
-			Policies: routePolicies,
+			Policies: renderPolicySpec(r.Policies),
 			Backends: routeBackends,
 		})
 	}
@@ -184,11 +174,7 @@ func renderBackends(backends []gateway.Backend) []LocalBackend {
 		case b.MCP != nil:
 			out = append(out, LocalBackend{Name: b.Name, MCP: renderMCPBackend(b.MCP)})
 		case len(b.Extensions) > 0:
-			extra := make(map[string]any, len(b.Extensions))
-			for _, ext := range b.Extensions {
-				extra[ext.Type] = ext.Spec
-			}
-			out = append(out, LocalBackend{Name: b.Name, Extra: extra})
+			out = append(out, LocalBackend{Name: b.Name, Extra: b.Extensions})
 		}
 	}
 	if len(out) == 0 {
@@ -317,98 +303,69 @@ func renderAllowedRoutes(ar *gateway.AllowedRoutes) *LocalAllowedRoutes {
 		return nil
 	}
 	return &LocalAllowedRoutes{
-		Namespaces: ar.Namespaces,
+		Namespaces: renderAllowedRouteNamespaces(ar.Namespaces),
 		Kinds:      ar.Kinds,
 	}
 }
 
-// renderPolicyRefs merges the specs of the referenced policies into a single
-// native FilterOrPolicy. Unknown references and policies that contribute
-// nothing are ignored; it returns nil when no policy contributes. It errors
-// when two referenced policies set the same PolicySpec field on the same
-// route/listener, rather than letting the later one silently overwrite the
-// earlier one.
-func renderPolicyRefs(refs []gateway.PolicyRef, policies map[string]gateway.Policy) (*FilterOrPolicy, error) {
-	if len(refs) == 0 {
-		return nil, nil
+func renderAllowedRouteNamespaces(ns *gateway.AllowedRouteNamespaces) *LocalAllowedRouteNamespaces {
+	if ns == nil {
+		return nil
+	}
+	return &LocalAllowedRouteNamespaces{From: ns.From}
+}
+
+func renderPolicySpec(spec gateway.PolicySpec) *FilterOrPolicy {
+	if spec == (gateway.PolicySpec{}) {
+		return nil
 	}
 	fp := &FilterOrPolicy{}
 	contributed := false
-	for _, ref := range refs {
-		p, ok := policies[ref.Name]
-		if !ok {
-			continue
+	if a := spec.MCPAuthorization; a != nil {
+		fp.MCPAuthorization = &MCPAuthorization{Rules: authzRules(a)}
+		contributed = true
+	}
+	if a := spec.TrafficAuthorization; a != nil {
+		fp.TrafficAuthorization = &TrafficAuthorization{Rules: authzRules(a)}
+		contributed = true
+	}
+	if fc := spec.FrontendConnect; fc != nil {
+		native := &FrontendConnect{Enabled: fc.Enabled}
+		if fc.Authorization != nil {
+			native.Rules = authzRules(fc.Authorization)
 		}
-		if a := p.Spec.MCPAuthorization; a != nil {
-			if fp.MCPAuthorization != nil {
-				return nil, fmt.Errorf("policy %q: mcp authorization already set by another policy", ref.Name)
-			}
-			fp.MCPAuthorization = &MCPAuthorization{Rules: authzRules(a)}
-			contributed = true
+		fp.FrontendConnect = native
+		contributed = true
+	}
+	if c := spec.CORS; c != nil {
+		fp.CORS = &CORS{
+			AllowOrigins:  c.AllowOrigins,
+			AllowMethods:  c.AllowMethods,
+			AllowHeaders:  c.AllowHeaders,
+			ExposeHeaders: c.ExposeHeaders,
 		}
-		if a := p.Spec.TrafficAuthorization; a != nil {
-			if fp.TrafficAuthorization != nil {
-				return nil, fmt.Errorf("policy %q: traffic authorization already set by another policy", ref.Name)
-			}
-			fp.TrafficAuthorization = &TrafficAuthorization{Rules: authzRules(a)}
-			contributed = true
-		}
-		if fc := p.Spec.FrontendConnect; fc != nil {
-			if fp.FrontendConnect != nil {
-				return nil, fmt.Errorf("policy %q: frontend connect already set by another policy", ref.Name)
-			}
-			native := &FrontendConnect{Enabled: fc.Enabled}
-			if fc.Authorization != nil {
-				native.Rules = authzRules(fc.Authorization)
-			}
-			fp.FrontendConnect = native
-			contributed = true
-		}
-		if c := p.Spec.CORS; c != nil {
-			if fp.CORS != nil {
-				return nil, fmt.Errorf("policy %q: cors already set by another policy", ref.Name)
-			}
-			fp.CORS = &CORS{
-				AllowOrigins:  c.AllowOrigins,
-				AllowMethods:  c.AllowMethods,
-				AllowHeaders:  c.AllowHeaders,
-				ExposeHeaders: c.ExposeHeaders,
-			}
-			contributed = true
-		}
-		if p.Spec.A2A != nil {
-			if fp.A2A != nil {
-				return nil, fmt.Errorf("policy %q: a2a already set by another policy", ref.Name)
-			}
-			fp.A2A = &A2APolicy{}
-			contributed = true
-		}
-		if u := p.Spec.URLRewrite; u != nil {
-			if fp.URLRewrite != nil {
-				return nil, fmt.Errorf("policy %q: url rewrite already set by another policy", ref.Name)
-			}
-			fp.URLRewrite = &URLRewrite{Path: &PathRedirect{Prefix: u.PathPrefix}}
-			contributed = true
-		}
-		if j := p.Spec.JWTAuth; j != nil {
-			if fp.JWTAuth != nil {
-				return nil, fmt.Errorf("policy %q: jwt auth already set by another policy", ref.Name)
-			}
-			fp.JWTAuth = renderJWTAuth(j)
-			contributed = true
-		}
-		if tr := p.Spec.Transformation; tr != nil {
-			if fp.Transformations != nil {
-				return nil, fmt.Errorf("policy %q: transformation already set by another policy", ref.Name)
-			}
-			fp.Transformations = renderTransformation(tr)
-			contributed = true
-		}
+		contributed = true
+	}
+	if spec.A2A != nil {
+		fp.A2A = &A2APolicy{}
+		contributed = true
+	}
+	if u := spec.URLRewrite; u != nil {
+		fp.URLRewrite = &URLRewrite{Path: &PathRedirect{Prefix: u.PathPrefix}}
+		contributed = true
+	}
+	if j := spec.JWTAuth; j != nil {
+		fp.JWTAuth = renderJWTAuth(j)
+		contributed = true
+	}
+	if tr := spec.Transformation; tr != nil {
+		fp.Transformations = renderTransformation(tr)
+		contributed = true
 	}
 	if !contributed {
-		return nil, nil
+		return nil
 	}
-	return fp, nil
+	return fp
 }
 
 // renderJWTAuth maps a desired JWTAuthPolicy into the native listener JWT auth
@@ -453,7 +410,7 @@ func (e *engine) Apply(ctx context.Context, _ gateway.Target, desired gateway.Co
 	if len(desired.Listeners) == 0 && len(desired.Routes) == 0 {
 		return nil
 	}
-	rendered, err := Render(ctx, desired)
+	rendered, err := renderConfig(ctx, desired)
 	if err != nil {
 		return err
 	}
