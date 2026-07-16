@@ -16,8 +16,20 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
+
+// Authorizer gates a read operation for a kind against the caller's session
+// (carried on the context). ListFilter returns an ExtraWhere predicate + args
+// that scope a list to what the caller may see. Both mirror the per-kind hooks
+// the REST resource handlers consult (resource.Config.Authorize /
+// resource.Config.ListFilter), so the bridge enforces the same RBAC.
+// A nil hook for a kind means no restriction.
+type Authorizer = func(ctx context.Context, in resource.AuthorizeInput) error
+
+// ListFilter is the per-kind list-scoping hook; see Authorizer.
+type ListFilter = func(ctx context.Context, in resource.AuthorizeInput) (extraWhere string, extraArgs []any, err error)
 
 const (
 	defaultPageLimit = 30
@@ -31,7 +43,11 @@ const (
 //
 // Tool names are preserved across builds (`list_servers` not
 // `list_mcpservers`) so saved Claude MCP configs keep working.
-func NewServer(stores map[string]*v1alpha1store.Store) *mcp.Server {
+func NewServer(
+	stores map[string]*v1alpha1store.Store,
+	authorizers map[string]Authorizer,
+	listFilters map[string]ListFilter,
+) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "agentregistry-mcp",
 		Version: version.Version,
@@ -41,36 +57,44 @@ func NewServer(stores map[string]*v1alpha1store.Store) *mcp.Server {
 	})
 
 	addKindTools(server, stores[v1alpha1.KindAgent], kindTools[*v1alpha1.Agent]{
-		Kind:     v1alpha1.KindAgent,
-		ListName: "list_agents",
-		GetName:  "get_agent",
-		ListDesc: "List published agents as v1alpha1 envelopes with optional namespace, substring-name, and tag filters.",
-		GetDesc:  "Fetch a published agent as a v1alpha1 envelope (defaults to the latest tag).",
-		NewObj:   func() *v1alpha1.Agent { return &v1alpha1.Agent{} },
+		Kind:       v1alpha1.KindAgent,
+		ListName:   "list_agents",
+		GetName:    "get_agent",
+		ListDesc:   "List published agents as v1alpha1 envelopes with optional namespace, substring-name, and tag filters.",
+		GetDesc:    "Fetch a published agent as a v1alpha1 envelope (defaults to the latest tag).",
+		NewObj:     func() *v1alpha1.Agent { return &v1alpha1.Agent{} },
+		Authorize:  authorizers[v1alpha1.KindAgent],
+		ListFilter: listFilters[v1alpha1.KindAgent],
 	})
 	addKindTools(server, stores[v1alpha1.KindMCPServer], kindTools[*v1alpha1.MCPServer]{
-		Kind:     v1alpha1.KindMCPServer,
-		ListName: "list_servers",
-		GetName:  "get_server",
-		ListDesc: "List published MCP servers as v1alpha1 envelopes with optional namespace, substring-name, and tag filters.",
-		GetDesc:  "Fetch a published MCP server as a v1alpha1 envelope (defaults to the latest tag).",
-		NewObj:   func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} },
+		Kind:       v1alpha1.KindMCPServer,
+		ListName:   "list_servers",
+		GetName:    "get_server",
+		ListDesc:   "List published MCP servers as v1alpha1 envelopes with optional namespace, substring-name, and tag filters.",
+		GetDesc:    "Fetch a published MCP server as a v1alpha1 envelope (defaults to the latest tag).",
+		NewObj:     func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} },
+		Authorize:  authorizers[v1alpha1.KindMCPServer],
+		ListFilter: listFilters[v1alpha1.KindMCPServer],
 	})
 	addKindTools(server, stores[v1alpha1.KindSkill], kindTools[*v1alpha1.Skill]{
-		Kind:     v1alpha1.KindSkill,
-		ListName: "list_skills",
-		GetName:  "get_skill",
-		ListDesc: "List published skills as v1alpha1 envelopes with optional namespace, substring-name, and tag filters.",
-		GetDesc:  "Fetch a published skill as a v1alpha1 envelope (defaults to the latest tag).",
-		NewObj:   func() *v1alpha1.Skill { return &v1alpha1.Skill{} },
+		Kind:       v1alpha1.KindSkill,
+		ListName:   "list_skills",
+		GetName:    "get_skill",
+		ListDesc:   "List published skills as v1alpha1 envelopes with optional namespace, substring-name, and tag filters.",
+		GetDesc:    "Fetch a published skill as a v1alpha1 envelope (defaults to the latest tag).",
+		NewObj:     func() *v1alpha1.Skill { return &v1alpha1.Skill{} },
+		Authorize:  authorizers[v1alpha1.KindSkill],
+		ListFilter: listFilters[v1alpha1.KindSkill],
 	})
 	addKindTools(server, stores[v1alpha1.KindDeployment], kindTools[*v1alpha1.Deployment]{
-		Kind:     v1alpha1.KindDeployment,
-		ListName: "list_deployments",
-		GetName:  "get_deployment",
-		ListDesc: "List deployments as v1alpha1 envelopes with optional namespace and substring-name filters.",
-		GetDesc:  "Fetch a deployment as a v1alpha1 envelope by namespace/name.",
-		NewObj:   func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} },
+		Kind:       v1alpha1.KindDeployment,
+		ListName:   "list_deployments",
+		GetName:    "get_deployment",
+		ListDesc:   "List deployments as v1alpha1 envelopes with optional namespace and substring-name filters.",
+		GetDesc:    "Fetch a deployment as a v1alpha1 envelope by namespace/name.",
+		NewObj:     func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} },
+		Authorize:  authorizers[v1alpha1.KindDeployment],
+		ListFilter: listFilters[v1alpha1.KindDeployment],
 	})
 	addMetaTools(server)
 	addServerPrompts(server)
@@ -89,6 +113,9 @@ type kindTools[T v1alpha1.Object] struct {
 	ListDesc string
 	GetDesc  string
 	NewObj   func() T
+	// Authorize + ListFilter are per-kind RBAC hooks, nil when the build wires no authz for this kind.
+	Authorize  Authorizer
+	ListFilter ListFilter
 }
 
 // addKindTools registers list_X + get_X MCP tools for a v1alpha1 kind.
@@ -102,7 +129,7 @@ func addKindTools[T v1alpha1.Object](server *mcp.Server, store *v1alpha1store.St
 		Name:        cfg.ListName,
 		Description: cfg.ListDesc,
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, args listInput) (*mcp.CallToolResult, listOutput[T], error) {
-		raws, next, err := runList(ctx, store, args)
+		raws, next, err := runList(ctx, store, cfg.Kind, cfg.Authorize, cfg.ListFilter, args)
 		if err != nil {
 			return nil, listOutput[T]{}, err
 		}
@@ -116,7 +143,7 @@ func addKindTools[T v1alpha1.Object](server *mcp.Server, store *v1alpha1store.St
 		Name:        cfg.GetName,
 		Description: cfg.GetDesc,
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, args getByRefInput) (*mcp.CallToolResult, T, error) {
-		return getEnvelope(ctx, store, cfg.Kind, args, cfg.NewObj)
+		return getEnvelope(ctx, store, cfg.Kind, cfg.Authorize, args, cfg.NewObj)
 	})
 }
 
@@ -174,15 +201,36 @@ func addMetaTools(server *mcp.Server) {
 // Internal glue — generic list + get helpers shared across kinds.
 // -----------------------------------------------------------------------------
 
-func runList(ctx context.Context, store *v1alpha1store.Store, args listInput) ([]*v1alpha1.RawObject, string, error) {
+func runList(
+	ctx context.Context,
+	store *v1alpha1store.Store,
+	kind string,
+	authorize Authorizer,
+	listFilter ListFilter,
+	args listInput,
+) ([]*v1alpha1.RawObject, string, error) {
+	namespace := strings.TrimSpace(args.Namespace)
+	if authorize != nil {
+		if err := authorize(ctx, resource.AuthorizeInput{Verb: "list", Kind: kind, Namespace: namespace}); err != nil {
+			return nil, "", err
+		}
+	}
 	opts := v1alpha1store.ListOpts{
-		Namespace: strings.TrimSpace(args.Namespace),
+		Namespace: namespace,
 		Limit:     clampLimit(args.Limit),
 		Cursor:    args.Cursor,
 	}
 	tag := strings.TrimSpace(args.Tag)
 	if strings.EqualFold(tag, "latest") {
 		opts.LatestOnly = true
+	}
+	if listFilter != nil {
+		extraWhere, extraArgs, err := listFilter(ctx, resource.AuthorizeInput{Verb: "list", Kind: kind, Namespace: namespace})
+		if err != nil {
+			return nil, "", err
+		}
+		opts.ExtraWhere = extraWhere
+		opts.ExtraArgs = extraArgs
 	}
 	raws, next, err := store.List(ctx, opts)
 	if err != nil {
@@ -219,6 +267,7 @@ func getEnvelope[T v1alpha1.Object](
 	ctx context.Context,
 	store *v1alpha1store.Store,
 	kind string,
+	authorize Authorizer,
 	args getByRefInput,
 	newObj func() T,
 ) (*mcp.CallToolResult, T, error) {
@@ -231,6 +280,12 @@ func getEnvelope[T v1alpha1.Object](
 		namespace = v1alpha1.DefaultNamespace
 	}
 	tag := strings.TrimSpace(args.Tag)
+	if authorize != nil {
+		if err := authorize(ctx, resource.AuthorizeInput{Verb: "get", Kind: kind, Namespace: namespace, Name: args.Name, Tag: tag}); err != nil {
+			var zero T
+			return nil, zero, err
+		}
+	}
 
 	var (
 		raw *v1alpha1.RawObject

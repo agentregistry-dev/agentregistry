@@ -161,7 +161,8 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		}
 	}()
 
-	routeOpts := buildRouteOptions(options, stores, deploymentAdapters, crudPerKindHooks(options))
+	perKindHooks := crudPerKindHooks(options)
+	routeOpts := buildRouteOptions(options, stores, deploymentAdapters, perKindHooks)
 
 	// Initialize HTTP server
 	baseServer, err := api.NewServer(cfg, metrics, versionInfo, options.UIHandler, authnProvider, routeOpts)
@@ -180,7 +181,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		options.OnHTTPServerCreated(server)
 	}
 
-	mcpHTTPServer := startMCPServer(cfg, stores, authnProvider)
+	mcpHTTPServer := startMCPServer(cfg, stores, authnProvider, perKindHooks)
 
 	// Start server in a goroutine so it doesn't block signal handling
 	go func() {
@@ -504,11 +505,12 @@ func startMCPServer(
 	cfg *config.Config,
 	stores map[string]*v1alpha1store.Store,
 	authnProvider auth.AuthnProvider,
+	hooks crud.PerKindHooks,
 ) *http.Server {
 	if cfg.MCPPort <= 0 {
 		return nil
 	}
-	mcpServer := mcpregistry.NewServer(stores)
+	mcpServer := mcpregistry.NewServer(stores, hooks.Authorizers, hooks.ListFilters)
 	var handler http.Handler = mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server {
 		return mcpServer
 	}, &mcp.StreamableHTTPOptions{})
@@ -540,23 +542,21 @@ func startMCPServer(
 }
 
 // mcpAuthnMiddleware uses the AuthnProvider to attach a session to the
-// request context on successful authentication. On auth error or missing
-// session, the request continues with an unauthenticated context — the
-// AuthzProvider downstream decides whether the request is allowed (the
-// OSS default `PublicAuthzProvider` permits read-only access; downstream
-// authz can reject). Failing-open here is intentional so the MCP bridge
-// works for anonymous `list_servers` / `get_server` traffic while still
-// letting authenticated callers pick up privileged operations.
+// request context on successful authentication, so downstream tool calls run
+// their per-kind authorizer + list-filter against the caller's identity. A
+// request without a valid credential is rejected with 401. This middleware is
+// only installed when an AuthnProvider is configured; a build with no provider
+// serves the bridge unauthenticated.
 func mcpAuthnMiddleware(authn auth.AuthnProvider) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
 			session, err := authn.Authenticate(ctx, r.Header.Get, r.URL.Query())
 			if err == nil && session != nil {
-				ctx = auth.AuthSessionTo(ctx, session)
-				r = r.WithContext(ctx)
+				next.ServeHTTP(w, r.WithContext(auth.AuthSessionTo(ctx, session)))
+				return
 			}
-			next.ServeHTTP(w, r)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		})
 	}
 }

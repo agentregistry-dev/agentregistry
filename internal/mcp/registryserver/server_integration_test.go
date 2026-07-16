@@ -47,7 +47,7 @@ func TestMCPListServers_HappyPath(t *testing.T) {
 	require.NoError(t, err, "seed server")
 
 	// Wire up MCP server + client over in-memory transports.
-	server := NewServer(stores)
+	server := NewServer(stores, nil, nil)
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 
 	serverSession, err := server.Connect(ctx, serverTransport, nil)
