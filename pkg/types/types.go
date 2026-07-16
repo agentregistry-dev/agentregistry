@@ -17,7 +17,6 @@ import (
 	"net/http"
 
 	"github.com/danielgtaylor/huma/v2"
-
 	"github.com/modelcontextprotocol/go-sdk/oauthex"
 
 	v0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
