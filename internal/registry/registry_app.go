@@ -183,7 +183,13 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		options.OnHTTPServerCreated(server)
 	}
 
-	mcpHTTPServer := startMCPServer(cfg, stores, authnProvider, perKindHooks, options.MCPProtectedResourceMetadata, options.MCPResourceMetadataURL)
+	// The bridge may use a dedicated authn provider (e.g. one that adds MCP
+	// audience validation) without affecting server traffic.
+	mcpAuthnProvider := options.MCPAuthnProvider
+	if mcpAuthnProvider == nil {
+		mcpAuthnProvider = authnProvider
+	}
+	mcpHTTPServer := startMCPServer(cfg, stores, mcpAuthnProvider, perKindHooks, options.MCPProtectedResourceMetadata, options.MCPResourceMetadataURL)
 
 	// Start server in a goroutine so it doesn't block signal handling
 	go func() {

@@ -361,6 +361,11 @@ type AppOptions struct {
 	// WWW-Authenticate challenge. Empty omits the hint.
 	MCPResourceMetadataURL string
 
+	// MCPAuthnProvider optionally overrides AuthnProvider for the MCP bridge
+	// only, letting a build apply bridge-specific validation (e.g. audience
+	// binding to the MCP resource). Nil falls back to AuthnProvider.
+	MCPAuthnProvider auth.AuthnProvider
+
 	// Auditor receives audit events from the v1alpha1 store layer
 	// (e.g. ResourceTagCreated on Upsert creates). The default OSS
 	// behavior is a no-op; downstream builds plug in a real audit sink.
