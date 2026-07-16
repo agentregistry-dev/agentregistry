@@ -823,17 +823,19 @@ components:
         secretRef:
           $ref: '#/components/schemas/SecretKeyRef'
         strategy:
+          enum:
+          - runtime
+          - secretRef
+          - passthrough
           type: string
+      required:
+      - strategy
       type: object
     ModelEndpointConfig:
       additionalProperties: false
       properties:
         baseUrl:
           type: string
-        defaultHeaders:
-          additionalProperties:
-            type: string
-          type: object
         region:
           type: string
         tls:

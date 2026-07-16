@@ -56,7 +56,7 @@ func validateModelSpec(s *ModelSpec) FieldErrors {
 
 	strategy := ""
 	if s.Auth != nil {
-		strategy = strings.TrimSpace(s.Auth.Strategy)
+		strategy = s.Auth.Strategy
 		switch strategy {
 		case ModelAuthStrategyRuntime, ModelAuthStrategyPassthrough:
 			if s.Auth.SecretRef != nil {

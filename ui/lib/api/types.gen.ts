@@ -387,14 +387,11 @@ export type Model = {
 
 export type ModelAuthConfig = {
     secretRef?: SecretKeyRef;
-    strategy?: string;
+    strategy: 'runtime' | 'secretRef' | 'passthrough';
 };
 
 export type ModelEndpointConfig = {
     baseUrl?: string;
-    defaultHeaders?: {
-        [key: string]: string;
-    };
     region?: string;
     tls?: ModelTlsConfig;
 };

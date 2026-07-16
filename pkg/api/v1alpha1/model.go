@@ -61,7 +61,7 @@ type ModelAuthConfig struct {
 	// Strategy is "runtime" (ambient cloud identity), "secretRef" (key
 	// material from a registry Secret), or "passthrough" (inbound bearer
 	// token forwarded as the provider key).
-	Strategy string `json:"strategy,omitempty" yaml:"strategy,omitempty"`
+	Strategy string `json:"strategy" yaml:"strategy" enum:"runtime,secretRef,passthrough"`
 	// SecretRef is required iff Strategy == "secretRef".
 	SecretRef *SecretKeyRef `json:"secretRef,omitempty" yaml:"secretRef,omitempty"`
 }
@@ -71,9 +71,8 @@ type ModelEndpointConfig struct {
 	BaseURL string `json:"baseUrl,omitempty" yaml:"baseUrl,omitempty"`
 	// Region overrides the model-endpoint region (bedrock); empty means the
 	// provider default.
-	Region         string            `json:"region,omitempty" yaml:"region,omitempty"`
-	DefaultHeaders map[string]string `json:"defaultHeaders,omitempty" yaml:"defaultHeaders,omitempty"`
-	TLS            *ModelTLSConfig   `json:"tls,omitempty" yaml:"tls,omitempty"`
+	Region string          `json:"region,omitempty" yaml:"region,omitempty"`
+	TLS    *ModelTLSConfig `json:"tls,omitempty" yaml:"tls,omitempty"`
 }
 
 // ModelTLSConfig carries TLS settings for private gateway endpoints.

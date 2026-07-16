@@ -84,6 +84,11 @@ func TestModelValidate(t *testing.T) {
 			wantErr: "spec.auth.strategy",
 		},
 		{
+			name:    "auth strategy must use canonical enum value",
+			spec:    ModelSpec{Provider: "bedrock", Model: "m", Auth: &ModelAuthConfig{Strategy: " runtime "}},
+			wantErr: "spec.auth.strategy",
+		},
+		{
 			name:    "empty auth strategy on non-nil auth",
 			spec:    ModelSpec{Provider: "bedrock", Model: "m", Auth: &ModelAuthConfig{}},
 			wantErr: "spec.auth.strategy",
