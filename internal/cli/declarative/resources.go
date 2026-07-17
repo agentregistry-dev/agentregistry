@@ -195,6 +195,7 @@ func modelRow(model *v1alpha1.Model) []string {
 	}
 	return []string{
 		printer.TruncateString(model.Metadata.Name, 40),
+		model.Metadata.Tag,
 		model.Spec.Provider,
 		printer.TruncateString(model.Spec.Model, 50),
 		printer.EmptyValueOrDefault(auth, "<provider default>"),

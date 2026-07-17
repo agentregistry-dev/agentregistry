@@ -26,8 +26,9 @@ var KnownModelProviders = map[string]struct {
 //   - "runtime" only for ambient-identity providers (currently bedrock);
 //     key-based providers must declare secretRef or passthrough.
 //
-// Model is unversioned: identity is (namespace, name). Auth/endpoint edits
-// are routine config mutations, not new versions.
+// Model is versioned: identity is (namespace, name, tag). Auth/endpoint edits
+// publish a new configuration tag when callers need to preserve existing
+// Deployment pins.
 func (m *Model) Validate() error {
 	var errs FieldErrors
 	errs = append(errs, ValidateObjectMeta(m.Metadata)...)

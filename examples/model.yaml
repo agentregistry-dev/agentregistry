@@ -4,6 +4,7 @@ apiVersion: ar.dev/v1alpha1
 kind: Model
 metadata:
   name: claude-opus-4-8
+  tag: approved-v1
 spec:
   title: Claude Opus 4.8 (Bedrock)
   provider: bedrock

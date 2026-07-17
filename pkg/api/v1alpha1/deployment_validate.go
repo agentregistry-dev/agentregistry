@@ -46,7 +46,12 @@ func (d *Deployment) ResolveRefs(ctx context.Context, resolver ResolverFunc) err
 	errs = append(errs, resolveRefWith(ctx, resolver, runtime, "spec.runtimeRef")...)
 
 	if d.Spec.ModelRef != nil {
-		model := ResourceRef{Kind: KindModel, Namespace: d.Spec.ModelRef.Namespace, Name: d.Spec.ModelRef.Name}
+		model := ResourceRef{
+			Kind:      KindModel,
+			Namespace: d.Spec.ModelRef.Namespace,
+			Name:      d.Spec.ModelRef.Name,
+			Tag:       d.Spec.ModelRef.Tag,
+		}
 		if model.Namespace == "" {
 			model.Namespace = d.Metadata.Namespace
 		}
@@ -97,12 +102,7 @@ func validateDeploymentSpec(s *DeploymentSpec) FieldErrors {
 	}
 
 	if s.ModelRef != nil {
-		if err := validateNameField(s.ModelRef.Name); err != nil {
-			errs.Append("spec.modelRef.name", err)
-		}
-		if s.ModelRef.Namespace != "" && !namespaceRegex.MatchString(s.ModelRef.Namespace) {
-			errs.Append("spec.modelRef.namespace", fmt.Errorf("%w: %q", ErrInvalidFormat, s.ModelRef.Namespace))
-		}
+		errs = append(errs, validateModelRef(*s.ModelRef)...)
 	}
 
 	switch s.DesiredState {
@@ -125,5 +125,21 @@ func validateDeploymentSpec(s *DeploymentSpec) FieldErrors {
 		}
 	}
 
+	return errs
+}
+
+func validateModelRef(ref ModelRef) FieldErrors {
+	var errs FieldErrors
+	if err := validateNameField(ref.Name); err != nil {
+		errs.Append("spec.modelRef.name", err)
+	}
+	if ref.Namespace != "" && !namespaceRegex.MatchString(ref.Namespace) {
+		errs.Append("spec.modelRef.namespace", fmt.Errorf("%w: %q", ErrInvalidFormat, ref.Namespace))
+	}
+	if ref.Tag != "" {
+		if err := validateTag(ref.Tag); err != nil {
+			errs.Append("spec.modelRef.tag", err)
+		}
+	}
 	return errs
 }

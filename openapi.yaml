@@ -850,6 +850,8 @@ components:
           type: string
         namespace:
           type: string
+        tag:
+          type: string
       required:
       - name
       type: object
@@ -2496,31 +2498,6 @@ paths:
           description: Error
       summary: List Model (scoped by ?namespace)
   /v0/models/{name}:
-    delete:
-      operationId: delete-model
-      parameters:
-      - description: Namespace (internal; defaults to 'default').
-        explode: false
-        in: query
-        name: namespace
-        schema:
-          description: Namespace (internal; defaults to 'default').
-          type: string
-      - in: path
-        name: name
-        required: true
-        schema:
-          type: string
-      responses:
-        "204":
-          description: No Content
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ErrorModel'
-          description: Error
-      summary: 'Delete a Model (soft-delete: sets deletionTimestamp)'
     get:
       operationId: get-latest-model
       parameters:
@@ -2550,8 +2527,9 @@ paths:
                 $ref: '#/components/schemas/ErrorModel'
           description: Error
       summary: Get the latest Model
-    put:
-      operationId: apply-model
+  /v0/models/{name}/{tag}:
+    delete:
+      operationId: delete-model
       parameters:
       - description: Namespace (internal; defaults to 'default').
         explode: false
@@ -2565,11 +2543,41 @@ paths:
         required: true
         schema:
           type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Model'
+      - in: path
+        name: tag
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorModel'
+          description: Error
+      summary: 'Delete a Model (soft-delete: sets deletionTimestamp)'
+    get:
+      operationId: get-model
+      parameters:
+      - description: Namespace (internal; defaults to 'default').
+        explode: false
+        in: query
+        name: namespace
+        schema:
+          description: Namespace (internal; defaults to 'default').
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: tag
+        required: true
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -2583,7 +2591,37 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorModel'
           description: Error
-      summary: Apply a Model (idempotent upsert)
+      summary: Get a Model by name and tag
+  /v0/models/{name}/tags:
+    get:
+      operationId: list-tags-model
+      parameters:
+      - description: Namespace (internal; defaults to 'default').
+        explode: false
+        in: query
+        name: namespace
+        schema:
+          description: Namespace (internal; defaults to 'default').
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListOutputModelBody'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorModel'
+          description: Error
+      summary: List all tags of a Model
   /v0/ping:
     get:
       description: Simple ping endpoint

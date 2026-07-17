@@ -12,7 +12,7 @@ type Model struct {
 }
 
 func init() {
-	MustRegisterKind[*Model, ModelSpec](KindModel, WithMutableObjectStorage())
+	MustRegisterKind[*Model, ModelSpec](KindModel)
 }
 
 // Supported provider families. Expand this enum only when the provider has a
@@ -31,8 +31,9 @@ const (
 // ModelSpec describes one model: catalog display metadata,
 // provider-scoped identity, and platform-owned connection posture.
 //
-// Model is a mutable namespace/name object (no tags): auth and endpoint edits
-// are routine config mutations, not new versions.
+// Model is a tagged catalog artifact. Provider identity and platform-owned
+// auth/endpoint posture are versioned together so Deployments can pin the
+// complete model configuration they consume.
 type ModelSpec struct {
 	// Catalog display metadata.
 	Title       string `json:"title,omitempty" yaml:"title,omitempty"`

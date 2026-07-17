@@ -73,11 +73,11 @@ func TestProvider_NoAllTagsSupport(t *testing.T) {
 	require.Nil(t, k.DeleteAllTags, "Runtime should not expose DeleteAllTags (mutable object kind)")
 }
 
-func TestModel_NoAllTagsSupport(t *testing.T) {
+func TestModel_AllTagsSupport(t *testing.T) {
 	k, err := scheme.Lookup("model")
 	require.NoError(t, err)
-	require.Nil(t, k.ListTags, "Model should not expose ListTags (mutable object kind)")
-	require.Nil(t, k.DeleteAllTags, "Model should not expose DeleteAllTags (mutable object kind)")
+	require.NotNil(t, k.ListTags, "tagged Model should expose ListTags")
+	require.NotNil(t, k.DeleteAllTags, "tagged Model should expose DeleteAllTags")
 	require.Equal(t, "model", k.Kind)
 	require.Equal(t, "models", k.Plural)
 }

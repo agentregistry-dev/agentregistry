@@ -276,6 +276,10 @@ func TestDeploymentValidate_ModelRef(t *testing.T) {
 			modelRef: &ModelRef{Namespace: "models", Name: "claude-opus-4-8"},
 		},
 		{
+			name:     "pinned tag",
+			modelRef: &ModelRef{Name: "claude-opus-4-8", Tag: "approved-v1"},
+		},
+		{
 			name:       "missing name",
 			modelRef:   &ModelRef{Namespace: "models"},
 			wantFields: []string{"spec.modelRef.name"},
@@ -289,6 +293,11 @@ func TestDeploymentValidate_ModelRef(t *testing.T) {
 			name:       "invalid namespace",
 			modelRef:   &ModelRef{Namespace: "Bad Namespace", Name: "claude-opus-4-8"},
 			wantFields: []string{"spec.modelRef.namespace"},
+		},
+		{
+			name:       "invalid tag",
+			modelRef:   &ModelRef{Name: "claude-opus-4-8", Tag: "not a tag"},
+			wantFields: []string{"spec.modelRef.tag"},
 		},
 	}
 
@@ -462,6 +471,7 @@ func TestDeploymentResolveRefs_ModelRef(t *testing.T) {
 		name          string
 		modelRef      ModelRef
 		wantNamespace string
+		wantTag       string
 	}{
 		{
 			name:          "inherits deployment namespace",
@@ -472,6 +482,12 @@ func TestDeploymentResolveRefs_ModelRef(t *testing.T) {
 			name:          "preserves explicit namespace",
 			modelRef:      ModelRef{Namespace: "models", Name: "claude-opus-4-8"},
 			wantNamespace: "models",
+		},
+		{
+			name:          "preserves pinned tag",
+			modelRef:      ModelRef{Name: "claude-opus-4-8", Tag: "approved-v1"},
+			wantNamespace: "team-b",
+			wantTag:       "approved-v1",
 		},
 	}
 
@@ -497,6 +513,7 @@ func TestDeploymentResolveRefs_ModelRef(t *testing.T) {
 				Kind:      KindModel,
 				Namespace: tt.wantNamespace,
 				Name:      "claude-opus-4-8",
+				Tag:       tt.wantTag,
 			}, seen[2])
 		})
 	}

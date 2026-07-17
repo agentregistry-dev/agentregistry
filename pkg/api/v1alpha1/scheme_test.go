@@ -53,6 +53,19 @@ func TestKindDescriptorsDriveKindMetadata(t *testing.T) {
 	if mcp.Plural != "mcpservers" || mcp.Table != "v1alpha1.mcp_servers" {
 		t.Fatalf("mcpserver routing/storage = %s/%s", mcp.Plural, mcp.Table)
 	}
+	model, ok := KindDescriptorFor(KindModel)
+	if !ok {
+		t.Fatalf("missing %s descriptor", KindModel)
+	}
+	if model.Storage != KindStorageTaggedArtifact {
+		t.Fatalf("model storage = %s, want %s", model.Storage, KindStorageTaggedArtifact)
+	}
+	if model.Plural != "models" || model.Table != "v1alpha1.models" {
+		t.Fatalf("model routing/storage = %s/%s", model.Plural, model.Table)
+	}
+	if !IsTaggedArtifactKind(KindModel) {
+		t.Fatalf("model should be tagged artifact kind")
+	}
 
 	deployment, ok := KindDescriptorFor(KindDeployment)
 	if !ok {

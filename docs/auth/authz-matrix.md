@@ -31,14 +31,16 @@ These five kinds share the same endpoint shape. `{kind}` = `agent` | `server` | 
 
 ## Models
 
-Model is a mutable namespace/name kind (no tags) served by the generic CRUD surface. Models are intended to be admin-writable: they carry platform connection posture (auth strategy, endpoint, secret refs), so a non-public provider should grant `Publish`/`Edit`/`Delete` on `model:{name}` to platform admins only. Secret values never live on the Model — only `SecretKeyRef` names — so `Read` does not expose key material.
+Model is a tagged catalog kind. Each tag versions provider identity together with platform connection posture (auth strategy, endpoint, secret refs), allowing Deployments to pin the complete configuration they consume. Models are intended to be admin-writable, so a non-public provider should grant `Publish`/`Edit`/`Delete` on `model:{name}` to platform admins only. Secret values never live on the Model — only `SecretKeyRef` names — so `Read` does not expose key material.
 
 | Operation | HTTP | Required permissions | Notes |
 | --- | --- | --- | --- |
 | List | `GET /v0/models` | none | Filtering is delegated to the provider implementation; the list boundary intentionally skips checks. |
-| Get | `GET /v0/models/{name}` | `Read` on `model:{name}` | |
-| Apply | `POST /v0/apply` | `Read` + `Publish` (new) or `Read` + `Edit` (existing) on `model:{name}` | Mutable object: apply replaces the (namespace, name) row. |
-| Delete | `DELETE /v0/models/{name}` | `Delete` on `model:{name}` | |
+| Get latest | `GET /v0/models/{name}` | `Read` on `model:{name}` | Resolves the literal `latest` tag. |
+| List tags | `GET /v0/models/{name}/tags` | `Read` on `model:{name}` | |
+| Get tag | `GET /v0/models/{name}/{tag}` | `Read` on `model:{name}` | |
+| Apply | `POST /v0/apply` | `Read` + `Publish` (new tag) or `Read` + `Edit` (existing tag) on `model:{name}` | Omitted `metadata.tag` defaults to `latest`. |
+| Delete tag | `DELETE /v0/models/{name}/{tag}` | `Delete` on `model:{name}` | Batch delete with an omitted tag deletes every tag for the name. |
 
 ## Deployments
 
@@ -62,7 +64,7 @@ Agent deployments additionally invoke `Read` on each referenced `plugin:{ref}`, 
 
 | Operation | HTTP | Required permissions | Notes |
 | --- | --- | --- | --- |
-| Apply | `POST /v0/apply` | Per-document; depends on kind and whether the row already exists | Each document dispatches to its kind handler individually; partial failure is allowed. Artifacts (`agent`/`server`/`plugin`/`skill`/`prompt`): `Read` + `Publish` if the tag is new, `Read` + `Edit` if it already exists. Mutable `model`: `Read` + `Publish` if new, `Read` + `Edit` if it exists. `provider`: `Read` + `Edit` if it exists, `Read` + `Publish` if new. `deployment`: same as `PUT /v0/deployments/{name}?namespace={namespace}`. |
+| Apply | `POST /v0/apply` | Per-document; depends on kind and whether the row already exists | Each document dispatches to its kind handler individually; partial failure is allowed. Artifacts (`agent`/`server`/`model`/`plugin`/`skill`/`prompt`): `Read` + `Publish` if the tag is new, `Read` + `Edit` if it already exists. `provider`: `Read` + `Edit` if it exists, `Read` + `Publish` if new. `deployment`: same as `PUT /v0/deployments/{name}?namespace={namespace}`. |
 | Delete | `DELETE /v0/apply` | Per-document; depends on kind | Artifacts and `model`: `Delete` on `{kind}:{name}`. `provider`: `Read` + `Delete` on `provider:{name}`. `deployment`: `Deploy` on target (see Deployments section). |
 
 ## Public

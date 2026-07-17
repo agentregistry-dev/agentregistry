@@ -14,7 +14,8 @@
 //	DELETE {basePrefix}/{pluralKind}/{name}/{tag}?namespace={ns}     delete exact tag (tagged content kinds only)
 //
 // Direct PUT is registered only for mutable object stores. Content-registry
-// artifact kinds (Agent, MCPServer, Skill, Prompt) use metadata.tag and are
+// artifact kinds (Agent, MCPServer, Model, Plugin, Skill, Prompt) use
+// metadata.tag and are
 // written through POST /v0/apply.
 package resource
 

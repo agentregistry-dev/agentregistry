@@ -400,6 +400,7 @@ export type ModelEndpointConfig = {
 export type ModelRef = {
     name: string;
     namespace?: string;
+    tag?: string;
 };
 
 export type ModelSpec = {
@@ -1533,38 +1534,6 @@ export type ListModelsResponses = {
 
 export type ListModelsResponse = ListModelsResponses[keyof ListModelsResponses];
 
-export type DeleteModelData = {
-    body?: never;
-    path: {
-        name: string;
-    };
-    query?: {
-        /**
-         * Namespace (internal; defaults to 'default').
-         */
-        namespace?: string;
-    };
-    url: '/v0/models/{name}';
-};
-
-export type DeleteModelErrors = {
-    /**
-     * Error
-     */
-    default: ErrorModel;
-};
-
-export type DeleteModelError = DeleteModelErrors[keyof DeleteModelErrors];
-
-export type DeleteModelResponses = {
-    /**
-     * No Content
-     */
-    204: void;
-};
-
-export type DeleteModelResponse = DeleteModelResponses[keyof DeleteModelResponses];
-
 export type GetLatestModelData = {
     body?: never;
     path: {
@@ -1597,8 +1566,74 @@ export type GetLatestModelResponses = {
 
 export type GetLatestModelResponse = GetLatestModelResponses[keyof GetLatestModelResponses];
 
-export type ApplyModelData = {
-    body?: Model;
+export type DeleteModelData = {
+    body?: never;
+    path: {
+        name: string;
+        tag: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/models/{name}/{tag}';
+};
+
+export type DeleteModelErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type DeleteModelError = DeleteModelErrors[keyof DeleteModelErrors];
+
+export type DeleteModelResponses = {
+    /**
+     * No Content
+     */
+    204: void;
+};
+
+export type DeleteModelResponse = DeleteModelResponses[keyof DeleteModelResponses];
+
+export type GetModelData = {
+    body?: never;
+    path: {
+        name: string;
+        tag: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/models/{name}/{tag}';
+};
+
+export type GetModelErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetModelError = GetModelErrors[keyof GetModelErrors];
+
+export type GetModelResponses = {
+    /**
+     * OK
+     */
+    200: Model;
+};
+
+export type GetModelResponse = GetModelResponses[keyof GetModelResponses];
+
+export type ListTagsModelData = {
+    body?: never;
     path: {
         name: string;
     };
@@ -1608,26 +1643,26 @@ export type ApplyModelData = {
          */
         namespace?: string;
     };
-    url: '/v0/models/{name}';
+    url: '/v0/models/{name}/tags';
 };
 
-export type ApplyModelErrors = {
+export type ListTagsModelErrors = {
     /**
      * Error
      */
     default: ErrorModel;
 };
 
-export type ApplyModelError = ApplyModelErrors[keyof ApplyModelErrors];
+export type ListTagsModelError = ListTagsModelErrors[keyof ListTagsModelErrors];
 
-export type ApplyModelResponses = {
+export type ListTagsModelResponses = {
     /**
      * OK
      */
-    200: Model;
+    200: ListOutputModelBody;
 };
 
-export type ApplyModelResponse = ApplyModelResponses[keyof ApplyModelResponses];
+export type ListTagsModelResponse = ListTagsModelResponses[keyof ListTagsModelResponses];
 
 export type PingV0Data = {
     body?: never;
