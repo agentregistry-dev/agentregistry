@@ -1,6 +1,6 @@
 // Package v1alpha1crud wires the generic CRUD HTTP handlers for every
 // first-party v1alpha1 Kind shipped by this repo (Agent, MCPServer,
-// Skill, Prompt, Runtime, Deployment). Per-kind registration is a
+// Skill, Prompt, Runtime, Model, Deployment). Per-kind registration is a
 // single `register(...)` call in bindings.go's init(); resource.Register
 // handles every per-kind quirk internally (per-kind authz / list
 // filtering / post-upsert / post-delete threaded through PerKindHooks).

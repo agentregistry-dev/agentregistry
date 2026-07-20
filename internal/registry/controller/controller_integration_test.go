@@ -70,6 +70,7 @@ func TestDeploymentControllerHandleDependencyEventsFullReconcileDeployments(t *t
 		v1alpha1.KindPlugin,
 		v1alpha1.KindSkill,
 		v1alpha1.KindPrompt,
+		v1alpha1.KindModel,
 	} {
 		t.Run(kind, func(t *testing.T) {
 			stores := newControllerTestStores(t)

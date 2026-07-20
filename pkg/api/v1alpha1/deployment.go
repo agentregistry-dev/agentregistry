@@ -57,9 +57,13 @@ const (
 // RuntimeRef is required and must name a top-level Runtime. The Runtime
 // resolves how/where the target is executed (local daemon, kubernetes, etc.).
 type DeploymentSpec struct {
-	TargetRef    ResourceRef `json:"targetRef" yaml:"targetRef"`
-	RuntimeRef   ResourceRef `json:"runtimeRef" yaml:"runtimeRef"`
-	DesiredState string      `json:"desiredState,omitempty" yaml:"desiredState,omitempty"`
+	TargetRef  ResourceRef `json:"targetRef" yaml:"targetRef"`
+	RuntimeRef ResourceRef `json:"runtimeRef" yaml:"runtimeRef"`
+	// ModelRef optionally selects the Model for this Deployment. Namespace
+	// defaults to the Deployment's namespace. Provider, endpoint, and auth
+	// configuration remain on the referenced Model.
+	ModelRef     *ModelRef `json:"modelRef,omitempty" yaml:"modelRef,omitempty"`
+	DesiredState string    `json:"desiredState,omitempty" yaml:"desiredState,omitempty"`
 	// DeploymentRefs declaratively binds this Deployment to other
 	// Deployments — e.g. an Agent Deployment binding to the MCPServer
 	// Deployments whose status should feed its runtime config. Stored

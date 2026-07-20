@@ -73,6 +73,15 @@ func TestProvider_NoAllTagsSupport(t *testing.T) {
 	require.Nil(t, k.DeleteAllTags, "Runtime should not expose DeleteAllTags (mutable object kind)")
 }
 
+func TestModel_AllTagsSupport(t *testing.T) {
+	k, err := scheme.Lookup("model")
+	require.NoError(t, err)
+	require.NotNil(t, k.ListTags, "tagged Model should expose ListTags")
+	require.NotNil(t, k.DeleteAllTags, "tagged Model should expose DeleteAllTags")
+	require.Equal(t, "model", k.Kind)
+	require.Equal(t, "models", k.Plural)
+}
+
 // TestDeployment_NoAllTagsSupport is the symmetric assertion for
 // Deployment — also a mutable namespace/name object. Already
 // covered by TestGet_AllTags_DeploymentRejected at the CLI surface

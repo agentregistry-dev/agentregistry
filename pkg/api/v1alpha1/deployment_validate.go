@@ -22,11 +22,11 @@ func (d *Deployment) Validate() error {
 	return errs
 }
 
-// ResolveRefs checks that TargetRef, RuntimeRef, and every entry in
-// DeploymentRefs resolve. The referenced objects must live in the
-// referenced namespace; when ref.Namespace is blank on the wire we
-// inherit the Deployment's own namespace (mirroring how kubectl treats
-// blank metadata.namespace).
+// ResolveRefs checks that TargetRef, RuntimeRef, the optional ModelRef, and
+// every entry in DeploymentRefs resolve. The referenced objects must live in
+// the referenced namespace; when ref.Namespace is blank on the wire we inherit
+// the Deployment's own namespace (mirroring how kubectl treats blank
+// metadata.namespace).
 func (d *Deployment) ResolveRefs(ctx context.Context, resolver ResolverFunc) error {
 	if resolver == nil {
 		return nil
@@ -44,6 +44,19 @@ func (d *Deployment) ResolveRefs(ctx context.Context, resolver ResolverFunc) err
 		runtime.Namespace = d.Metadata.Namespace
 	}
 	errs = append(errs, resolveRefWith(ctx, resolver, runtime, "spec.runtimeRef")...)
+
+	if d.Spec.ModelRef != nil {
+		model := ResourceRef{
+			Kind:      KindModel,
+			Namespace: d.Spec.ModelRef.Namespace,
+			Name:      d.Spec.ModelRef.Name,
+			Tag:       d.Spec.ModelRef.Tag,
+		}
+		if model.Namespace == "" {
+			model.Namespace = d.Metadata.Namespace
+		}
+		errs = append(errs, resolveRefWith(ctx, resolver, model, "spec.modelRef")...)
+	}
 
 	for i, ref := range d.Spec.DeploymentRefs {
 		probe := ResourceRef{Kind: KindDeployment, Namespace: ref.Namespace, Name: ref.Name}
@@ -88,6 +101,10 @@ func validateDeploymentSpec(s *DeploymentSpec) FieldErrors {
 		}
 	}
 
+	if s.ModelRef != nil {
+		errs = append(errs, validateModelRef(*s.ModelRef)...)
+	}
+
 	switch s.DesiredState {
 	case "", DesiredStateDeployed, DesiredStateUndeployed:
 		// Empty is allowed — defaults to "deployed" at apply-time.
@@ -108,5 +125,21 @@ func validateDeploymentSpec(s *DeploymentSpec) FieldErrors {
 		}
 	}
 
+	return errs
+}
+
+func validateModelRef(ref ModelRef) FieldErrors {
+	var errs FieldErrors
+	if err := validateNameField(ref.Name); err != nil {
+		errs.Append("spec.modelRef.name", err)
+	}
+	if ref.Namespace != "" && !namespaceRegex.MatchString(ref.Namespace) {
+		errs.Append("spec.modelRef.namespace", fmt.Errorf("%w: %q", ErrInvalidFormat, ref.Namespace))
+	}
+	if ref.Tag != "" {
+		if err := validateTag(ref.Tag); err != nil {
+			errs.Append("spec.modelRef.tag", err)
+		}
+	}
 	return errs
 }

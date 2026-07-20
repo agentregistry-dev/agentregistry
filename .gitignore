@@ -38,6 +38,7 @@ internal/registry/api/ui/dist/
 .vscode/
 .idea/
 .cursor/
+.kiro/
 *.swp
 *.swo
 *~

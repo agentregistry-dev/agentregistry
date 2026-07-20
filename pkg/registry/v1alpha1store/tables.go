@@ -19,6 +19,7 @@ var builtInKinds = map[string]struct{}{
 	v1alpha1.KindPlugin:     {},
 	v1alpha1.KindPrompt:     {},
 	v1alpha1.KindRuntime:    {},
+	v1alpha1.KindModel:      {},
 	v1alpha1.KindDeployment: {},
 }
 

@@ -70,7 +70,7 @@ type ObjectMeta struct {
 	Annotations map[string]string `json:"annotations,omitempty" yaml:"annotations,omitempty"`
 
 	// Tag is the user-visible identity for content-registry kinds
-	// (Agent, MCPServer, Skill, Prompt).
+	// (Agent, MCPServer, Model, Plugin, Skill, Prompt).
 	Tag string `json:"tag,omitempty" yaml:"tag,omitempty"`
 
 	// Generation is server-managed and internal. Populated from the DB row for

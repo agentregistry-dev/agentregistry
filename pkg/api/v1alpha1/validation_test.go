@@ -253,6 +253,70 @@ func TestDeploymentValidate_HarnessSelectionOK(t *testing.T) {
 	require.NoError(t, d.Validate())
 }
 
+func TestDeploymentValidate_ModelRef(t *testing.T) {
+	tests := []struct {
+		name       string
+		modelRef   *ModelRef
+		harness    *DeploymentHarness
+		wantFields []string
+	}{
+		{
+			name: "omitted",
+		},
+		{
+			name:    "omitted for harness deployment",
+			harness: &DeploymentHarness{Type: "claude-code"},
+		},
+		{
+			name:     "same namespace",
+			modelRef: &ModelRef{Name: "claude-opus-4-8"},
+		},
+		{
+			name:     "explicit namespace",
+			modelRef: &ModelRef{Namespace: "models", Name: "claude-opus-4-8"},
+		},
+		{
+			name:     "pinned tag",
+			modelRef: &ModelRef{Name: "claude-opus-4-8", Tag: "approved-v1"},
+		},
+		{
+			name:       "missing name",
+			modelRef:   &ModelRef{Namespace: "models"},
+			wantFields: []string{"spec.modelRef.name"},
+		},
+		{
+			name:       "invalid name",
+			modelRef:   &ModelRef{Name: "Not Valid"},
+			wantFields: []string{"spec.modelRef.name"},
+		},
+		{
+			name:       "invalid namespace",
+			modelRef:   &ModelRef{Namespace: "Bad Namespace", Name: "claude-opus-4-8"},
+			wantFields: []string{"spec.modelRef.namespace"},
+		},
+		{
+			name:       "invalid tag",
+			modelRef:   &ModelRef{Name: "claude-opus-4-8", Tag: "not a tag"},
+			wantFields: []string{"spec.modelRef.tag"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := &Deployment{
+				Metadata: ObjectMeta{Namespace: "default", Name: "prod"},
+				Spec: DeploymentSpec{
+					TargetRef:  ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
+					RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "agentcore"},
+					ModelRef:   tt.modelRef,
+					Harness:    tt.harness,
+				},
+			}
+			require.ElementsMatch(t, tt.wantFields, failedFields(t, d.Validate()))
+		})
+	}
+}
+
 func TestDeploymentValidate_RejectsHarnessSelectionWithoutType(t *testing.T) {
 	d := &Deployment{
 		Metadata: ObjectMeta{Namespace: "default", Name: "prod"},
@@ -400,6 +464,80 @@ func TestDeploymentResolveRefs_InheritsNamespace(t *testing.T) {
 	require.Len(t, seen, 2)
 	require.Equal(t, "team-b", seen[0].Namespace)
 	require.Equal(t, "team-b", seen[1].Namespace)
+}
+
+func TestDeploymentResolveRefs_ModelRef(t *testing.T) {
+	tests := []struct {
+		name          string
+		modelRef      ModelRef
+		wantNamespace string
+		wantTag       string
+	}{
+		{
+			name:          "inherits deployment namespace",
+			modelRef:      ModelRef{Name: "claude-opus-4-8"},
+			wantNamespace: "team-b",
+		},
+		{
+			name:          "preserves explicit namespace",
+			modelRef:      ModelRef{Namespace: "models", Name: "claude-opus-4-8"},
+			wantNamespace: "models",
+		},
+		{
+			name:          "preserves pinned tag",
+			modelRef:      ModelRef{Name: "claude-opus-4-8", Tag: "approved-v1"},
+			wantNamespace: "team-b",
+			wantTag:       "approved-v1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var seen []ResourceRef
+			resolver := func(_ context.Context, ref ResourceRef) error {
+				seen = append(seen, ref)
+				return nil
+			}
+			d := &Deployment{
+				Metadata: ObjectMeta{Namespace: "team-b", Name: "prod"},
+				Spec: DeploymentSpec{
+					TargetRef:  ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
+					RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "local"},
+					ModelRef:   &tt.modelRef,
+				},
+			}
+
+			require.NoError(t, d.ResolveRefs(context.Background(), resolver))
+			require.Len(t, seen, 3)
+			require.Equal(t, ResourceRef{
+				Kind:      KindModel,
+				Namespace: tt.wantNamespace,
+				Name:      "claude-opus-4-8",
+				Tag:       tt.wantTag,
+			}, seen[2])
+		})
+	}
+}
+
+func TestDeploymentResolveRefs_ReportsDanglingModelRef(t *testing.T) {
+	resolver := func(_ context.Context, ref ResourceRef) error {
+		if ref.Kind == KindModel {
+			return ErrDanglingRef
+		}
+		return nil
+	}
+	d := &Deployment{
+		Metadata: ObjectMeta{Namespace: "default", Name: "prod"},
+		Spec: DeploymentSpec{
+			TargetRef:  ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
+			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "local"},
+			ModelRef:   &ModelRef{Name: "missing"},
+		},
+	}
+
+	err := d.ResolveRefs(context.Background(), resolver)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "spec.modelRef")
 }
 
 // -----------------------------------------------------------------------------

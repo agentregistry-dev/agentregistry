@@ -17,6 +17,7 @@ var clientConfigurers = map[string]ClientConfigurer{
 	"vscode":      &VSCodeConfigurer{},
 	"cursor":      &CursorConfigurer{},
 	"claude-code": &ClaudeCodeConfigurer{},
+	"kiro":        &KiroConfigurer{},
 }
 
 func NewCommand(deps cliruntime.Deps) *cobra.Command {

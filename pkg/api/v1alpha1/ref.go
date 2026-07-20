@@ -25,3 +25,13 @@ type DeploymentRef struct {
 	Namespace string `json:"namespace,omitempty" yaml:"namespace,omitempty"`
 	Name      string `json:"name" yaml:"name"`
 }
+
+// ModelRef selects a tagged Model. Kind is implicit (always Model).
+//
+// Namespace is optional: blank means "same namespace as the referencing
+// Deployment". Tag is optional: blank resolves the literal "latest" tag.
+type ModelRef struct {
+	Namespace string `json:"namespace,omitempty" yaml:"namespace,omitempty"`
+	Name      string `json:"name" yaml:"name"`
+	Tag       string `json:"tag,omitempty" yaml:"tag,omitempty"`
+}

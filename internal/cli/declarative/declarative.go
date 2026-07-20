@@ -101,6 +101,17 @@ func init() {
 		),
 	)
 
+	scheme.Register(typedKind(
+		"model", "models", []string{"Model"},
+		[]scheme.Column{
+			{Header: "NAME"}, {Header: "TAG"}, {Header: "PROVIDER"},
+			{Header: "MODEL"}, {Header: "AUTH"},
+		},
+		v1alpha1.KindModel,
+		func() *v1alpha1.Model { return &v1alpha1.Model{} },
+		modelRow,
+	))
+
 	// Deployment is registered manually because it is a mutable namespace/name
 	// object: the server's deployment store does not expose /tags or
 	// DeleteAllTags endpoints. Explicit get/delete accept either NAME or
