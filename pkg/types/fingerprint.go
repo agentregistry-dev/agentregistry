@@ -235,17 +235,39 @@ func materialHash(parts ...json.RawMessage) string {
 
 func defaultApplyDependencies(ctx context.Context, in ApplyInput) ([]v1alpha1.Object, error) {
 	agent, ok := in.Target.(*v1alpha1.Agent)
-	if !ok || agent == nil {
-		return nil, nil
-	}
+	hasModelRef := in.Deployment != nil && in.Deployment.Spec.ModelRef != nil
+	hasAgentRefs := ok && agent != nil &&
+		(len(agent.Spec.MCPServers) > 0 || hasHarnessCompositionRefs(in.Deployment, agent))
 	if in.Getter == nil {
-		if len(agent.Spec.MCPServers) > 0 || hasHarnessCompositionRefs(in.Deployment, agent) {
-			return nil, fmt.Errorf("fingerprint: getter required to resolve Agent dependency refs")
+		if hasModelRef || hasAgentRefs {
+			return nil, fmt.Errorf("fingerprint: getter required to resolve dependency refs")
 		}
 		return nil, nil
 	}
-	deps := make([]v1alpha1.Object, 0, len(agent.Spec.MCPServers)+len(agent.Spec.Plugins)+len(agent.Spec.Skills)+1)
+	dependencyCapacity := 0
+	if hasModelRef {
+		dependencyCapacity++
+	}
+	if ok && agent != nil {
+		dependencyCapacity += len(agent.Spec.MCPServers) + len(agent.Spec.Plugins) + len(agent.Spec.Skills) + 1
+	}
+	deps := make([]v1alpha1.Object, 0, dependencyCapacity)
 	var err error
+	if hasModelRef {
+		modelRef := in.Deployment.Spec.ModelRef
+		deps, err = appendResolvedRefs(ctx, deps, in.Getter, in.Deployment.Metadata.NamespaceOrDefault(), []v1alpha1.ResourceRef{{
+			Kind:      v1alpha1.KindModel,
+			Namespace: modelRef.Namespace,
+			Name:      modelRef.Name,
+			Tag:       modelRef.Tag,
+		}}, v1alpha1.KindModel, "deployment spec.modelRef")
+		if err != nil {
+			return nil, err
+		}
+	}
+	if !ok || agent == nil {
+		return deps, nil
+	}
 	deps, err = appendResolvedRefs(ctx, deps, in.Getter, agent.Metadata.NamespaceOrDefault(), agent.Spec.MCPServers, v1alpha1.KindMCPServer, "target spec.mcpServers")
 	if err != nil {
 		return nil, err

@@ -103,9 +103,49 @@ func TestDefaultApplyFingerprintResultIncludesDependencySnapshot(t *testing.T) {
 	}
 }
 
+func TestDefaultApplyFingerprintResultIncludesModelDependency(t *testing.T) {
+	in := testApplyInput()
+	in.Deployment.Metadata.Namespace = "team-a"
+	in.Deployment.Spec.ModelRef = &v1alpha1.ModelRef{Name: "approved-model"}
+
+	modelID := "us.anthropic.claude-sonnet-4-6"
+	in.Getter = func(_ context.Context, ref v1alpha1.ResourceRef) (v1alpha1.Object, error) {
+		if ref.Kind != v1alpha1.KindModel || ref.Namespace != "team-a" || ref.Name != "approved-model" || ref.Tag != "" {
+			t.Fatalf("model ref = %+v, want team-a/approved-model with implicit latest tag", ref)
+		}
+		return testModel("team-a", "approved-model", "latest", modelID), nil
+	}
+
+	first, err := DefaultApplyFingerprintResult(context.Background(), in, ApplyFingerprintOptions{AdapterType: "test"})
+	if err != nil {
+		t.Fatalf("DefaultApplyFingerprintResult: %v", err)
+	}
+	if len(first.Dependencies) != 1 {
+		t.Fatalf("dependencies = %+v, want one Model dependency", first.Dependencies)
+	}
+	dep := first.Dependencies[0]
+	if dep.Kind != v1alpha1.KindModel || dep.Namespace != "team-a" || dep.Name != "approved-model" || dep.Tag != "latest" {
+		t.Fatalf("model dependency identity mismatch: %+v", dep)
+	}
+	if dep.UID != "model-uid" || dep.Generation != 1 || dep.MaterialHash == "" {
+		t.Fatalf("model dependency version mismatch: %+v", dep)
+	}
+
+	modelID = "us.anthropic.claude-opus-4-8"
+	second, err := DefaultApplyFingerprintResult(context.Background(), in, ApplyFingerprintOptions{AdapterType: "test"})
+	if err != nil {
+		t.Fatalf("DefaultApplyFingerprintResult after Model change: %v", err)
+	}
+	if second.Fingerprint == first.Fingerprint {
+		t.Fatalf("fingerprint did not change after resolved Model spec changed: %s", second.Fingerprint)
+	}
+}
+
 func TestDefaultApplyFingerprintIncludesAgentHarnessCompositionDependencies(t *testing.T) {
 	in := testApplyInput()
+	in.Deployment.Metadata.Namespace = "team-a"
 	in.Deployment.Spec.Harness = &v1alpha1.DeploymentHarness{Type: "claude-code"}
+	in.Deployment.Spec.ModelRef = &v1alpha1.ModelRef{Name: "approved-model"}
 	in.Target = &v1alpha1.Agent{
 		TypeMeta: v1alpha1.TypeMeta{Kind: v1alpha1.KindAgent},
 		Metadata: v1alpha1.ObjectMeta{
@@ -139,6 +179,8 @@ func TestDefaultApplyFingerprintIncludesAgentHarnessCompositionDependencies(t *t
 			return testPrompt(ref.Namespace, ref.Name, "Write concise rollout notes."), nil
 		case v1alpha1.KindMCPServer:
 			return testMCPServerInNamespace(ref.Namespace, ref.Name, "ghcr.io/example/search:1.0.0"), nil
+		case v1alpha1.KindModel:
+			return testModel(ref.Namespace, ref.Name, "latest", "us.anthropic.claude-sonnet-4-6"), nil
 		default:
 			t.Fatalf("unexpected dependency ref: %+v", ref)
 			return nil, nil
@@ -149,8 +191,8 @@ func TestDefaultApplyFingerprintIncludesAgentHarnessCompositionDependencies(t *t
 	if err != nil {
 		t.Fatalf("DefaultApplyFingerprintResult: %v", err)
 	}
-	if len(first.Dependencies) != 4 {
-		t.Fatalf("dependencies = %+v, want Plugin, Skill, Prompt, and MCPServer", first.Dependencies)
+	if len(first.Dependencies) != 5 {
+		t.Fatalf("dependencies = %+v, want Model, Plugin, Skill, Prompt, and MCPServer", first.Dependencies)
 	}
 	for _, dep := range first.Dependencies {
 		if dep.Namespace != "team-a" {
@@ -280,6 +322,23 @@ func testPrompt(namespace, name, content string) *v1alpha1.Prompt {
 			Generation: 1,
 		},
 		Spec: v1alpha1.PromptSpec{Content: content},
+	}
+}
+
+func testModel(namespace, name, tag, modelID string) *v1alpha1.Model {
+	return &v1alpha1.Model{
+		TypeMeta: v1alpha1.TypeMeta{Kind: v1alpha1.KindModel},
+		Metadata: v1alpha1.ObjectMeta{
+			Namespace:  namespace,
+			Name:       name,
+			Tag:        tag,
+			UID:        "model-uid",
+			Generation: 1,
+		},
+		Spec: v1alpha1.ModelSpec{
+			Provider: v1alpha1.ModelProviderBedrock,
+			Model:    modelID,
+		},
 	}
 }
 
