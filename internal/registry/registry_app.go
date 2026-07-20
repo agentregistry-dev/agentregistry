@@ -527,19 +527,7 @@ func startMCPServer(
 	if authnProvider != nil {
 		handler = mcpAuthnMiddleware(authnProvider, resourceMetadataURL)(handler)
 	}
-	// Mount the MCP handler under a mux that reserves /healthz for a 200-OK liveness probe.
-	// The bridge listener otherwise has no plain-HTTP endpoint that returns 200 (a bare GET
-	// yields 400).
-	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})
-	// RFC 9728 discovery for MCP clients, served only when a downstream build supplies the metadata.
-	if resourceMetadata != nil {
-		mux.Handle("/.well-known/oauth-protected-resource", mcpauth.ProtectedResourceMetadataHandler(resourceMetadata))
-		mux.Handle("/.well-known/oauth-protected-resource/", mcpauth.ProtectedResourceMetadataHandler(resourceMetadata))
-	}
-	mux.Handle("/", handler)
+	mux := buildMCPMux(handler, resourceMetadata)
 	addr := ":" + strconv.Itoa(int(cfg.MCPPort))
 	srv := &http.Server{
 		Addr:              addr,
@@ -554,6 +542,21 @@ func startMCPServer(
 		}
 	}()
 	return srv
+}
+
+// buildMCPMux assembles the registry MCP server's HTTP routes: a /healthz liveness
+// probe, plus protected-resource-metadata discovery served only when supplied the metadata.
+func buildMCPMux(handler http.Handler, resourceMetadata *oauthex.ProtectedResourceMetadata) *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	if resourceMetadata != nil {
+		mux.Handle("/.well-known/oauth-protected-resource", mcpauth.ProtectedResourceMetadataHandler(resourceMetadata))
+		mux.Handle("/.well-known/oauth-protected-resource/", mcpauth.ProtectedResourceMetadataHandler(resourceMetadata))
+	}
+	mux.Handle("/", handler)
+	return mux
 }
 
 // mcpAuthnMiddleware validates the bearer via the AuthnProvider and attaches the
