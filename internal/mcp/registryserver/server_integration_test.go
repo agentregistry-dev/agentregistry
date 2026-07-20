@@ -175,7 +175,10 @@ func TestRunList_Authz(t *testing.T) {
 	t.Run("hooks receive the list AuthorizeInput", func(t *testing.T) {
 		var gotAuth, gotFilter resource.AuthorizeInput
 		authz := func(_ context.Context, in resource.AuthorizeInput) error { gotAuth = in; return nil }
-		filter := func(_ context.Context, in resource.AuthorizeInput) (string, []any, error) { gotFilter = in; return "", nil, nil }
+		filter := func(_ context.Context, in resource.AuthorizeInput) (string, []any, error) {
+			gotFilter = in
+			return "", nil, nil
+		}
 		_, _, err := runList(ctx, store, v1alpha1.KindMCPServer, authz, filter, listInput{Namespace: "default"})
 		require.NoError(t, err)
 		want := resource.AuthorizeInput{Verb: "list", Kind: v1alpha1.KindMCPServer, Namespace: "default"}
