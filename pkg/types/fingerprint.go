@@ -244,14 +244,7 @@ func defaultApplyDependencies(ctx context.Context, in ApplyInput) ([]v1alpha1.Ob
 		}
 		return nil, nil
 	}
-	dependencyCapacity := 0
-	if hasModelRef {
-		dependencyCapacity++
-	}
-	if ok && agent != nil {
-		dependencyCapacity += len(agent.Spec.MCPServers) + len(agent.Spec.Plugins) + len(agent.Spec.Skills) + 1
-	}
-	deps := make([]v1alpha1.Object, 0, dependencyCapacity)
+	deps := make([]v1alpha1.Object, 0)
 	var err error
 	if hasModelRef {
 		modelRef := in.Deployment.Spec.ModelRef
