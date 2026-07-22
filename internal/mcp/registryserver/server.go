@@ -367,10 +367,10 @@ func clampLimit(limit int) int {
 func addServerPrompts(server *mcp.Server) {
 	server.AddPrompt(&mcp.Prompt{
 		Name:        "search_registry",
-		Description: "Search the agent registry for MCP servers, agents, skills, prompts, plugins, deployments, or models by keyword",
+		Description: "Search the agent registry for MCP servers, agents, skills, prompts, plugins, deployments, runtimes, or models by keyword",
 		Arguments: []*mcp.PromptArgument{
 			{Name: "query", Description: "Search term or keyword", Required: true},
-			{Name: "type", Description: "Resource type to search: servers, agents, skills, prompts, plugins, deployments, or models (default: all)"},
+			{Name: "type", Description: "Resource type to search: servers, agents, skills, prompts, plugins, deployments, runtimes, or models (default: all)"},
 		},
 	}, func(_ context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
 		query := req.Params.Arguments["query"]
@@ -380,7 +380,7 @@ func addServerPrompts(server *mcp.Server) {
 		if resourceType != "" {
 			instruction += " (filter to " + resourceType + " only)"
 		}
-		instruction += ". Use the appropriate list tool (list_servers, list_agents, list_skills, list_prompts, list_plugins, list_deployments, list_models) with the search parameter. Summarize what you find including names, descriptions, and tags."
+		instruction += ". Use the appropriate list tool (list_servers, list_agents, list_skills, list_prompts, list_plugins, list_deployments, list_runtimes, list_models) with the search parameter. Summarize what you find including names, descriptions, and tags."
 
 		return &mcp.GetPromptResult{
 			Description: "Search the registry for resources matching a query",
