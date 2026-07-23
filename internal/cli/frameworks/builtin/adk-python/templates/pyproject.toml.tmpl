@@ -19,4 +19,10 @@ dependencies = [
   "kagent-adk=={{.KagentADKPyVersion}}",
 {{- end}}
 ]
-requires-python = ">=3.13"
+# <3.14: google-adk's opentelemetry-resourcedetector-gcp transitive has no 3.14 wheels.
+requires-python = ">=3.13,<3.14"
+
+[tool.uv]
+# google-adk 1.25.1 needs opentelemetry-resourcedetector-gcp from a pre-release-only
+# range; pin the known-good alpha so a live resolve can't randomly break the build.
+constraint-dependencies = ["opentelemetry-resourcedetector-gcp==1.12.0a0"]
