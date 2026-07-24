@@ -1,46 +1,35 @@
 package configure
 
-import (
-	"encoding/json"
-	"fmt"
-	"os"
-)
+import "fmt"
 
 // KiroConfigurer handles Kiro MCP configuration
 type KiroConfigurer struct{}
 
-// kiroServerConfig represents a Kiro MCP server configuration
+// kiroServerConfig is the arctl server entry written into .kiro/settings/mcp.json.
+// Other servers' entries are preserved verbatim by mergeServerEntry.
 type kiroServerConfig struct {
-	URL string `json:"url"`
-}
-
-// kiroConfig represents the Kiro MCP configuration file structure
-type kiroConfig struct {
-	MCPServers map[string]kiroServerConfig `json:"mcpServers"`
+	URL     string            `json:"url"`
+	Headers map[string]string `json:"headers,omitempty"`
 }
 
 func (c *KiroConfigurer) GetConfigPath() (string, error) {
 	return ".kiro/settings/mcp.json", nil
 }
 
-func (c *KiroConfigurer) CreateConfig(url string, configPath string) (any, error) {
-	config := kiroConfig{
-		MCPServers: make(map[string]kiroServerConfig),
+func (c *KiroConfigurer) CreateConfig(opts CreateOptions, configPath string) (any, error) {
+	entry := kiroServerConfig{
+		URL: opts.URL,
 	}
-
-	// Read existing config if it exists
-	if data, err := os.ReadFile(configPath); err == nil {
-		if err := json.Unmarshal(data, &config); err != nil {
-			return config, fmt.Errorf("failed to parse existing config: %w", err)
+	if opts.TokenEnv != "" {
+		// Kiro documents plain ${VAR} expansion in header values, but based on this issue
+		// it is sent literally instead of expanded: https://github.com/kirodotdev/Kiro/issues/5060.
+		// The undocumented ${env:VAR} form is reported working in that issue's comments, so it is emitted here.
+		// Revisit if Kiro fixes #5060 in favor of the documented syntax.
+		entry.Headers = map[string]string{
+			"Authorization": fmt.Sprintf("Bearer ${env:%s}", opts.TokenEnv),
 		}
 	}
-
-	// Add or update the ARCTL server
-	config.MCPServers["ARCTL"] = kiroServerConfig{
-		URL: url,
-	}
-
-	return config, nil
+	return mergeServerEntry(configPath, "mcpServers", entry)
 }
 
 func (c *KiroConfigurer) GetClientName() string {
