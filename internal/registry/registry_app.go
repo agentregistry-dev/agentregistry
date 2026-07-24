@@ -167,7 +167,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	routeOpts := buildRouteOptions(options, stores, deploymentAdapters, perKindHooks)
 
 	// Initialize HTTP server
-	baseServer, err := api.NewServer(cfg, metrics, versionInfo, options.UIHandler, authnProvider, routeOpts)
+	baseServer, err := api.NewServer(cfg, metrics, versionInfo, options.UIHandler, authnProvider, routeOpts, options.OpenAPISchemaNamer)
 	if err != nil {
 		return fmt.Errorf("failed to initialize HTTP server: %w", err)
 	}

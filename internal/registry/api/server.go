@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"reflect"
 	"strings"
 	"time"
 
@@ -159,6 +160,7 @@ func NewServer(
 	customUIHandler http.Handler,
 	authnProvider auth.AuthnProvider,
 	routeOpts *router.RouteOptions,
+	schemaNamer func(reflect.Type, string) string,
 ) (*Server, error) {
 	// Create HTTP mux and Huma API
 	mux := http.NewServeMux()
@@ -178,7 +180,7 @@ func NewServer(
 		}
 	}
 
-	api, err := router.NewHumaAPI(cfg, mux, metrics, versionInfo, uiHandler, authnProvider, routeOpts)
+	api, err := router.NewHumaAPI(cfg, mux, metrics, versionInfo, uiHandler, authnProvider, routeOpts, schemaNamer)
 	if err != nil {
 		return nil, err
 	}
