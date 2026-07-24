@@ -15,6 +15,7 @@ package types
 import (
 	"context"
 	"net/http"
+	"reflect"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/modelcontextprotocol/go-sdk/oauthex"
@@ -186,6 +187,12 @@ var NoopAuditor Auditor = noopAuditor{}
 // (internal/registry/registry_app.go) can reference it without a cyclic
 // import.
 type AppOptions struct {
+	// OpenAPISchemaNamer overrides Huma's default schema naming function.
+	// Use this when an application exposes same-named Go types from different
+	// packages; Huma's default namer omits package paths and panics on those
+	// collisions. Nil preserves Huma's default schema names.
+	OpenAPISchemaNamer func(reflect.Type, string) string
+
 	// DatabaseFactory is an optional function to create a database that
 	// adds new functionality. The factory receives the base database and
 	// can run additional migrations. If nil, uses the default PostgreSQL

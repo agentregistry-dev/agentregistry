@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"reflect"
 	"strings"
 	"time"
 
@@ -143,12 +144,16 @@ func NewHumaAPI(
 	uiHandler http.Handler,
 	authnProvider auth.AuthnProvider,
 	routeOpts *RouteOptions,
+	schemaNamer func(reflect.Type, string) string,
 ) (huma.API, error) {
 	// Create Huma API configuration
 	humaConfig := huma.DefaultConfig("Official MCP Registry", "1.0.0")
 	humaConfig.Info.Description = "A community driven registry service for Model Context Protocol (MCP) servers.\n\n[GitHub repository](https://github.com/modelcontextprotocol/registry) | [Documentation](https://github.com/modelcontextprotocol/registry/tree/main/docs)"
 	// Disable $schema property in responses: https://github.com/danielgtaylor/huma/issues/230
 	humaConfig.CreateHooks = []func(huma.Config) huma.Config{}
+	if schemaNamer != nil {
+		humaConfig.Components.Schemas = huma.NewMapRegistry("#/components/schemas/", schemaNamer)
+	}
 
 	// Create a new API using humago adapter for standard library
 	api := humago.New(mux, humaConfig)
