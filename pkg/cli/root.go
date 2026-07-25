@@ -28,6 +28,7 @@ const (
 // Root creates a fresh arctl root command from Config.
 func Root(cfg Config) *cobra.Command {
 	cfg = cfg.withDefaults()
+	daemonConfig := daemonManagerConfig(cfg)
 
 	root := &cobra.Command{
 		Use:     cfg.Use,
@@ -74,7 +75,7 @@ func Root(cfg Config) *cobra.Command {
 	}
 	root.AddCommand(configure.NewCommand(deps))
 	root.AddCommand(internalcli.NewVersionCommand(deps))
-	root.AddCommand(clidaemon.NewCommand(dockercompose.NewManager(dockercompose.DefaultConfig())))
+	root.AddCommand(clidaemon.NewCommand(dockercompose.NewManager(daemonConfig)))
 	root.AddCommand(declarative.NewApplyCmd(deps))
 	root.AddCommand(declarative.NewGetCmd(deps))
 	root.AddCommand(declarative.NewDeleteCmd(deps))
@@ -96,6 +97,15 @@ func Root(cfg Config) *cobra.Command {
 	}
 
 	return root
+}
+
+func daemonManagerConfig(cfg Config) dockercompose.Config {
+	config := dockercompose.DefaultConfig()
+	if override := strings.TrimSpace(cfg.Env.Getenv("ARCTL_DAEMON_DOCKER_REGISTRY")); override != "" {
+		config.DockerRegistry = override
+	}
+
+	return config
 }
 
 func removeDisabledCommands(root *cobra.Command, disabled map[string]bool) {

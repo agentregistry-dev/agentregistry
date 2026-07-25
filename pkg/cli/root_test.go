@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/agentregistry-dev/agentregistry/internal/version"
 	dbmigrate "github.com/agentregistry-dev/agentregistry/pkg/cli/db/migrate"
 )
 
@@ -38,6 +39,36 @@ func TestRootDisabledCommandPathsPruneBuiltInsBeforeExtraCommands(t *testing.T) 
 	}
 	if migrateCmd.PersistentFlags().Lookup("source") == nil {
 		t.Fatal("expected db migrate --source flag for multiple migration sources")
+	}
+}
+
+type testEnv map[string]string
+
+func (e testEnv) Getenv(key string) string {
+	return e[key]
+}
+
+func TestDaemonManagerConfigUsesEnvOverride(t *testing.T) {
+	const override = "registry.example.com"
+
+	cfg := DefaultConfig()
+	cfg.Env = testEnv{
+		"ARCTL_DAEMON_DOCKER_REGISTRY": "  " + override + "  ",
+	}
+
+	daemonConfig := daemonManagerConfig(cfg)
+	if daemonConfig.DockerRegistry != override {
+		t.Fatalf("daemonManagerConfig() DockerRegistry = %q, want %q", daemonConfig.DockerRegistry, override)
+	}
+}
+
+func TestDaemonManagerConfigFallsBackToDefaultRegistry(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Env = testEnv{}
+
+	daemonConfig := daemonManagerConfig(cfg)
+	if daemonConfig.DockerRegistry != version.DockerRegistry {
+		t.Fatalf("daemonManagerConfig() DockerRegistry = %q, want %q", daemonConfig.DockerRegistry, version.DockerRegistry)
 	}
 }
 
