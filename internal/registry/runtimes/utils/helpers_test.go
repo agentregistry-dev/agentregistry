@@ -163,6 +163,37 @@ func TestResolveDeploymentModelSpec_NormalizesAndResolves(t *testing.T) {
 	}
 }
 
+func TestResolveDeploymentModelSpec_UsesDefaultHarnessModel(t *testing.T) {
+	deployment := &v1alpha1.Deployment{
+		Metadata: v1alpha1.ObjectMeta{Namespace: "team-a", Name: "assistant"},
+		Spec: v1alpha1.DeploymentSpec{
+			TargetRef: v1alpha1.ResourceRef{Kind: v1alpha1.KindAgent, Name: "assistant"},
+			Harness:   &v1alpha1.DeploymentHarness{Type: "claude-code"},
+		},
+	}
+	var gotRef v1alpha1.ResourceRef
+	got, err := ResolveDeploymentModelSpec(t.Context(), deployment, func(_ context.Context, ref v1alpha1.ResourceRef) (v1alpha1.Object, error) {
+		gotRef = ref
+		return &v1alpha1.Model{
+			TypeMeta: v1alpha1.TypeMeta{Kind: v1alpha1.KindModel},
+			Spec: v1alpha1.ModelSpec{
+				Provider: v1alpha1.ModelProviderBedrock,
+				Model:    "us.anthropic.claude-sonnet-4-6",
+			},
+		}, nil
+	})
+	if err != nil {
+		t.Fatalf("ResolveDeploymentModelSpec: %v", err)
+	}
+	if gotRef.Kind != v1alpha1.KindModel || gotRef.Namespace != "team-a" ||
+		gotRef.Name != v1alpha1.DefaultModelName || gotRef.Tag != "latest" {
+		t.Fatalf("default model ref = %+v", gotRef)
+	}
+	if got.Provider != v1alpha1.ModelProviderBedrock {
+		t.Fatalf("resolved model = %+v", got)
+	}
+}
+
 func TestResolveDeploymentModelSpec_FailuresNameNormalizedRef(t *testing.T) {
 	deployment := &v1alpha1.Deployment{
 		Metadata: v1alpha1.ObjectMeta{Namespace: "team-a", Name: "assistant"},

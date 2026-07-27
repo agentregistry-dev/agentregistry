@@ -26,36 +26,6 @@ type Config struct {
 	// "http" or "stdio". Empty for agent projects; empty on MCPServer is
 	// treated as "http" for back-compat.
 	Transport string `yaml:"transport,omitempty"`
-
-	// legacyModelProvider is populated only when reading an older arctl.yaml.
-	// It keeps existing generated projects' run-time credential validation
-	// working without serializing the removed provider/model configuration.
-	legacyModelProvider string
-}
-
-// UnmarshalYAML accepts historical modelProvider while keeping it outside the
-// current serialized Config shape. New projects use RequiredEnv directly.
-func (c *Config) UnmarshalYAML(value *yaml.Node) error {
-	type plainConfig Config
-	var decoded struct {
-		plainConfig   `yaml:",inline"`
-		ModelProvider string `yaml:"modelProvider"`
-	}
-	if err := value.Decode(&decoded); err != nil {
-		return err
-	}
-	*c = Config(decoded.plainConfig)
-	c.legacyModelProvider = decoded.ModelProvider
-	return nil
-}
-
-// LegacyModelProvider returns modelProvider from a historical arctl.yaml, if
-// present. It is a read-only compatibility input and is never serialized.
-func (c *Config) LegacyModelProvider() string {
-	if c == nil {
-		return ""
-	}
-	return c.legacyModelProvider
 }
 
 // Path returns the canonical arctl.yaml path under projectDir.

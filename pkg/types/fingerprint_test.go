@@ -141,6 +141,37 @@ func TestDefaultApplyFingerprintResultIncludesModelDependency(t *testing.T) {
 	}
 }
 
+func TestDefaultApplyFingerprintResultIncludesDefaultHarnessModel(t *testing.T) {
+	in := testApplyInput()
+	in.Deployment.Metadata.Namespace = "team-a"
+	in.Deployment.Spec.TargetRef = v1alpha1.ResourceRef{Kind: v1alpha1.KindAgent, Name: "assistant"}
+	in.Deployment.Spec.Harness = &v1alpha1.DeploymentHarness{Type: "claude-code"}
+	in.Target = &v1alpha1.Agent{
+		TypeMeta: v1alpha1.TypeMeta{Kind: v1alpha1.KindAgent},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "team-a", Name: "assistant"},
+	}
+	in.Getter = func(_ context.Context, ref v1alpha1.ResourceRef) (v1alpha1.Object, error) {
+		if ref.Kind != v1alpha1.KindModel || ref.Namespace != "team-a" ||
+			ref.Name != v1alpha1.DefaultModelName || ref.Tag != "" {
+			t.Fatalf("default model ref = %+v", ref)
+		}
+		return testModel("team-a", v1alpha1.DefaultModelName, "latest", "us.anthropic.claude-sonnet-4-6"), nil
+	}
+
+	result, err := DefaultApplyFingerprintResult(context.Background(), in, ApplyFingerprintOptions{AdapterType: "test"})
+	if err != nil {
+		t.Fatalf("DefaultApplyFingerprintResult: %v", err)
+	}
+	if len(result.Dependencies) != 1 {
+		t.Fatalf("dependencies = %+v, want one default Model dependency", result.Dependencies)
+	}
+	dep := result.Dependencies[0]
+	if dep.Kind != v1alpha1.KindModel || dep.Namespace != "team-a" ||
+		dep.Name != v1alpha1.DefaultModelName || dep.Tag != "latest" {
+		t.Fatalf("default model dependency identity mismatch: %+v", dep)
+	}
+}
+
 func TestDefaultApplyFingerprintIncludesAgentHarnessCompositionDependencies(t *testing.T) {
 	in := testApplyInput()
 	in.Deployment.Metadata.Namespace = "team-a"

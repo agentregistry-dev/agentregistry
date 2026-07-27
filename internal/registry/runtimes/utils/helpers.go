@@ -79,7 +79,8 @@ type AgentTranslateOpts struct {
 	// refs (MCPServer.Spec.Remote.Headers), already split from
 	// Deployment.Spec.Env by the adapter via the HEADER_ prefix convention.
 	HeaderValues map[string]string
-	// Model is the spec resolved from Deployment.Spec.ModelRef. When nil,
+	// Model is the spec resolved from the Deployment's effective ModelRef,
+	// including the namespace default for a harness Agent. When nil,
 	// SpecToRuntimeAgent omits model provider/name env rather than accepting
 	// those values from DeploymentEnv.
 	Model *v1alpha1.ModelSpec
@@ -87,19 +88,24 @@ type AgentTranslateOpts struct {
 	Getter v1alpha1.GetterFunc
 }
 
-// ResolveDeploymentModelSpec resolves Deployment.Spec.ModelRef through getter
-// and returns the selected Model spec. Blank namespace inherits from the
-// Deployment and blank tag resolves the literal "latest" tag. A Deployment
-// without ModelRef returns (nil, nil).
+// ResolveDeploymentModelSpec resolves the Deployment's effective ModelRef
+// through getter and returns the selected Model spec. A harness Agent
+// Deployment that omits ModelRef selects Model/default@latest in its namespace.
+// Blank namespace inherits from the Deployment and blank tag resolves the
+// literal "latest" tag. A non-harness Deployment without ModelRef returns
+// (nil, nil).
 func ResolveDeploymentModelSpec(
 	ctx context.Context,
 	deployment *v1alpha1.Deployment,
 	getter v1alpha1.GetterFunc,
 ) (*v1alpha1.ModelSpec, error) {
-	if deployment == nil || deployment.Spec.ModelRef == nil {
+	if deployment == nil {
 		return nil, nil
 	}
-	modelRef := deployment.Spec.ModelRef
+	modelRef := deployment.Spec.EffectiveModelRef()
+	if modelRef == nil {
+		return nil, nil
+	}
 	normalized := v1alpha1.ResourceRef{
 		Kind:      v1alpha1.KindModel,
 		Namespace: modelRef.Namespace,

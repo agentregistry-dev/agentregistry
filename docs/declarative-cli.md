@@ -14,9 +14,9 @@ arctl apply -f summarizer/agent.yaml
 
 ## Tags And Mutable Objects
 
-Agents, MCP servers, remote MCP servers, skills, and prompts are taggable artifacts. Set `metadata.tag` to publish a deterministic name you can reference from other manifests; if you omit it, the registry uses the literal `latest` tag.
+Agents, Models, MCP servers, remote MCP servers, skills, and prompts are taggable artifacts. Set `metadata.tag` to publish a deterministic name you can reference from other manifests; if you omit it, the registry uses the literal `latest` tag.
 
-Providers and deployments are mutable control-plane objects. They use public namespace/name identity, not tags or versions.
+Runtimes and Deployments are mutable control-plane objects. They use public namespace/name identity, not tags or versions.
 
 ```bash
 arctl init agent summarizer --framework adk --language python --model-provider gemini --model-name gemini-2.5-flash
@@ -46,6 +46,55 @@ arctl run --dry-run   # print the command without executing
 ```bash
 npx -y @modelcontextprotocol/inspector --server-url <url>
 ```
+
+## Models and harness deployment defaults
+
+Models are admin-owned tagged resources containing provider identity together
+with the platform's endpoint and authentication posture. A harness Agent
+Deployment can select a Model explicitly:
+
+```yaml
+spec:
+  targetRef:
+    kind: Agent
+    name: summarizer
+  runtimeRef:
+    kind: Runtime
+    name: agentcore
+  harness:
+    type: claude-code
+  modelRef:
+    name: claude-opus-4-8
+    tag: approved-v1
+```
+
+When `modelRef` is omitted from a harness Agent Deployment, the registry
+materializes `{name: default}` and resolves
+`Model/<deployment namespace>/default@latest`. An explicit `modelRef` always
+wins. Non-harness Agent and MCPServer Deployments do not receive an implicit
+Model.
+
+Platform administrators should create one `Model` named `default` in each
+namespace where deployment authors may rely on omission:
+
+```yaml
+apiVersion: ar.dev/v1alpha1
+kind: Model
+metadata:
+  name: default
+  # tag omitted: literal "latest"
+spec:
+  title: Namespace default model
+  provider: bedrock
+  model: us.anthropic.claude-opus-4-8
+  auth:
+    strategy: runtime
+```
+
+If that default does not exist, reference resolution rejects the Deployment
+with a `spec.modelRef` dangling-reference error. The registry never selects the
+first or only Model automatically, because catalog growth would make that
+behavior nondeterministic.
 
 ### Wiring MCP dependencies into a new agent
 

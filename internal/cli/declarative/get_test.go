@@ -49,7 +49,9 @@ func TestGetCmd_NoAPIClientErrors(t *testing.T) {
 func TestGetCmd_RegistryDrivenColumnLookup(t *testing.T) {
 	k, err := scheme.Lookup("agents")
 	require.NoError(t, err, "agents alias should resolve via declarative's init() registration")
-	assert.Equal(t, []scheme.Column{{Header: "NAME"}, {Header: "TAG"}}, k.TableColumns)
+	assert.Equal(t, []scheme.Column{
+		{Header: "NAME"}, {Header: "TAG"}, {Header: "MODE"}, {Header: "DESCRIPTION"},
+	}, k.TableColumns)
 
 	// Looking up a valid kind should get past kind validation and fail
 	// only at runtime setup — confirming the dispatch ran.

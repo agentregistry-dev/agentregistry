@@ -25,7 +25,7 @@ func TestWriteAndRead_RoundTrip(t *testing.T) {
 	assert.Equal(t, cfg.RequiredEnv, got.RequiredEnv)
 }
 
-func TestRead_AcceptsLegacyModelFieldsWithoutRewritingThem(t *testing.T) {
+func TestRead_IgnoresRemovedModelFieldsWithoutRewritingThem(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, Filename), []byte(`
 framework: adk
@@ -38,7 +38,6 @@ modelName: gpt-4o
 	require.NoError(t, err)
 	assert.Equal(t, "adk", got.Framework)
 	assert.Equal(t, "python", got.Language)
-	assert.Equal(t, "openai", got.LegacyModelProvider())
 
 	require.NoError(t, Write(dir, got))
 	data, err := os.ReadFile(filepath.Join(dir, Filename))

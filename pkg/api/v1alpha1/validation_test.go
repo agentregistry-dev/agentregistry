@@ -238,13 +238,12 @@ func TestDeploymentValidate_OK(t *testing.T) {
 	require.NoError(t, d.Validate())
 }
 
-func TestDeploymentValidate_HarnessSelectionOK(t *testing.T) {
+func TestDeploymentValidate_HarnessSelectionDefaultsModelRef(t *testing.T) {
 	d := &Deployment{
 		Metadata: ObjectMeta{Namespace: "default", Name: "prod"},
 		Spec: DeploymentSpec{
 			TargetRef:  ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
 			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "agentcore"},
-			ModelRef:   &ModelRef{Name: "claude-opus-4-8"},
 			Harness: &DeploymentHarness{
 				Type:           "claude-code",
 				PermissionMode: "acceptEdits",
@@ -252,6 +251,7 @@ func TestDeploymentValidate_HarnessSelectionOK(t *testing.T) {
 		},
 	}
 	require.NoError(t, d.Validate())
+	require.Equal(t, &ModelRef{Name: DefaultModelName}, d.Spec.ModelRef)
 }
 
 func TestDeploymentValidate_ModelRef(t *testing.T) {
@@ -266,9 +266,8 @@ func TestDeploymentValidate_ModelRef(t *testing.T) {
 			name: "omitted",
 		},
 		{
-			name:       "omitted for harness deployment",
-			harness:    &DeploymentHarness{Type: "claude-code"},
-			wantFields: []string{"spec.modelRef"},
+			name:    "omitted for harness deployment defaults",
+			harness: &DeploymentHarness{Type: "claude-code"},
 		},
 		{
 			name:       "omitted for MCPServer deployment",
@@ -536,6 +535,30 @@ func TestDeploymentResolveRefs_ModelRef(t *testing.T) {
 	}
 }
 
+func TestDeploymentResolveRefs_UsesDefaultHarnessModel(t *testing.T) {
+	var seen []ResourceRef
+	resolver := func(_ context.Context, ref ResourceRef) error {
+		seen = append(seen, ref)
+		return nil
+	}
+	d := &Deployment{
+		Metadata: ObjectMeta{Namespace: "team-b", Name: "prod"},
+		Spec: DeploymentSpec{
+			TargetRef:  ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
+			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "local"},
+			Harness:    &DeploymentHarness{Type: "claude-code"},
+		},
+	}
+
+	require.NoError(t, d.ResolveRefs(context.Background(), resolver))
+	require.Len(t, seen, 3)
+	require.Equal(t, ResourceRef{
+		Kind:      KindModel,
+		Namespace: "team-b",
+		Name:      DefaultModelName,
+	}, seen[2])
+}
+
 func TestDeploymentResolveRefs_ReportsDanglingModelRef(t *testing.T) {
 	resolver := func(_ context.Context, ref ResourceRef) error {
 		if ref.Kind == KindModel {
@@ -549,6 +572,27 @@ func TestDeploymentResolveRefs_ReportsDanglingModelRef(t *testing.T) {
 			TargetRef:  ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
 			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "local"},
 			ModelRef:   &ModelRef{Name: "missing"},
+		},
+	}
+
+	err := d.ResolveRefs(context.Background(), resolver)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "spec.modelRef")
+}
+
+func TestDeploymentResolveRefs_ReportsDanglingDefaultHarnessModel(t *testing.T) {
+	resolver := func(_ context.Context, ref ResourceRef) error {
+		if ref.Kind == KindModel && ref.Name == DefaultModelName {
+			return ErrDanglingRef
+		}
+		return nil
+	}
+	d := &Deployment{
+		Metadata: ObjectMeta{Namespace: "default", Name: "prod"},
+		Spec: DeploymentSpec{
+			TargetRef:  ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
+			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "local"},
+			Harness:    &DeploymentHarness{Type: "claude-code"},
 		},
 	}
 

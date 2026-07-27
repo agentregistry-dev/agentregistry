@@ -235,7 +235,11 @@ func materialHash(parts ...json.RawMessage) string {
 
 func defaultApplyDependencies(ctx context.Context, in ApplyInput) ([]v1alpha1.Object, error) {
 	agent, ok := in.Target.(*v1alpha1.Agent)
-	hasModelRef := in.Deployment != nil && in.Deployment.Spec.ModelRef != nil
+	var modelRef *v1alpha1.ModelRef
+	if in.Deployment != nil {
+		modelRef = in.Deployment.Spec.EffectiveModelRef()
+	}
+	hasModelRef := modelRef != nil
 	hasAgentRefs := ok && agent != nil &&
 		(len(agent.Spec.MCPServers) > 0 || hasHarnessCompositionRefs(in.Deployment, agent))
 	if in.Getter == nil {
@@ -247,7 +251,6 @@ func defaultApplyDependencies(ctx context.Context, in ApplyInput) ([]v1alpha1.Ob
 	deps := make([]v1alpha1.Object, 0)
 	var err error
 	if hasModelRef {
-		modelRef := in.Deployment.Spec.ModelRef
 		deps, err = appendResolvedRefs(ctx, deps, in.Getter, in.Deployment.Metadata.NamespaceOrDefault(), []v1alpha1.ResourceRef{{
 			Kind:      v1alpha1.KindModel,
 			Namespace: modelRef.Namespace,
