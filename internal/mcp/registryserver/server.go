@@ -86,6 +86,36 @@ func NewServer(
 		Authorize:  authorizers[v1alpha1.KindSkill],
 		ListFilter: listFilters[v1alpha1.KindSkill],
 	})
+	addKindTools(server, stores[v1alpha1.KindPrompt], kindTools[*v1alpha1.Prompt]{
+		Kind:       v1alpha1.KindPrompt,
+		ListName:   "list_prompts",
+		GetName:    "get_prompt",
+		ListDesc:   "List published prompts as v1alpha1 envelopes with optional namespace, substring-name, and tag filters.",
+		GetDesc:    "Fetch a published prompt as a v1alpha1 envelope (defaults to the latest tag).",
+		NewObj:     func() *v1alpha1.Prompt { return &v1alpha1.Prompt{} },
+		Authorize:  authorizers[v1alpha1.KindPrompt],
+		ListFilter: listFilters[v1alpha1.KindPrompt],
+	})
+	addKindTools(server, stores[v1alpha1.KindModel], kindTools[*v1alpha1.Model]{
+		Kind:       v1alpha1.KindModel,
+		ListName:   "list_models",
+		GetName:    "get_model",
+		ListDesc:   "List published models as v1alpha1 envelopes with optional namespace, substring-name, and tag filters.",
+		GetDesc:    "Fetch a published model as a v1alpha1 envelope (defaults to the latest tag).",
+		NewObj:     func() *v1alpha1.Model { return &v1alpha1.Model{} },
+		Authorize:  authorizers[v1alpha1.KindModel],
+		ListFilter: listFilters[v1alpha1.KindModel],
+	})
+	addKindTools(server, stores[v1alpha1.KindPlugin], kindTools[*v1alpha1.Plugin]{
+		Kind:       v1alpha1.KindPlugin,
+		ListName:   "list_plugins",
+		GetName:    "get_plugin",
+		ListDesc:   "List published plugins as v1alpha1 envelopes with optional namespace, substring-name, and tag filters.",
+		GetDesc:    "Fetch a published plugin as a v1alpha1 envelope (defaults to the latest tag).",
+		NewObj:     func() *v1alpha1.Plugin { return &v1alpha1.Plugin{} },
+		Authorize:  authorizers[v1alpha1.KindPlugin],
+		ListFilter: listFilters[v1alpha1.KindPlugin],
+	})
 	addKindTools(server, stores[v1alpha1.KindDeployment], kindTools[*v1alpha1.Deployment]{
 		Kind:       v1alpha1.KindDeployment,
 		ListName:   "list_deployments",
@@ -95,6 +125,16 @@ func NewServer(
 		NewObj:     func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} },
 		Authorize:  authorizers[v1alpha1.KindDeployment],
 		ListFilter: listFilters[v1alpha1.KindDeployment],
+	})
+	addKindTools(server, stores[v1alpha1.KindRuntime], kindTools[*v1alpha1.Runtime]{
+		Kind:       v1alpha1.KindRuntime,
+		ListName:   "list_runtimes",
+		GetName:    "get_runtime",
+		ListDesc:   "List runtimes as v1alpha1 envelopes with optional namespace and substring-name filters.",
+		GetDesc:    "Fetch a runtime as a v1alpha1 envelope by namespace/name.",
+		NewObj:     func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} },
+		Authorize:  authorizers[v1alpha1.KindRuntime],
+		ListFilter: listFilters[v1alpha1.KindRuntime],
 	})
 	addMetaTools(server)
 	addServerPrompts(server)
@@ -327,10 +367,10 @@ func clampLimit(limit int) int {
 func addServerPrompts(server *mcp.Server) {
 	server.AddPrompt(&mcp.Prompt{
 		Name:        "search_registry",
-		Description: "Search the agent registry for MCP servers, agents, skills, or deployments by keyword",
+		Description: "Search the agent registry for MCP servers, agents, skills, prompts, plugins, deployments, runtimes, or models by keyword",
 		Arguments: []*mcp.PromptArgument{
 			{Name: "query", Description: "Search term or keyword", Required: true},
-			{Name: "type", Description: "Resource type to search: servers, agents, skills, or deployments (default: all)"},
+			{Name: "type", Description: "Resource type to search: servers, agents, skills, prompts, plugins, deployments, runtimes, or models (default: all)"},
 		},
 	}, func(_ context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
 		query := req.Params.Arguments["query"]
@@ -340,7 +380,7 @@ func addServerPrompts(server *mcp.Server) {
 		if resourceType != "" {
 			instruction += " (filter to " + resourceType + " only)"
 		}
-		instruction += ". Use the appropriate list tool (list_servers, list_agents, list_skills, list_deployments) with the search parameter. Summarize what you find including names, descriptions, and tags."
+		instruction += ". Use the appropriate list tool (list_servers, list_agents, list_skills, list_prompts, list_plugins, list_deployments, list_runtimes, list_models) with the search parameter. Summarize what you find including names, descriptions, and tags."
 
 		return &mcp.GetPromptResult{
 			Description: "Search the registry for resources matching a query",
@@ -359,8 +399,8 @@ func addServerPrompts(server *mcp.Server) {
 			Messages: []*mcp.PromptMessage{
 				{Role: "user", Content: &mcp.TextContent{
 					Text: "Give me an overview of what's available in the agent registry. " +
-						"Use list_servers, list_agents, and list_skills to see what's published. " +
-						"Also check list_deployments to see what's currently deployed. " +
+						"Use list_servers, list_agents, list_skills, list_prompts, list_plugins, and list_models to see what's published. " +
+						"Use list_deployments to see what's currently deployed. And use list_runtimes to view available runtimes for deployment. " +
 						"Summarize the results in a clear table format showing name, description, and tag for each resource type.",
 				}},
 			},
