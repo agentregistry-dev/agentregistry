@@ -279,19 +279,22 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 				return fmt.Errorf("render templates: %w", err)
 			}
 
+			// Required env = framework's infra keys + project-specific model
+			// provider keys. Persist only the project additions as a generic
+			// source-run concern without retaining provider/model ownership in
+			// arctl.yaml.
+			projectRequired := ModelProviderEnvKeys(provider)
+			required := append([]string{}, framework.Env.Required...)
+			required = append(required, projectRequired...)
+
 			cfg := &buildconfig.Config{
-				Framework: framework.Framework,
-				Language:  framework.Language,
+				Framework:   framework.Framework,
+				Language:    framework.Language,
+				RequiredEnv: projectRequired,
 			}
 			if err := buildconfig.Write(projectDir, cfg); err != nil {
 				return fmt.Errorf("write arctl.yaml: %w", err)
 			}
-
-			// Required env = framework's infra keys + model provider's keys.
-			// arctl owns the provider→keys map (see modelenv.go) so frameworks
-			// don't have to restate it.
-			required := append([]string{}, framework.Env.Required...)
-			required = append(required, ModelProviderEnvKeys(provider)...)
 
 			if err := buildconfig.WriteDotEnv(projectDir, required, framework.Env.Optional); err != nil {
 				return fmt.Errorf("write .env: %w", err)

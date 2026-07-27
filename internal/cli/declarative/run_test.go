@@ -35,6 +35,49 @@ func TestRun_DispatchesToFrameworkRunCommand(t *testing.T) {
 	require.NoError(t, cmd.Execute())
 }
 
+func TestRun_AgentScaffoldStillRequiresProviderEnv(t *testing.T) {
+	t.Setenv("GOOGLE_API_KEY", "")
+	tmp := t.TempDir()
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	require.NoError(t, os.Chdir(tmp))
+	initCmd := declarative.NewInitCmd(declarativeTestDeps(nil))
+	initCmd.SetArgs([]string{"agent", "myagent", "--framework", "adk", "--language", "python"})
+	require.NoError(t, initCmd.Execute())
+
+	require.NoError(t, os.Chdir(filepath.Join(tmp, "myagent")))
+	cmd := declarative.NewRunCmd(declarativeTestDeps(nil))
+	cmd.SetArgs([]string{"--dry-run"})
+	err = cmd.Execute()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "GOOGLE_API_KEY")
+}
+
+func TestRun_LegacyAgentConfigStillRequiresProviderEnv(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "")
+	tmp := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(tmp, "arctl.yaml"), []byte(`
+framework: adk
+language: python
+modelProvider: openai
+modelName: gpt-4o
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tmp, ".env"), []byte("OPENAI_API_KEY=\n"), 0o644))
+
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+	require.NoError(t, os.Chdir(tmp))
+
+	cmd := declarative.NewRunCmd(declarativeTestDeps(nil))
+	cmd.SetArgs([]string{"--dry-run"})
+	err = cmd.Execute()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "OPENAI_API_KEY")
+}
+
 // TestRun_ChatDefault_DryRunNarratesFullLifecycle verifies that for an Agent
 // kind, `arctl run --dry-run` reaches the chat-default branch and narrates
 // the detached compose-up, readiness wait, chat launch, and teardown without

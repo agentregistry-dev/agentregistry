@@ -47,6 +47,7 @@ func TestInitAgent_WritesYAMLAndArctlAndDotEnv(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "adk", cfg.Framework)
 	assert.Equal(t, "python", cfg.Language)
+	assert.Equal(t, []string{"GOOGLE_API_KEY"}, cfg.RequiredEnv)
 
 	spec := readYAMLFile(t, filepath.Join(projectDir, "agent.yaml"))["spec"].(map[string]any)
 	assert.NotContains(t, spec, "modelProvider")

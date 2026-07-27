@@ -12,8 +12,9 @@ import (
 func TestWriteAndRead_RoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	cfg := &Config{
-		Framework: "adk",
-		Language:  "python",
+		Framework:   "adk",
+		Language:    "python",
+		RequiredEnv: []string{"GOOGLE_API_KEY"},
 	}
 	require.NoError(t, Write(dir, cfg))
 
@@ -21,9 +22,10 @@ func TestWriteAndRead_RoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, cfg.Framework, got.Framework)
 	assert.Equal(t, cfg.Language, got.Language)
+	assert.Equal(t, cfg.RequiredEnv, got.RequiredEnv)
 }
 
-func TestRead_IgnoresLegacyModelFields(t *testing.T) {
+func TestRead_AcceptsLegacyModelFieldsWithoutRewritingThem(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, Filename), []byte(`
 framework: adk
@@ -36,6 +38,13 @@ modelName: gpt-4o
 	require.NoError(t, err)
 	assert.Equal(t, "adk", got.Framework)
 	assert.Equal(t, "python", got.Language)
+	assert.Equal(t, "openai", got.LegacyModelProvider())
+
+	require.NoError(t, Write(dir, got))
+	data, err := os.ReadFile(filepath.Join(dir, Filename))
+	require.NoError(t, err)
+	assert.NotContains(t, string(data), "modelProvider")
+	assert.NotContains(t, string(data), "modelName")
 }
 
 func TestRead_MissingFileErrs(t *testing.T) {
