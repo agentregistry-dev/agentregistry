@@ -171,9 +171,6 @@ func runProject(ctx context.Context, out io.Writer, projectDir string, extraEnv 
 	}
 
 	required := append([]string(nil), p.Env.Required...)
-	if frameworkType == "agent" && cfg.ModelProvider != "" {
-		required = append(required, ModelProviderEnvKeys(cfg.ModelProvider)...)
-	}
 	if err := ValidateRequiredEnv(dotEnv, extraEnv, required); err != nil {
 		return err
 	}

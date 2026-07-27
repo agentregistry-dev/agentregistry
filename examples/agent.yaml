@@ -7,8 +7,6 @@ spec:
     image: ghcr.io/acme/summarizer:v1.0.0
     # repository:                 # optional: link to source code
     #   url: https://github.com/acme/summarizer
-  modelProvider: gemini         # OpenAI | Anthropic | Gemini | AzureOpenAI | Agentgateway
-  modelName: gemini-2.5-flash
   description: "An agent that summarizes documents"
   # References to other registry resources -- resolved at deploy time:
   # mcpServers:

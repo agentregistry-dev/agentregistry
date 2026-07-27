@@ -56,9 +56,7 @@ metadata:
 spec:
   source:
     image: ghcr.io/acme/summarizer:v1.0.0
-  modelProvider: gemini
-  modelName: gemini-2.5-flash
-  description: "An agent that summarizes documents using Gemini"
+  description: "An agent that summarizes documents"
   # References to resources defined above -- resolved from the registry at deploy time.
   mcpServers:
     - kind: MCPServer

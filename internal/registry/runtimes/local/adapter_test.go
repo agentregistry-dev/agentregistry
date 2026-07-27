@@ -105,6 +105,52 @@ func TestV1Alpha1Apply_MCPServerTarget_WritesComposeAndMarksProgressing(t *testi
 	}
 }
 
+func TestBuildDesiredState_AgentUsesResolvedModel(t *testing.T) {
+	adapter := NewLocalDeploymentAdapter(t.TempDir(), 21212)
+	deployment := &v1alpha1.Deployment{
+		Metadata: v1alpha1.ObjectMeta{Namespace: "team-a", Name: "assistant-local"},
+		Spec: v1alpha1.DeploymentSpec{
+			ModelRef: &v1alpha1.ModelRef{Name: "approved-model"},
+			Env: map[string]string{
+				"MODEL_PROVIDER": "deployment-provider",
+				"MODEL_NAME":     "deployment-model",
+			},
+		},
+	}
+	target := &v1alpha1.Agent{
+		Metadata: v1alpha1.ObjectMeta{Namespace: "team-a", Name: "assistant", Tag: "stable"},
+		Spec:     v1alpha1.AgentSpec{Source: &v1alpha1.AgentSource{Image: "ghcr.io/example/assistant:v1"}},
+	}
+	var gotRef v1alpha1.ResourceRef
+	desired, err := adapter.buildDesiredStateFromV1Alpha1(t.Context(), types.ApplyInput{
+		Deployment: deployment,
+		Target:     target,
+		Getter: func(_ context.Context, ref v1alpha1.ResourceRef) (v1alpha1.Object, error) {
+			gotRef = ref
+			return &v1alpha1.Model{
+				Spec: v1alpha1.ModelSpec{
+					Provider: v1alpha1.ModelProviderBedrock,
+					Model:    "us.anthropic.claude-sonnet-4-6",
+				},
+			}, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("buildDesiredStateFromV1Alpha1: %v", err)
+	}
+	if gotRef.Namespace != "team-a" || gotRef.Name != "approved-model" || gotRef.Tag != "latest" {
+		t.Fatalf("resolved ref = %+v", gotRef)
+	}
+	if len(desired.Agents) != 1 {
+		t.Fatalf("agents = %+v", desired.Agents)
+	}
+	env := desired.Agents[0].Deployment.Env
+	if env["MODEL_PROVIDER"] != v1alpha1.ModelProviderBedrock ||
+		env["MODEL_NAME"] != "us.anthropic.claude-sonnet-4-6" {
+		t.Fatalf("model env = %+v", env)
+	}
+}
+
 func TestV1Alpha1Remove_CallsComposeDown(t *testing.T) {
 	tmpDir := t.TempDir()
 

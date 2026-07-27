@@ -7,8 +7,6 @@ const mockAgent: AgentResponse = {
     name: "code-review-agent",
     description: "An AI agent that reviews pull requests, identifies bugs, and suggests improvements based on best practices.",
     tag: "2.1.0",
-    modelProvider: "openai",
-    modelName: "gpt-4o",
     source: {
       image: "registry.example.com/code-review-agent:2.1.0",
       repository: {
@@ -31,8 +29,6 @@ const minimalAgent: AgentResponse = {
     name: "simple-bot",
     description: "",
     tag: "0.1.0",
-    modelProvider: "",
-    modelName: "",
   },
   _meta: {},
 }

@@ -22,10 +22,11 @@ func (d *Deployment) Validate() error {
 	return errs
 }
 
-// ResolveRefs checks that TargetRef, RuntimeRef, the optional ModelRef, and
-// every entry in DeploymentRefs resolve. The referenced objects must live in
-// the referenced namespace; when ref.Namespace is blank on the wire we inherit
-// the Deployment's own namespace (mirroring how kubectl treats blank
+// ResolveRefs checks that TargetRef, RuntimeRef, any supplied ModelRef, and
+// every entry in DeploymentRefs resolve. Validation requires ModelRef when an
+// Agent Deployment selects a harness. The referenced objects must live in the
+// referenced namespace; when ref.Namespace is blank on the wire we inherit the
+// Deployment's own namespace (mirroring how kubectl treats blank
 // metadata.namespace).
 func (d *Deployment) ResolveRefs(ctx context.Context, resolver ResolverFunc) error {
 	if resolver == nil {
@@ -98,6 +99,9 @@ func validateDeploymentSpec(s *DeploymentSpec) FieldErrors {
 		}
 		if strings.TrimSpace(s.Harness.Type) == "" {
 			errs.Append("spec.harness.type", fmt.Errorf("%w", ErrRequiredField))
+		}
+		if s.TargetRef.Kind == KindAgent && s.ModelRef == nil {
+			errs.Append("spec.modelRef", fmt.Errorf("%w", ErrRequiredField))
 		}
 	}
 

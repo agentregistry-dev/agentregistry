@@ -121,8 +121,6 @@ spec:
   image: localhost:5001/my-agent:latest
   language: python
   framework: adk
-  modelProvider: gemini
-  modelName: gemini-2.0-flash
   description: test agent
 `)
 	cmd := declarative.NewBuildCmd(declarativeTestDeps(nil))

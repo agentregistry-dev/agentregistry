@@ -244,6 +244,7 @@ func TestDeploymentValidate_HarnessSelectionOK(t *testing.T) {
 		Spec: DeploymentSpec{
 			TargetRef:  ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
 			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "agentcore"},
+			ModelRef:   &ModelRef{Name: "claude-opus-4-8"},
 			Harness: &DeploymentHarness{
 				Type:           "claude-code",
 				PermissionMode: "acceptEdits",
@@ -256,6 +257,7 @@ func TestDeploymentValidate_HarnessSelectionOK(t *testing.T) {
 func TestDeploymentValidate_ModelRef(t *testing.T) {
 	tests := []struct {
 		name       string
+		targetKind string
 		modelRef   *ModelRef
 		harness    *DeploymentHarness
 		wantFields []string
@@ -264,8 +266,18 @@ func TestDeploymentValidate_ModelRef(t *testing.T) {
 			name: "omitted",
 		},
 		{
-			name:    "omitted for harness deployment",
-			harness: &DeploymentHarness{Type: "claude-code"},
+			name:       "omitted for harness deployment",
+			harness:    &DeploymentHarness{Type: "claude-code"},
+			wantFields: []string{"spec.modelRef"},
+		},
+		{
+			name:       "omitted for MCPServer deployment",
+			targetKind: KindMCPServer,
+		},
+		{
+			name:       "supplied for MCPServer deployment",
+			targetKind: KindMCPServer,
+			modelRef:   &ModelRef{Name: "claude-opus-4-8"},
 		},
 		{
 			name:     "same namespace",
@@ -303,10 +315,14 @@ func TestDeploymentValidate_ModelRef(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			targetKind := tt.targetKind
+			if targetKind == "" {
+				targetKind = KindAgent
+			}
 			d := &Deployment{
 				Metadata: ObjectMeta{Namespace: "default", Name: "prod"},
 				Spec: DeploymentSpec{
-					TargetRef:  ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
+					TargetRef:  ResourceRef{Kind: targetKind, Name: "alice", Tag: "stable"},
 					RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "agentcore"},
 					ModelRef:   tt.modelRef,
 					Harness:    tt.harness,
@@ -323,6 +339,7 @@ func TestDeploymentValidate_RejectsHarnessSelectionWithoutType(t *testing.T) {
 		Spec: DeploymentSpec{
 			TargetRef:  ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
 			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "agentcore"},
+			ModelRef:   &ModelRef{Name: "claude-opus-4-8"},
 			Harness:    &DeploymentHarness{},
 		},
 	}

@@ -92,7 +92,7 @@ func TestScheme_Register_Duplicate(t *testing.T) {
 	}
 }
 
-func TestScheme_Decode_Agent(t *testing.T) {
+func TestScheme_Decode_Agent_IgnoresLegacyModelFields(t *testing.T) {
 	doc := []byte(`
 apiVersion: ar.dev/v1alpha1
 kind: Agent
@@ -136,6 +136,13 @@ spec:
 		agent.Spec.MCPServers[0].Name != "github-tools" ||
 		agent.Spec.MCPServers[0].Tag != "0.2" {
 		t.Fatalf("mcpServers ref mismatch: %+v", agent.Spec.MCPServers)
+	}
+	encoded, err := Encode(agent)
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	if strings.Contains(string(encoded), "modelProvider") || strings.Contains(string(encoded), "modelName") {
+		t.Fatalf("legacy model fields survived decode/encode:\n%s", encoded)
 	}
 }
 

@@ -59,9 +59,11 @@ const (
 type DeploymentSpec struct {
 	TargetRef  ResourceRef `json:"targetRef" yaml:"targetRef"`
 	RuntimeRef ResourceRef `json:"runtimeRef" yaml:"runtimeRef"`
-	// ModelRef optionally selects the Model for this Deployment. Namespace
-	// defaults to the Deployment's namespace. Provider, endpoint, and auth
-	// configuration remain on the referenced Model.
+	// ModelRef selects the tagged Model for this Deployment. It is required
+	// when an Agent Deployment selects a harness and remains optional for
+	// non-harness Agent and MCPServer Deployments. Namespace defaults to the
+	// Deployment namespace and tag defaults to the literal "latest" tag.
+	// Provider, endpoint, and auth configuration remain on the referenced Model.
 	ModelRef     *ModelRef `json:"modelRef,omitempty" yaml:"modelRef,omitempty"`
 	DesiredState string    `json:"desiredState,omitempty" yaml:"desiredState,omitempty"`
 	// DeploymentRefs declaratively binds this Deployment to other

@@ -242,10 +242,12 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 				image = fmt.Sprintf("%s/%s:latest", registry, name)
 			}
 
-			// Resolve provider + model name once, then thread the resolved
-			// values into templates, arctl.yaml, and agent.yaml so all three
-			// agree. Provider comes from --model-provider flag; otherwise the
-			// interactive picker if a TTY is available; otherwise "gemini".
+			// Resolve provider + model name once for source-template generation.
+			// Runtime model selection belongs to Deployment.spec.modelRef, so
+			// these scaffold inputs are deliberately not persisted in
+			// arctl.yaml or agent.yaml. Provider comes from --model-provider
+			// flag; otherwise the interactive picker if a TTY is available;
+			// otherwise "gemini".
 			// User-cancel propagates as an error; TTY-unavailable falls back
 			// silently so tests and headless runs continue to work.
 			provider := initModelProvider
@@ -278,10 +280,8 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 			}
 
 			cfg := &buildconfig.Config{
-				Framework:     framework.Framework,
-				Language:      framework.Language,
-				ModelProvider: provider,
-				ModelName:     modelName,
+				Framework: framework.Framework,
+				Language:  framework.Language,
 			}
 			if err := buildconfig.Write(projectDir, cfg); err != nil {
 				return fmt.Errorf("write arctl.yaml: %w", err)
@@ -332,7 +332,6 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 			// language/framework now live in arctl.yaml only. The declarative
 			// agent.yaml carries only canonical AgentSpec fields.
 			if err := writeDeclarativeAgentYAML(projectDir, name, image,
-				provider, modelName,
 				initDescription, initGit, initGitBranch, initGitCommit, initMCPs); err != nil {
 				return fmt.Errorf("write agent.yaml: %w", err)
 			}
@@ -568,7 +567,7 @@ func parseNameVersion(s string) (string, string) {
 // metadata.tag is intentionally omitted — tagging is a publish-time concern.
 // The server stores untagged applies as the literal "latest"; users who want
 // a deterministic tag set it on the YAML by hand before `arctl apply`.
-func writeDeclarativeAgentYAML(projectDir, name, image, modelProvider, modelName, description, gitURL, gitBranch, gitCommit string, mcps []string) error {
+func writeDeclarativeAgentYAML(projectDir, name, image, description, gitURL, gitBranch, gitCommit string, mcps []string) error {
 	desc := description
 	if desc == "" {
 		desc = fmt.Sprintf("%s agent", name)
@@ -583,9 +582,7 @@ func writeDeclarativeAgentYAML(projectDir, name, image, modelProvider, modelName
 			Name: name,
 		},
 		Spec: v1alpha1.AgentSpec{
-			ModelProvider: modelProvider,
-			ModelName:     modelName,
-			Description:   desc,
+			Description: desc,
 			Source: &v1alpha1.AgentSource{
 				Image: image,
 			},

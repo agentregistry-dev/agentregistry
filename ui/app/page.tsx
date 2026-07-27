@@ -378,7 +378,6 @@ export default function AdminPage() {
       ))
       setFilteredAgents(groupedAgents.filter(({agent}) =>
         agent.name?.toLowerCase().includes(query) ||
-        agent.modelProvider?.toLowerCase().includes(query) ||
         agent.description?.toLowerCase().includes(query)
       ))
       setFilteredPrompts(groupedPrompts.filter(({prompt}) =>

@@ -19,10 +19,8 @@ func init() {
 // wired in, define a top-level MCPServer resource and reference it here.
 type AgentSpec struct {
 	// Core fields.
-	Title         string `json:"title,omitempty" yaml:"title,omitempty"`
-	Description   string `json:"description,omitempty" yaml:"description,omitempty"`
-	ModelProvider string `json:"modelProvider,omitempty" yaml:"modelProvider,omitempty"`
-	ModelName     string `json:"modelName,omitempty" yaml:"modelName,omitempty"`
+	Title       string `json:"title,omitempty" yaml:"title,omitempty"`
+	Description string `json:"description,omitempty" yaml:"description,omitempty"`
 
 	// Source declares where the agent comes from — Image (the runtime
 	// container) and/or Repository (the source code).

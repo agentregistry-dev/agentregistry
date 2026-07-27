@@ -79,8 +79,52 @@ type AgentTranslateOpts struct {
 	// refs (MCPServer.Spec.Remote.Headers), already split from
 	// Deployment.Spec.Env by the adapter via the HEADER_ prefix convention.
 	HeaderValues map[string]string
+	// Model is the spec resolved from Deployment.Spec.ModelRef. When nil,
+	// SpecToRuntimeAgent omits model provider/name env rather than accepting
+	// those values from DeploymentEnv.
+	Model *v1alpha1.ModelSpec
 	// Getter resolves AgentSpec.MCPServers refs to v1alpha1.MCPServer objects.
 	Getter v1alpha1.GetterFunc
+}
+
+// ResolveDeploymentModelSpec resolves Deployment.Spec.ModelRef through getter
+// and returns the selected Model spec. Blank namespace inherits from the
+// Deployment and blank tag resolves the literal "latest" tag. A Deployment
+// without ModelRef returns (nil, nil).
+func ResolveDeploymentModelSpec(
+	ctx context.Context,
+	deployment *v1alpha1.Deployment,
+	getter v1alpha1.GetterFunc,
+) (*v1alpha1.ModelSpec, error) {
+	if deployment == nil || deployment.Spec.ModelRef == nil {
+		return nil, nil
+	}
+	modelRef := deployment.Spec.ModelRef
+	normalized := v1alpha1.ResourceRef{
+		Kind:      v1alpha1.KindModel,
+		Namespace: modelRef.Namespace,
+		Name:      modelRef.Name,
+		Tag:       modelRef.Tag,
+	}
+	if normalized.Namespace == "" {
+		normalized.Namespace = deployment.Metadata.NamespaceOrDefault()
+	}
+	if normalized.Tag == "" {
+		normalized.Tag = "latest"
+	}
+	refName := fmt.Sprintf("%s %s/%s@%s", normalized.Kind, normalized.Namespace, normalized.Name, normalized.Tag)
+	if getter == nil {
+		return nil, fmt.Errorf("spec.modelRef resolve %s: getter is required", refName)
+	}
+	obj, err := getter(ctx, normalized)
+	if err != nil {
+		return nil, fmt.Errorf("spec.modelRef resolve %s: %w", refName, err)
+	}
+	model, ok := obj.(*v1alpha1.Model)
+	if !ok || model == nil {
+		return nil, fmt.Errorf("spec.modelRef resolve %s: getter returned unexpected type %T", refName, obj)
+	}
+	return &model.Spec, nil
 }
 
 // SpecToRuntimeAgent translates a v1alpha1 Agent envelope + Deployment
@@ -115,8 +159,12 @@ func SpecToRuntimeAgent(
 	}
 	envValues[constants.EnvKagentName] = agentMeta.Name
 	envValues[constants.EnvAgentName] = agentMeta.Name
-	envValues[constants.EnvModelProvider] = agentSpec.ModelProvider
-	envValues[constants.EnvModelName] = agentSpec.ModelName
+	delete(envValues, constants.EnvModelProvider)
+	delete(envValues, constants.EnvModelName)
+	if opts.Model != nil {
+		envValues[constants.EnvModelProvider] = opts.Model.Provider
+		envValues[constants.EnvModelName] = opts.Model.Model
+	}
 
 	var (
 		resolvedServers []*runtimetypes.MCPServer
