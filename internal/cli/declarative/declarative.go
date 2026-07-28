@@ -84,6 +84,14 @@ func init() {
 		promptRow,
 	))
 
+	scheme.Register(typedKind(
+		"plugin", "plugins", []string{"Plugin"},
+		[]scheme.Column{{Header: "NAME"}, {Header: "TAG"}, {Header: "DESCRIPTION"}},
+		v1alpha1.KindPlugin,
+		func() *v1alpha1.Plugin { return &v1alpha1.Plugin{} },
+		pluginRow,
+	))
+
 	// Runtime is registered manually because it is a mutable namespace/name
 	// object: the server's runtime store does not expose /tags or
 	// DeleteAllTags endpoints. Routing it through
