@@ -178,6 +178,17 @@ func promptRow(prompt *v1alpha1.Prompt) []string {
 	}
 }
 
+func pluginRow(plugin *v1alpha1.Plugin) []string {
+	if plugin == nil {
+		return []string{"<invalid>"}
+	}
+	return []string{
+		printer.TruncateString(plugin.Metadata.Name, 40),
+		plugin.Metadata.Tag,
+		printer.TruncateString(printer.EmptyValueOrDefault(plugin.Spec.Description, "<none>"), 60),
+	}
+}
+
 func runtimeRow(runtime *v1alpha1.Runtime) []string {
 	if runtime == nil {
 		return []string{"<invalid>"}

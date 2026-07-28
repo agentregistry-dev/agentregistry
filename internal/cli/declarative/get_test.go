@@ -82,6 +82,21 @@ func TestModel_AllTagsSupport(t *testing.T) {
 	require.Equal(t, "models", k.Plural)
 }
 
+// TestPlugin_AllTagsSupport pins that Plugin — a tag-versioned artifact kind —
+// resolves via every alias and keeps its tagged-kind wiring (ListTags /
+// DeleteAllTags), so it never silently loses registration or --all-tags support.
+func TestPlugin_AllTagsSupport(t *testing.T) {
+	for _, alias := range []string{"plugin", "plugins", "Plugin"} {
+		k, err := scheme.Lookup(alias)
+		require.NoError(t, err, "%q should resolve via declarative's init() registration", alias)
+		require.NotNil(t, k.ListTags, "tagged Plugin should expose ListTags")
+		require.NotNil(t, k.DeleteAllTags, "tagged Plugin should expose DeleteAllTags")
+		require.Equal(t, "plugin", k.Kind)
+		require.Equal(t, "plugins", k.Plural)
+		require.NotEmpty(t, k.TableColumns, "expected TableColumns on the plugin kind")
+	}
+}
+
 // TestDeployment_NoAllTagsSupport is the symmetric assertion for
 // Deployment — also a mutable namespace/name object. Already
 // covered by TestGet_AllTags_DeploymentRejected at the CLI surface
