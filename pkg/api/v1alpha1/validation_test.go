@@ -371,7 +371,7 @@ func TestDeploymentValidate_EnvFrom(t *testing.T) {
 		{
 			name:       "inner missing secretRef",
 			targetKind: KindMCPServer,
-			envFrom:    []EnvFromSource{
+			envFrom: []EnvFromSource{
 				{SecretRef: &SecretEnvSource{Name: "mcp-secrets"}},
 				{},
 			},
@@ -380,7 +380,7 @@ func TestDeploymentValidate_EnvFrom(t *testing.T) {
 		{
 			name:       "multiple field errors",
 			targetKind: KindMCPServer,
-			envFrom:    []EnvFromSource{
+			envFrom: []EnvFromSource{
 				{SecretRef: &SecretEnvSource{Name: "mcp-secrets"}},
 				{SecretRef: &SecretEnvSource{Name: "Invalid Name"}},
 				{},

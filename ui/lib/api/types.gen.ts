@@ -90,6 +90,7 @@ export type DeploymentSpec = {
     env?: {
         [key: string]: string;
     };
+    envFrom?: Array<EnvFromSource> | null;
     harness?: DeploymentHarness;
     modelRef?: ModelRef;
     runtimeConfig?: {
@@ -97,6 +98,10 @@ export type DeploymentSpec = {
     };
     runtimeRef: ResourceRef;
     targetRef: ResourceRef;
+};
+
+export type EnvFromSource = {
+    secretRef?: SecretEnvSource;
 };
 
 export type ErrorDetail = {
@@ -637,6 +642,10 @@ export type RuntimeSpec = {
     };
     telemetryEndpoint?: string;
     type: string;
+};
+
+export type SecretEnvSource = {
+    name: string;
 };
 
 export type SecretKeyRef = {
