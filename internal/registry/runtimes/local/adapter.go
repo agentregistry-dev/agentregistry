@@ -58,6 +58,11 @@ func (a *localDeploymentAdapter) Apply(ctx context.Context, in types.ApplyInput)
 	if in.Deployment == nil {
 		return nil, fmt.Errorf("apply: deployment is required")
 	}
+	// spec.envFrom references a runtime-resolved Secret; the local runtime
+	// has no secret store to resolve it against, so reject.
+	if len(in.Deployment.Spec.EnvFrom) > 0 {
+		return nil, fmt.Errorf("apply: spec.envFrom is not supported by the %s runtime", v1alpha1.TypeLocal)
+	}
 	desired, err := a.buildDesiredStateFromV1Alpha1(ctx, in)
 	if err != nil {
 		return nil, err
