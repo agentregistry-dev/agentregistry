@@ -175,7 +175,7 @@ func outputSchemaFor[T any]() *jsonschema.Schema {
 	}
 	s, err := jsonschema.ForType(rt, &jsonschema.ForOptions{
 		TypeSchemas: map[reflect.Type]*jsonschema.Schema{
-			reflect.TypeFor[json.RawMessage](): &jsonschema.Schema{Types: []string{
+			reflect.TypeFor[json.RawMessage](): {Types: []string{
 				"null", "boolean", "object", "array", "number", "string",
 			}},
 		},
