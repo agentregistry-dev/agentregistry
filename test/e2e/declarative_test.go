@@ -152,8 +152,6 @@ spec:
   source:
     image: ghcr.io/e2e-test/decl-agent:latest
   description: "E2E declarative apply test agent"
-  modelProvider: gemini
-  modelName: gemini-2.0-flash
 `, agentName)
 
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "agent.yaml", agentYAML)
@@ -284,8 +282,6 @@ spec:
   source:
     image: ghcr.io/e2e-test/multi-agent:latest
   description: "Multi-doc test agent"
-  modelProvider: gemini
-  modelName: gemini-2.0-flash
 `, serverName, agentName)
 
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "stack.yaml", multiDocYAML)
@@ -317,8 +313,6 @@ spec:
   source:
     image: ghcr.io/e2e-test/dryrun:latest
   description: "Dry-run test agent"
-  modelProvider: gemini
-  modelName: gemini-2.0-flash
 `, agentName)
 
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "dryrun.yaml", agentYAML)
@@ -661,8 +655,6 @@ spec:
   source:
     image: ghcr.io/e2e-test/idemp-agent:latest
   description: "Idempotent apply test agent"
-  modelProvider: gemini
-  modelName: gemini-2.0-flash
 `, agentName)
 
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "agent.yaml", agentYAML)
@@ -735,8 +727,6 @@ spec:
   source:
     image: ghcr.io/e2e-test/update-agent:latest
   description: "v1 description"
-  modelProvider: gemini
-  modelName: gemini-2.0-flash
 `, agentName)
 
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "agent.yaml", v1YAML)
@@ -763,8 +753,6 @@ spec:
   source:
     image: ghcr.io/e2e-test/update-agent:latest
   description: "v2 description"
-  modelProvider: gemini
-  modelName: gemini-2.0-flash
 `, agentName)
 
 	yamlPath = writeDeclarativeYAML(t, tmpDir, "agent.yaml", v2YAML)
@@ -1082,8 +1070,6 @@ spec:
   source:
     image: ghcr.io/e2e-test/batch-agent:latest
   description: "Batch multi-resource apply test agent"
-  modelProvider: gemini
-  modelName: gemini-2.0-flash
 ---
 apiVersion: ar.dev/v1alpha1
 kind: Runtime
@@ -1133,8 +1119,6 @@ spec:
   source:
     image: ghcr.io/e2e-test/idemp-batch-agent:latest
   description: "Idempotent batch apply test"
-  modelProvider: gemini
-  modelName: gemini-2.0-flash
 ---
 apiVersion: ar.dev/v1alpha1
 kind: Runtime
@@ -1289,8 +1273,6 @@ spec:
   source:
     image: ghcr.io/e2e-test/del-batch-agent:latest
   description: "Delete-file batch test agent"
-  modelProvider: gemini
-  modelName: gemini-2.0-flash
 `, agentName)
 
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "agent.yaml", agentYAML)
@@ -1561,8 +1543,6 @@ spec:
   source:
     image: ghcr.io/e2e-test/delmulti-agent:latest
   description: "multi-kind delete test"
-  modelProvider: gemini
-  modelName: gemini-2.0-flash
 ---
 apiVersion: ar.dev/v1alpha1
 kind: MCPServer

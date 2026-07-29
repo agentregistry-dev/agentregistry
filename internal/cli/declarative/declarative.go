@@ -50,8 +50,7 @@ func init() {
 	scheme.Register(typedKind(
 		"agent", "agents", []string{"Agent"},
 		[]scheme.Column{
-			{Header: "NAME"}, {Header: "TAG"},
-			{Header: "PROVIDER"}, {Header: "MODEL"},
+			{Header: "NAME"}, {Header: "TAG"}, {Header: "MODE"}, {Header: "DESCRIPTION"},
 		},
 		v1alpha1.KindAgent,
 		func() *v1alpha1.Agent { return &v1alpha1.Agent{} },
@@ -82,6 +81,14 @@ func init() {
 		v1alpha1.KindPrompt,
 		func() *v1alpha1.Prompt { return &v1alpha1.Prompt{} },
 		promptRow,
+	))
+
+	scheme.Register(typedKind(
+		"plugin", "plugins", []string{"Plugin"},
+		[]scheme.Column{{Header: "NAME"}, {Header: "TAG"}, {Header: "DESCRIPTION"}},
+		v1alpha1.KindPlugin,
+		func() *v1alpha1.Plugin { return &v1alpha1.Plugin{} },
+		pluginRow,
 	))
 
 	// Runtime is registered manually because it is a mutable namespace/name

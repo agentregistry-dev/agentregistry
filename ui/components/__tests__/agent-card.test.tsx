@@ -9,8 +9,6 @@ const mockAgent: AgentResponse = {
     name: "test-agent",
     description: "A test agent for unit testing",
     tag: "1.0.0",
-    modelProvider: "openai",
-    modelName: "gpt-4",
     source: {
       image: "registry.example.com/test-agent:latest",
     },
@@ -37,12 +35,6 @@ describe("AgentCard", () => {
     expect(screen.getByText("1.0.0")).toBeInTheDocument()
   })
 
-  it("renders model provider and name", () => {
-    render(<AgentCard agent={mockAgent} />)
-    expect(screen.getByText("openai")).toBeInTheDocument()
-    expect(screen.getByText("gpt-4")).toBeInTheDocument()
-  })
-
   it("calls onClick when card is clicked", async () => {
     const onClick = vi.fn()
     render(<AgentCard agent={mockAgent} onClick={onClick} />)
@@ -56,8 +48,6 @@ describe("AgentCard", () => {
         name: "minimal-agent",
         description: "",
         tag: "0.1.0",
-        modelProvider: "",
-        modelName: "",
       },
       _meta: {},
     }

@@ -45,8 +45,6 @@ spec:
   description: %q
   language: python
   framework: adk
-  modelProvider: gemini
-  modelName: gemini-2.0-flash
 `, name, tagLine, desc)
 	path := writeDeclarativeYAML(t, tmpDir, fmt.Sprintf("agent-%d.yaml", time.Now().UnixNano()), yaml)
 	result := RunArctl(t, tmpDir, "apply", "-f", path, "--registry-url", regURL)

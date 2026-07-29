@@ -107,7 +107,7 @@ func TestBuildStores_PropagatesAuditor(t *testing.T) {
 	_, err := agentStore.Upsert(t.Context(), &v1alpha1.Agent{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
 		Metadata: v1alpha1.ObjectMeta{Namespace: v1alpha1.DefaultNamespace, Name: "audited"},
-		Spec:     v1alpha1.AgentSpec{ModelName: "model-a"},
+		Spec:     v1alpha1.AgentSpec{Title: "Audited Agent"},
 	})
 	require.NoError(t, err)
 

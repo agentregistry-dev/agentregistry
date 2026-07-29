@@ -22,11 +22,12 @@ func (d *Deployment) Validate() error {
 	return errs
 }
 
-// ResolveRefs checks that TargetRef, RuntimeRef, the optional ModelRef, and
-// every entry in DeploymentRefs resolve. The referenced objects must live in
-// the referenced namespace; when ref.Namespace is blank on the wire we inherit
-// the Deployment's own namespace (mirroring how kubectl treats blank
-// metadata.namespace).
+// ResolveRefs checks that TargetRef, RuntimeRef, the effective ModelRef, and
+// every entry in DeploymentRefs resolve. A harness Agent Deployment that omits
+// ModelRef resolves Model/default@latest in its own namespace. The referenced
+// objects must live in the referenced namespace; when ref.Namespace is blank on
+// the wire we inherit the Deployment's own namespace (mirroring how kubectl
+// treats blank metadata.namespace).
 func (d *Deployment) ResolveRefs(ctx context.Context, resolver ResolverFunc) error {
 	if resolver == nil {
 		return nil
@@ -45,12 +46,12 @@ func (d *Deployment) ResolveRefs(ctx context.Context, resolver ResolverFunc) err
 	}
 	errs = append(errs, resolveRefWith(ctx, resolver, runtime, "spec.runtimeRef")...)
 
-	if d.Spec.ModelRef != nil {
+	if modelRef := d.Spec.EffectiveModelRef(); modelRef != nil {
 		model := ResourceRef{
 			Kind:      KindModel,
-			Namespace: d.Spec.ModelRef.Namespace,
-			Name:      d.Spec.ModelRef.Name,
-			Tag:       d.Spec.ModelRef.Tag,
+			Namespace: modelRef.Namespace,
+			Name:      modelRef.Name,
+			Tag:       modelRef.Tag,
 		}
 		if model.Namespace == "" {
 			model.Namespace = d.Metadata.Namespace
@@ -99,6 +100,13 @@ func validateDeploymentSpec(s *DeploymentSpec) FieldErrors {
 		if strings.TrimSpace(s.Harness.Type) == "" {
 			errs.Append("spec.harness.type", fmt.Errorf("%w", ErrRequiredField))
 		}
+	}
+
+	// Materialize the namespace-scoped default into the admitted Deployment so
+	// get, fingerprints, dependency tracking, and runtime translation all expose
+	// the same effective selection instead of relying on a hidden fallback.
+	if s.ModelRef == nil {
+		s.ModelRef = s.EffectiveModelRef()
 	}
 
 	if s.ModelRef != nil {

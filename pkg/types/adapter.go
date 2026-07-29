@@ -100,8 +100,8 @@ type ApplyInput struct {
 
 	// Getter fetches the typed Object for a ResourceRef. Adapters use
 	// this when they need the target's Spec (not just an existence
-	// check) — for example, the local adapter walking
-	// AgentSpec.MCPServers to build agentgateway upstream config.
+	// check) — for example, resolving a Deployment's effective ModelRef or
+	// walking AgentSpec.MCPServers to build agentgateway upstream config.
 	Getter v1alpha1.GetterFunc
 }
 

@@ -8,7 +8,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { Bot, Brain, Cpu, Github, Play } from "lucide-react"
+import { Bot, Github, Play } from "lucide-react"
 
 interface AgentCardProps {
   agent: AgentResponse
@@ -68,20 +68,6 @@ export function AgentCard({ agent, onDeploy, showDeploy = false, onClick, tagCou
 
             {official?.publishedAt && (
               <span>{formatDate(official.publishedAt)}</span>
-            )}
-
-            {agentData.modelProvider && (
-              <span className="flex items-center gap-1">
-                <Brain className="h-3 w-3" aria-hidden="true" />
-                {agentData.modelProvider}
-              </span>
-            )}
-
-            {agentData.modelName && (
-              <span className="flex items-center gap-1 font-mono">
-                <Cpu className="h-3 w-3" aria-hidden="true" />
-                {agentData.modelName}
-              </span>
             )}
 
             {source?.repository?.url && (

@@ -140,8 +140,23 @@ func agentRow(agent *v1alpha1.Agent) []string {
 	return []string{
 		printer.TruncateString(agent.Metadata.Name, 40),
 		agent.Metadata.Tag,
-		printer.EmptyValueOrDefault(agent.Spec.ModelProvider, "<none>"),
-		printer.TruncateString(printer.EmptyValueOrDefault(agent.Spec.ModelName, "<none>"), 30),
+		agentDisplayMode(agent.Spec),
+		printer.TruncateString(printer.EmptyValueOrDefault(agent.Spec.Description, "<none>"), 60),
+	}
+}
+
+func agentDisplayMode(spec v1alpha1.AgentSpec) string {
+	hasSource := spec.Source != nil && (spec.Source.Image != "" || spec.Source.Repository != nil)
+	hasHarness := len(spec.CompatibleHarnesses) > 0
+	switch {
+	case hasSource && hasHarness:
+		return "source+harness"
+	case hasSource:
+		return "source"
+	case hasHarness:
+		return "harness"
+	default:
+		return "<none>"
 	}
 }
 
@@ -175,6 +190,17 @@ func promptRow(prompt *v1alpha1.Prompt) []string {
 		printer.TruncateString(prompt.Metadata.Name, 40),
 		prompt.Metadata.Tag,
 		printer.TruncateString(printer.EmptyValueOrDefault(prompt.Spec.Description, "<none>"), 60),
+	}
+}
+
+func pluginRow(plugin *v1alpha1.Plugin) []string {
+	if plugin == nil {
+		return []string{"<invalid>"}
+	}
+	return []string{
+		printer.TruncateString(plugin.Metadata.Name, 40),
+		plugin.Metadata.Tag,
+		printer.TruncateString(printer.EmptyValueOrDefault(plugin.Spec.Description, "<none>"), 60),
 	}
 }
 

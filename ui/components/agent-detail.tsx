@@ -9,8 +9,6 @@ import {
   Calendar,
   Bot,
   Code,
-  Cpu,
-  Brain,
   Clock,
   Github,
   ExternalLink,
@@ -128,26 +126,6 @@ export function AgentDetail({ agent, allTags: allTagsProp }: AgentDetailProps) {
                 <p className="text-[15px] leading-relaxed">{agentData.description}</p>
               </section>
             )}
-
-            <section>
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">Details</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex items-center gap-2.5">
-                  <Brain className="h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Model Provider</p>
-                    <p className="text-[15px] font-medium">{agentData.modelProvider}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2.5">
-                  <Cpu className="h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Model</p>
-                    <p className="text-[15px] font-medium font-mono">{agentData.modelName}</p>
-                  </div>
-                </div>
-              </div>
-            </section>
 
             {source?.repository?.url && (
               <section>

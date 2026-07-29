@@ -59,8 +59,10 @@ const (
 type DeploymentSpec struct {
 	TargetRef  ResourceRef `json:"targetRef" yaml:"targetRef"`
 	RuntimeRef ResourceRef `json:"runtimeRef" yaml:"runtimeRef"`
-	// ModelRef optionally selects the Model for this Deployment. Namespace
-	// defaults to the Deployment's namespace. Provider, endpoint, and auth
+	// ModelRef selects the tagged Model for this Deployment. When omitted from
+	// a harness Agent Deployment, it defaults to Model/default@latest in the
+	// Deployment namespace. It remains optional with no implicit selection for
+	// non-harness Agent and MCPServer Deployments. Provider, endpoint, and auth
 	// configuration remain on the referenced Model.
 	ModelRef     *ModelRef `json:"modelRef,omitempty" yaml:"modelRef,omitempty"`
 	DesiredState string    `json:"desiredState,omitempty" yaml:"desiredState,omitempty"`
@@ -81,6 +83,22 @@ type DeploymentSpec struct {
 	// rollout-specific harness policy. Omitted for BYO image/source Agent
 	// deployments and MCPServer deployments.
 	Harness *DeploymentHarness `json:"harness,omitempty" yaml:"harness,omitempty"`
+}
+
+// EffectiveModelRef returns the explicit ModelRef or the conventional
+// namespace-scoped default for a harness Agent Deployment. It returns nil for
+// non-harness Agent and MCPServer Deployments that omit ModelRef.
+func (s *DeploymentSpec) EffectiveModelRef() *ModelRef {
+	if s == nil {
+		return nil
+	}
+	if s.ModelRef != nil {
+		return s.ModelRef
+	}
+	if s.TargetRef.Kind == KindAgent && s.Harness != nil {
+		return &ModelRef{Name: DefaultModelName}
+	}
+	return nil
 }
 
 // EnvFromSource selects one external source of environment variables.

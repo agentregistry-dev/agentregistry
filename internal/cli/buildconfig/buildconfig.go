@@ -16,10 +16,9 @@ const Filename = "arctl.yaml"
 // Config is the per-project build-config. Future fields are additive; older
 // arctl ignores unknown keys.
 type Config struct {
-	Framework     string `yaml:"framework"`
-	Language      string `yaml:"language"`
-	ModelProvider string `yaml:"modelProvider,omitempty"`
-	ModelName     string `yaml:"modelName,omitempty"`
+	Framework   string   `yaml:"framework"`
+	Language    string   `yaml:"language"`
+	RequiredEnv []string `yaml:"requiredEnv,omitempty"`
 	// Port is set for MCPServer projects to expose HTTP transport. arctl run
 	// maps it to the host and the MCP runtime binds 0.0.0.0:<port>.
 	Port int `yaml:"port,omitempty"`

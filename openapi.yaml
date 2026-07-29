@@ -46,10 +46,6 @@ components:
           type:
           - array
           - "null"
-        modelName:
-          type: string
-        modelProvider:
-          type: string
         plugins:
           items:
             $ref: '#/components/schemas/ResourceRef'

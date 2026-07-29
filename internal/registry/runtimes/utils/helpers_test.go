@@ -3,6 +3,8 @@ package utils
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"strings"
 	"testing"
 
 	runtimetypes "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
@@ -103,6 +105,169 @@ func TestSpecToRuntimeMCPServer_NamespaceOptOverridesMeta(t *testing.T) {
 	}
 }
 
+func TestResolveDeploymentModelSpec_NormalizesAndResolves(t *testing.T) {
+	tests := []struct {
+		name      string
+		namespace string
+		tag       string
+		wantNS    string
+		wantTag   string
+	}{
+		{
+			name:    "deployment namespace and latest tag",
+			wantNS:  "team-a",
+			wantTag: "latest",
+		},
+		{
+			name:      "explicit namespace and tag",
+			namespace: "models",
+			tag:       "approved-v1",
+			wantNS:    "models",
+			wantTag:   "approved-v1",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			deployment := &v1alpha1.Deployment{
+				Metadata: v1alpha1.ObjectMeta{Namespace: "team-a", Name: "assistant"},
+				Spec: v1alpha1.DeploymentSpec{
+					ModelRef: &v1alpha1.ModelRef{
+						Namespace: tt.namespace,
+						Name:      "approved-model",
+						Tag:       tt.tag,
+					},
+				},
+			}
+			var gotRef v1alpha1.ResourceRef
+			got, err := ResolveDeploymentModelSpec(t.Context(), deployment, func(_ context.Context, ref v1alpha1.ResourceRef) (v1alpha1.Object, error) {
+				gotRef = ref
+				return &v1alpha1.Model{
+					TypeMeta: v1alpha1.TypeMeta{Kind: v1alpha1.KindModel},
+					Spec: v1alpha1.ModelSpec{
+						Provider: v1alpha1.ModelProviderBedrock,
+						Model:    "us.anthropic.claude-sonnet-4-6",
+					},
+				}, nil
+			})
+			if err != nil {
+				t.Fatalf("ResolveDeploymentModelSpec: %v", err)
+			}
+			if gotRef.Kind != v1alpha1.KindModel || gotRef.Namespace != tt.wantNS ||
+				gotRef.Name != "approved-model" || gotRef.Tag != tt.wantTag {
+				t.Fatalf("normalized ref = %+v", gotRef)
+			}
+			if got.Provider != v1alpha1.ModelProviderBedrock || got.Model != "us.anthropic.claude-sonnet-4-6" {
+				t.Fatalf("resolved model = %+v", got)
+			}
+		})
+	}
+}
+
+func TestResolveDeploymentModelSpec_UsesDefaultHarnessModel(t *testing.T) {
+	deployment := &v1alpha1.Deployment{
+		Metadata: v1alpha1.ObjectMeta{Namespace: "team-a", Name: "assistant"},
+		Spec: v1alpha1.DeploymentSpec{
+			TargetRef: v1alpha1.ResourceRef{Kind: v1alpha1.KindAgent, Name: "assistant"},
+			Harness:   &v1alpha1.DeploymentHarness{Type: "claude-code"},
+		},
+	}
+	var gotRef v1alpha1.ResourceRef
+	got, err := ResolveDeploymentModelSpec(t.Context(), deployment, func(_ context.Context, ref v1alpha1.ResourceRef) (v1alpha1.Object, error) {
+		gotRef = ref
+		return &v1alpha1.Model{
+			TypeMeta: v1alpha1.TypeMeta{Kind: v1alpha1.KindModel},
+			Spec: v1alpha1.ModelSpec{
+				Provider: v1alpha1.ModelProviderBedrock,
+				Model:    "us.anthropic.claude-sonnet-4-6",
+			},
+		}, nil
+	})
+	if err != nil {
+		t.Fatalf("ResolveDeploymentModelSpec: %v", err)
+	}
+	if gotRef.Kind != v1alpha1.KindModel || gotRef.Namespace != "team-a" ||
+		gotRef.Name != v1alpha1.DefaultModelName || gotRef.Tag != "latest" {
+		t.Fatalf("default model ref = %+v", gotRef)
+	}
+	if got.Provider != v1alpha1.ModelProviderBedrock {
+		t.Fatalf("resolved model = %+v", got)
+	}
+}
+
+func TestResolveDeploymentModelSpec_FailuresNameNormalizedRef(t *testing.T) {
+	deployment := &v1alpha1.Deployment{
+		Metadata: v1alpha1.ObjectMeta{Namespace: "team-a", Name: "assistant"},
+		Spec: v1alpha1.DeploymentSpec{
+			ModelRef: &v1alpha1.ModelRef{Name: "approved-model"},
+		},
+	}
+
+	_, err := ResolveDeploymentModelSpec(t.Context(), deployment, nil)
+	if err == nil || !strings.Contains(err.Error(), "spec.modelRef") ||
+		!strings.Contains(err.Error(), "Model team-a/approved-model@latest") {
+		t.Fatalf("missing getter error = %v", err)
+	}
+
+	_, err = ResolveDeploymentModelSpec(t.Context(), deployment, func(context.Context, v1alpha1.ResourceRef) (v1alpha1.Object, error) {
+		return nil, v1alpha1.ErrDanglingRef
+	})
+	if !errors.Is(err, v1alpha1.ErrDanglingRef) || !strings.Contains(err.Error(), "spec.modelRef") {
+		t.Fatalf("dangling ref error = %v", err)
+	}
+
+	_, err = ResolveDeploymentModelSpec(t.Context(), deployment, func(context.Context, v1alpha1.ResourceRef) (v1alpha1.Object, error) {
+		return &v1alpha1.Agent{}, nil
+	})
+	if err == nil || !strings.Contains(err.Error(), "unexpected type") ||
+		!strings.Contains(err.Error(), "Model team-a/approved-model@latest") {
+		t.Fatalf("unexpected type error = %v", err)
+	}
+}
+
+func TestSpecToRuntimeAgent_ModelEnvIsAuthoritative(t *testing.T) {
+	agent, _, err := SpecToRuntimeAgent(
+		t.Context(),
+		v1alpha1.ObjectMeta{Namespace: "default", Name: "alice"},
+		v1alpha1.AgentSpec{},
+		AgentTranslateOpts{
+			DeploymentEnv: map[string]string{
+				"MODEL_PROVIDER": "deployment-provider",
+				"MODEL_NAME":     "deployment-model",
+			},
+			Model: &v1alpha1.ModelSpec{
+				Provider: v1alpha1.ModelProviderBedrock,
+				Model:    "us.anthropic.claude-opus-4-8",
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("SpecToRuntimeAgent: %v", err)
+	}
+	if agent.Deployment.Env["MODEL_PROVIDER"] != v1alpha1.ModelProviderBedrock ||
+		agent.Deployment.Env["MODEL_NAME"] != "us.anthropic.claude-opus-4-8" {
+		t.Fatalf("model env = %+v", agent.Deployment.Env)
+	}
+
+	agent, _, err = SpecToRuntimeAgent(
+		t.Context(),
+		v1alpha1.ObjectMeta{Namespace: "default", Name: "alice"},
+		v1alpha1.AgentSpec{},
+		AgentTranslateOpts{DeploymentEnv: map[string]string{
+			"MODEL_PROVIDER": "deployment-provider",
+			"MODEL_NAME":     "deployment-model",
+		}},
+	)
+	if err != nil {
+		t.Fatalf("SpecToRuntimeAgent without Model: %v", err)
+	}
+	if _, ok := agent.Deployment.Env["MODEL_PROVIDER"]; ok {
+		t.Fatalf("MODEL_PROVIDER should be omitted without Model: %+v", agent.Deployment.Env)
+	}
+	if _, ok := agent.Deployment.Env["MODEL_NAME"]; ok {
+		t.Fatalf("MODEL_NAME should be omitted without Model: %+v", agent.Deployment.Env)
+	}
+}
+
 func TestSpecToRuntimeAgent_ResolvesMCPServerRefs(t *testing.T) {
 	mcp := &v1alpha1.MCPServer{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindMCPServer},
@@ -128,9 +293,7 @@ func TestSpecToRuntimeAgent_ResolvesMCPServerRefs(t *testing.T) {
 
 	agentMeta := v1alpha1.ObjectMeta{Namespace: "default", Name: "alice", Tag: "1.0.0"}
 	agentSpec := v1alpha1.AgentSpec{
-		Source:        &v1alpha1.AgentSource{Image: "ghcr.io/example/alice:v1"},
-		ModelProvider: "openai",
-		ModelName:     "gpt-4o",
+		Source: &v1alpha1.AgentSource{Image: "ghcr.io/example/alice:v1"},
 		MCPServers: []v1alpha1.ResourceRef{
 			{Kind: v1alpha1.KindMCPServer, Name: "tools", Tag: "1.0.0"},
 		},
@@ -140,7 +303,11 @@ func TestSpecToRuntimeAgent_ResolvesMCPServerRefs(t *testing.T) {
 		DeploymentID:  "dep-42",
 		KagentURL:     "http://localhost",
 		DeploymentEnv: map[string]string{"EXTRA": "value"},
-		Getter:        getter,
+		Model: &v1alpha1.ModelSpec{
+			Provider: v1alpha1.ModelProviderBedrock,
+			Model:    "us.anthropic.claude-sonnet-4-6",
+		},
+		Getter: getter,
 	})
 	if err != nil {
 		t.Fatalf("SpecToRuntimeAgent: %v", err)
@@ -159,6 +326,10 @@ func TestSpecToRuntimeAgent_ResolvesMCPServerRefs(t *testing.T) {
 	}
 	if agent.Deployment.Env["EXTRA"] != "value" {
 		t.Fatalf("EXTRA env missing: %+v", agent.Deployment.Env)
+	}
+	if agent.Deployment.Env["MODEL_PROVIDER"] != v1alpha1.ModelProviderBedrock ||
+		agent.Deployment.Env["MODEL_NAME"] != "us.anthropic.claude-sonnet-4-6" {
+		t.Fatalf("model env = %+v", agent.Deployment.Env)
 	}
 	encoded := agent.Deployment.Env["MCP_SERVERS_CONFIG"]
 	if encoded == "" {

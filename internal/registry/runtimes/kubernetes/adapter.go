@@ -161,6 +161,10 @@ func (a *kubernetesDeploymentAdapter) buildDesiredStateFromV1Alpha1(
 		if in.Runtime != nil {
 			telemetryEndpoint = in.Runtime.Spec.TelemetryEndpoint
 		}
+		model, err := utils.ResolveDeploymentModelSpec(ctx, in.Deployment, in.Getter)
+		if err != nil {
+			return nil, err
+		}
 		agent, servers, err := utils.SpecToRuntimeAgent(ctx, target.Metadata, target.Spec, utils.AgentTranslateOpts{
 			DeploymentID:      deploymentID,
 			Namespace:         namespace,
@@ -168,6 +172,7 @@ func (a *kubernetesDeploymentAdapter) buildDesiredStateFromV1Alpha1(
 			DeploymentEnv:     envValues,
 			TelemetryEndpoint: telemetryEndpoint,
 			HeaderValues:      headerValues,
+			Model:             model,
 			Getter:            in.Getter,
 		})
 		if err != nil {

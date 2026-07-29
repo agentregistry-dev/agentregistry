@@ -31,7 +31,7 @@ These five kinds share the same endpoint shape. `{kind}` = `agent` | `server` | 
 
 ## Models
 
-Model is a tagged catalog kind. Each tag versions provider identity together with platform connection posture (auth strategy, endpoint, secret refs), allowing Deployments to pin the complete configuration they consume. Models are intended to be admin-writable, so a non-public provider should grant `Publish`/`Edit`/`Delete` on `model:{name}` to platform admins only. Secret values never live on the Model — only `SecretKeyRef` names — so `Read` does not expose key material.
+Model is a tagged catalog kind. Each tag versions provider identity together with platform connection posture (auth strategy, endpoint, secret refs), allowing Deployments to pin the complete configuration they consume. Models are intended to be admin-writable, so a non-public provider should grant `Publish`/`Edit`/`Delete` on `model:{name}` to platform admins only. Secret values never live on the Model — only `SecretKeyRef` names — so `Read` does not expose key material. A harness Agent Deployment that omits `spec.modelRef` selects `Model/<deployment namespace>/default@latest`; platform administrators therefore own both creation and mutation of each namespace's `default` Model.
 
 | Operation | HTTP | Required permissions | Notes |
 | --- | --- | --- | --- |

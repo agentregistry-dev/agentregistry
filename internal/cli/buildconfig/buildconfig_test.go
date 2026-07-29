@@ -12,10 +12,9 @@ import (
 func TestWriteAndRead_RoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	cfg := &Config{
-		Framework:     "adk",
-		Language:      "python",
-		ModelProvider: "openai",
-		ModelName:     "gpt-4",
+		Framework:   "adk",
+		Language:    "python",
+		RequiredEnv: []string{"GOOGLE_API_KEY"},
 	}
 	require.NoError(t, Write(dir, cfg))
 
@@ -23,23 +22,28 @@ func TestWriteAndRead_RoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, cfg.Framework, got.Framework)
 	assert.Equal(t, cfg.Language, got.Language)
-	assert.Equal(t, cfg.ModelProvider, got.ModelProvider)
-	assert.Equal(t, cfg.ModelName, got.ModelName)
+	assert.Equal(t, cfg.RequiredEnv, got.RequiredEnv)
 }
 
-func TestWriteAndRead_OmitsEmptyModelFields(t *testing.T) {
+func TestRead_IgnoresRemovedModelFieldsWithoutRewritingThem(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, Write(dir, &Config{Framework: "fastmcp", Language: "python"}))
-
-	data, err := os.ReadFile(filepath.Join(dir, "arctl.yaml"))
-	require.NoError(t, err)
-	assert.NotContains(t, string(data), "modelProvider")
-	assert.NotContains(t, string(data), "modelName")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, Filename), []byte(`
+framework: adk
+language: python
+modelProvider: openai
+modelName: gpt-4o
+`), 0o644))
 
 	got, err := Read(dir)
 	require.NoError(t, err)
-	assert.Empty(t, got.ModelProvider)
-	assert.Empty(t, got.ModelName)
+	assert.Equal(t, "adk", got.Framework)
+	assert.Equal(t, "python", got.Language)
+
+	require.NoError(t, Write(dir, got))
+	data, err := os.ReadFile(filepath.Join(dir, Filename))
+	require.NoError(t, err)
+	assert.NotContains(t, string(data), "modelProvider")
+	assert.NotContains(t, string(data), "modelName")
 }
 
 func TestRead_MissingFileErrs(t *testing.T) {
