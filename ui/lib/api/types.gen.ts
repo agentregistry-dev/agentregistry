@@ -22,6 +22,14 @@ export type AgentSpec = {
     description?: string;
     instructions?: ResourceRef;
     mcpServers?: Array<ResourceRef> | null;
+    /**
+     * @deprecated
+     */
+    modelName?: string;
+    /**
+     * @deprecated
+     */
+    modelProvider?: string;
     plugins?: Array<ResourceRef> | null;
     skills?: Array<ResourceRef> | null;
     source?: AgentSource;

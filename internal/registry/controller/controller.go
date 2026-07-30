@@ -44,6 +44,9 @@ type DeploymentController struct {
 	BatchLimit int
 	Wakeups    <-chan struct{}
 	Queue      workqueue.TypedRateLimitingInterface[deploymentQueueKey]
+	// DependencyKinds extends the built-in resource kinds whose durable events
+	// requeue Deployments. Fingerprint gating prevents unchanged adapter work.
+	DependencyKinds map[string]bool
 
 	mu         sync.RWMutex
 	checkpoint int64
@@ -128,6 +131,9 @@ func (c *DeploymentController) HandleEvent(ctx context.Context, event v1alpha1st
 	case v1alpha1.KindRuntime, v1alpha1.KindAgent, v1alpha1.KindMCPServer, v1alpha1.KindPlugin, v1alpha1.KindSkill, v1alpha1.KindPrompt, v1alpha1.KindModel:
 		return c.FullReconcile(ctx)
 	default:
+		if c.DependencyKinds[event.Key.Kind] {
+			return c.FullReconcile(ctx)
+		}
 		return 0, nil
 	}
 }

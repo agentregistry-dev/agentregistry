@@ -91,6 +91,49 @@ func TestApplyPostsToBatchEndpoint(t *testing.T) {
 	assert.Equal(t, "/v0/apply", captured.URL.Path)
 }
 
+func TestApplyWarnsForLegacyAgentModelConfiguration(t *testing.T) {
+	results := []arv0.ApplyResult{
+		{Kind: "agent", Name: "acme-bot", Tag: "latest", Status: arv0.ApplyStatusConfigured},
+	}
+	srv, _ := newApplyTestServer(t, results)
+	legacyAgent := `apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  namespace: team-a
+  name: acme-bot
+spec:
+  title: Legacy agent
+  modelProvider: gemini
+  modelName: gemini-2.5-flash
+`
+
+	var stdout, stderr bytes.Buffer
+	cmd := declarative.NewApplyCmd(applyDeps(t, srv))
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
+	cmd.SetArgs([]string{"-f", writeTempYAML(t, legacyAgent)})
+	require.NoError(t, cmd.Execute())
+
+	assert.Contains(t, stderr.String(), "warning: Agent team-a/acme-bot uses deprecated spec.modelProvider/modelName")
+	assert.Contains(t, stderr.String(), "migrate each Deployment to spec.modelRef")
+}
+
+func TestApplyDoesNotWarnForAgentWithoutLegacyModelConfiguration(t *testing.T) {
+	results := []arv0.ApplyResult{
+		{Kind: "agent", Name: "acme-bot", Tag: "latest", Status: arv0.ApplyStatusConfigured},
+	}
+	srv, _ := newApplyTestServer(t, results)
+
+	var stdout, stderr bytes.Buffer
+	cmd := declarative.NewApplyCmd(applyDeps(t, srv))
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
+	cmd.SetArgs([]string{"-f", writeTempYAML(t, agentYAML)})
+	require.NoError(t, cmd.Execute())
+
+	assert.NotContains(t, stderr.String(), "deprecated spec.modelProvider/modelName")
+}
+
 // TestApplyPrintsPerResourceStatus verifies stdout contains per-resource lines.
 func TestApplyPrintsPerResourceStatus(t *testing.T) {
 	results := []arv0.ApplyResult{

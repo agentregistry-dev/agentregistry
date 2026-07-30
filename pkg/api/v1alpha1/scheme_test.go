@@ -92,7 +92,7 @@ func TestScheme_Register_Duplicate(t *testing.T) {
 	}
 }
 
-func TestScheme_Decode_Agent_IgnoresLegacyModelFields(t *testing.T) {
+func TestScheme_Decode_Agent_PreservesLegacyModelFieldsForCompatibility(t *testing.T) {
 	doc := []byte(`
 apiVersion: ar.dev/v1alpha1
 kind: Agent
@@ -131,6 +131,13 @@ spec:
 	if agent.Spec.Source.Image != "ghcr.io/example/summarizer:1.0.0" {
 		t.Fatalf("spec.source.image mismatch: %q", agent.Spec.Source.Image)
 	}
+	if agent.Spec.ModelProvider != "openai" || agent.Spec.ModelName != "gpt-4o" {
+		t.Fatalf("legacy model configuration mismatch: provider=%q model=%q",
+			agent.Spec.ModelProvider, agent.Spec.ModelName)
+	}
+	if !agent.Spec.HasLegacyModelConfiguration() {
+		t.Fatal("expected legacy model configuration to be detected")
+	}
 	if len(agent.Spec.MCPServers) != 1 ||
 		agent.Spec.MCPServers[0].Kind != KindMCPServer ||
 		agent.Spec.MCPServers[0].Name != "github-tools" ||
@@ -141,8 +148,29 @@ spec:
 	if err != nil {
 		t.Fatalf("Encode: %v", err)
 	}
-	if strings.Contains(string(encoded), "modelProvider") || strings.Contains(string(encoded), "modelName") {
-		t.Fatalf("legacy model fields survived decode/encode:\n%s", encoded)
+	if !strings.Contains(string(encoded), "modelProvider: openai") ||
+		!strings.Contains(string(encoded), "modelName: gpt-4o") {
+		t.Fatalf("legacy model fields did not survive decode/encode:\n%s", encoded)
+	}
+}
+
+func TestAgentSpec_HasLegacyModelConfiguration(t *testing.T) {
+	tests := []struct {
+		name string
+		spec AgentSpec
+		want bool
+	}{
+		{name: "none", spec: AgentSpec{}, want: false},
+		{name: "provider only", spec: AgentSpec{ModelProvider: "gemini"}, want: true},
+		{name: "model only", spec: AgentSpec{ModelName: "gemini-2.5-flash"}, want: true},
+		{name: "both", spec: AgentSpec{ModelProvider: "bedrock", ModelName: "claude"}, want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.spec.HasLegacyModelConfiguration(); got != tt.want {
+				t.Fatalf("HasLegacyModelConfiguration() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 

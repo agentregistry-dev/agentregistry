@@ -14,6 +14,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	cliruntime "github.com/agentregistry-dev/agentregistry/pkg/cli/runtime"
 )
 
@@ -71,9 +72,11 @@ func runApply(cmd *cobra.Command, deps cliruntime.Deps, dryRun bool) error {
 		}
 
 		// Validate locally via registry decode — catches unknown kinds before sending.
-		if _, err := scheme.DecodeBytes(data); err != nil {
+		objects, err := scheme.DecodeBytes(data)
+		if err != nil {
 			return fmt.Errorf("parsing %s: %w", path, err)
 		}
+		warnLegacyAgentModelConfiguration(cmd.ErrOrStderr(), objects)
 		allData = append(allData, data)
 	}
 
@@ -109,6 +112,24 @@ func runApply(cmd *cobra.Command, deps cliruntime.Deps, dryRun bool) error {
 		return fmt.Errorf("one or more resources failed to apply")
 	}
 	return nil
+}
+
+func warnLegacyAgentModelConfiguration(out io.Writer, objects []v1alpha1.Object) {
+	for _, obj := range objects {
+		agent, ok := obj.(*v1alpha1.Agent)
+		if !ok || !agent.Spec.HasLegacyModelConfiguration() {
+			continue
+		}
+		namespace := agent.Metadata.Namespace
+		if namespace == "" {
+			namespace = v1alpha1.DefaultNamespace
+		}
+		fmt.Fprintf(out,
+			"warning: Agent %s/%s uses deprecated spec.modelProvider/modelName; "+
+				"the values are preserved for compatibility only and do not select a runtime model; "+
+				"migrate each Deployment to spec.modelRef\n",
+			namespace, agent.Metadata.Name)
+	}
 }
 
 // InjectArctlLabels reads the v1alpha1 envelope at yamlPath and, if a sibling

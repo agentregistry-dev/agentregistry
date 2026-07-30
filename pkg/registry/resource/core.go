@@ -3,6 +3,7 @@ package resource
 import (
 	"context"
 	"errors"
+	"log/slog"
 
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
@@ -109,6 +110,15 @@ func applyCore(
 	}
 	if err := v1alpha1.ValidateObjectRegistries(ctx, obj, opts.RegistryValidator); err != nil {
 		return types.AdmissionResult{}, &applyError{Stage: stageRegistries, Err: err}
+	}
+
+	if agent, ok := obj.(*v1alpha1.Agent); ok && agent.Spec.HasLegacyModelConfiguration() {
+		slog.WarnContext(ctx,
+			"Agent uses deprecated model configuration; preserving values for compatibility only",
+			"namespace", meta.Namespace,
+			"name", meta.Name,
+			"migration", "set Deployment.spec.modelRef",
+		)
 	}
 
 	if opts.Prepare != nil {

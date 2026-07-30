@@ -22,6 +22,16 @@ type AgentSpec struct {
 	Title       string `json:"title,omitempty" yaml:"title,omitempty"`
 	Description string `json:"description,omitempty" yaml:"description,omitempty"`
 
+	// ModelProvider and ModelName are retained for one release so existing
+	// Agent resources continue to decode and round-trip without data loss.
+	//
+	// Deprecated: these fields do not select or configure a runtime model.
+	// New and migrated Deployments must use spec.modelRef; distributions may
+	// temporarily preserve Deployment MODEL_PROVIDER / MODEL_NAME environment
+	// values when modelRef is omitted.
+	ModelProvider string `json:"modelProvider,omitempty" yaml:"modelProvider,omitempty" deprecated:"true"`
+	ModelName     string `json:"modelName,omitempty" yaml:"modelName,omitempty" deprecated:"true"`
+
 	// Source declares where the agent comes from — Image (the runtime
 	// container) and/or Repository (the source code).
 	Source *AgentSource `json:"source,omitempty" yaml:"source,omitempty"`
@@ -43,6 +53,14 @@ type AgentSpec struct {
 	Skills       []ResourceRef `json:"skills,omitempty" yaml:"skills,omitempty"`
 	Instructions *ResourceRef  `json:"instructions,omitempty" yaml:"instructions,omitempty"`
 	MCPServers   []ResourceRef `json:"mcpServers,omitempty" yaml:"mcpServers,omitempty"`
+}
+
+// HasLegacyModelConfiguration reports whether an Agent still carries the
+// one-release compatibility fields. The fields are intentionally
+// non-authoritative; callers should use this only for warnings and migration
+// inventory.
+func (s AgentSpec) HasLegacyModelConfiguration() bool {
+	return s.ModelProvider != "" || s.ModelName != ""
 }
 
 // AgentSource is the distribution origin of a bring-your-own container/source
