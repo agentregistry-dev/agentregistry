@@ -19,7 +19,7 @@ A PostgreSQL instance is bundled and started automatically — no external datab
 
 This chart bootstraps an [Agent Registry](https://github.com/agentregistry-dev/agentregistry) deployment on a [Kubernetes](https://kubernetes.io) cluster using the [Helm](https://helm.sh) package manager.
 
-It exposes both an HTTP REST API and an Agent Gateway gRPC endpoint. A PostgreSQL instance is bundled by default for development and evaluation. For production, set `database.postgres.type: external` and supply a connection string to your own PostgreSQL service.
+It exposes both an HTTP REST API and an MCP server endpoint. A PostgreSQL instance is bundled by default for development and evaluation. For production, set `database.postgres.type: external` and supply a connection string to your own PostgreSQL service.
 
 ## Prerequisites
 
@@ -61,7 +61,7 @@ The chart deploys the following Kubernetes resources:
 | Resource | Description |
 |---|---|
 | Deployment | Agent Registry application |
-| Service | Exposes HTTP (`:12121`) and gRPC (`:21212`) ports |
+| Service | Exposes HTTP (`:12121`) and MCP (`:31313`) ports |
 | ConfigMap | Application configuration injected as environment variables |
 | Secret | JWT signing key (omitted when `config.existingSecret` is set) |
 | Secret (`-postgresql`) | Bundled PostgreSQL password (only when `database.postgres.type=bundled`) |
