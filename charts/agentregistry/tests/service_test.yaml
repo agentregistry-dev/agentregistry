@@ -47,16 +47,6 @@ tests:
             targetPort: 8080
             protocol: TCP
 
-  - it: exposes grpc port 21212
-    asserts:
-      - contains:
-          path: spec.ports
-          content:
-            name: grpc
-            port: 21212
-            targetPort: 21212
-            protocol: TCP
-
   - it: exposes mcp port 31313
     asserts:
       - contains:

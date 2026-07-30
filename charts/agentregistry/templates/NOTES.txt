@@ -1,6 +1,6 @@
 {{- $fullName := include "agentregistry.fullname" . -}}
 {{- $httpPort := .Values.service.ports.http -}}
-{{- $grpcPort := .Values.service.ports.grpc -}}
+{{- $mcpPort := .Values.service.ports.mcp -}}
 
 ========================================================================
   Agent Registry has been deployed!
@@ -23,8 +23,8 @@ Useful endpoints (after port-forward):
   - OpenAPI spec (JSON): http://localhost:{{ $httpPort }}/openapi.json
   - Deployments list:    http://localhost:{{ $httpPort }}/v0/deployments?limit=200
 
-gRPC endpoint (Agent Gateway):
-  - kubectl -n {{ .Release.Namespace }} port-forward svc/{{ $fullName }} {{ $grpcPort }}:{{ $grpcPort }}
+Built-in MCP Server (for AI Clients / Chatbots):
+  - kubectl -n {{ .Release.Namespace }} port-forward svc/{{ $fullName }} {{ $mcpPort }}:{{ $mcpPort }}
 
 {{- if eq .Values.database.postgres.type "bundled" }}
 ################################################################################
