@@ -40,6 +40,7 @@ type ControllerConfig struct {
 	DiscoveryInterval          time.Duration
 	DiscoveryStaleAfterMisses  int
 	DiscoveryDeleteAfterMisses int
+	DependencyKinds            map[string]bool
 }
 
 // StartDeploymentController constructs the Deployment controller, runs the
@@ -61,10 +62,11 @@ func StartDeploymentController(
 
 	controlPlaneEventStore := v1alpha1store.NewControlPlaneEventStore(pool, pkgdb.MustNewSchema(pkgdb.OSSSchema))
 	controller := &DeploymentController{
-		Stores:   stores,
-		Adapters: adapters,
-		Getter:   internaldb.NewGetter(stores),
-		Events:   controlPlaneEventStore,
+		Stores:          stores,
+		Adapters:        adapters,
+		Getter:          internaldb.NewGetter(stores),
+		Events:          controlPlaneEventStore,
+		DependencyKinds: config.DependencyKinds,
 	}
 	if _, err := controller.Refresh(ctx); err != nil {
 		return nil, fmt.Errorf("deployment controller initial refresh: %w", err)

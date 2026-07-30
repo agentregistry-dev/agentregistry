@@ -101,7 +101,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 
 	// v1alpha1 DeploymentAdapter map consumed by the Deployment controller and
 	// adjacent adapter resolver surfaces.
-	// Built OSS-side from the local + kubernetes ports; enterprise extends
+	// Built from the local + kubernetes ports; downstream applications extend
 	// via AppOptions.DeploymentAdapters. Keys are the canonical CamelCase
 	// Spec.Type values; Runtime.Validate canonicalizes user-supplied case
 	// at admission so adapter lookup can use exact-match.
@@ -112,7 +112,9 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	maps.Copy(deploymentAdapters, options.DeploymentAdapters)
 	pool := db.Pool()
 	stores := buildStores(pool, options.V1Alpha1StoreTables, options.V1Alpha1MutableStoreKinds, options.Auditor)
-	if _, err := controller.StartDeploymentController(ctx, pool, stores, deploymentAdapters, deploymentControllerConfig(cfg)); err != nil {
+	controllerConfig := deploymentControllerConfig(cfg)
+	controllerConfig.DependencyKinds = maps.Clone(options.DeploymentDependencyKinds)
+	if _, err := controller.StartDeploymentController(ctx, pool, stores, deploymentAdapters, controllerConfig); err != nil {
 		return fmt.Errorf("start deployment controller: %w", err)
 	}
 	// The Plugin controller resolves each plugin's pinned source pointer to a

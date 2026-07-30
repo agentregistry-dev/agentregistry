@@ -90,6 +90,24 @@ func TestDeploymentControllerHandleDependencyEventsFullReconcileDeployments(t *t
 	}
 }
 
+func TestDeploymentControllerHandleConfiguredDependencyEventFullReconcilesDeployments(t *testing.T) {
+	ctx := context.Background()
+	stores := newControllerTestStores(t)
+	seedRuntime(t, stores, "local")
+	seedMCPServer(t, stores, "weather")
+	seedDeployment(t, stores, "api", v1alpha1.DesiredStateDeployed)
+	seedDeployment(t, stores, "worker", v1alpha1.DesiredStateDeployed)
+	controller := newDeploymentTestController(stores, &recordingDeploymentAdapter{})
+	controller.DependencyKinds = map[string]bool{"CustomDependency": true}
+
+	count, err := controller.HandleEvent(ctx, v1alpha1store.ControlPlaneEvent{
+		Key: v1alpha1store.ResourceKey{Kind: "CustomDependency", Namespace: "default", Name: "example"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, 2, count)
+	require.Equal(t, 2, controller.workQueue().Len())
+}
+
 func TestDeploymentControllerRetentionGapTriggersFullReconcile(t *testing.T) {
 	ctx := context.Background()
 	stores := newControllerTestStores(t)

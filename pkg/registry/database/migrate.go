@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io/fs"
 	"net/url"
+	"strings"
 
 	"github.com/golang-migrate/migrate/v4"
 	migratepgx "github.com/golang-migrate/migrate/v4/database/pgx/v5"
@@ -45,6 +46,14 @@ const migrationsTable = "schema_migrations"
 // code; sql.Open is lazy (never pings) and go-migrate's API is
 // synchronous and doesn't accept a context.
 func NewMigrator(ctx context.Context, dsn string, migrationsFS fs.FS, dir string, schema Schema) (*migrate.Migrate, error) {
+	return NewMigratorWithSearchPath(ctx, dsn, migrationsFS, dir, schema)
+}
+
+// NewMigratorWithSearchPath constructs a migrator whose unqualified names
+// resolve first in schema and then in additionalSchemas. Additional schemas
+// let extension migrations call shared functions owned by an earlier source
+// while keeping migration SQL schema-agnostic.
+func NewMigratorWithSearchPath(ctx context.Context, dsn string, migrationsFS fs.FS, dir string, schema Schema, additionalSchemas ...Schema) (*migrate.Migrate, error) {
 	// migratepgx.WithInstance does NOT set search_path on the connection
 	// it acquires — its `SchemaName` config only controls where
 	// `schema_migrations` lives. Unqualified identifiers in migration
@@ -55,7 +64,12 @@ func NewMigrator(ctx context.Context, dsn string, migrationsFS fs.FS, dir string
 	// driver passes it as a connection-startup parameter and every
 	// connection migratepgx pulls from the pool sees the right
 	// search_path from the moment it's established.
-	dsnWithSchema, err := withSearchPath(dsn, schema.Name())
+	searchPath := make([]string, 0, 1+len(additionalSchemas))
+	searchPath = append(searchPath, schema.Name())
+	for _, additional := range additionalSchemas {
+		searchPath = append(searchPath, additional.Name())
+	}
+	dsnWithSchema, err := withSearchPath(dsn, strings.Join(searchPath, ","))
 	if err != nil {
 		return nil, fmt.Errorf("inject search_path into DSN: %w", err)
 	}
@@ -99,17 +113,17 @@ func NewMigrator(ctx context.Context, dsn string, migrationsFS fs.FS, dir string
 }
 
 // withSearchPath returns dsn with the `search_path` connection-startup
-// parameter set to schema. If dsn already specifies a search_path it
+// parameter set to searchPath. If dsn already specifies a search_path it
 // is replaced. Used by NewMigrator so unqualified identifiers in
 // migration SQL resolve against the target schema regardless of the
 // connecting user.
-func withSearchPath(dsn, schema string) (string, error) {
+func withSearchPath(dsn, searchPath string) (string, error) {
 	u, err := url.Parse(dsn)
 	if err != nil {
 		return "", fmt.Errorf("parse DSN: %w", err)
 	}
 	q := u.Query()
-	q.Set("search_path", schema)
+	q.Set("search_path", searchPath)
 	u.RawQuery = q.Encode()
 	return u.String(), nil
 }

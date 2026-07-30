@@ -103,6 +103,11 @@ type Source struct {
 	// table is created in that schema.
 	Schema database.Schema
 
+	// AdditionalSchemas are appended to the migration connection's search_path.
+	// Use this when an extension migration calls a shared function owned by an
+	// earlier source. The source's own Schema always remains first.
+	AdditionalSchemas []database.Schema
+
 	// Files is the embedded filesystem holding NNN_name.up.sql /
 	// NNN_name.down.sql pairs.
 	Files fs.FS
@@ -294,7 +299,7 @@ func restoreSource(ctx context.Context, dsn string, a appliedSource) error {
 		}
 	}()
 
-	mg, err := database.NewMigrator(ctx, dsn, a.src.Files, a.src.Dir, a.src.Schema)
+	mg, err := database.NewMigratorWithSearchPath(ctx, dsn, a.src.Files, a.src.Dir, a.src.Schema, a.src.AdditionalSchemas...)
 	if err != nil {
 		return fmt.Errorf("construct migrator for source %s: %w", a.src.Name, err)
 	}
@@ -421,7 +426,7 @@ func runSource(ctx context.Context, dsn string, src Source) (legacyRan bool, err
 		return false, fmt.Errorf("snapshot schema_migrations row count: %w", err)
 	}
 
-	mg, err := database.NewMigrator(ctx, dsn, src.Files, src.Dir, src.Schema)
+	mg, err := database.NewMigratorWithSearchPath(ctx, dsn, src.Files, src.Dir, src.Schema, src.AdditionalSchemas...)
 	if err != nil {
 		return false, fmt.Errorf("construct migrator: %w", err)
 	}

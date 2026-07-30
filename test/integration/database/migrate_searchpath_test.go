@@ -95,3 +95,47 @@ func TestNewMigrator_ReturnsErrNoChangeOnReRun(t *testing.T) {
 	require.True(t, errors.Is(second.Up(), migrate.ErrNoChange))
 	_, _ = second.Close()
 }
+
+func TestNewMigratorWithSearchPath_ResolvesAdditionalSchemaFunction(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	dsn := freshDB(t)
+	db, err := sql.Open("pgx", dsn)
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+	require.NoError(t, db.PingContext(ctx))
+	require.NoError(t, execStatements(ctx, db,
+		"CREATE SCHEMA shared_source",
+		"CREATE FUNCTION shared_source.shared_value() RETURNS integer LANGUAGE sql IMMUTABLE AS 'SELECT 42'",
+	))
+
+	mfs := fstest.MapFS{
+		"migrations/001_init.up.sql":   {Data: []byte("CREATE TABLE resolved_value AS SELECT shared_value() AS value;")},
+		"migrations/001_init.down.sql": {Data: []byte("DROP TABLE resolved_value;")},
+	}
+	mg, err := database.NewMigratorWithSearchPath(
+		ctx,
+		dsn,
+		mfs,
+		"migrations",
+		database.MustNewSchema("dependent_source"),
+		database.MustNewSchema("shared_source"),
+	)
+	require.NoError(t, err)
+	defer func() { _, _ = mg.Close() }()
+	require.NoError(t, mg.Up())
+
+	var value int
+	require.NoError(t, db.QueryRowContext(ctx, "SELECT value FROM dependent_source.resolved_value").Scan(&value))
+	require.Equal(t, 42, value)
+}
+
+func execStatements(ctx context.Context, db *sql.DB, statements ...string) error {
+	for _, statement := range statements {
+		if _, err := db.ExecContext(ctx, statement); err != nil {
+			return err
+		}
+	}
+	return nil
+}

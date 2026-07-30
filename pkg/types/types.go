@@ -226,6 +226,12 @@ type AppOptions struct {
 	// additional adapters here.
 	DeploymentAdapters map[string]DeploymentAdapter
 
+	// DeploymentDependencyKinds registers additional resource kinds whose
+	// durable control-plane events may change a Deployment's desired inputs.
+	// The Deployment controller requeues current Deployments for these events;
+	// its apply fingerprint still suppresses unchanged adapter work.
+	DeploymentDependencyKinds map[string]bool
+
 	// Authorizers gates every read + write operation on the
 	// generic v1alpha1 resource handler, keyed by canonical Kind name
 	// (v1alpha1.KindAgent, v1alpha1.KindMCPServer, etc.). Downstream
@@ -245,7 +251,7 @@ type AppOptions struct {
 	ListFilters map[string]ListFilter
 
 	// PostUpserts run after the generic resource handler PUTs a
-	// row, per kind. Enterprise builds wire this for kinds that need
+	// row, per kind. Downstream applications wire this for kinds that need
 	// runtime side-effects on apply — Runtime apply mirroring spec
 	// into a per-type sidecar table, for example. Missing keys =
 	// no post-upsert hook for that kind.

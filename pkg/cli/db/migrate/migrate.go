@@ -128,7 +128,7 @@ func sourceNames(srcs []Source) string {
 // unguarded.
 func withSourceMigrator(ctx context.Context, src Source, dsn string, fn func(mg *migrate.Migrate) error) error {
 	return orchestrator.WithSourceLock(ctx, dsn, src.Name, func(_ *sql.DB) error {
-		mg, err := database.NewMigrator(ctx, dsn, src.Files, src.Dir, src.Schema)
+		mg, err := database.NewMigratorWithSearchPath(ctx, dsn, src.Files, src.Dir, src.Schema, src.AdditionalSchemas...)
 		if err != nil {
 			return fmt.Errorf("construct %s migrator: %w", src.Name, err)
 		}
