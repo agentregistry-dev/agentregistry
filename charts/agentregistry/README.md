@@ -18,7 +18,7 @@ A PostgreSQL instance is bundled and started automatically — no external datab
 
 This chart bootstraps an [Agent Registry](https://github.com/agentregistry-dev/agentregistry) deployment on a [Kubernetes](https://kubernetes.io) cluster using the [Helm](https://helm.sh) package manager.
 
-It exposes both an HTTP REST API and an Agent Gateway gRPC endpoint. A PostgreSQL instance is bundled by default for development and evaluation. For production, set `database.postgres.type: external` and supply a connection string to your own PostgreSQL service.
+It exposes both an HTTP REST API and an MCP server endpoint. A PostgreSQL instance is bundled by default for development and evaluation. For production, set `database.postgres.type: external` and supply a connection string to your own PostgreSQL service.
 
 ## Prerequisites
 
@@ -60,7 +60,7 @@ The chart deploys the following Kubernetes resources:
 | Resource | Description |
 |---|---|
 | Deployment | Agent Registry application |
-| Service | Exposes HTTP (`:12121`) and gRPC (`:21212`) ports |
+| Service | Exposes HTTP (`:12121`) and MCP (`:31313`) ports |
 | ConfigMap | Application configuration injected as environment variables |
 | Secret | JWT signing key (omitted when `config.existingSecret` is set) |
 | Secret (`-postgresql`) | Bundled PostgreSQL password (only when `database.postgres.type=bundled`) |
@@ -228,15 +228,12 @@ This creates a `Role`/`RoleBinding` in each listed namespace (plus the installat
 | service.externalTrafficPolicy | string | `"Cluster"` | External traffic policy |
 | service.loadBalancerIP | string | `""` | LoadBalancer IP |
 | service.loadBalancerSourceRanges | list | `[]` | LoadBalancer allowed source ranges |
-| service.nodePorts.grpc | string | `""` | NodePort for gRPC (when type is NodePort) |
 | service.nodePorts.http | string | `""` | NodePort for HTTP (when type is NodePort) |
 | service.nodePorts.mcp | string | `""` | NodePort for MCP (when type is NodePort) |
-| service.ports.grpc | int | `21212` | Agent Gateway gRPC port |
 | service.ports.http | int | `12121` | HTTP port |
 | service.ports.mcp | int | `31313` | MCP HTTP port |
 | service.sessionAffinity | string | `"None"` | Session affinity (None or ClientIP) |
 | service.sessionAffinityConfig | object | `{}` | Session affinity configuration |
-| service.targetPorts.grpc | int | `21212` | gRPC container target port |
 | service.targetPorts.http | int | `8080` | HTTP container target port |
 | service.targetPorts.mcp | int | `31313` | MCP container target port |
 | service.type | string | `"ClusterIP"` | Kubernetes Service type |

@@ -120,9 +120,6 @@ spec:
             - name: http
               containerPort: {{ .Values.service.targetPorts.http }}
               protocol: TCP
-            - name: grpc
-              containerPort: {{ .Values.service.targetPorts.grpc }}
-              protocol: TCP
             - name: mcp
               containerPort: {{ .Values.service.targetPorts.mcp }}
               protocol: TCP

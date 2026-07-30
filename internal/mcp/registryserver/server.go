@@ -7,10 +7,13 @@ package registryserver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/agentregistry-dev/agentregistry/internal/version"
@@ -158,6 +161,31 @@ type kindTools[T v1alpha1.Object] struct {
 	ListFilter ListFilter
 }
 
+// Schemas are built here instead of letting the MCP SDK infer them because
+// the default inference maps json.RawMessage to a byte-array schema,
+// while at marshal time a RawMessage emits the raw JSON it holds (for
+// example status.details is a JSON object). Any envelope carrying a
+// populated RawMessage fails the SDK's output validation.
+// The override only applies to json.RawMessage. A named RawMessage wrapper
+// or a plain []byte field would need its own TypeSchemas entry.
+func outputSchemaFor[T any]() *jsonschema.Schema {
+	rt := reflect.TypeFor[T]()
+	if rt.Kind() == reflect.Pointer {
+		rt = rt.Elem()
+	}
+	s, err := jsonschema.ForType(rt, &jsonschema.ForOptions{
+		TypeSchemas: map[reflect.Type]*jsonschema.Schema{
+			reflect.TypeFor[json.RawMessage](): {Types: []string{
+				"null", "boolean", "object", "array", "number", "string",
+			}},
+		},
+	})
+	if err != nil {
+		panic(fmt.Sprintf("registryserver: output schema for %v: %v", rt, err))
+	}
+	return s
+}
+
 // addKindTools registers list_X + get_X MCP tools for a v1alpha1 kind.
 // Nil store is a no-op so bootstrap can wire every kind unconditionally
 // and skip ones the backend doesn't expose.
@@ -166,8 +194,9 @@ func addKindTools[T v1alpha1.Object](server *mcp.Server, store *v1alpha1store.St
 		return
 	}
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        cfg.ListName,
-		Description: cfg.ListDesc,
+		Name:         cfg.ListName,
+		Description:  cfg.ListDesc,
+		OutputSchema: outputSchemaFor[listOutput[T]](),
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, args listInput) (*mcp.CallToolResult, listOutput[T], error) {
 		raws, next, err := runList(ctx, store, cfg.Kind, cfg.Authorize, cfg.ListFilter, args)
 		if err != nil {
@@ -180,8 +209,9 @@ func addKindTools[T v1alpha1.Object](server *mcp.Server, store *v1alpha1store.St
 		return nil, listOutput[T]{Items: items, NextCursor: next, Count: len(items)}, nil
 	})
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        cfg.GetName,
-		Description: cfg.GetDesc,
+		Name:         cfg.GetName,
+		Description:  cfg.GetDesc,
+		OutputSchema: outputSchemaFor[T](),
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, args getByRefInput) (*mcp.CallToolResult, T, error) {
 		return getEnvelope(ctx, store, cfg.Kind, cfg.Authorize, args, cfg.NewObj)
 	})
