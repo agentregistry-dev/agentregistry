@@ -86,8 +86,6 @@ spec:
   description: Agent that wires in a remote MCPServer
   language: python
   framework: adk
-  modelProvider: gemini
-  modelName: gemini-2.0-flash
   mcpServers:
     - kind: MCPServer
       name: %s

@@ -1,10 +1,11 @@
-# Admin-owned model identity plus how the platform reaches and authenticates
-# to it.
+# Admin-owned namespace default for harness Agent deployments. When a harness
+# Deployment in this namespace omits spec.modelRef, the registry selects
+# Model/default@latest. Use an explicit modelRef to override this convention.
 apiVersion: ar.dev/v1alpha1
 kind: Model
 metadata:
-  name: claude-opus-4-8
-  tag: approved-v1
+  name: default
+  # tag omitted: stored and resolved as the literal "latest" tag
 spec:
   title: Claude Opus 4.8 (Bedrock)
   provider: bedrock

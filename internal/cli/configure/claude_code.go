@@ -1,53 +1,37 @@
 package configure
 
-import (
-	"encoding/json"
-	"fmt"
-	"os"
-)
+import "fmt"
 
 // ClaudeCodeConfigurer handles Claude Code MCP configuration
 type ClaudeCodeConfigurer struct{}
 
-// claudeServerConfig represents a Claude MCP server configuration (supports both stdio and HTTP)
+// claudeServerConfig is the arctl server entry written into .mcp.json. Other
+// servers' entries are preserved verbatim by mergeServerEntry to avoid breaking
+// a user's file.
 type claudeServerConfig struct {
-	Type    string            `json:"type,omitempty"`
-	URL     string            `json:"url,omitempty"`
-	Command string            `json:"command,omitempty"`
-	Args    []string          `json:"args,omitempty"`
-	Env     map[string]string `json:"env,omitempty"`
-}
-
-// claudeConfig represents the Claude MCP configuration file structure
-type claudeConfig struct {
-	MCPServers map[string]claudeServerConfig `json:"mcpServers"`
+	Type    string            `json:"type"`
+	URL     string            `json:"url"`
+	Headers map[string]string `json:"headers,omitempty"`
 }
 
 func (c *ClaudeCodeConfigurer) GetConfigPath() (string, error) {
 	return ".mcp.json", nil
 }
 
-func (c *ClaudeCodeConfigurer) CreateConfig(url string, configPath string) (any, error) {
-	config := claudeConfig{
-		MCPServers: make(map[string]claudeServerConfig),
+func (c *ClaudeCodeConfigurer) CreateConfig(opts CreateOptions, configPath string) (any, error) {
+	entry := claudeServerConfig{
+		Type: "http",
+		URL:  opts.URL,
 	}
-
-	// Read existing config if it exists
-	if data, err := os.ReadFile(configPath); err == nil {
-		if err := json.Unmarshal(data, &config); err != nil {
-			return config, fmt.Errorf("failed to parse existing config: %w", err)
+	if opts.TokenEnv != "" {
+		// Claude Code expands ${VAR} in header values at connect time, keeping the token out of the checked-in file.
+		entry.Headers = map[string]string{
+			"Authorization": fmt.Sprintf("Bearer ${%s}", opts.TokenEnv),
 		}
 	}
-
-	// Add or update the arctl HTTP server
-	config.MCPServers["arctl"] = claudeServerConfig{
-		Type: "http",
-		URL:  url,
-	}
-
-	return config, nil
+	return mergeServerEntry(configPath, "mcpServers", entry)
 }
 
 func (c *ClaudeCodeConfigurer) GetClientName() string {
-	return "Claude Code Editor"
+	return "Claude Code"
 }

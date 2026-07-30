@@ -42,12 +42,16 @@ func TestInitAgent_WritesYAMLAndArctlAndDotEnv(t *testing.T) {
 	_, err = os.Stat(filepath.Join(projectDir, "agent.yaml"))
 	require.NoError(t, err)
 
-	// arctl.yaml written with framework + language + default model fields
+	// arctl.yaml carries only source-build concerns.
 	cfg, err := buildconfig.Read(projectDir)
 	require.NoError(t, err)
 	assert.Equal(t, "adk", cfg.Framework)
 	assert.Equal(t, "python", cfg.Language)
-	assert.Equal(t, "gemini", cfg.ModelProvider)
+	assert.Equal(t, []string{"GOOGLE_API_KEY"}, cfg.RequiredEnv)
+
+	spec := readYAMLFile(t, filepath.Join(projectDir, "agent.yaml"))["spec"].(map[string]any)
+	assert.NotContains(t, spec, "modelProvider")
+	assert.NotContains(t, spec, "modelName")
 
 	// .env written directly (no cp step needed)
 	_, err = os.Stat(filepath.Join(projectDir, ".env"))
@@ -106,33 +110,71 @@ func TestInitAgent_OutputDirFlag(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "project should NOT be in cwd")
 }
 
-func TestInitAgent_ModelProviderFlagFlowsToArctlYAML(t *testing.T) {
-	tmp := t.TempDir()
+func TestInitAgent_ModelFlagsRemainScaffoldOnly(t *testing.T) {
 	origDir, err := os.Getwd()
 	require.NoError(t, err)
-	require.NoError(t, os.Chdir(tmp))
 	defer func() { _ = os.Chdir(origDir) }()
 
-	cmd := declarative.NewInitCmd(declarativeTestDeps(nil))
-	cmd.SetArgs([]string{
-		"agent", "openaibot",
-		"--framework", "adk", "--language", "python",
-		"--model-provider", "openai",
-		"--model-name", "gpt4",
-	})
-	require.NoError(t, cmd.Execute())
+	tests := []struct {
+		provider   string
+		model      string
+		sourceText string
+		envKey     string
+	}{
+		{provider: "gemini", model: "gemini-test", sourceText: `return "gemini-test"`, envKey: "GOOGLE_API_KEY="},
+		{provider: "openai", model: "gpt-test", sourceText: `LiteLlm(model="openai/gpt-test")`, envKey: "OPENAI_API_KEY="},
+		{provider: "anthropic", model: "claude-test", sourceText: `LiteLlm(model="anthropic/claude-test")`, envKey: "ANTHROPIC_API_KEY="},
+		{provider: "bedrock", model: "bedrock-test", sourceText: `BedrockClaude(model="bedrock-test")`, envKey: "AWS_ACCESS_KEY_ID="},
+		{provider: "agentgateway", model: "gateway-test", sourceText: `model="gateway-test"`, envKey: ""},
+	}
 
-	projectDir := filepath.Join(tmp, "openaibot")
+	for _, tt := range tests {
+		t.Run(tt.provider, func(t *testing.T) {
+			tmp := t.TempDir()
+			require.NoError(t, os.Chdir(tmp))
 
-	cfg, err := buildconfig.Read(projectDir)
-	require.NoError(t, err)
-	assert.Equal(t, "openai", cfg.ModelProvider)
-	assert.Equal(t, "gpt4", cfg.ModelName)
+			projectName := tt.provider + "bot"
+			cmd := declarative.NewInitCmd(declarativeTestDeps(nil))
+			cmd.SetArgs([]string{
+				"agent", projectName,
+				"--framework", "adk", "--language", "python",
+				"--model-provider", tt.provider,
+				"--model-name", tt.model,
+			})
+			require.NoError(t, cmd.Execute())
 
-	// agent.yaml still mirrors model fields for the registry side
-	spec := readYAMLFile(t, filepath.Join(projectDir, "agent.yaml"))["spec"].(map[string]any)
-	assert.Equal(t, "openai", spec["modelProvider"])
-	assert.Equal(t, "gpt4", spec["modelName"])
+			projectDir := filepath.Join(tmp, projectName)
+
+			// Every existing provider/model choice still drives its generated
+			// source template and local compose wiring.
+			agentSource, err := os.ReadFile(filepath.Join(projectDir, projectName, "agent.py"))
+			require.NoError(t, err)
+			assert.Contains(t, string(agentSource), tt.sourceText)
+
+			dotEnv, err := os.ReadFile(filepath.Join(projectDir, ".env"))
+			require.NoError(t, err)
+			if tt.envKey != "" {
+				assert.Contains(t, string(dotEnv), tt.envKey)
+			}
+
+			compose, err := os.ReadFile(filepath.Join(projectDir, "docker-compose.yaml"))
+			require.NoError(t, err)
+			assert.Contains(t, string(compose), "MODEL_PROVIDER="+tt.provider)
+			assert.Contains(t, string(compose), "MODEL_NAME="+tt.model)
+
+			// The selection is a source-scaffold concern only. Runtime model
+			// authority is Deployment.spec.modelRef, so neither persistent
+			// config surface keeps the deprecated Agent-owned values.
+			arctlYAML, err := os.ReadFile(filepath.Join(projectDir, "arctl.yaml"))
+			require.NoError(t, err)
+			assert.NotContains(t, string(arctlYAML), "modelProvider")
+			assert.NotContains(t, string(arctlYAML), "modelName")
+
+			spec := readYAMLFile(t, filepath.Join(projectDir, "agent.yaml"))["spec"].(map[string]any)
+			assert.NotContains(t, spec, "modelProvider")
+			assert.NotContains(t, spec, "modelName")
+		})
+	}
 }
 
 // ---- init mcp ----

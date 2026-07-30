@@ -18,17 +18,17 @@ import (
 )
 
 // agentObj returns an Agent envelope with the given name + a deterministic
-// spec keyed by modelName, so the four apply-branch tests can produce both
+// spec keyed by title, so the four apply-branch tests can produce both
 // hash-equal and hash-distinct payloads without recomputing fixtures.
-func agentObj(name, modelName string, labels map[string]string) *v1alpha1.Agent {
-	return taggedAgentObj(name, "", modelName, labels)
+func agentObj(name, title string, labels map[string]string) *v1alpha1.Agent {
+	return taggedAgentObj(name, "", title, labels)
 }
 
-func taggedAgentObj(name, tag, modelName string, labels map[string]string) *v1alpha1.Agent {
+func taggedAgentObj(name, tag, title string, labels map[string]string) *v1alpha1.Agent {
 	return &v1alpha1.Agent{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: name, Tag: tag, Labels: labels},
-		Spec:     v1alpha1.AgentSpec{ModelName: modelName},
+		Spec:     v1alpha1.AgentSpec{Title: title},
 	}
 }
 

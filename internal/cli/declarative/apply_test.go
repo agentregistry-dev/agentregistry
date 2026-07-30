@@ -29,8 +29,6 @@ spec:
   description: "A bot"
   language: python
   framework: adk
-  modelProvider: google
-  modelName: gemini-2.0-flash
 `
 
 // batchApplyResponse builds a JSON body matching the POST /v0/apply response shape.
