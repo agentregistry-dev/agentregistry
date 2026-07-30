@@ -23,6 +23,9 @@ type MCPServerTranslateOpts struct {
 	EnvValues    map[string]string
 	ArgValues    map[string]string
 	HeaderValues map[string]string
+	// EnvFrom carries the Deployment's spec.envFrom Secret references. Only
+	// bundled servers accept it.
+	EnvFrom []v1alpha1.EnvFromSource
 }
 
 // SpecToRuntimeMCPServer translates a v1alpha1 MCPServer envelope into the
@@ -36,12 +39,13 @@ func SpecToRuntimeMCPServer(
 	opts MCPServerTranslateOpts,
 ) (*runtimetypes.MCPServer, error) {
 	req := &MCPServerRunRequest{
-		Name:         meta.Name,
-		Spec:         spec,
-		DeploymentID: opts.DeploymentID,
-		EnvValues:    nonNilStringMap(opts.EnvValues),
-		ArgValues:    nonNilStringMap(opts.ArgValues),
-		HeaderValues: nonNilStringMap(opts.HeaderValues),
+		Name:              meta.Name,
+		Spec:              spec,
+		DeploymentID:      opts.DeploymentID,
+		EnvValues:         nonNilStringMap(opts.EnvValues),
+		ArgValues:         nonNilStringMap(opts.ArgValues),
+		HeaderValues:      nonNilStringMap(opts.HeaderValues),
+		EnvFromSecretRefs: envFromSecretNames(opts.EnvFrom),
 	}
 	runtimeServer, err := TranslateMCPServer(ctx, req)
 	if err != nil {
@@ -303,4 +307,18 @@ func nonNilStringMap(in map[string]string) map[string]string {
 	}
 	maps.Copy(out, in)
 	return out
+}
+
+// envFromSecretNames flattens spec.envFrom entries into the Secret-name list
+// runtime translation consumes. Returns nil when nothing remains so downstream
+// CRDs omit the key.
+func envFromSecretNames(envFrom []v1alpha1.EnvFromSource) []string {
+	var names []string
+	for _, src := range envFrom {
+		if src.SecretRef == nil || src.SecretRef.Name == "" {
+			continue
+		}
+		names = append(names, src.SecretRef.Name)
+	}
+	return names
 }

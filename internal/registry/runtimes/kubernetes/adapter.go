@@ -46,10 +46,6 @@ func (a *kubernetesDeploymentAdapter) Apply(ctx context.Context, in types.ApplyI
 	if in.Deployment == nil {
 		return nil, fmt.Errorf("apply: deployment is required")
 	}
-	// spec.envFrom is not wired through this adapter's kmcp translation (yet), so reject.
-	if len(in.Deployment.Spec.EnvFrom) > 0 {
-		return nil, fmt.Errorf("apply: spec.envFrom is not supported by the %s runtime", v1alpha1.TypeKubernetes)
-	}
 	namespace := namespaceFromV1Alpha1(in.Deployment, in.Runtime)
 
 	desired, err := a.buildDesiredStateFromV1Alpha1(ctx, in, namespace)
@@ -145,12 +141,14 @@ func (a *kubernetesDeploymentAdapter) buildDesiredStateFromV1Alpha1(
 
 	switch target := in.Target.(type) {
 	case *v1alpha1.MCPServer:
+		envFrom := in.Deployment.Spec.EnvFrom
 		server, err := utils.SpecToRuntimeMCPServer(ctx, target.Metadata, target.Spec, utils.MCPServerTranslateOpts{
 			DeploymentID: deploymentID,
 			Namespace:    namespace,
 			EnvValues:    envValues,
 			ArgValues:    argValues,
 			HeaderValues: headerValues,
+			EnvFrom:      envFrom,
 		})
 		if err != nil {
 			return nil, err

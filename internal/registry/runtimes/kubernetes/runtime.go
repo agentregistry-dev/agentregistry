@@ -448,6 +448,27 @@ func kubernetesTranslateRemoteMCPServer(server *runtimetypes.MCPServer) (*v1alph
 	}, nil
 }
 
+// secretLocalObjectRefs converts Secret names into the LocalObjectReference
+// list kmcp expects under spec.deployment.secretRefs (rendered as container
+// envFrom by the kmcp controller). Returns nil when no names are configured
+// so the key is omitted from the CRD entirely.
+func secretLocalObjectRefs(names []string) []corev1.LocalObjectReference {
+	if len(names) == 0 {
+		return nil
+	}
+	refs := make([]corev1.LocalObjectReference, 0, len(names))
+	for _, n := range names {
+		if n == "" {
+			continue
+		}
+		refs = append(refs, corev1.LocalObjectReference{Name: n})
+	}
+	if len(refs) == 0 {
+		return nil
+	}
+	return refs
+}
+
 func kubernetesTranslateLocalMCPServer(server *runtimetypes.MCPServer) (*kmcpv1alpha1.MCPServer, error) {
 	if server.Local == nil {
 		return nil, fmt.Errorf("local MCP server config missing for %s", server.Name)
@@ -461,10 +482,11 @@ func kubernetesTranslateLocalMCPServer(server *runtimetypes.MCPServer) (*kmcpv1a
 		namespace = server.Local.Deployment.Env[constants.EnvKagentNamespace]
 	}
 	deployment := kmcpv1alpha1.MCPServerDeployment{
-		Image: server.Local.Deployment.Image,
-		Cmd:   server.Local.Deployment.Cmd,
-		Args:  server.Local.Deployment.Args,
-		Env:   server.Local.Deployment.Env,
+		Image:      server.Local.Deployment.Image,
+		Cmd:        server.Local.Deployment.Cmd,
+		Args:       server.Local.Deployment.Args,
+		Env:        server.Local.Deployment.Env,
+		SecretRefs: secretLocalObjectRefs(server.Local.Deployment.SecretRefs),
 	}
 
 	spec := kmcpv1alpha1.MCPServerSpec{Deployment: deployment}
