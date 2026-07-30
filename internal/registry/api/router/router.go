@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	mcpregistrycompat "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/mcpregistry"
+	pluginmarketplacecompat "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/pluginmarketplace"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
@@ -170,6 +171,14 @@ func NewHumaAPI(
 			// PublicSession, allowing it to successfully pass authz hooks on anonymous sessions.
 			middlewareOpts = append(middlewareOpts, auth.WithPublicPaths(
 				mcpregistrycompat.BasePath(cfg.MCPRegistryCompatPathPrefix)+"/"))
+		}
+		if cfg.PluginMarketplaceCompatEnabled {
+			// The /plugin-marketplace compatibility API is a public catalogue that
+			// still goes through authorization (for listing resources), so add to
+			// public paths and append a PublicSession, allowing it to successfully
+			// pass authz hooks on anonymous sessions.
+			middlewareOpts = append(middlewareOpts, auth.WithPublicPaths(
+				pluginmarketplacecompat.BasePath(cfg.PluginMarketplaceCompatPathPrefix)+"/"))
 		}
 		api.UseMiddleware(auth.AuthnMiddleware(authnProvider, middlewareOpts...))
 	}

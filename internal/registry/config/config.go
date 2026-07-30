@@ -52,6 +52,24 @@ type Config struct {
 	// configured base.
 	MCPRegistryCompatPathPrefix string `env:"MCP_REGISTRY_COMPAT_PATH_PREFIX" envDefault:""`
 
+	// Plugin marketplace compatibility (read-only)
+	//
+	// PluginMarketplaceCompatEnabled toggles the read-only Claude Code
+	// marketplace.json compatibility API (GET /plugin-marketplace/marketplace.json),
+	// which re-exposes resolved Plugin resources in the marketplace.json shape
+	// so a bare URL to this endpoint can be registered directly with
+	// `claude plugin marketplace add`. The endpoint flattens every namespace
+	// into one catalogue and honors the same per-kind RBAC list filter as the
+	// native Plugin read path (nil = public OSS behavior), so it is OFF by
+	// default — enable it only where a Plugin catalogue at this scope is
+	// acceptable (a public OSS registry, or behind a trusted gateway).
+	PluginMarketplaceCompatEnabled bool `env:"PLUGIN_MARKETPLACE_COMPAT_ENABLED" envDefault:"false"`
+	// PluginMarketplaceCompatPathPrefix optionally mounts the compatibility API
+	// under a base prefix (e.g. "/plugins"); empty serves the standard
+	// "/plugin-marketplace/marketplace.json" path at the root. Any prefix set
+	// here must match the base URL registered with the consuming agent.
+	PluginMarketplaceCompatPathPrefix string `env:"PLUGIN_MARKETPLACE_COMPAT_PATH_PREFIX" envDefault:""`
+
 	// ControllerEventRetention is how long handled control-plane events remain
 	// available for checkpoint replay. Set to 0 to disable event pruning.
 	ControllerEventRetention time.Duration `env:"CONTROLLER_EVENT_RETENTION" envDefault:"24h"`

@@ -8,6 +8,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	mcpregistrycompat "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/mcpregistry"
+	pluginmarketplacecompat "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/pluginmarketplace"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/crud"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/deploymentlogs"
 	v0health "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/health"
@@ -159,6 +160,32 @@ func RegisterRoutes(
 				Store:      store,
 				ListFilter: opts.PerKindHooks.ListFilters[v1alpha1.KindMCPServer],
 				Authorize:  opts.PerKindHooks.Authorizers[v1alpha1.KindMCPServer],
+			})
+		}
+	}
+
+	// Read-only Claude Code marketplace.json compatibility surface. Re-exposes
+	// resolved Plugin rows in the marketplace.json shape at
+	// `/plugin-marketplace/marketplace.json` (plus an optional configured
+	// prefix) so the URL can be registered directly with
+	// `claude plugin marketplace add`. Mounted here — not via ExtraRoutes —
+	// because it's a first-party OSS read feature that needs the Plugin store
+	// already wired into opts.Stores.
+	if cfg.PluginMarketplaceCompatEnabled {
+		if store := opts.Stores[v1alpha1.KindPlugin]; store != nil {
+			// Reuse the same per-kind RBAC list filter the native Plugin read
+			// path uses, so a downstream build that gates Plugin reads gates the
+			// compat endpoint identically. nil hook = public OSS behavior.
+			//
+			// This route is registered as an authn public path (see
+			// NewHumaAPI): where an authn provider is configured, requests
+			// under it carry an auth.PublicSession instead of requiring
+			// credentials, so ListFilter still receives a session and scopes
+			// what anonymous callers may see.
+			pluginmarketplacecompat.Register(api, pluginmarketplacecompat.Config{
+				PathPrefix: cfg.PluginMarketplaceCompatPathPrefix,
+				Store:      store,
+				ListFilter: opts.PerKindHooks.ListFilters[v1alpha1.KindPlugin],
 			})
 		}
 	}
