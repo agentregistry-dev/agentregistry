@@ -46,6 +46,12 @@ components:
           type:
           - array
           - "null"
+        modelName:
+          deprecated: true
+          type: string
+        modelProvider:
+          deprecated: true
+          type: string
         plugins:
           items:
             $ref: '#/components/schemas/ResourceRef'
