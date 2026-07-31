@@ -802,6 +802,26 @@ components:
       required:
       - type
       type: object
+    MarketplaceResponse:
+      additionalProperties: false
+      properties:
+        $schema:
+          type: string
+        name:
+          type: string
+        owner:
+          $ref: '#/components/schemas/Owner'
+        plugins:
+          items:
+            $ref: '#/components/schemas/PluginEntry'
+          type:
+          - array
+          - "null"
+      required:
+      - name
+      - owner
+      - plugins
+      type: object
     Model:
       additionalProperties: false
       properties:
@@ -964,6 +984,16 @@ components:
       required:
       - isLatest
       type: object
+    Owner:
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+        name:
+          type: string
+      required:
+      - name
+      type: object
     PathOrPaths:
       additionalProperties: false
       properties:
@@ -1044,6 +1074,20 @@ components:
           type: string
         version:
           type: string
+      type: object
+    PluginEntry:
+      additionalProperties: false
+      properties:
+        description:
+          type: string
+        name:
+          type: string
+        source: {}
+        version:
+          type: string
+      required:
+      - name
+      - source
       type: object
     PluginExperimental:
       additionalProperties: false
@@ -1634,6 +1678,27 @@ info:
   version: dev
 openapi: 3.1.0
 paths:
+  /plugin-marketplace/marketplace.json:
+    get:
+      description: Read-only listing of resolved plugins in the Claude Code marketplace.json
+        format.
+      operationId: plugin-marketplace-get
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketplaceResponse'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorModel'
+          description: Error
+      summary: Get the plugin marketplace (Claude Code marketplace.json compatibility)
+      tags:
+      - plugins
   /v0.1/servers:
     get:
       description: Read-only listing of registered MCP servers in the official MCP

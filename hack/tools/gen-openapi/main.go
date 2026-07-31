@@ -70,6 +70,10 @@ func generateSpec(apiVersion string) *huma.OpenAPI {
 		// (opt-in via AGENT_REGISTRY_MCP_REGISTRY_COMPAT_ENABLED); documenting
 		// the surface regardless keeps the published OpenAPI complete.
 		MCPRegistryCompatEnabled: true,
+		// Same reasoning for the read-only Claude Code marketplace.json
+		// compatibility route (opt-in via
+		// AGENT_REGISTRY_PLUGIN_MARKETPLACE_COMPAT_ENABLED at runtime).
+		PluginMarketplaceCompatEnabled: true,
 	}
 
 	// Register all routes. Services and metrics are nil because they are only
