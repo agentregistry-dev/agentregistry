@@ -81,7 +81,7 @@ The rapid growth of AI agents, MCP servers, and skills has created a fragmented 
 
 **Deployment to Kubernetes**: The registry server deploys MCP servers and agents to Kubernetes clusters using the kagent.dev CRDs. This involves creating and managing deployments, services, secrets, and configmaps. RBAC permissions are enforced through Kubernetes ClusterRoles or namespace-scoped Roles.
 
-**API Authentication and Authorization**: The registry server authenticates API requests using JWT tokens signed with Ed25519 cryptography. Authorization is enforced per-request through a dedicated AuthzProvider interface with resource-pattern matching and action-based permissions (read, publish, edit, delete, deploy).
+**API Authentication and Authorization**: The default configuration is permissive and does not provide an authenticated security boundary. AuthnProvider and AuthzProvider interfaces allow integrators to enforce identity and resource-level access policies.
 
 ### Goals
 
@@ -108,15 +108,15 @@ This document provides the CNCF TAG-Security with an initial understanding of ag
 
 ### Critical
 
-- **JWT Authentication with Ed25519**: The registry server authenticates API requests using JWT tokens signed with Ed25519 cryptography. Tokens have a 5-minute expiration window to limit the blast radius of token compromise. The signing key is configured at deploy time via the `config.jwtPrivateKey` Helm value or a Kubernetes Secret referenced by `config.existingSecret`.
+- **Pluggable Authentication and Authorization**: The server provides AuthnProvider and AuthzProvider extension points. By default, authentication middleware is disabled and authorization is permissive, so the server does not provide an authenticated security boundary.
 
-- **OIDC Integration**: The registry supports external identity federation through OpenID Connect (OIDC), allowing organizations to integrate their existing identity providers (GitHub OIDC, generic OIDC). Role-based permissions can be mapped from OIDC claims.
+- **External Identity Integration**: Integrators can supply standards-based authentication such as OIDC through the provider interfaces. No identity provider integration is bundled with the server.
 
 - **Kubernetes RBAC**: The Helm chart deploys a ClusterRole (or namespace-scoped Roles when `rbac.watchedNamespaces` is configured) that grants only the permissions necessary for the registry's core function of managing MCP server deployments. RBAC is enabled by default.
 
 - **Pod Security Context**: All containers run with hardened security defaults: non-root user (UID/GID 1001), read-only root filesystem, all Linux capabilities dropped, privilege escalation disabled, and RuntimeDefault seccomp profile. These are enabled by default in the Helm chart.
 
-- **Secret Management**: Integrates with Kubernetes secret management for storing sensitive data like JWT signing keys, database credentials, and deployment configuration. Supports external secret references (`existingSecret`, `global.existingSecret`) for integration with secret management tools (e.g., External Secrets Operator, Vault).
+- **Secret Management**: Integrates with Kubernetes Secrets for database credentials and deployment configuration. External PostgreSQL connection strings can be sourced from an existing Secret for integration with secret management tools such as External Secrets Operator or Vault.
 
 ### Security Relevant
 
@@ -202,7 +202,7 @@ See the [incident response](https://github.com/agentregistry-dev/community/blob/
 ### Known Issues Over Time
 
 As of the time of this assessment, no critical security vulnerabilities have been publicly reported or discovered in agentregistry. The following areas have been identified as requiring hardening before production use:
-- JWT signing key rotation is not automated; operators must manually rotate keys.
+- **Authentication model**: The default configuration is unauthenticated and permissive. Further investment is needed to provide standards-based authentication, secure-by-default behavior, and an explicit anonymous mode. Until then, operators that require an authenticated security boundary must configure an authentication provider or place the service behind a trusted access layer.
 - No automated dependency vulnerability scanning (govulncheck, Trivy, Dependabot) is currently integrated into CI.
 
 ### Open SSF Best Practices

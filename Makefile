@@ -429,11 +429,7 @@ install-agentregistry: charts-generate ## Build images and Helm install AgentReg
 ifeq ($(BUILD),true)
 install-agentregistry: docker-server docker-agentgateway
 endif
-	@JWT_KEY=$$(kubectl --context $(KIND_CLUSTER_CONTEXT) -n $(KIND_NAMESPACE) \
-	    get secret agentregistry \
-	    -o jsonpath='{.data.AGENT_REGISTRY_JWT_PRIVATE_KEY}' 2>/dev/null | base64 -d); \
-	  if [ -z "$$JWT_KEY" ]; then JWT_KEY=$$(openssl rand -hex 32); fi; \
-	  $(HELM) upgrade --install agentregistry charts/agentregistry \
+	@$(HELM) upgrade --install agentregistry charts/agentregistry \
 	    --kube-context $(KIND_CLUSTER_CONTEXT) \
 	    --namespace $(KIND_NAMESPACE) \
 	    --create-namespace \
@@ -441,7 +437,6 @@ endif
 	    --set image.registry=$(DOCKER_REGISTRY) \
 	    --set image.repository=$(DOCKER_REPO) \
 	    --set image.tag=$(VERSION) \
-	    --set config.jwtPrivateKey="$$JWT_KEY" \
 	    --set service.type=LoadBalancer \
 	    --wait \
 	    --timeout=5m;
@@ -606,14 +601,12 @@ charts-docs: charts-generate ## Render chart README.md from values.yaml via helm
 	  --template-files=_templates.gotmpl \
 	  --template-files=README.md.gotmpl
 
-# Render chart templates to stdout (smoke test — catches template errors).
-# Uses minimum required values to pass chart validation.
+# Render chart templates to stdout (smoke test -- catches template errors).
 .PHONY: charts-render-test
 charts-render-test: charts-deps ## Render chart templates as a smoke test
 	@echo "Rendering chart templates for $(HELM_CHART_DIR)..."
 	$(HELM) template test-release $(HELM_CHART_DIR) \
-	  --values $(HELM_CHART_DIR)/values.yaml \
-	  --set config.jwtPrivateKey=deadbeef1234567890abcdef12345678
+	  --values $(HELM_CHART_DIR)/values.yaml
 
 # Package the chart into $(HELM_PACKAGE_DIR)/.
 .PHONY: charts-package

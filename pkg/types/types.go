@@ -357,15 +357,18 @@ type AppOptions struct {
 	// precedence over the UI handler.
 	UIHandler http.Handler
 
-	// AuthnProvider is an optional authentication provider.
+	// AuthnProvider is an optional authentication provider. Nil disables HTTP
+	// authentication middleware, which is the permissive default.
 	AuthnProvider auth.AuthnProvider
 
-	// AuthzProvider is an optional authorization provider.
+	// AuthzProvider is an optional authorization provider. Nil selects the
+	// permissive default provider.
 	AuthzProvider auth.AuthzProvider
 
 	// MCPProtectedResourceMetadata, when non-nil, makes the MCP bridge serve
 	// RFC 9728 protected-resource metadata at the well-known path. Nil disables
-	// OAuth discovery only, although the bridge stays fail-closed and RBAC-enforced.
+	// OAuth discovery. Authentication and authorization enforcement are
+	// determined by the configured providers.
 	MCPProtectedResourceMetadata *oauthex.ProtectedResourceMetadata
 
 	// MCPResourceMetadataURL is the external URL of that metadata document,

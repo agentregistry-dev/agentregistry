@@ -314,11 +314,6 @@ Called from templates/validate.yaml so it fires during helm template/install.
 */}}
 {{- define "agentregistry.validateValues.errors" -}}
 {{- $errors := list }}
-{{- if and (not .Values.config.existingSecret) (eq .Values.config.jwtPrivateKey "") }}
-{{- $errors = append $errors "config.jwtPrivateKey must be set (or provide config.existingSecret containing AGENT_REGISTRY_JWT_PRIVATE_KEY)." }}
-{{- else if and (not .Values.config.existingSecret) (not (regexMatch "^[0-9a-fA-F]+$" .Values.config.jwtPrivateKey)) }}
-{{- $errors = append $errors "config.jwtPrivateKey must be a valid hex string (e.g. generated with: openssl rand -hex 32)." }}
-{{- end }}
 {{- if hasKey .Values.database.postgres "url" }}
 {{- $errors = append $errors "database.postgres.url has moved: set database.postgres.type=external and database.postgres.external.url instead." }}
 {{- end }}

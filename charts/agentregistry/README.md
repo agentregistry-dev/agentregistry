@@ -8,8 +8,7 @@ Production-grade Helm chart for Agent Registry -- deploy, secure, and scale the 
 ## TL;DR
 
 ```console
-helm install my-agentregistry oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry \
-  --set config.jwtPrivateKey=$(openssl rand -hex 32)
+helm install my-agentregistry oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry
 ```
 
 A PostgreSQL instance is bundled and started automatically — no external database is required to get started.
@@ -30,15 +29,13 @@ It exposes both an HTTP REST API and an MCP server endpoint. A PostgreSQL instan
 ### Development / evaluation (bundled database)
 
 ```console
-helm install my-agentregistry oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry \
-  --set config.jwtPrivateKey=$(openssl rand -hex 32)
+helm install my-agentregistry oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry
 ```
 
 ### Production (external database)
 
 ```console
 helm install my-agentregistry oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry \
-  --set config.jwtPrivateKey=$(openssl rand -hex 32) \
   --set database.postgres.type=external \
   --set database.postgres.external.url=postgres://<user>:<password>@<host>:5432/<dbname>
 ```
@@ -62,7 +59,6 @@ The chart deploys the following Kubernetes resources:
 | Deployment | Agent Registry application |
 | Service | Exposes HTTP (`:12121`) and MCP (`:31313`) ports |
 | ConfigMap | Application configuration injected as environment variables |
-| Secret | JWT signing key (omitted when `config.existingSecret` is set) |
 | Secret (`-postgresql`) | Bundled PostgreSQL password (only when `database.postgres.type=bundled`) |
 | Deployment (`-postgresql`) | Bundled PostgreSQL instance (only when `database.postgres.type=bundled`) |
 | Service (`-postgresql`) | Internal service for bundled PostgreSQL (only when `database.postgres.type=bundled`) |
@@ -109,22 +105,6 @@ database:
 
 See [docs/byo-postgres.md](../../docs/byo-postgres.md) for a complete walkthrough.
 
-## Secrets
-
-Agent Registry requires a hex-encoded JWT signing key. Provide it directly:
-
-```yaml
-config:
-  jwtPrivateKey: "$(openssl rand -hex 32)"
-```
-
-Or reference an existing Secret (must contain key `AGENT_REGISTRY_JWT_PRIVATE_KEY`):
-
-```yaml
-config:
-  existingSecret: "my-agentregistry-secret"
-```
-
 ## RBAC
 
 By default, Agent Registry is granted cluster-wide access via a `ClusterRole`/`ClusterRoleBinding`. To restrict it to specific namespaces, set `rbac.watchedNamespaces`:
@@ -151,8 +131,6 @@ This creates a `Role`/`RoleBinding` in each listed namespace (plus the installat
 | config.agentGatewayPort | string | `"21212"` | Agent Gateway gRPC port |
 | config.agentRegistryMcpPort | string | `"31313"` | Agent Registry MCP server port |
 | config.enableRegistryValidation | string | `"false"` | Enable input validation on the registry API |
-| config.existingSecret | string | `""` | Name of an existing Secret containing AGENT_REGISTRY_JWT_PRIVATE_KEY. When set, the chart will not create its own JWT secret. |
-| config.jwtPrivateKey | string | `""` | Hex-encoded HMAC key for signing JWT tokens (must be valid hex, e.g. "a3f4b2c1..."). Ignored when existingSecret is set. |
 | config.serverAddress | string | `":8080"` | Listen address for the HTTP server |
 | containerSecurityContext.allowPrivilegeEscalation | bool | `false` | Allow privilege escalation |
 | containerSecurityContext.capabilities.drop | list | `["ALL"]` | Linux capabilities to drop |
@@ -262,9 +240,6 @@ database:
     external:
       url: "postgres://agentregistry:changeme@pg.example.com:5432/agentregistry?sslmode=require"
 
-config:
-  existingSecret: "agentregistry-secrets"
-
 resources:
   requests:
     cpu: 250m
@@ -283,9 +258,6 @@ database:
     external:
       secretRef:
         name: my-db-creds
-
-config:
-  existingSecret: "agentregistry-secrets"
 ```
 
 ### Namespace-scoped RBAC
