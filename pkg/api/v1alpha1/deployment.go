@@ -55,7 +55,7 @@ const (
 // lifecycle intent (desiredState).
 //
 // RuntimeRef is required and must name a top-level Runtime. The Runtime
-// resolves how/where the target is executed (local daemon, kubernetes, etc.).
+// resolves how/where the target is executed (local Docker, Kubernetes, etc.).
 type DeploymentSpec struct {
 	TargetRef  ResourceRef `json:"targetRef" yaml:"targetRef"`
 	RuntimeRef ResourceRef `json:"runtimeRef" yaml:"runtimeRef"`

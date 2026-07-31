@@ -22,8 +22,8 @@ type Config struct {
 
 	// Platform mode: "docker" or "kubernetes". Controls which deployment
 	// provider IDs are available in the UI. Defaults to "kubernetes" so
-	// Helm/K8s deployments work without extra config; docker-compose.yml
-	// explicitly sets this to "docker".
+	// Helm/K8s deployments work without extra config;
+	// docker/docker-compose.yml explicitly sets this to "docker".
 	PlatformMode string `env:"PLATFORM_MODE" envDefault:"kubernetes"`
 
 	// Agent Gateway Configuration

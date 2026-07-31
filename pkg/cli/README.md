@@ -9,8 +9,7 @@ root := cli.Root(cli.Config{
 	Version: version.Version,
 	Auth: enterpriseAuthProvider{},
 	Disabled: map[string]bool{
-		cliruntime.CommandDaemon: true,
-		"db migrate goto":        true,
+		"db migrate goto": true,
 	},
 	ExtraCommands: []*cobra.Command{
 		runtime.NewCommand(),

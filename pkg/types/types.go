@@ -1,15 +1,5 @@
-// Package types holds extension-point surfaces that cross the
-// pkg/registry <-> internal/registry boundary. Anything a downstream
-// build (out-of-tree wrapper, custom CLI) needs to implement to plug
-// into the registry app lives here.
-//
-// The types are split by domain across files:
-//   - types.go         — AppOptions, Server, HTTPServerFactory,
-//     Response/EmptyResponse wrappers
-//   - adapter.go       — deployment + runtime adapter surfaces
-//     (DeploymentAdapter, RuntimeAdapter)
-//   - daemon.go        — CLI-side daemon + token provider hooks
-//   - runner_images.go — default runner image refs for non-OCI origins
+// Package types defines public extension points shared by registry components
+// and external integrations.
 package types
 
 import (

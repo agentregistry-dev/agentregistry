@@ -7,7 +7,6 @@ import (
 
 	internalcli "github.com/agentregistry-dev/agentregistry/internal/cli"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/configure"
-	clidaemon "github.com/agentregistry-dev/agentregistry/internal/cli/daemon"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
@@ -15,7 +14,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/cli/db"
 	"github.com/agentregistry-dev/agentregistry/pkg/cli/db/migrate"
 	cliruntime "github.com/agentregistry-dev/agentregistry/pkg/cli/runtime"
-	"github.com/agentregistry-dev/agentregistry/pkg/daemon/dockercompose"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database/legacymigrate"
 )
 
@@ -74,7 +72,6 @@ func Root(cfg Config) *cobra.Command {
 	}
 	root.AddCommand(configure.NewCommand(deps))
 	root.AddCommand(internalcli.NewVersionCommand(deps))
-	root.AddCommand(clidaemon.NewCommand(dockercompose.NewManager(dockercompose.DefaultConfig())))
 	root.AddCommand(declarative.NewApplyCmd(deps))
 	root.AddCommand(declarative.NewGetCmd(deps))
 	root.AddCommand(declarative.NewDeleteCmd(deps))
@@ -140,7 +137,7 @@ type Config struct {
 	Auth cliruntime.AuthProvider
 
 	ExtraCommands []*cobra.Command
-	Disabled      map[string]bool // command paths to remove, such as "daemon" or "db migrate goto"
+	Disabled      map[string]bool // command paths to remove, such as "db migrate goto"
 
 	ExtraMigrationSources []migrate.Source
 	DeclarativeKinds      []DeclarativeKind

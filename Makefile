@@ -169,7 +169,9 @@ dev-ui: ## Run the Next.js UI in development mode
 
 # Start local development environment (docker backend only, no Kind)
 .PHONY: run-docker
-run-docker: local-registry docker docker-tag-as-dev daemon-start ## Start local development environment (docker backend only, no Kind)
+run-docker: local-registry docker docker-tag-as-dev ## Start local development environment (docker backend only, no Kind)
+	DOCKER_REGISTRY=$(DOCKER_REGISTRY) VERSION=$(VERSION) \
+		docker compose -f docker/docker-compose.yml up -d --wait --pull always
 	@echo ""
 	@echo "agentregistry is running (docker backend):"
 	@echo "  UI:  http://localhost:12121"
@@ -195,23 +197,12 @@ run: run-k8s # Start local development environment (default: k8s)
 
 # Stop local development environment
 .PHONY: down
-down: daemon-stop delete-kind-cluster ## Stop the local development environment
+down: delete-kind-cluster ## Stop the local development environment
+	DOCKER_REGISTRY=$(DOCKER_REGISTRY) VERSION=$(VERSION) \
+		docker compose -f docker/docker-compose.yml down
 	@echo "agentregistry stopped"
 
 ARCTL ?= ./bin/arctl
-
-# Manage local daemon lifecycle via CLI helpers.
-.PHONY: daemon-start
-daemon-start: build-cli ## Start local daemon via CLI
-	$(ARCTL) daemon start
-
-.PHONY: daemon-stop
-daemon-stop: ## Stop local daemon via CLI
-	$(ARCTL) daemon stop
-
-.PHONY: daemon-stop-purge
-daemon-stop-purge: ## Stop local daemon and purge volumes via CLI
-	$(ARCTL) daemon stop --purge
 
 # Run Go tests (unit tests only)
 .PHONY: test-unit

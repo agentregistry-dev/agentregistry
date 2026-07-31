@@ -65,7 +65,7 @@ The rapid growth of AI agents, MCP servers, and skills has created a fragmented 
 
 **Registry Server**: The core Go service exposing the REST API for artifact management. Stores metadata in PostgreSQL. Handles authentication, authorization, artifact lifecycle, and deployment orchestration.
 
-**CLI (arctl)**: A Go-based command-line interface that communicates with the registry server over HTTP. Supports artifact discovery, publishing, deployment, and configuration of AI-powered IDEs. Manages local daemon lifecycle explicitly via `arctl daemon start`, `arctl daemon stop`, and `arctl daemon status`.
+**CLI (arctl)**: A Go-based command-line interface that communicates with the registry server over HTTP. Supports artifact discovery, publishing, deployment, and configuration of AI-powered IDEs. Registry process lifecycle is managed independently through Docker Compose or Kubernetes.
 
 **Web UI**: A TypeScript/React (Next.js 14) frontend served by the registry server. Provides a visual interface for browsing, managing, and publishing artifacts. Accessible at port 12121.
 

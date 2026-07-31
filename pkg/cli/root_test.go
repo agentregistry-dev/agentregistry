@@ -8,22 +8,12 @@ import (
 	dbmigrate "github.com/agentregistry-dev/agentregistry/pkg/cli/db/migrate"
 )
 
-func TestRootDisabledCommandPathsPruneBuiltInsBeforeExtraCommands(t *testing.T) {
+func TestRootDisabledCommandPaths(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.Disabled["daemon"] = true
 	cfg.Disabled["db migrate goto"] = true
-	cfg.ExtraCommands = []*cobra.Command{{Use: "daemon", Short: "Enterprise daemon command"}}
 	cfg.ExtraMigrationSources = []dbmigrate.Source{{Name: "enterprise"}}
 
 	root := Root(cfg)
-
-	daemon := childCommand(root, "daemon")
-	if daemon == nil {
-		t.Fatal("expected extra daemon command to be registered")
-	}
-	if daemon.Short != "Enterprise daemon command" {
-		t.Fatalf("daemon.Short = %q, want extra command", daemon.Short)
-	}
 
 	dbCmd := childCommand(root, "db")
 	if dbCmd == nil {
