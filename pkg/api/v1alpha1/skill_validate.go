@@ -13,6 +13,7 @@ func (s *Skill) Validate() error {
 func validateSkillSpec(s *SkillSpec) FieldErrors {
 	var errs FieldErrors
 	errs.Append("spec.title", validateTitle(s.Title))
+	errs.Append("spec.iconUrl", validateIconURL(s.IconURL))
 	if s.Source != nil {
 		for _, e := range validateRepository(s.Source.Repository) {
 			errs.Append("spec.source."+e.Path, e.Cause)

@@ -123,6 +123,36 @@ func TestAgentValidate_AccumulatesErrors(t *testing.T) {
 	require.Contains(t, paths, "spec.title")
 }
 
+func TestAgentValidate_IconURL(t *testing.T) {
+	cases := []struct {
+		name    string
+		iconURL string
+		wantErr bool
+	}{
+		{"empty", "", false},
+		{"absolute https", "https://example.com/icons/agent.svg", false},
+		{"root-relative path", "/catalog-covers/agent-neural.svg", false},
+		{"plain http", "http://example.com/icons/agent.svg", true},
+		{"javascript scheme", "javascript:alert(1)", true},
+		{"scheme-relative", "//example.com/icons/agent.svg", true},
+		{"bare path", "catalog-covers/agent-neural.svg", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := &Agent{
+				Metadata: ObjectMeta{Namespace: "default", Name: "a"},
+				Spec:     AgentSpec{IconURL: tc.iconURL},
+			}
+			err := a.Validate()
+			if !tc.wantErr {
+				require.NoError(t, err)
+				return
+			}
+			require.Contains(t, failedFields(t, err), "spec.iconUrl")
+		})
+	}
+}
+
 func TestAgentValidate_AcceptsRepositoryWithBranchAndCommit(t *testing.T) {
 	a := &Agent{
 		Metadata: ObjectMeta{Namespace: "default", Name: "a"},

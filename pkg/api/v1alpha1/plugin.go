@@ -31,6 +31,10 @@ type PluginSpec struct {
 	Title       string `json:"title,omitempty" yaml:"title,omitempty"`
 	Description string `json:"description,omitempty" yaml:"description,omitempty"`
 
+	// IconURL is the image a catalog UI shows for this plugin. Either an
+	// absolute https:// URL or a root-relative path served by the UI.
+	IconURL string `json:"iconUrl,omitempty" yaml:"iconUrl,omitempty"`
+
 	// Harnesses lists the harness formats this bundle carries native manifests
 	// for (e.g. "claude-code", "codex"). It is informational in this phase;
 	// deploy-time adapters decide which harnesses they can consume.

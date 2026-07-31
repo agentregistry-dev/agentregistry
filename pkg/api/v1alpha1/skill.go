@@ -14,9 +14,14 @@ func init() {
 
 // SkillSpec is the skill resource's declarative body.
 type SkillSpec struct {
-	Title       string       `json:"title,omitempty" yaml:"title,omitempty"`
-	Description string       `json:"description,omitempty" yaml:"description,omitempty"`
-	Source      *SkillSource `json:"source,omitempty" yaml:"source,omitempty"`
+	Title       string `json:"title,omitempty" yaml:"title,omitempty"`
+	Description string `json:"description,omitempty" yaml:"description,omitempty"`
+
+	// IconURL is the image a catalog UI shows for this skill. Either an
+	// absolute https:// URL or a root-relative path served by the UI.
+	IconURL string `json:"iconUrl,omitempty" yaml:"iconUrl,omitempty"`
+
+	Source *SkillSource `json:"source,omitempty" yaml:"source,omitempty"`
 }
 
 // SkillSource is the distribution origin of a skill. Currently just a
