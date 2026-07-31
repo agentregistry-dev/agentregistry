@@ -1,10 +1,10 @@
 package pluginmarketplace_test
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/pluginmarketplace"
@@ -42,7 +42,7 @@ func TestFromPlugin_ReadyPlainGit(t *testing.T) {
 	}
 
 	got, err := pluginmarketplace.FromPlugin(p)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	want := pluginmarketplace.PluginEntry{
 		Name: "code-formatter",
@@ -76,7 +76,7 @@ func TestFromPlugin_MonorepoSubfolder(t *testing.T) {
 	}
 
 	got, err := pluginmarketplace.FromPlugin(p)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	want := pluginmarketplace.PluginEntry{
 		Name: "deployment-tools",
@@ -107,7 +107,7 @@ func TestFromPlugin_NotReady_Skipped(t *testing.T) {
 	}
 
 	_, err := pluginmarketplace.FromPlugin(p)
-	assert.True(t, errors.Is(err, pluginmarketplace.ErrNotResolved))
+	assert.ErrorIs(t, err, pluginmarketplace.ErrNotResolved)
 }
 
 func TestFromPlugin_ReadyButNoResolvedSource_Skipped(t *testing.T) {
@@ -125,7 +125,7 @@ func TestFromPlugin_ReadyButNoResolvedSource_Skipped(t *testing.T) {
 	}
 
 	_, err := pluginmarketplace.FromPlugin(p)
-	assert.True(t, errors.Is(err, pluginmarketplace.ErrNotResolved))
+	assert.ErrorIs(t, err, pluginmarketplace.ErrNotResolved)
 }
 
 func TestFromPlugin_OCI_Skipped(t *testing.T) {
@@ -144,7 +144,7 @@ func TestFromPlugin_OCI_Skipped(t *testing.T) {
 	}
 
 	_, err := pluginmarketplace.FromPlugin(p)
-	assert.True(t, errors.Is(err, pluginmarketplace.ErrUnsupportedSource))
+	assert.ErrorIs(t, err, pluginmarketplace.ErrUnsupportedSource)
 }
 
 func TestFromPlugin_DescriptionFallsBackToSpec(t *testing.T) {
@@ -166,9 +166,9 @@ func TestFromPlugin_DescriptionFallsBackToSpec(t *testing.T) {
 	}
 
 	got, err := pluginmarketplace.FromPlugin(p)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, "spec-level description", got.Description)
-	assert.Equal(t, "", got.Version)
+	assert.Empty(t, got.Version)
 }
 
 func TestFromPlugin_ManifestDescriptionOverridesSpec(t *testing.T) {
@@ -191,7 +191,7 @@ func TestFromPlugin_ManifestDescriptionOverridesSpec(t *testing.T) {
 	}
 
 	got, err := pluginmarketplace.FromPlugin(p)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, "manifest-level description", got.Description)
 	assert.Equal(t, "2.0.0", got.Version)
 }
