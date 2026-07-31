@@ -160,6 +160,9 @@ agentregistry follows semantic versioning (https://semver.org/):
 - Minor Releases (0.x.0): New features, non-breaking changes.
 - Patch Releases (0.0.x): Bug fixes, security patches
 
+The tagging, publication, artifact, verification, and recovery procedures are
+documented in [Releasing AgentRegistry](../../releasing.md).
+
 ---
 
 ## Installation
