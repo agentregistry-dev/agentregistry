@@ -237,28 +237,11 @@ test-cli-e2e: ## Run CLI subprocess e2e tests (no docker/k8s required; DB cases 
 	@echo "Running CLI e2e tests..."
 	$(GOTESTSUM) --format testdox -- -tags=e2e -timeout 5m ./pkg/cli/...
 
-# Run e2e tests against docker backend (skips Kind cluster setup and k8s tests)
-.PHONY: test-e2e-docker
-test-e2e-docker: local-registry docker docker-tag-as-dev daemon-start
-	@set -e; \
-	  trap '$(MAKE) --no-print-directory daemon-stop-purge >/dev/null 2>&1 || true' EXIT; \
-	  ARCTL_API_BASE_URL=http://localhost:12121/v0 E2E_BACKEND=docker GOOGLE_API_KEY=$(GOOGLE_API_KEY) OPENAI_API_KEY=$(OPENAI_API_KEY) \
-	    $(GOTESTSUM) --format testdox -- -v -tags=e2e -timeout 45m ./test/e2e/...
-
-# Run e2e tests against k8s backend (full Kind cluster setup)
-.PHONY: test-e2e-k8s
-test-e2e-k8s: setup-kind-cluster build-cli
-	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) E2E_BACKEND=k8s GOOGLE_API_KEY=$(GOOGLE_API_KEY) OPENAI_API_KEY=$(OPENAI_API_KEY) \
-	  $(GOTESTSUM) --format testdox -- -v -tags=e2e -timeout 45m ./test/e2e/...
-
-# Run e2e tests (default: k8s)
+# Run e2e tests against a local Kind cluster.
 .PHONY: test-e2e
-test-e2e: ## Run end-to-end tests (default: k8s)
-	@if [ "$(E2E_BACKEND)" = "docker" ]; then \
-	  $(MAKE) test-e2e-docker; \
-	else \
-	  $(MAKE) test-e2e-k8s; \
-	fi
+test-e2e: setup-kind-cluster build-cli ## Run end-to-end tests against Kubernetes
+	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) GOOGLE_API_KEY=$(GOOGLE_API_KEY) OPENAI_API_KEY=$(OPENAI_API_KEY) \
+	  $(GOTESTSUM) --format testdox -- -v -tags=e2e -timeout 45m ./test/e2e/...
 
 .PHONY: gen-openapi
 gen-openapi: ## Generate the OpenAPI specification
