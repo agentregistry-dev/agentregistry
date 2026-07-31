@@ -18,7 +18,6 @@ type Config struct {
 	MCPPort       uint16 `env:"MCP_PORT" envDefault:"0"`
 	DatabaseURL   string `env:"DATABASE_URL" envDefault:"postgres://agentregistry:agentregistry@localhost:5432/agentregistry?sslmode=disable"`
 	Version       string `env:"VERSION" envDefault:"dev"`
-	JWTPrivateKey string `env:"JWT_PRIVATE_KEY" envDefault:""`
 	LogLevel      string `env:"LOG_LEVEL" envDefault:"info"`
 
 	// Platform mode: "docker" or "kubernetes". Controls which deployment

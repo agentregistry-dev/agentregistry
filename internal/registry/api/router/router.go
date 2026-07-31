@@ -197,10 +197,6 @@ func NewHumaAPI(
 			Description: "Operations for publishing MCP servers to the registry",
 		},
 		{
-			Name:        "auth",
-			Description: "Authentication operations for obtaining tokens to publish servers",
-		},
-		{
 			Name:        "health",
 			Description: "Health check endpoint for monitoring service availability",
 		},

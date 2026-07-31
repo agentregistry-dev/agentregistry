@@ -38,8 +38,6 @@ make install-agentregistry BUILD=false
 
 `install-agentregistry` automatically runs `charts-generate` first (see [Helm Chart Generation](#helm-chart-generation) below), so `Chart.yaml` is always up to date before deploying.
 
-On subsequent runs, `install-agentregistry` reuses the `jwtPrivateKey` already stored in the cluster secret so tokens remain valid across redeploys.
-
 ### Accessing the services
 
 ```bash
@@ -137,4 +135,3 @@ make build-ui
 - [Next.js Documentation](https://nextjs.org/docs)
 - [shadcn/ui Components](https://ui.shadcn.com/)
 - [MCP Protocol Specification](https://spec.modelcontextprotocol.io/)
-
