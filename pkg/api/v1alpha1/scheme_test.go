@@ -2,6 +2,7 @@ package v1alpha1
 
 import (
 	"encoding/json"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -211,6 +212,45 @@ spec:
 	}
 	if m.Spec.Source.Package.Transport.Type != "stdio" {
 		t.Fatalf("transport mismatch: %+v", m.Spec.Source.Package.Transport)
+	}
+}
+
+func TestExample_ParallelSearchMCP(t *testing.T) {
+	doc, err := os.ReadFile("../../../examples/mcp-search.yaml")
+	if err != nil {
+		t.Fatalf("read example: %v", err)
+	}
+
+	obj, err := Default.Decode(doc)
+	if err != nil {
+		t.Fatalf("decode example: %v", err)
+	}
+	mcp, ok := obj.(*MCPServer)
+	if !ok {
+		t.Fatalf("want *MCPServer, got %T", obj)
+	}
+	// The apply path defaults an omitted namespace before object validation.
+	mcp.Metadata.Namespace = DefaultNamespace
+	if err := mcp.Validate(); err != nil {
+		t.Fatalf("validate example: %v", err)
+	}
+	if mcp.Metadata.Name != "parallel-search" {
+		t.Fatalf("metadata.name = %q, want parallel-search", mcp.Metadata.Name)
+	}
+	if mcp.Spec.Source != nil {
+		t.Fatalf("remote example unexpectedly has source: %+v", mcp.Spec.Source)
+	}
+	if mcp.Spec.Remote == nil {
+		t.Fatal("remote example is missing spec.remote")
+	}
+	if mcp.Spec.Remote.Type != "streamable-http" {
+		t.Fatalf("remote.type = %q, want streamable-http", mcp.Spec.Remote.Type)
+	}
+	if mcp.Spec.Remote.URL != "https://search.parallel.ai/mcp" {
+		t.Fatalf("remote.url = %q, want Parallel Search MCP endpoint", mcp.Spec.Remote.URL)
+	}
+	if len(mcp.Spec.Remote.Headers) != 0 {
+		t.Fatalf("public endpoint example unexpectedly has headers: %+v", mcp.Spec.Remote.Headers)
 	}
 }
 

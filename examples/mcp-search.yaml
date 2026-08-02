@@ -1,0 +1,10 @@
+apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: parallel-search
+spec:
+  title: Parallel Search
+  description: "Live web search and URL content extraction"
+  remote:
+    type: streamable-http
+    url: https://search.parallel.ai/mcp
