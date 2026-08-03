@@ -24,6 +24,11 @@ components:
       properties:
         image:
           type: string
+        protocol:
+          enum:
+          - A2A
+          - HTTP
+          type: string
         repository:
           $ref: '#/components/schemas/Repository'
       type: object

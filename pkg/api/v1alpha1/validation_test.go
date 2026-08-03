@@ -112,6 +112,37 @@ func TestAgentValidate_AcceptsBlankOptionalFields(t *testing.T) {
 	require.NoError(t, a.Validate())
 }
 
+func TestAgentValidate_Protocol(t *testing.T) {
+	tests := []struct {
+		name     string
+		protocol *AgentProtocol
+		wantErr  bool
+	}{
+		{name: "omitted defaults at consumption"},
+		{name: "A2A", protocol: new(AgentProtocolA2A)},
+		{name: "HTTP", protocol: new(AgentProtocolHTTP)},
+		{name: "reject empty", protocol: new(AgentProtocol("")), wantErr: true},
+		{name: "reject lowercase", protocol: new(AgentProtocol("http")), wantErr: true},
+		{name: "reject unknown", protocol: new(AgentProtocol("GRPC")), wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			agent := &Agent{
+				Metadata: ObjectMeta{Namespace: "default", Name: "protocol-agent"},
+				Spec:     AgentSpec{Source: &AgentSource{Protocol: tt.protocol}},
+			}
+			err := agent.Validate()
+			if tt.wantErr {
+				require.Error(t, err)
+				require.Contains(t, failedFields(t, err), "spec.source.protocol")
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
 func TestAgentValidate_AccumulatesErrors(t *testing.T) {
 	a := &Agent{
 		Metadata: ObjectMeta{Namespace: "default", Name: "a"},
