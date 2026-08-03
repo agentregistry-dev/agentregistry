@@ -895,37 +895,24 @@ spec:
 }
 
 // TestApplyDeployment_HTTPIdempotent exercises POST /v0/apply deployment idempotency
-// against the local provider: it builds and publishes an agent, then issues
+// against Kubernetes: it builds and publishes an agent, then issues
 // POST /v0/apply three times with a deployment YAML. The first call deploys;
 // the second and third calls must succeed without error (idempotent re-apply).
-// Skipped on the kubernetes backend.
 func TestApplyDeployment_HTTPIdempotent(t *testing.T) {
-	if IsK8sBackend() {
-		t.Skip("skipping local apply-deployment idempotency test: E2E_BACKEND=k8s")
-	}
-	// Local-provider deploy binds port 8080 via a shared docker-compose
-	// project. Multiple tests exercising that path race on port allocation
-	// and on lazy-cleanup from prior tests, making the suite flaky on CI.
-	// Opt-in via E2E_RUN_LOCAL_DEPLOY=1 to run locally.
-	if os.Getenv("E2E_RUN_LOCAL_DEPLOY") != "1" {
-		t.Skip("skipping local-deploy test; set E2E_RUN_LOCAL_DEPLOY=1 to run")
-	}
-
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 	agentName := UniqueAgentName("e2eapplydpl")
-	// localhost:5001 is the private registry the daemon runs on the docker
-	// backend. `arctl build --push` pushes to it so the local-provider
-	// deploy can pull it back. Public images don't satisfy the adapter's
+	// localhost:5001 is the private registry connected to the Kind cluster.
+	// `arctl build --push` pushes to it so the Kubernetes adapter can deploy
+	// the image. Public images don't satisfy the adapter's
 	// expected container shape, so we build a real one.
 	agentImage := fmt.Sprintf("localhost:5001/%s:e2e", agentName)
 
 	t.Cleanup(func() { RemoveDeploymentsByServerName(t, regURL, agentName) })
-	t.Cleanup(func() { removeLocalDeployment(t) })
 
-	// Init → build+push → apply. Build is required: the local-provider
+	// Init -> build+push -> apply. Build is required: the Kubernetes adapter
 	// deploy actually pulls the tagged image and starts it, so the image
-	// must exist in the daemon's localhost:5001 registry first.
+	// must exist in the localhost:5001 registry first.
 	result := RunArctl(t, tmpDir,
 		"init", "agent", agentName,
 		"--framework", "adk", "--language", "python",
@@ -952,7 +939,7 @@ spec:
     name: %s
   runtimeRef:
     kind: Runtime
-    name: local
+    name: kubernetes-default
 `, agentName, agentName)
 
 	httpClient := &http.Client{Timeout: 60 * time.Second}
@@ -1148,8 +1135,7 @@ spec:
 
 // TestBatchApply_DriftRequiresForce verifies that applying a deployment whose
 // config has drifted from the running deployment fails without --force and
-// succeeds with --force. This test only runs on the docker backend, as it
-// requires a live local deployment that can be in-flight.
+// succeeds with --force.
 //
 // The test uses the Deployment kind's ErrDeploymentDrift path by:
 //  1. Publishing an agent and deploying it.
@@ -1157,31 +1143,20 @@ spec:
 //  3. Re-applying without --force — expects failure with a "force" hint.
 //  4. Re-applying with --force — expects success.
 func TestBatchApply_DriftRequiresForce(t *testing.T) {
-	if IsK8sBackend() {
-		t.Skip("skipping drift test: not applicable on k8s backend (requires local docker provider)")
-	}
-	// See TestApplyDeployment_HTTPIdempotent: local-deploy races on port 8080
-	// against other deploy tests when cleanup lags; opt-in via env var.
-	if os.Getenv("E2E_RUN_LOCAL_DEPLOY") != "1" {
-		t.Skip("skipping local-deploy test; set E2E_RUN_LOCAL_DEPLOY=1 to run")
-	}
-
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 	agentName := UniqueAgentName("driftbatch")
 	agentImage := fmt.Sprintf("localhost:5001/%s:e2e", agentName)
 	agentTag := defaultArtifactTag
-	runtimeID := "local"
+	runtimeID := "kubernetes-default"
 
 	t.Cleanup(func() {
 		RemoveDeploymentsByServerName(t, regURL, agentName)
-		removeLocalDeployment(t)
 		RunArctl(t, tmpDir, "delete", "agent", agentName, "--tag", agentTag, "--registry-url", regURL)
 	})
 
-	// Step 1: init → build+push → apply the agent. Build pushes to the
-	// daemon's private localhost:5001 registry so the subsequent local
-	// deploy can pull it.
+	// Step 1: init -> build+push -> apply the agent. Build pushes to the
+	// localhost:5001 registry connected to Kind so Kubernetes can pull it.
 	result := RunArctl(t, tmpDir, "init", "agent", agentName,
 		"--framework", "adk", "--language", "python",
 		"--model-name", "gemini-2.5-flash",
@@ -1724,36 +1699,26 @@ func TestDeclarativeDelete_NotFound(t *testing.T) {
 	RequireOutputContains(t, result, "not found")
 }
 
-// TestDeploymentGet_YAMLIncludesStatus creates an agent + local deployment,
+// TestDeploymentGet_YAMLIncludesStatus creates an agent and deployment,
 // then checks that `arctl get deployment NAME -o yaml` renders a .status
 // block (phase/id/origin) in addition to the declarative spec. Round-trips
 // the output through `arctl apply` to confirm status is silently dropped on
 // input.
 func TestDeploymentGet_YAMLIncludesStatus(t *testing.T) {
-	if IsK8sBackend() {
-		t.Skip("skipping local deployment status test: E2E_BACKEND=k8s")
-	}
-	// See TestApplyDeployment_HTTPIdempotent: local-deploy races on port 8080
-	// against other deploy tests when cleanup lags; opt-in via env var.
-	if os.Getenv("E2E_RUN_LOCAL_DEPLOY") != "1" {
-		t.Skip("skipping local-deploy test; set E2E_RUN_LOCAL_DEPLOY=1 to run")
-	}
-
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 	agentName := UniqueAgentName("e2estatus")
 	tag := defaultArtifactTag
-	// Local-provider deploys pull from localhost:5001 (the daemon's private
-	// registry). Scaffold → build+push so the image resolves at deploy time.
+	// Kubernetes deploys pull from the registry connected to the Kind cluster.
+	// Scaffold -> build+push so the image resolves at deploy time.
 	agentImage := fmt.Sprintf("localhost:5001/%s:e2e", agentName)
 
 	t.Cleanup(func() { RemoveDeploymentsByServerName(t, regURL, agentName) })
-	t.Cleanup(func() { removeLocalDeployment(t) })
 	t.Cleanup(func() {
 		RunArctl(t, tmpDir, "delete", "agent", agentName, "--tag", tag, "--registry-url", regURL)
 	})
 
-	// init → build+push → apply — same shape as TestApplyDeployment_HTTPIdempotent.
+	// init -> build+push -> apply, as in TestApplyDeployment_HTTPIdempotent.
 	RequireSuccess(t, RunArctl(t, tmpDir,
 		"init", "agent", agentName,
 		"--framework", "adk", "--language", "python",
@@ -1776,7 +1741,7 @@ spec:
     tag: %s
   runtimeRef:
     kind: Runtime
-    name: local
+    name: kubernetes-default
 `, agentName, agentName, tag)
 	deployPath := writeDeclarativeYAML(t, tmpDir, "deployment.yaml", deployYAML)
 	RequireSuccess(t, RunArctl(t, tmpDir, "apply", "-f", deployPath, "--registry-url", regURL))
@@ -1786,14 +1751,14 @@ spec:
 	RequireSuccess(t, result)
 	RequireOutputContains(t, result, "apiVersion: ar.dev/v1alpha1")
 	RequireOutputContains(t, result, "kind: Deployment")
-	// Spec fields — declarative, round-trippable.
+	// Spec fields are declarative and round-trippable.
 	RequireOutputContains(t, result, "runtimeRef:")
-	RequireOutputContains(t, result, "name: local")
+	RequireOutputContains(t, result, "name: kubernetes-default")
 	RequireOutputContains(t, result, "kind: Runtime")
-	// Status block — server-managed.
+	// Status block is server-managed.
 	RequireOutputContains(t, result, "status:")
 	// phase may be "deploying" or "deployed" depending on how fast the
-	// reconciler runs for the local runtime; both assert the status block.
+	// Kubernetes reconciler runs; both assert the status block.
 	if !strings.Contains(result.Stdout, "phase:") {
 		t.Fatalf("expected .status.phase in get output, got:\n%s", result.Stdout)
 	}
@@ -1813,10 +1778,6 @@ spec:
 // agent does not exist. Apply must exit non-zero with a clear error message
 // identifying the missing template — not silently create a ghost row.
 func TestDeploymentApply_BadTemplateRef(t *testing.T) {
-	if IsK8sBackend() {
-		t.Skip("skipping bad-templateRef test: E2E_BACKEND=k8s")
-	}
-
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 	// Name intentionally NOT created as an agent.
@@ -1833,7 +1794,7 @@ spec:
     tag: latest
   runtimeRef:
     kind: Runtime
-    name: local
+    name: kubernetes-default
 `, missingName, missingName)
 	deployPath := writeDeclarativeYAML(t, tmpDir, "deployment.yaml", deployYAML)
 

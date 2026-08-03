@@ -48,6 +48,10 @@ type MCPServerRunRequest struct {
 	// HeaderValues are per-deployment header overrides resolved against
 	// Spec.Remote.Headers when the server is remote. Ignored for bundled.
 	HeaderValues map[string]string
+	// EnvFromSecretRefs names Kubernetes Secrets whose keys the runtime
+	// injects as container env vars, flattened from Deployment.Spec.EnvFrom.
+	// Only valid for bundled servers.
+	EnvFromSecretRefs []string
 }
 
 // TranslateMCPServer maps a v1alpha1 MCPServerSpec onto the runtime-internal
@@ -59,12 +63,16 @@ func TranslateMCPServer(ctx context.Context, req *MCPServerRunRequest) (*runtime
 		return nil, fmt.Errorf("mcp server run request is required")
 	}
 	if req.Spec.Remote != nil {
+		// A remote MCP has no pod, so a Secret reference cannot be honored.
+		if len(req.EnvFromSecretRefs) > 0 {
+			return nil, fmt.Errorf("spec.envFrom is not supported for remote MCP server %s", req.Name)
+		}
 		return translateRemoteMCPServer(req.Name, req.Spec.Remote, req.DeploymentID, req.HeaderValues)
 	}
 	if req.Spec.Source == nil || req.Spec.Source.Package == nil {
 		return nil, fmt.Errorf("no valid deployment method found for server: %s (no package or remote)", req.Name)
 	}
-	return translateLocalMCPServer(ctx, req.Name, req.Spec, req.DeploymentID, req.EnvValues, req.ArgValues)
+	return translateLocalMCPServer(ctx, req.Name, req.Spec, req.DeploymentID, req.EnvValues, req.ArgValues, req.EnvFromSecretRefs)
 }
 
 // translateRemoteMCPServer emits a runtimetypes.MCPServer for a
@@ -115,6 +123,7 @@ func translateLocalMCPServer(
 	deploymentID string,
 	envValues map[string]string,
 	argValues map[string]string,
+	envFromSecretRefs []string,
 ) (*runtimetypes.MCPServer, error) {
 	pkg := *spec.Source.Package
 
@@ -165,10 +174,11 @@ func translateLocalMCPServer(
 		MCPServerType: runtimetypes.MCPServerTypeLocal,
 		Local: &runtimetypes.LocalMCPServer{
 			Deployment: runtimetypes.MCPServerDeployment{
-				Image: config.Image,
-				Cmd:   cmd,
-				Args:  args,
-				Env:   envValues,
+				Image:      config.Image,
+				Cmd:        cmd,
+				Args:       args,
+				Env:        envValues,
+				SecretRefs: envFromSecretRefs,
 			},
 			TransportType: transportType,
 			HTTP:          httpTransport,

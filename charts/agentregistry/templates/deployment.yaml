@@ -24,7 +24,6 @@ spec:
     metadata:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
-        checksum/secret: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
         checksum/postgresql-secret: {{ include (print $.Template.BasePath "/postgresql-secret.yaml") . | sha256sum }}
         {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
@@ -127,11 +126,6 @@ spec:
             - configMapRef:
                 name: {{ include "agentregistry.fullname" . }}-config
           env:
-            - name: AGENT_REGISTRY_JWT_PRIVATE_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.config.existingSecret | default (include "agentregistry.fullname" .) }}
-                  key: AGENT_REGISTRY_JWT_PRIVATE_KEY
             {{- if eq .Values.database.postgres.type "external" }}
             {{- if .Values.database.postgres.external.secretRef.name }}
             - name: AGENT_REGISTRY_DATABASE_URL

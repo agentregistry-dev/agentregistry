@@ -29,7 +29,7 @@ var KnownRuntimeTypes = map[string]struct{}{
 // exactly one place.
 //
 // Runtime is unversioned: a connection handle to one execution
-// target (an AWS account + role, a kagent cluster, a local daemon).
+// target (an AWS account + role, a kagent cluster, a local Docker engine).
 // Multiple coexisting versions of the same (namespace, name) carry no
 // meaning — there is no "v1" vs "v2" of the same AWS role — so the
 // (namespace, name) pair is the identity.

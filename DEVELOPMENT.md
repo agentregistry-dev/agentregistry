@@ -38,8 +38,6 @@ make install-agentregistry BUILD=false
 
 `install-agentregistry` automatically runs `charts-generate` first (see [Helm Chart Generation](#helm-chart-generation) below), so `Chart.yaml` is always up to date before deploying.
 
-On subsequent runs, `install-agentregistry` reuses the `jwtPrivateKey` already stored in the cluster secret so tokens remain valid across redeploys.
-
 ### Accessing the services
 
 ```bash
@@ -100,11 +98,19 @@ This runs in order: `charts-test` → `charts-push` (lint → package → push) 
 ## Local Docker Compose Environment
 
 ```bash
-make run   # starts registry server + daemon via docker-compose
-make down  # stops everything
+make run-docker  # builds and starts the local Compose stack
+make down        # stops the stack and preserves data
 ```
 
 The UI is available at `http://localhost:12121`.
+
+The Compose definition is checked in at
+[`docker/docker-compose.yml`](docker/docker-compose.yml). AgentRegistry does
+not manage this process through `arctl`; use Docker Compose directly when you
+need custom lifecycle or environment settings.
+
+The default development environment is Kubernetes. Run `make run` to create a
+Kind cluster and install AgentRegistry with Helm.
 
 ---
 
@@ -137,4 +143,3 @@ make build-ui
 - [Next.js Documentation](https://nextjs.org/docs)
 - [shadcn/ui Components](https://ui.shadcn.com/)
 - [MCP Protocol Specification](https://spec.modelcontextprotocol.io/)
-

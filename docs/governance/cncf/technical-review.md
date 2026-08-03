@@ -85,7 +85,7 @@ _Developers interact primarily through the CLI for day-to-day workflows._
    ```
    curl -fsSL https://raw.githubusercontent.com/agentregistry-dev/agentregistry/main/scripts/get-arctl | bash
    ```
-2. **Discover** — Run `arctl daemon start` first to start the local registry daemon, then use `arctl get mcps` or `arctl list` to browse available artifacts from the registry.
+2. **Discover** -- Start a local registry with `make run-docker` or install it on Kubernetes, then use `arctl get mcps` or `arctl list` to browse available artifacts from the registry.
 3. **Configure IDEs** — Generate ready-to-use configuration files for AI-powered IDEs with a single command:
    - `arctl configure claude-desktop`
    - `arctl configure cursor`
@@ -102,7 +102,7 @@ _This is described as part of the above answer_
 
 In production, agentregistry acts as the **control plane** for agentic AI infrastructure — it manages the catalog, governance, and configuration of AI artifacts — while complementary projects handle execution, traffic routing, and deployment. The key integrations are:
 - **agentgateway (Linux Foundation):** The most significant integration. Agentgateway is a reverse proxy purpose-built for AI traffic that provides a single, unified MCP endpoint for all deployed servers. In a production deployment, agentregistry and agentgateway work as a pair, where agentregistry holds the catalog of approved artifacts, while agentgateway receives mCP traffic from AI IDE clients (ie Claude Desktop, Cursor, VS Code) and droutes tools calls to the appropriate backend MCP server.
-- **Kubernetes / Helm:** In production, agentregistry is deployed to a Kubernetes cluster using the published OCI Helm chart (`oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry`). It integrates with standard Kubernetes primitives: Deployments, Services, ConfigMaps, and Secrets (for the JWT private key and database credentials). The Kubernetes Gateway API (`gateway.networking.k8s.io`) is used for agentgateway routing configuration.
+- **Kubernetes / Helm:** In production, agentregistry is deployed to a Kubernetes cluster using the published OCI Helm chart (`oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry`). It integrates with standard Kubernetes primitives: Deployments, Services, ConfigMaps, and Secrets for database credentials. The Kubernetes Gateway API (`gateway.networking.k8s.io`) is used for agentgateway routing configuration.
 - **PostgreSQL:** agentregistry requires PostgreSQL as its persistent storage backend. In production, this may be an externally managed PostgreSQL instance.
 - **Container registries:** agentregistry integrates with whatever container registry an organization already uses, with no lock-in to a specific image storage backend.
 - **AI-powered IDEs (Claude Desktop, Cursor, VS Code):** agentregistry integrates with AI IDEs not as a runtime dependency, but as a configuration provider. The `arctl configure` command writes MCP configuration files to the developer's local filesystem in the format expected by each IDE. Once configured, the IDE connects directly to the agentgateway; agentregistry is not in the request path at runtime.
@@ -134,7 +134,7 @@ See [`DEVELOPMENT.md`](https://github.com/agentregistry-dev/agentregistry/blob/m
 **Describe the project's architecture requirements for PoC, Development, Test, and Production environments.**
 | Environment | Configuration |
 |---|---|
-| **PoC / Local** | Docker Compose with bundled PostgreSQL. Single node. Daemon lifecycle is managed explicitly with `arctl daemon start` / `arctl daemon stop`. |
+| **PoC / Local** | Docker Compose with bundled PostgreSQL. Single node. Lifecycle is managed directly with Docker Compose. |
 | **Development** | Docker Compose or Kind (local Kubernetes). See `scripts/kind/README.md`. |
 | **Test** | Kubernetes (Kind) with Helm chart and an external PostgreSQL instance. |
 | **Production** | Kubernetes cluster with Helm chart (`oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry`). Requires an external, HA PostgreSQL instance. |
@@ -184,9 +184,9 @@ agentregistry does not currently ship a dedicated installation verification comm
 Agentregistry applies cloud native security principles across its architecture, deployment model, and development practices. The project provides secure defaults out of the box while allowing operators to tune security controls for their environment.
 
 **Describe how each of the cloud native principles apply to your project.**
-- **Defense in Depth:** agentregistry employs multiple independent layers of security controls. API authentication is handled via JWT tokens, with support for external identity providers through OIDC. Authorization is enforced per-request through a dedicated `AuthzProvider`. At the infrastructure level, Kubernetes pod security contexts enforce non-root execution, read-only root filesystems, dropped Linux capabilities, and a RuntimeDefault seccomp profile. Database connections default to SSL mode `require`, encrypting data in transit between the registry server and PostgreSQL.
+- **Defense in Depth:** The server exposes authentication and authorization provider interfaces while using a permissive default. Integrators can supply authentication providers backed by identity systems such as OIDC and enforce authorization through a dedicated `AuthzProvider`. At the infrastructure level, Kubernetes pod security contexts enforce non-root execution, read-only root filesystems, dropped Linux capabilities, and a RuntimeDefault seccomp profile. Database connections default to SSL mode `require`, encrypting data in transit between the registry server and PostgreSQL.
 - **Least Privilege:** The Kubernetes RBAC configuration grants only the permissions necessary for the registry's core function of managing MCP server deployments.
-- **Zero Trust:** Every API request is subject to authentication and authorization checks.
+- **Extensible Access Control:** Configured providers can require authentication and apply resource-level authorization without coupling those implementations to the server.
 - **Secure Defaults:** The Helm chart ships with security-hardened defaults that require no additional configuration.
 - **Separation of Concerns:**  The project is architected as distinct components with well-defined interfaces. The database is only accessed through the dedicated database layer. Authentication and authorization are handled through clearly defined interfaces.
 - **Transparency:** Fully open-source under the Apache 2.0 license.
@@ -206,10 +206,9 @@ Operators who need to relax security controls for specific environments can use 
 
 The following features have been identified as carrying security risk if not actively maintained:
 
-1. **JWT private key management** — The signing key is set statically at deploy time (`config.jwtPrivateKey` or via `existingSecret`). There is no built-in key rotation mechanism. If the key is compromised, all issued tokens are at risk until the key is manually rotated.
-2. **Public action allowlist** — The current authorization implementation (`pkg/registry/auth/authz.go`) includes a temporary allowlist that permits `read`, `publish`, `delete`, and `deploy` actions without authentication. This is documented in the code as a development convenience and is flagged for removal before production hardening.
-3. **Dependency vulnerability scanning** — The project does not currently have automated dependency scanning (e.g., Dependabot, Renovate, `govulncheck`, Trivy) integrated into CI. Vulnerabilities in transitive dependencies may go undetected without manual triage.
-4. **Artifact signing and provenance** — Released container images and Helm charts are not signed (no cosign/sigstore integration) and no SBOM or provenance attestation is generated. Users cannot cryptographically verify the integrity of published artifacts.
+1. **Permissive default access policy** -- The default configuration does not provide an authenticated security boundary. Operators that require one must configure an authentication provider or place the service behind a trusted access layer.
+2. **Dependency vulnerability scanning** -- The project does not currently have automated dependency scanning (e.g., Dependabot, Renovate, `govulncheck`, Trivy) integrated into CI. Vulnerabilities in transitive dependencies may go undetected without manual triage.
+3. **Artifact signing and provenance** -- Released container images and Helm charts are not signed (no cosign/sigstore integration) and no SBOM or provenance attestation is generated. Users cannot cryptographically verify the integrity of published artifacts.
 
 
 **Explain the least minimal privileges required by the project and reasons for additional privileges.**
@@ -218,7 +217,6 @@ Operators can set `rbac.watchedNamespaces` in the Helm values to restrict the re
 
 **Describe how the project is handling certificate rotation and mitigates any issues with certificates.**
 
-- **JWT Token Signing:** Tokens are signed with a private key that is configured at deploy time. There is no automated key rotation mechanism. Operators must manually update the signing key and restart the registry server to rotate keys.
 - **Database TLS:** The PostgreSQL connection defaults to SSL mode `require`. Certificate management for the database connection is delegated to the operator's PostgreSQL infrastructure.
 
 **Describe how the project is following and implementing secure software supply chain best practices.**

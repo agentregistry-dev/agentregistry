@@ -93,12 +93,11 @@ The setup script accepts environment variables to override defaults:
 | `DOCKER_REGISTRY`   | `localhost:5001`                  | Local registry address             |
 | `DOCKER_REPO`       | `agentregistry-dev/agentregistry` | Image repository prefix for local image builds |
 | `VERSION`           | `git describe --tags --always`    | Image tag to deploy                |
-| `JWT_KEY`           | Random 32-byte hex                | JWT private key for AgentRegistry  |
 
 Example with custom values:
 
 ```bash
-JWT_KEY=mysecretkey VERSION=v0.2.0 make setup-kind-cluster
+VERSION=v0.2.0 make setup-kind-cluster
 ```
 
 ## Troubleshooting

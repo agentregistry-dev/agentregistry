@@ -59,24 +59,15 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 
 	setupLogging(cfg.LogLevel)
 
-	// Build auth providers from options (before database creation)
-	// Only create jwtManager if JWT is configured
-	var jwtManager *auth.JWTManager
-	if cfg.JWTPrivateKey != "" {
-		jwtManager = auth.NewJWTManager(cfg)
-	}
-
-	// Resolve authn provider: use provided, or default to JWT-based if configured
+	// The default configuration omits authentication. Integrators can supply
+	// authentication and authorization providers through AppOptions.
 	authnProvider := options.AuthnProvider
-	if authnProvider == nil && jwtManager != nil {
-		authnProvider = jwtManager
-	}
 
 	// Resolve authz provider: use provided, or default to public authz
 	authzProvider := options.AuthzProvider
 	if authzProvider == nil {
 		slog.Info("using public authz provider")
-		authzProvider = auth.NewPublicAuthzProvider(jwtManager)
+		authzProvider = auth.NewPublicAuthzProvider()
 	}
 	authz := auth.Authorizer{Authz: authzProvider}
 

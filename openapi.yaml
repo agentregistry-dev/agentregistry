@@ -209,6 +209,12 @@ components:
           additionalProperties:
             type: string
           type: object
+        envFrom:
+          items:
+            $ref: '#/components/schemas/EnvFromSource'
+          type:
+          - array
+          - "null"
         harness:
           $ref: '#/components/schemas/DeploymentHarness'
         modelRef:
@@ -223,6 +229,12 @@ components:
       required:
       - targetRef
       - runtimeRef
+      type: object
+    EnvFromSource:
+      additionalProperties: false
+      properties:
+        secretRef:
+          $ref: '#/components/schemas/SecretEnvSource'
       type: object
     ErrorDetail:
       additionalProperties: false
@@ -1381,6 +1393,14 @@ components:
           type: string
       required:
       - type
+      type: object
+    SecretEnvSource:
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+      required:
+      - name
       type: object
     SecretKeyRef:
       additionalProperties: false

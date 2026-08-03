@@ -7,11 +7,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Daemon + CLI-side extension points. These types are referenced by the
-// `arctl` CLI (internal/cli/daemon, pkg/cli, pkg/daemon/dockercompose) —
-// kept in pkg/types so they cross the CLI / library boundary without a
-// cyclic import.
-
 // ErrCLINoStoredToken is returned when no stored authentication token is found.
 // This is expected for CLI commands that do not require authentication
 // (e.g. `arctl init`).
@@ -21,19 +16,6 @@ var ErrCLINoStoredToken = errors.New("no stored authentication token")
 // This is expected for CLI commands that do not require authentication
 // (e.g. `arctl init`) when the user/extension has not configured OIDC.
 var ErrNoOIDCDefined = errors.New("OIDC is not defined")
-
-// DaemonManager defines the interface for managing the CLI's backend daemon.
-// External libraries can implement this to use their own orchestration.
-type DaemonManager interface {
-	// IsRunning checks if the daemon is currently running.
-	IsRunning() bool
-	// Start starts the daemon and waits until it's ready to serve requests.
-	Start() error
-	// Stop stops the daemon but preserves data volumes.
-	Stop() error
-	// Purge stops the daemon and removes all data volumes.
-	Purge() error
-}
 
 // CLITokenProvider provides tokens for CLI commands.
 // External libraries can implement this to support fetching tokens from

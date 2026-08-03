@@ -113,6 +113,20 @@ func validateDeploymentSpec(s *DeploymentSpec) FieldErrors {
 		errs = append(errs, validateModelRef(*s.ModelRef)...)
 	}
 
+	if len(s.EnvFrom) > 0 && s.TargetRef.Kind != KindMCPServer {
+		errs.Append("spec.envFrom", fmt.Errorf("%w: envFrom is only valid for MCPServer deployments", ErrInvalidFormat))
+	}
+	for i, src := range s.EnvFrom {
+		path := fmt.Sprintf("spec.envFrom[%d]", i)
+		if src.SecretRef == nil {
+			errs.Append(path+".secretRef", fmt.Errorf("%w", ErrRequiredField))
+			continue
+		}
+		if err := validateNameField(src.SecretRef.Name); err != nil {
+			errs.Append(path+".secretRef.name", err)
+		}
+	}
+
 	switch s.DesiredState {
 	case "", DesiredStateDeployed, DesiredStateUndeployed:
 		// Empty is allowed — defaults to "deployed" at apply-time.

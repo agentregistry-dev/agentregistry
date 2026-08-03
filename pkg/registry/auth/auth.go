@@ -10,6 +10,33 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 )
 
+// PermissionArtifactType represents the type of artifact that a permission is for.
+type PermissionArtifactType string
+
+const (
+	PermissionArtifactTypeAgent   PermissionArtifactType = "agent"
+	PermissionArtifactTypeSkill   PermissionArtifactType = "skill"
+	PermissionArtifactTypeServer  PermissionArtifactType = "server"
+	PermissionArtifactTypePrompt  PermissionArtifactType = "prompt"
+	PermissionArtifactTypeRuntime PermissionArtifactType = "runtime"
+)
+
+// PermissionAction represents an action that can be performed on a resource.
+type PermissionAction string
+
+const (
+	PermissionActionRead    PermissionAction = "read"
+	PermissionActionPublish PermissionAction = "publish"
+	PermissionActionEdit    PermissionAction = "edit"
+	PermissionActionDelete  PermissionAction = "delete"
+	PermissionActionDeploy  PermissionAction = "deploy"
+)
+
+type Permission struct {
+	Action          PermissionAction `json:"action"`
+	ResourcePattern string           `json:"resource"`
+}
+
 type Resource struct {
 	Name string
 	Type PermissionArtifactType

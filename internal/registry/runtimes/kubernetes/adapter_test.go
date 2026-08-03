@@ -2,10 +2,12 @@ package kubernetes
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
 	v1alpha2 "github.com/kagent-dev/kagent/go/api/v1alpha2"
 	kmcpv1alpha1 "github.com/kagent-dev/kmcp/api/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
@@ -217,5 +219,78 @@ func TestK8sV1Alpha1Logs_ReturnsClosedChannel(t *testing.T) {
 	}
 	if _, open := <-ch; open {
 		t.Fatalf("expected closed channel")
+	}
+}
+
+// TestK8sV1Alpha1Apply_BundledMCPServerEnvFrom_CreatesResourceWithSecretRefs
+// walks the adapter's full apply path for a bundled MCPServer Deployment
+// carrying spec.envFrom and asserts the created kmcp MCPServer resource
+// carries spec.deployment.secretRefs (which the kmcp controller renders as
+// container envFrom).
+func TestK8sV1Alpha1Apply_BundledMCPServerEnvFrom_CreatesResourceWithSecretRefs(t *testing.T) {
+	fakeClient := withFakeKubeClient(t)
+
+	runtime := &v1alpha1.Runtime{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindRuntime},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "kube-local"},
+		Spec: v1alpha1.RuntimeSpec{
+			Type:   v1alpha1.TypeKubernetes,
+			Config: map[string]any{"namespace": "kagent"},
+		},
+	}
+	target := &v1alpha1.MCPServer{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindMCPServer},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather"},
+		Spec: v1alpha1.MCPServerSpec{
+			Source: &v1alpha1.MCPServerSource{
+				Package: &v1alpha1.MCPPackage{
+					Origin: v1alpha1.MCPPackageOrigin{
+						Type:       v1alpha1.MCPPackageOriginTypeOCI,
+						Identifier: "docker.io/example/weather:1.0",
+						OCI:        &v1alpha1.MCPPackageOriginOCI{ServerName: "io.example/weather"},
+					},
+					Transport: v1alpha1.MCPTransport{Type: "stdio"},
+					Launch:    &v1alpha1.MCPPackageLaunch{Command: "python"},
+				},
+			},
+		},
+	}
+	deployment := &v1alpha1.Deployment{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindDeployment},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-kube"},
+		Spec: v1alpha1.DeploymentSpec{
+			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather"},
+			RuntimeRef:   v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "kube-local"},
+			DesiredState: v1alpha1.DesiredStateDeployed,
+			Env:          map[string]string{"env": "fromenv"},
+			EnvFrom: []v1alpha1.EnvFromSource{
+				{SecretRef: &v1alpha1.SecretEnvSource{Name: "mcp-secrets"}},
+			},
+		},
+	}
+
+	adapter := NewKubernetesDeploymentAdapter()
+	if _, err := adapter.Apply(context.Background(), adapterpkgtypes.ApplyInput{
+		Deployment: deployment,
+		Target:     target,
+		Runtime:    runtime,
+	}); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+
+	mcps := &kmcpv1alpha1.MCPServerList{}
+	if err := fakeClient.List(context.Background(), mcps); err != nil {
+		t.Fatalf("list MCPServers: %v", err)
+	}
+	if len(mcps.Items) != 1 {
+		t.Fatalf("expected 1 MCPServer, got %d", len(mcps.Items))
+	}
+	dep := mcps.Items[0].Spec.Deployment
+	wantRefs := []corev1.LocalObjectReference{{Name: "mcp-secrets"}}
+	if !reflect.DeepEqual(dep.SecretRefs, wantRefs) {
+		t.Fatalf("secretRefs = %+v, want %+v", dep.SecretRefs, wantRefs)
+	}
+	if dep.Env["env"] != "fromenv" {
+		t.Fatalf("env env = %q, want fromenv (explicit env forwarded beside the refs)", dep.Env["env"])
 	}
 }

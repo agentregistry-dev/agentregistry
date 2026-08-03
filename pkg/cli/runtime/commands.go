@@ -5,7 +5,6 @@ const (
 	CommandBuild      = "build"
 	CommandCompletion = "completion"
 	CommandConfigure  = "configure"
-	CommandDaemon     = "daemon"
 	CommandDB         = "db"
 	CommandDelete     = "delete"
 	CommandGet        = "get"

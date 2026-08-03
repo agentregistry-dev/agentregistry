@@ -38,30 +38,17 @@ func TestMain(m *testing.M) {
 	// otherwise re-resolve against whatever cwd a test happens to be in.
 	os.Setenv("ARCTL_BINARY", resolveArctlBinaryPath())
 
-	var cleanupFns []func()
-
-	registryURL = os.Getenv("ARCTL_API_BASE_URL")
-	if IsK8sBackend() {
-		var cleanup func()
-		registryURL, cleanup = resolveRegistryURL()
-		cleanupFns = append(cleanupFns, cleanup)
-	}
-	if registryURL == "" {
-		log.Fatal("ARCTL_API_BASE_URL not set — run tests via `make test-e2e-docker` or `make test-e2e-k8s`")
-	}
+	var cleanup func()
+	registryURL, cleanup = resolveRegistryURL()
 	os.Setenv("ARCTL_API_BASE_URL", registryURL)
 
 	log.Printf("Configuration:")
 	log.Printf("  ARCTL_API_BASE_URL: %s", registryURL)
 	log.Printf("  GOOGLE_API_KEY:     %s", maskEnv("GOOGLE_API_KEY"))
-	if IsK8sBackend() {
-		log.Printf("  Cluster:            %s (context: %s)", e2eClusterName, e2eKubeContext)
-	}
+	log.Printf("  Cluster:            %s (context: %s)", e2eClusterName, e2eKubeContext)
 
 	code := m.Run()
-	for i := len(cleanupFns) - 1; i >= 0; i-- {
-		cleanupFns[i]()
-	}
+	cleanup()
 	os.Exit(code)
 }
 
@@ -166,14 +153,12 @@ func checkPrerequisites() {
 	if _, err := exec.LookPath("docker"); err != nil {
 		log.Fatalf("docker not found in PATH -- required for e2e tests")
 	}
-	if IsK8sBackend() {
-		if _, err := exec.LookPath("kubectl"); err != nil {
-			log.Fatalf("kubectl not found in PATH -- required for k8s e2e tests")
-		}
-		toolsModfile := filepath.Join(testDir(), "..", "..", "tools", "go.mod")
-		if out, err := exec.Command("go", "tool", "-modfile="+toolsModfile, "kind", "version").CombinedOutput(); err != nil {
-			log.Fatalf("kind not available via tools/go.mod -- required for k8s e2e tests: %v\n%s", err, out)
-		}
+	if _, err := exec.LookPath("kubectl"); err != nil {
+		log.Fatalf("kubectl not found in PATH -- required for e2e tests")
+	}
+	toolsModfile := filepath.Join(testDir(), "..", "..", "tools", "go.mod")
+	if out, err := exec.Command("go", "tool", "-modfile="+toolsModfile, "kind", "version").CombinedOutput(); err != nil {
+		log.Fatalf("kind not available via tools/go.mod -- required for e2e tests: %v\n%s", err, out)
 	}
 }
 
@@ -219,29 +204,6 @@ func TestArctlVersion(t *testing.T) {
 	RequireSuccess(t, result)
 	RequireOutputContains(t, result, "arctl version")
 	RequireOutputContains(t, result, "Server version:")
-}
-
-// TestDaemonContainersRunning verifies that the agentregistry daemon
-// containers (server + postgres) are running. Only applicable to the
-// docker backend where containers are managed by docker compose.
-func TestDaemonContainersRunning(t *testing.T) {
-	if IsK8sBackend() {
-		t.Skip("Skipping: docker-compose containers are not used in k8s backend")
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	for _, container := range []string{"agentregistry-server", "agent-registry-postgres"} {
-		cmd := exec.CommandContext(ctx, "docker", "inspect", "--format", "{{.State.Running}}", container)
-		out, err := cmd.Output()
-		if err != nil {
-			t.Fatalf("Failed to inspect container %s: %v", container, err)
-		}
-		if got := strings.TrimSpace(string(out)); got != "true" {
-			t.Fatalf("Expected container %s to be running, got state: %s", container, got)
-		}
-	}
 }
 
 // TestRegistryHealth verifies the registry health endpoint responds with 200.
