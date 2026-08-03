@@ -134,11 +134,13 @@ var iconURLCases = []struct {
 	{"empty", "", false},
 	{"absolute https", "https://example.com/icons/icon.svg", false},
 	{"root-relative path", "/catalog-covers/icon.svg", false},
+	{"relative path", "catalog-covers/icon.svg", false},
+	{"dot-relative path", "./catalog-covers/icon.svg", false},
+	{"parent-relative path", "../catalog-covers/icon.svg", false},
 	{"plain http", "http://example.com/icons/icon.svg", true},
 	{"javascript scheme", "javascript:alert(1)", true},
 	{"data scheme", "data:image/svg+xml;base64,PHN2Zy8+", true},
 	{"scheme-relative", "//example.com/icons/icon.svg", true},
-	{"bare path", "catalog-covers/icon.svg", true},
 }
 
 func TestAgentValidate_IconURL(t *testing.T) {
