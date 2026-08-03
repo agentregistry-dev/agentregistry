@@ -1006,27 +1006,39 @@ spec:
 	}
 
 	// Verify only one deployment exists for this agent in deploy list.
-	listURL := fmt.Sprintf("%s/deployments?resourceName=%s&resourceType=agent", regURL, agentName)
+	//
+	// The list route returns the standard CRUD envelope — {"items": [...]} of
+	// Deployment objects — and a deployment names its target via
+	// spec.targetRef, so filter on that. There are no resourceName/resourceType
+	// query filters; unknown params are ignored, so filter client-side. Raise
+	// limit past the default 50 so deployments left behind by other tests in
+	// the same run cannot page this one out of the first page.
+	listURL := fmt.Sprintf("%s/deployments?limit=200", regURL)
 	listResp := RegistryGet(t, listURL)
 	defer listResp.Body.Close()
 	listBody, _ := io.ReadAll(listResp.Body)
 	var listed struct {
-		Deployments []struct {
-			ID         string `json:"id"`
-			ServerName string `json:"serverName"`
-		} `json:"deployments"`
+		Items []struct {
+			Spec struct {
+				TargetRef struct {
+					Kind string `json:"kind"`
+					Name string `json:"name"`
+				} `json:"targetRef"`
+			} `json:"spec"`
+		} `json:"items"`
 	}
 	if err := json.Unmarshal(listBody, &listed); err != nil {
 		t.Fatalf("failed to decode deployments list: %v\nBody: %s", err, listBody)
 	}
 	count := 0
-	for _, d := range listed.Deployments {
-		if d.ServerName == agentName {
+	for _, d := range listed.Items {
+		if d.Spec.TargetRef.Kind == "Agent" && d.Spec.TargetRef.Name == agentName {
 			count++
 		}
 	}
 	if count != 1 {
-		t.Fatalf("expected exactly 1 deployment for agent %s after 3 idempotent applies, got %d", agentName, count)
+		t.Fatalf("expected exactly 1 deployment for agent %s after 3 idempotent applies, got %d\nBody: %s",
+			agentName, count, listBody)
 	}
 }
 
