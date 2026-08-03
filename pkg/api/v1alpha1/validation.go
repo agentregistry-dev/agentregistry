@@ -206,30 +206,25 @@ func validateWebsiteURL(u string) error {
 }
 
 // validateIconURL: optional field. When set, must be an absolute https:// URL
-// or a path on the UI's own origin — either root-relative ("/icons/x.svg") or
-// relative to the page ("icons/x.svg", "./icons/x.svg"). Other schemes are
-// rejected because a catalog UI renders the value as an image source: plain
-// http:// is blocked as mixed content, and javascript:/data: would make the
-// field an injection point.
+// or a root-relative path. Other schemes are rejected because a catalog UI
+// renders the value as an image source: plain http:// is blocked as mixed
+// content, and javascript:/data: would make the field an injection point.
 func validateIconURL(u string) error {
 	if u == "" {
+		return nil
+	}
+	// A single leading slash is a path on the UI's own origin. Two is a
+	// scheme-relative reference to some other host, which is not what this
+	// field is for.
+	if strings.HasPrefix(u, "/") && !strings.HasPrefix(u, "//") {
 		return nil
 	}
 	parsed, err := url.Parse(u)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrInvalidURL, err)
 	}
-	if parsed.Scheme == "" {
-		// A scheme-relative reference ("//host/x.svg") carries a host and points
-		// at some other origin, which is not what this field is for. Anything
-		// else without a scheme is a path served by the UI itself.
-		if parsed.Host != "" {
-			return fmt.Errorf("%w: must be an absolute https:// URL or a relative path", ErrInvalidURL)
-		}
-		return nil
-	}
 	if parsed.Scheme != "https" || parsed.Host == "" {
-		return fmt.Errorf("%w: must be an absolute https:// URL or a relative path", ErrInvalidURL)
+		return fmt.Errorf("%w: must be an absolute https:// URL or a root-relative path", ErrInvalidURL)
 	}
 	return nil
 }

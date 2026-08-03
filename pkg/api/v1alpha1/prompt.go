@@ -20,7 +20,6 @@ type PromptSpec struct {
 	Content     string `json:"content,omitempty" yaml:"content,omitempty"`
 
 	// IconURL is the image a catalog UI shows for this prompt. Either an
-	// absolute https:// URL or a path served by the UI itself (root-relative or
-	// relative).
+	// absolute https:// URL or a root-relative path served by the UI.
 	IconURL string `json:"iconUrl,omitempty" yaml:"iconUrl,omitempty"`
 }
