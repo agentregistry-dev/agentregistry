@@ -930,8 +930,7 @@ func TestApplyDeployment_HTTPIdempotent(t *testing.T) {
 
 	// Use POST /v0/apply with a deployment YAML body (PUT sub-resource endpoint was removed).
 	applyURL := fmt.Sprintf("%s/apply", regURL)
-	deployYAML := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
-kind: Deployment
+	deployYAML := fmt.Sprintf(`kind: Deployment
 metadata:
   name: %s
 spec:
@@ -1006,39 +1005,27 @@ spec:
 	}
 
 	// Verify only one deployment exists for this agent in deploy list.
-	//
-	// The list route returns the standard CRUD envelope — {"items": [...]} of
-	// Deployment objects — and a deployment names its target via
-	// spec.targetRef, so filter on that. There are no resourceName/resourceType
-	// query filters; unknown params are ignored, so filter client-side. Raise
-	// limit past the default 50 so deployments left behind by other tests in
-	// the same run cannot page this one out of the first page.
-	listURL := fmt.Sprintf("%s/deployments?limit=200", regURL)
+	listURL := fmt.Sprintf("%s/deployments?resourceName=%s&resourceType=agent", regURL, agentName)
 	listResp := RegistryGet(t, listURL)
 	defer listResp.Body.Close()
 	listBody, _ := io.ReadAll(listResp.Body)
 	var listed struct {
-		Items []struct {
-			Spec struct {
-				TargetRef struct {
-					Kind string `json:"kind"`
-					Name string `json:"name"`
-				} `json:"targetRef"`
-			} `json:"spec"`
-		} `json:"items"`
+		Deployments []struct {
+			ID         string `json:"id"`
+			ServerName string `json:"serverName"`
+		} `json:"deployments"`
 	}
 	if err := json.Unmarshal(listBody, &listed); err != nil {
 		t.Fatalf("failed to decode deployments list: %v\nBody: %s", err, listBody)
 	}
 	count := 0
-	for _, d := range listed.Items {
-		if d.Spec.TargetRef.Kind == "Agent" && d.Spec.TargetRef.Name == agentName {
+	for _, d := range listed.Deployments {
+		if d.ServerName == agentName {
 			count++
 		}
 	}
 	if count != 1 {
-		t.Fatalf("expected exactly 1 deployment for agent %s after 3 idempotent applies, got %d\nBody: %s",
-			agentName, count, listBody)
+		t.Fatalf("expected exactly 1 deployment for agent %s after 3 idempotent applies, got %d", agentName, count)
 	}
 }
 
@@ -1156,19 +1143,6 @@ spec:
 //  3. Re-applying without --force — expects failure with a "force" hint.
 //  4. Re-applying with --force — expects success.
 func TestBatchApply_DriftRequiresForce(t *testing.T) {
-	// Skipped: this test asserts a product contract that no longer exists.
-	// The drift-rejection path was removed when the synchronous deployment
-	// service was replaced by the async controller (#517): ErrDeploymentDrift
-	// is gone, and `arctl apply` never registered a --force flag, so step 4
-	// would fail on an unknown flag regardless. Applying a drifted deployment
-	// now goes through the generic upsert and reports "configured".
-	//
-	// The test was previously skipped behind E2E_RUN_LOCAL_DEPLOY=1 and was
-	// un-gated by #605, which is what first surfaced these failures in CI.
-	// Restoring drift rejection (or dropping this test) is a follow-up for
-	// the deployment controller owners.
-	t.Skip("drift rejection and apply --force were removed in #517; see comment above")
-
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 	agentName := UniqueAgentName("driftbatch")
@@ -1731,20 +1705,6 @@ func TestDeclarativeDelete_NotFound(t *testing.T) {
 // the output through `arctl apply` to confirm status is silently dropped on
 // input.
 func TestDeploymentGet_YAMLIncludesStatus(t *testing.T) {
-	// Skipped: this test asserts .status.phase and .status.id, neither of
-	// which exists in v1alpha1.Status any more. Status now carries only
-	// Conditions and Details — Phase was deliberately dropped in favor of
-	// conditions (see the type comment in pkg/api/v1alpha1/status.go), and
-	// there is no id field; the server-generated UUID lives at metadata.uid.
-	// The assertions therefore cannot pass regardless of reconciler timing.
-	//
-	// The test was previously skipped behind E2E_RUN_LOCAL_DEPLOY=1 and was
-	// un-gated by #605, which is what first surfaced these failures in CI.
-	// Rewriting it against the conditions-based schema (polling for the
-	// reconciler to populate them) is a follow-up for the deployment
-	// controller owners.
-	t.Skip("asserts status.phase/status.id, removed from v1alpha1.Status; see comment above")
-
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 	agentName := UniqueAgentName("e2estatus")
