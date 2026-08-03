@@ -77,7 +77,20 @@ type AgentSource struct {
 
 	// Repository links to the source code the image was built from.
 	Repository *Repository `json:"repository,omitempty" yaml:"repository,omitempty"`
+
+	// Protocol is the application protocol spoken by every runnable form of the
+	// agent, whether built from Repository or supplied as Image. When omitted,
+	// A2A is inferred as the default.
+	Protocol *AgentProtocol `json:"protocol,omitempty" yaml:"protocol,omitempty" enum:"A2A,HTTP"`
 }
+
+// AgentProtocol is the application protocol exposed by an Agent source.
+type AgentProtocol string
+
+const (
+	AgentProtocolA2A  AgentProtocol = "A2A"
+	AgentProtocolHTTP AgentProtocol = "HTTP"
+)
 
 // HarnessCompatibility declares one harness family this Agent can run under.
 // Rollout policy selection lives on Deployment so the same Agent can be rolled

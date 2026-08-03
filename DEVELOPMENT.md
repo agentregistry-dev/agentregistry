@@ -84,6 +84,10 @@ Because `charts/agentregistry/Chart.yaml` is gitignored, some editors may flag i
 
 ### Helm release pipeline
 
+For the complete project release procedure, including container images, CLI
+binaries, the Helm chart, and verification, see
+[Releasing AgentRegistry](docs/releasing.md).
+
 The full release pipeline is encapsulated in a single target:
 
 ```bash
