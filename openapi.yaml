@@ -814,9 +814,7 @@ components:
         plugins:
           items:
             $ref: '#/components/schemas/PluginEntry'
-          type:
-          - array
-          - "null"
+          type: array
       required:
       - name
       - owner

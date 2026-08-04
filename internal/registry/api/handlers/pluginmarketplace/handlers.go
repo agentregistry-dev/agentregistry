@@ -102,6 +102,9 @@ func getMarketplace(cfg Config) func(context.Context, *struct{}) (*marketplaceOu
 			Schema: pluginmarketplace.SchemaURL,
 			Name:   name,
 			Owner:  pluginmarketplace.Owner{Name: name},
+			// Claude Code's marketplace.json parser rejects a null plugins
+			// field, so an empty catalogue must still marshal as `[]`.
+			Plugins: []pluginmarketplace.PluginEntry{},
 		}
 
 		var extraWhere string

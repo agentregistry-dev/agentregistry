@@ -20,7 +20,11 @@ type MarketplaceResponse struct {
 	Schema  string        `json:"$schema,omitempty"`
 	Name    string        `json:"name"`
 	Owner   Owner         `json:"owner"`
-	Plugins []PluginEntry `json:"plugins"`
+	// Plugins is never emitted as null: Claude Code's marketplace.json parser
+	// rejects a null plugins field outright, so an empty catalogue must still
+	// marshal as `[]`. The nullable:"false" tag keeps the generated OpenAPI
+	// schema from allowing null, matching what the handler actually emits.
+	Plugins []PluginEntry `json:"plugins" nullable:"false"`
 }
 
 // Owner identifies who publishes the marketplace.

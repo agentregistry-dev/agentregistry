@@ -169,6 +169,25 @@ func TestGetMarketplace_TranslatesReadyPlugins(t *testing.T) {
 	assert.Len(t, store.lastOpts, 3)
 }
 
+func TestGetMarketplace_EmptyCatalogueEmitsEmptyArray(t *testing.T) {
+	// Claude Code's marketplace.json parser rejects a null plugins field, so
+	// an empty catalogue must marshal as "plugins":[] rather than
+	// "plugins":null. json.Unmarshal into pluginmarketplace.MarketplaceResponse
+	// can't distinguish the two (both decode to a nil slice), so this decodes
+	// Plugins as json.RawMessage to inspect the actual encoded value.
+	store := &fakeStore{rows: nil}
+	h := newAPI(t, handler.Config{Store: store})
+
+	rec := doGet(t, h, "/plugin-marketplace/marketplace.json")
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var got struct {
+		Plugins json.RawMessage `json:"plugins"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	assert.JSONEq(t, "[]", string(got.Plugins))
+}
+
 func TestGetMarketplace_AppliesListFilter(t *testing.T) {
 	store := &fakeStore{rows: nil}
 	var gotAuthorizeInput resource.AuthorizeInput
