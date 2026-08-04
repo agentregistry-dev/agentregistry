@@ -70,7 +70,7 @@ func (r *runtime) ResolveRegistryTarget(ctx context.Context) (RegistryTarget, er
 			err = nil
 		}
 		if err != nil {
-			return RegistryTarget{}, err
+			return RegistryTarget{}, fmt.Errorf("resolving registry token: %w", err)
 		}
 		target.Token = token
 	}

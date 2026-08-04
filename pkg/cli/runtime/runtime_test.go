@@ -125,6 +125,25 @@ func TestResolveRegistryTarget(t *testing.T) {
 	}
 }
 
+func TestResolveRegistryTargetReturnsCallbackError(t *testing.T) {
+	callbackErr := errors.New("callback failed")
+	flagToken := "flag-token"
+	rt := New(Config{
+		RegistryToken: &flagToken,
+		OnTokenResolved: func(string) error {
+			return callbackErr
+		},
+	})
+
+	got, err := rt.ResolveRegistryTarget(context.Background())
+	if !errors.Is(err, callbackErr) {
+		t.Fatalf("ResolveRegistryTarget() error = %v, want %v", err, callbackErr)
+	}
+	if got != (RegistryTarget{}) {
+		t.Fatalf("ResolveRegistryTarget() = %#v, want empty target", got)
+	}
+}
+
 func TestRegistryClientAllowsMissingStoredToken(t *testing.T) {
 	var resolvedToken string
 	rt := New(Config{

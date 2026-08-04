@@ -28,6 +28,8 @@ registry as built-in commands. Commands using an extended downstream client
 should call `deps.Runtime.ResolveRegistryTarget` and pass the returned base URL
 and token to that client; commands using the OSS API client can call
 `deps.Runtime.RegistryClient` directly.
+`ResolveRegistryTarget` replaces the former partial `RegistryTarget` getter so
+callers cannot bypass token resolution.
 
 The OSS migration source is always registered first by `Root`. Extra migration
 sources are appended in config order. When more than one source is present,
