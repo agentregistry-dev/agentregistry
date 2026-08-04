@@ -85,11 +85,13 @@ func Root(cfg Config) *cobra.Command {
 
 	removeDisabledCommands(root, cfg.Disabled)
 
-	for _, cmd := range cfg.ExtraCommands {
-		if cmd == nil {
-			continue
+	if cfg.ExtraCommands != nil {
+		for _, cmd := range cfg.ExtraCommands(deps) {
+			if cmd == nil {
+				continue
+			}
+			root.AddCommand(cmd)
 		}
-		root.AddCommand(cmd)
 	}
 
 	return root
@@ -136,7 +138,7 @@ type Config struct {
 	Env  cliruntime.Env
 	Auth cliruntime.AuthProvider
 
-	ExtraCommands []*cobra.Command
+	ExtraCommands func(cliruntime.Deps) []*cobra.Command
 	Disabled      map[string]bool // command paths to remove, such as "db migrate goto"
 
 	ExtraMigrationSources []migrate.Source

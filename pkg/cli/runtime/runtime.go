@@ -20,7 +20,7 @@ type RegistryTarget struct {
 
 // Runtime is the command-facing runtime contract.
 type Runtime interface {
-	RegistryTarget() RegistryTarget
+	ResolveRegistryTarget(ctx context.Context) (RegistryTarget, error)
 	RegistryClient(ctx context.Context) (*client.Client, error)
 }
 
@@ -39,7 +39,10 @@ func New(cfg Config) Runtime {
 	return &runtime{cfg: cfg}
 }
 
-func (r *runtime) RegistryTarget() RegistryTarget {
+// ResolveRegistryTarget resolves the registry address and bearer token for a
+// command invocation. Explicit flags take precedence over environment values;
+// AuthProvider is consulted only when neither supplies a token.
+func (r *runtime) ResolveRegistryTarget(ctx context.Context) (RegistryTarget, error) {
 	var baseURL string
 	if r.cfg.RegistryURL != nil {
 		baseURL = *r.cfg.RegistryURL
@@ -56,10 +59,29 @@ func (r *runtime) RegistryTarget() RegistryTarget {
 		token = r.cfg.Env.Getenv("ARCTL_API_TOKEN")
 	}
 
-	return RegistryTarget{
+	target := RegistryTarget{
 		BaseURL: normalizeBaseURL(baseURL),
 		Token:   token,
 	}
+	if target.Token == "" {
+		token, err := r.cfg.Auth.Token(ctx)
+		if errors.Is(err, types.ErrCLINoStoredToken) {
+			token = ""
+			err = nil
+		}
+		if err != nil {
+			return RegistryTarget{}, err
+		}
+		target.Token = token
+	}
+
+	if r.cfg.OnTokenResolved != nil {
+		if err := r.cfg.OnTokenResolved(target.Token); err != nil {
+			return RegistryTarget{}, fmt.Errorf("calling token resolved callback: %w", err)
+		}
+	}
+
+	return target, nil
 }
 
 // RegistryClient returns the shared registry client for this CLI invocation.
@@ -72,25 +94,10 @@ func (r *runtime) RegistryTarget() RegistryTarget {
 // available.
 func (r *runtime) RegistryClient(ctx context.Context) (*client.Client, error) {
 	r.clientOnce.Do(func() {
-		target := r.RegistryTarget()
-		if target.Token == "" {
-			token, err := r.cfg.Auth.Token(ctx)
-			if errors.Is(err, types.ErrCLINoStoredToken) {
-				token = ""
-				err = nil
-			}
-			if err != nil {
-				r.clientErr = err
-				return
-			}
-			target.Token = token
-		}
-
-		if r.cfg.OnTokenResolved != nil {
-			if err := r.cfg.OnTokenResolved(target.Token); err != nil {
-				r.clientErr = fmt.Errorf("calling token resolved callback: %w", err)
-				return
-			}
+		target, err := r.ResolveRegistryTarget(ctx)
+		if err != nil {
+			r.clientErr = err
+			return
 		}
 
 		r.client = client.NewClient(target.BaseURL, target.Token)
