@@ -18,11 +18,20 @@ var (
 
 // FromPlugin translates a resolved Plugin into a marketplace.json PluginEntry.
 // It returns ErrNotResolved for anything that isn't Ready with a non-nil
-// ResolvedSource, and ErrUnsupportedSource for an OCI-resolved Plugin (the
+// ResolvedSource, or whose Status hasn't caught up with the current Spec
+// (ObservedGeneration < Generation) — the reconciler only resets Ready on a
+// Plugin's very first reconcile, so a Spec edit to an already-Ready Plugin
+// (e.g. a new source URL) leaves Ready true and ResolvedSource pointed at the
+// stale commit until the next reconcile finishes. Combining the live Spec URL
+// with that stale commit would emit a mismatched, potentially uninstallable
+// pin. It returns ErrUnsupportedSource for an OCI-resolved Plugin (the
 // marketplace.json schema has no OCI/image source form) — callers must skip
 // these, never emit a partial/broken entry.
 func FromPlugin(p *v1alpha1.Plugin) (PluginEntry, error) {
 	if !p.Status.IsConditionTrue("Ready") || p.Status.ResolvedSource == nil {
+		return PluginEntry{}, ErrNotResolved
+	}
+	if p.Metadata.Generation > p.Status.ObservedGeneration {
 		return PluginEntry{}, ErrNotResolved
 	}
 	if p.Status.ResolvedSource.Type != v1alpha1.PluginSourceTypeGit {

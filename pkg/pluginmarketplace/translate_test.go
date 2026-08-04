@@ -128,6 +128,31 @@ func TestFromPlugin_ReadyButNoResolvedSource_Skipped(t *testing.T) {
 	assert.ErrorIs(t, err, pluginmarketplace.ErrNotResolved)
 }
 
+func TestFromPlugin_StaleObservedGeneration_Skipped(t *testing.T) {
+	// Simulates a Spec edit (e.g. new source URL) landing on an
+	// already-Ready Plugin: Status.Ready/ResolvedSource still reflect the
+	// prior generation until the next reconcile finishes.
+	p := &v1alpha1.Plugin{
+		Metadata: v1alpha1.ObjectMeta{Name: "mid-reconcile", Generation: 2},
+		Spec: v1alpha1.PluginSpec{
+			Source: &v1alpha1.PluginSource{
+				Type: v1alpha1.PluginSourceTypeGit,
+				Git: &v1alpha1.PluginSourceGit{
+					Repository: &v1alpha1.Repository{URL: "https://github.com/acme/new-url"},
+				},
+			},
+		},
+		Status: v1alpha1.PluginStatus{
+			Status:         readyCondition(),
+			ResolvedSource: &v1alpha1.PluginResolvedSource{Type: v1alpha1.PluginSourceTypeGit, Commit: "oldcommitoldcommitoldcommitoldcommitoldc"},
+		},
+	}
+	p.Status.ObservedGeneration = 1
+
+	_, err := pluginmarketplace.FromPlugin(p)
+	assert.ErrorIs(t, err, pluginmarketplace.ErrNotResolved)
+}
+
 func TestFromPlugin_OCI_Skipped(t *testing.T) {
 	p := &v1alpha1.Plugin{
 		Metadata: v1alpha1.ObjectMeta{Name: "oci-plugin"},
