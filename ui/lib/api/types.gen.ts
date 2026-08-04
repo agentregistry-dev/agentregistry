@@ -421,6 +421,7 @@ export type ModelSpec = {
     auth?: ModelAuthConfig;
     description?: string;
     endpoint?: ModelEndpointConfig;
+    iconUrl?: string;
     model: string;
     provider: 'bedrock';
     title?: string;

@@ -887,6 +887,8 @@ components:
           type: string
         endpoint:
           $ref: '#/components/schemas/ModelEndpointConfig'
+        iconUrl:
+          type: string
         model:
           type: string
         provider:
