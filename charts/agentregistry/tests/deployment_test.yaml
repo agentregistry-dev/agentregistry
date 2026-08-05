@@ -2,7 +2,6 @@ suite: Deployment
 templates:
   - deployment.yaml
   - configmap.yaml
-  - secrets.yaml
   - postgresql-secret.yaml
 
 tests:
@@ -26,7 +25,7 @@ tests:
     asserts:
       - matchRegex:
           path: spec.template.spec.containers[0].image
-          pattern: '^ghcr.io/agentregistry-dev/agentregistry/server:[^@\s]+$'
+          pattern: '^ghcr.io/agentregistry-dev/agentregistry/server:v[^@\s]+$'
 
   - it: uses digest when image.digest is set
     template: deployment.yaml
@@ -79,18 +78,6 @@ tests:
               secretKeyRef:
                 name: RELEASE-NAME-agentregistry-postgresql
                 key: POSTGRES_PASSWORD
-
-  - it: injects JWT private key from secret
-    template: deployment.yaml
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: AGENT_REGISTRY_JWT_PRIVATE_KEY
-            valueFrom:
-              secretKeyRef:
-                name: RELEASE-NAME-agentregistry
-                key: AGENT_REGISTRY_JWT_PRIVATE_KEY
 
   - it: sets AGENT_REGISTRY_DATABASE_URL pointing at bundled postgres by default
     template: deployment.yaml
@@ -188,28 +175,13 @@ tests:
       - isNotNull:
           path: spec.template.spec.containers[0].startupProbe
 
-  - it: uses config.existingSecret for AGENT_REGISTRY_JWT_PRIVATE_KEY when set
-    template: deployment.yaml
-    set:
-      config.existingSecret: my-existing-secret
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: AGENT_REGISTRY_JWT_PRIVATE_KEY
-            valueFrom:
-              secretKeyRef:
-                name: my-existing-secret
-                key: AGENT_REGISTRY_JWT_PRIVATE_KEY
-
-
-  - it: adds checksum annotations for config and secret
+  - it: adds checksum annotations for config and postgresql secret
     template: deployment.yaml
     asserts:
       - isNotNull:
           path: spec.template.metadata.annotations["checksum/config"]
       - isNotNull:
-          path: spec.template.metadata.annotations["checksum/secret"]
+          path: spec.template.metadata.annotations["checksum/postgresql-secret"]
 
   - it: applies fullnameOverride
     template: deployment.yaml

@@ -2,6 +2,7 @@ package utils
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	runtimetypes "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
@@ -221,5 +222,56 @@ func TestParseURL(t *testing.T) {
 				t.Errorf("parseURL(%q) = %+v, want %+v", tt.rawURL, *got, tt.want)
 			}
 		})
+	}
+}
+
+func TestTranslateMCPServer_LocalCarriesEnvFromSecretRefs(t *testing.T) {
+	server, err := TranslateMCPServer(context.Background(), &MCPServerRunRequest{
+		Name: "test/server",
+		Spec: v1alpha1.MCPServerSpec{
+			Source: &v1alpha1.MCPServerSource{
+				Package: &v1alpha1.MCPPackage{
+					Origin: v1alpha1.MCPPackageOrigin{
+						Type:       v1alpha1.MCPPackageOriginTypeOCI,
+						Identifier: "docker.io/test/server:1.0",
+						OCI:        &v1alpha1.MCPPackageOriginOCI{ServerName: "io.test/server"},
+					},
+					Transport: v1alpha1.MCPTransport{Type: "stdio"},
+				},
+			},
+		},
+		EnvFromSecretRefs: []string{"mcp-secrets", "shared-tokens"},
+	})
+	if err != nil {
+		t.Fatalf("TranslateMCPServer() unexpected error: %v", err)
+	}
+	if server.Local == nil {
+		t.Fatal("expected local config")
+	}
+	wantRefs := []string{"mcp-secrets", "shared-tokens"}
+	if !slicesEqual(server.Local.Deployment.SecretRefs, wantRefs) {
+		t.Fatalf("secretRefs = %v, want %v", server.Local.Deployment.SecretRefs, wantRefs)
+	}
+}
+
+// TestTranslateMCPServer_RemoteRejectsEnvFromSecretRefs: a remote MCP has no
+// pod for the runtime to inject Secret keys into, so silently dropping the
+// reference would deploy without the expected env vars. Fail fast instead.
+func TestTranslateMCPServer_RemoteRejectsEnvFromSecretRefs(t *testing.T) {
+	_, err := TranslateMCPServer(context.Background(), &MCPServerRunRequest{
+		Name: "remote server",
+		Spec: v1alpha1.MCPServerSpec{
+			Remote: &v1alpha1.MCPRemote{
+				Type: "streamable-http",
+				URL:  "https://example.com/mcp",
+			},
+		},
+		EnvFromSecretRefs: []string{"mcp-secrets"},
+	})
+	if err == nil {
+		t.Fatal("expected error for remote MCP with envFrom secret refs")
+	}
+	if want := "spec.envFrom is not supported for remote MCP server"; !strings.Contains(err.Error(), want) {
+		t.Fatalf("error = %q, want it to contain %q", err, want)
 	}
 }

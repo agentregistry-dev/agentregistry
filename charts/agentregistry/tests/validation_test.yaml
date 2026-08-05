@@ -3,52 +3,10 @@ templates:
   - validate.yaml
 
 tests:
-  # ── JWT key validation ───────────────────────────────────────────────────────
-
-  - it: renders nothing when type=bundled and jwtPrivateKey is set
-    set:
-      config.jwtPrivateKey: deadbeef1234567890abcdef
-    asserts:
-      - hasDocuments:
-          count: 0
-
-  - it: renders nothing when type=external with url and jwtPrivateKey is set
-    set:
-      config.jwtPrivateKey: deadbeef1234567890abcdef
-      database.postgres.type: external
-      database.postgres.external.url: "postgres://user:pass@host:5432/db"
-    asserts:
-      - hasDocuments:
-          count: 0
-
-  - it: renders nothing when config.existingSecret is set (type=external with url)
-    set:
-      config.existingSecret: my-existing-secret
-      database.postgres.type: external
-      database.postgres.external.url: "postgres://user:pass@host:5432/db"
-    asserts:
-      - hasDocuments:
-          count: 0
-
-  - it: fails when jwtPrivateKey is empty and no existingSecret is provided
-    set:
-      database.postgres.type: bundled
-    asserts:
-      - failedTemplate:
-          errorPattern: "CHART CONFIGURATION ERROR"
-
-  - it: fails when jwtPrivateKey is not a valid hex string
-    set:
-      config.jwtPrivateKey: "not-hex!!"
-    asserts:
-      - failedTemplate:
-          errorPattern: "CHART CONFIGURATION ERROR"
-
   # ── type discriminator ──────────────────────────────────────────────────────
 
   - it: fails when database.postgres.type is invalid
     set:
-      config.jwtPrivateKey: deadbeef1234567890abcdef
       database.postgres.type: invalid
     asserts:
       - failedTemplate:
@@ -57,8 +15,6 @@ tests:
   # ── type=bundled skips external validation ──────────────────────────────────
 
   - it: renders nothing with type=bundled even when no url
-    set:
-      config.jwtPrivateKey: deadbeef1234567890abcdef
     asserts:
       - hasDocuments:
           count: 0
@@ -67,7 +23,6 @@ tests:
 
   - it: fails when type=external and neither url nor secretRef.name is set
     set:
-      config.jwtPrivateKey: deadbeef1234567890abcdef
       database.postgres.type: external
     asserts:
       - failedTemplate:
@@ -75,7 +30,6 @@ tests:
 
   - it: renders nothing when type=external and external.url is set
     set:
-      config.jwtPrivateKey: deadbeef1234567890abcdef
       database.postgres.type: external
       database.postgres.external.url: "postgres://user:pass@host:5432/db"
     asserts:
@@ -86,7 +40,6 @@ tests:
 
   - it: renders nothing when type=external and external.secretRef.name is set
     set:
-      config.jwtPrivateKey: deadbeef1234567890abcdef
       database.postgres.type: external
       database.postgres.external.secretRef.name: my-postgres-secret
     asserts:
@@ -95,7 +48,6 @@ tests:
 
   - it: fails when external.url and external.secretRef.name are both set
     set:
-      config.jwtPrivateKey: deadbeef1234567890abcdef
       database.postgres.type: external
       database.postgres.external.url: "postgres://user:pass@host:5432/db"
       database.postgres.external.secretRef.name: my-postgres-secret
@@ -107,7 +59,6 @@ tests:
 
   - it: fails with migration guidance when legacy database.postgres.url is set
     set:
-      config.jwtPrivateKey: deadbeef1234567890abcdef
       database.postgres.url: "postgres://user:pass@host:5432/db"
     asserts:
       - failedTemplate:
@@ -115,7 +66,6 @@ tests:
 
   - it: fails with migration guidance when legacy database.postgres.secretRef is set
     set:
-      config.jwtPrivateKey: deadbeef1234567890abcdef
       database.postgres.secretRef.name: my-postgres-secret
     asserts:
       - failedTemplate:
@@ -123,7 +73,6 @@ tests:
 
   - it: fails with migration guidance when legacy database.postgres.bundled.enabled is set
     set:
-      config.jwtPrivateKey: deadbeef1234567890abcdef
       database.postgres.bundled.enabled: false
     asserts:
       - failedTemplate:
@@ -133,7 +82,6 @@ tests:
 
   - it: fails when external.url is set while type=bundled
     set:
-      config.jwtPrivateKey: deadbeef1234567890abcdef
       database.postgres.external.url: "postgres://user:pass@host:5432/db"
     asserts:
       - failedTemplate:
@@ -141,7 +89,6 @@ tests:
 
   - it: fails when external.secretRef.name is set while type=bundled
     set:
-      config.jwtPrivateKey: deadbeef1234567890abcdef
       database.postgres.external.secretRef.name: my-postgres-secret
     asserts:
       - failedTemplate:

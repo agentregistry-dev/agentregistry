@@ -248,6 +248,53 @@ spec:
 	}
 }
 
+func TestScheme_Decode_DeploymentEnvFrom(t *testing.T) {
+	doc := []byte(`
+apiVersion: ar.dev/v1alpha1
+kind: Deployment
+metadata:
+  name: weather-prod
+spec:
+  targetRef:
+    kind: MCPServer
+    name: weather
+    tag: "1.0.0"
+  runtimeRef:
+    kind: Runtime
+    name: kagent
+  env:
+    LOG_LEVEL: debug
+  envFrom:
+    - secretRef:
+        name: mcp-secrets
+`)
+	obj, err := Default.Decode(doc)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	d, ok := obj.(*Deployment)
+	if !ok {
+		t.Fatalf("want *Deployment, got %T", obj)
+	}
+	wantEnvFrom := []EnvFromSource{{SecretRef: &SecretEnvSource{Name: "mcp-secrets"}}}
+	if !reflect.DeepEqual(d.Spec.EnvFrom, wantEnvFrom) {
+		t.Fatalf("envFrom mismatch: %+v", d.Spec.EnvFrom)
+	}
+
+	// JSON round-trip: the stored spec must carry envFrom losslessly.
+	raw, err := json.Marshal(d.Spec)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	var spec DeploymentSpec
+	if err := json.Unmarshal(raw, &spec); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if !reflect.DeepEqual(spec, d.Spec) {
+		t.Fatalf("spec round-trip mismatch:\n got %+v\nwant %+v", spec, d.Spec)
+	}
+}
+
 func TestScheme_Decode_RejectsWrongAPIVersion(t *testing.T) {
 	doc := []byte(`
 apiVersion: example.com/v1

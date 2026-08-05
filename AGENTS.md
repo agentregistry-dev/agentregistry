@@ -32,10 +32,9 @@ agentregistry/
 │   │   ├── service/   # Business logic
 │   │   └── ...
 │   ├── cli/       # CLI command implementations
-│   ├── mcp/       # MCP protocol handling
-│   └── daemon/    # Daemon orchestration
+│   └── mcp/       # MCP protocol handling
 ├── ui/            # Next.js frontend
-└── docker/        # Container configurations
+└── docker/        # Container images and local Compose configuration
 ```
 
 ### Layer Responsibilities
@@ -484,8 +483,8 @@ If an agent opens a PR without following the template, it should update the PR b
 | Format Code | `make fmt` |
 | Build UI | `make build-ui` |
 | Dev UI | `make dev-ui` |
-| Daemon Start | `make daemon-start` |
-| Daemon Stop | `make daemon-stop` |
+| Run Docker Environment | `make run-docker` |
+| Stop Local Environment | `make down` |
 
 ---
 

@@ -24,6 +24,11 @@ components:
       properties:
         image:
           type: string
+        protocol:
+          enum:
+          - A2A
+          - HTTP
+          type: string
         repository:
           $ref: '#/components/schemas/Repository'
       type: object
@@ -37,6 +42,8 @@ components:
           - array
           - "null"
         description:
+          type: string
+        iconUrl:
           type: string
         instructions:
           $ref: '#/components/schemas/ResourceRef'
@@ -207,6 +214,12 @@ components:
           additionalProperties:
             type: string
           type: object
+        envFrom:
+          items:
+            $ref: '#/components/schemas/EnvFromSource'
+          type:
+          - array
+          - "null"
         harness:
           $ref: '#/components/schemas/DeploymentHarness'
         modelRef:
@@ -221,6 +234,12 @@ components:
       required:
       - targetRef
       - runtimeRef
+      type: object
+    EnvFromSource:
+      additionalProperties: false
+      properties:
+        secretRef:
+          $ref: '#/components/schemas/SecretEnvSource'
       type: object
     ErrorDetail:
       additionalProperties: false
@@ -766,6 +785,8 @@ components:
       properties:
         description:
           type: string
+        iconUrl:
+          type: string
         remote:
           $ref: '#/components/schemas/MCPRemote'
         source:
@@ -884,6 +905,8 @@ components:
           type: string
         endpoint:
           $ref: '#/components/schemas/ModelEndpointConfig'
+        iconUrl:
+          type: string
         model:
           type: string
         provider:
@@ -1275,6 +1298,8 @@ components:
           type:
           - array
           - "null"
+        iconUrl:
+          type: string
         source:
           $ref: '#/components/schemas/PluginSource'
         title:
@@ -1350,6 +1375,8 @@ components:
           type: string
         description:
           type: string
+        iconUrl:
+          type: string
       type: object
     Repository:
       additionalProperties: false
@@ -1415,6 +1442,14 @@ components:
           type: string
       required:
       - type
+      type: object
+    SecretEnvSource:
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+      required:
+      - name
       type: object
     SecretKeyRef:
       additionalProperties: false
@@ -1617,6 +1652,8 @@ components:
       additionalProperties: false
       properties:
         description:
+          type: string
+        iconUrl:
           type: string
         source:
           $ref: '#/components/schemas/SkillSource'

@@ -18,13 +18,12 @@ type Config struct {
 	MCPPort       uint16 `env:"MCP_PORT" envDefault:"0"`
 	DatabaseURL   string `env:"DATABASE_URL" envDefault:"postgres://agentregistry:agentregistry@localhost:5432/agentregistry?sslmode=disable"`
 	Version       string `env:"VERSION" envDefault:"dev"`
-	JWTPrivateKey string `env:"JWT_PRIVATE_KEY" envDefault:""`
 	LogLevel      string `env:"LOG_LEVEL" envDefault:"info"`
 
 	// Platform mode: "docker" or "kubernetes". Controls which deployment
 	// provider IDs are available in the UI. Defaults to "kubernetes" so
-	// Helm/K8s deployments work without extra config; docker-compose.yml
-	// explicitly sets this to "docker".
+	// Helm/K8s deployments work without extra config;
+	// docker/docker-compose.yml explicitly sets this to "docker".
 	PlatformMode string `env:"PLATFORM_MODE" envDefault:"kubernetes"`
 
 	// Agent Gateway Configuration

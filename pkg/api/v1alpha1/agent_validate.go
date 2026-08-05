@@ -3,6 +3,8 @@ package v1alpha1
 import (
 	"context"
 	"fmt"
+
+	"k8s.io/utils/ptr"
 )
 
 // Validate runs structural validation on the Agent envelope: ObjectMeta
@@ -62,9 +64,18 @@ func validateAgentSpec(s *AgentSpec) FieldErrors {
 	var errs FieldErrors
 
 	errs.Append("spec.title", validateTitle(s.Title))
+	errs.Append("spec.iconUrl", validateIconURL(s.IconURL))
 	if s.Source != nil {
 		for _, e := range validateRepository(s.Source.Repository) {
 			errs.Append("spec.source."+e.Path, e.Cause)
+		}
+		if s.Source.Protocol != nil {
+			protocol := ptr.Deref(s.Source.Protocol, AgentProtocol(""))
+			switch protocol {
+			case AgentProtocolA2A, AgentProtocolHTTP:
+			default:
+				errs.Append("spec.source.protocol", fmt.Errorf("%w: must be %q or %q, got %q", ErrInvalidFormat, AgentProtocolA2A, AgentProtocolHTTP, protocol))
+			}
 		}
 	}
 	errs = append(errs, validateHarnessCompatibility(s.CompatibleHarnesses)...)

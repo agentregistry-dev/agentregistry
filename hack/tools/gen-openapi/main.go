@@ -60,11 +60,7 @@ func generateSpec(apiVersion string) *huma.OpenAPI {
 
 	api := humago.New(mux, humaConfig)
 
-	// Some registration functions (auth handlers) dereference the config at
-	// registration time to set up JWT managers, so we need a minimal config
-	// with a valid dummy key. The key is never used for actual signing.
 	cfg := &config.Config{
-		JWTPrivateKey: "0000000000000000000000000000000000000000000000000000000000000000",
 		// Force-enable the read-only MCP Registry v0.1 compatibility routes so
 		// the generated spec always documents them. The runtime default is OFF
 		// (opt-in via AGENT_REGISTRY_MCP_REGISTRY_COMPAT_ENABLED); documenting

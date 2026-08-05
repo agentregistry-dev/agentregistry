@@ -894,154 +894,6 @@ spec:
 	}
 }
 
-// TestApplyDeployment_HTTPIdempotent exercises POST /v0/apply deployment idempotency
-// against the local provider: it builds and publishes an agent, then issues
-// POST /v0/apply three times with a deployment YAML. The first call deploys;
-// the second and third calls must succeed without error (idempotent re-apply).
-// Skipped on the kubernetes backend.
-func TestApplyDeployment_HTTPIdempotent(t *testing.T) {
-	if IsK8sBackend() {
-		t.Skip("skipping local apply-deployment idempotency test: E2E_BACKEND=k8s")
-	}
-	// Local-provider deploy binds port 8080 via a shared docker-compose
-	// project. Multiple tests exercising that path race on port allocation
-	// and on lazy-cleanup from prior tests, making the suite flaky on CI.
-	// Opt-in via E2E_RUN_LOCAL_DEPLOY=1 to run locally.
-	if os.Getenv("E2E_RUN_LOCAL_DEPLOY") != "1" {
-		t.Skip("skipping local-deploy test; set E2E_RUN_LOCAL_DEPLOY=1 to run")
-	}
-
-	regURL := RegistryURL(t)
-	tmpDir := t.TempDir()
-	agentName := UniqueAgentName("e2eapplydpl")
-	// localhost:5001 is the private registry the daemon runs on the docker
-	// backend. `arctl build --push` pushes to it so the local-provider
-	// deploy can pull it back. Public images don't satisfy the adapter's
-	// expected container shape, so we build a real one.
-	agentImage := fmt.Sprintf("localhost:5001/%s:e2e", agentName)
-
-	t.Cleanup(func() { RemoveDeploymentsByServerName(t, regURL, agentName) })
-	t.Cleanup(func() { removeLocalDeployment(t) })
-
-	// Init → build+push → apply. Build is required: the local-provider
-	// deploy actually pulls the tagged image and starts it, so the image
-	// must exist in the daemon's localhost:5001 registry first.
-	result := RunArctl(t, tmpDir,
-		"init", "agent", agentName,
-		"--framework", "adk", "--language", "python",
-		"--model-name", "gemini-2.5-flash",
-		"--image", agentImage,
-	)
-	RequireSuccess(t, result)
-
-	agentDir := filepath.Join(tmpDir, agentName)
-	result = RunArctl(t, tmpDir, "build", agentDir, "--push", "--image", agentImage)
-	RequireSuccess(t, result)
-
-	result = RunArctl(t, tmpDir, "apply", "-f", filepath.Join(agentDir, "agent.yaml"), "--registry-url", regURL)
-	RequireSuccess(t, result)
-
-	// Use POST /v0/apply with a deployment YAML body (PUT sub-resource endpoint was removed).
-	applyURL := fmt.Sprintf("%s/apply", regURL)
-	deployYAML := fmt.Sprintf(`kind: Deployment
-metadata:
-  name: %s
-spec:
-  targetRef:
-    kind: Agent
-    name: %s
-  runtimeRef:
-    kind: Runtime
-    name: local
-`, agentName, agentName)
-
-	httpClient := &http.Client{Timeout: 60 * time.Second}
-	doApply := func(t *testing.T) string {
-		t.Helper()
-		req, err := http.NewRequest(http.MethodPost, applyURL, strings.NewReader(deployYAML))
-		if err != nil {
-			t.Fatalf("failed to build POST request: %v", err)
-		}
-		req.Header.Set("Content-Type", "application/yaml")
-		resp, err := httpClient.Do(req)
-		if err != nil {
-			t.Fatalf("POST %s failed: %v", applyURL, err)
-		}
-		defer resp.Body.Close()
-		body, _ := io.ReadAll(resp.Body)
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
-		}
-		var applyResp struct {
-			Results []struct {
-				Kind   string `json:"kind"`
-				Name   string `json:"name"`
-				Tag    string `json:"tag"`
-				Status string `json:"status"`
-			} `json:"results"`
-		}
-		if err := json.Unmarshal(body, &applyResp); err != nil {
-			t.Fatalf("failed to decode apply response: %v\nBody: %s", err, body)
-		}
-		if len(applyResp.Results) == 0 {
-			t.Fatalf("apply returned empty results\nBody: %s", body)
-		}
-		return applyResp.Results[0].Status
-	}
-
-	// isApplySuccess matches the kubectl-style verbs the server emits for a
-	// successful apply: "created", "configured", "unchanged". (The failure
-	// verb is "failed".)
-	isApplySuccess := func(s string) bool {
-		return s == "created" || s == "configured" || s == "unchanged"
-	}
-
-	// First apply — creates the deployment.
-	status1 := doApply(t)
-	t.Logf("first apply: status=%s", status1)
-	if !isApplySuccess(status1) {
-		t.Fatalf("first apply: expected success status, got %q", status1)
-	}
-
-	// Second apply — must succeed (idempotent no-op once deployed).
-	status2 := doApply(t)
-	t.Logf("second apply: status=%s", status2)
-	if !isApplySuccess(status2) {
-		t.Fatalf("second apply: expected success status, got %q", status2)
-	}
-
-	// Third apply — same expectation.
-	status3 := doApply(t)
-	t.Logf("third apply: status=%s", status3)
-	if !isApplySuccess(status3) {
-		t.Fatalf("third apply: expected success status, got %q", status3)
-	}
-
-	// Verify only one deployment exists for this agent in deploy list.
-	listURL := fmt.Sprintf("%s/deployments?resourceName=%s&resourceType=agent", regURL, agentName)
-	listResp := RegistryGet(t, listURL)
-	defer listResp.Body.Close()
-	listBody, _ := io.ReadAll(listResp.Body)
-	var listed struct {
-		Deployments []struct {
-			ID         string `json:"id"`
-			ServerName string `json:"serverName"`
-		} `json:"deployments"`
-	}
-	if err := json.Unmarshal(listBody, &listed); err != nil {
-		t.Fatalf("failed to decode deployments list: %v\nBody: %s", err, listBody)
-	}
-	count := 0
-	for _, d := range listed.Deployments {
-		if d.ServerName == agentName {
-			count++
-		}
-	}
-	if count != 1 {
-		t.Fatalf("expected exactly 1 deployment for agent %s after 3 idempotent applies, got %d", agentName, count)
-	}
-}
-
 // --- Batch apply endpoint tests ---
 
 // TestBatchApply_MultiResource verifies that applying a multi-document YAML
@@ -1144,112 +996,6 @@ spec:
 
 	// Both resources must still exist after both applies.
 	verifyAgentExists(t, regURL, agentName, agentTag)
-}
-
-// TestBatchApply_DriftRequiresForce verifies that applying a deployment whose
-// config has drifted from the running deployment fails without --force and
-// succeeds with --force. This test only runs on the docker backend, as it
-// requires a live local deployment that can be in-flight.
-//
-// The test uses the Deployment kind's ErrDeploymentDrift path by:
-//  1. Publishing an agent and deploying it.
-//  2. Modifying the env in the YAML.
-//  3. Re-applying without --force — expects failure with a "force" hint.
-//  4. Re-applying with --force — expects success.
-func TestBatchApply_DriftRequiresForce(t *testing.T) {
-	if IsK8sBackend() {
-		t.Skip("skipping drift test: not applicable on k8s backend (requires local docker provider)")
-	}
-	// See TestApplyDeployment_HTTPIdempotent: local-deploy races on port 8080
-	// against other deploy tests when cleanup lags; opt-in via env var.
-	if os.Getenv("E2E_RUN_LOCAL_DEPLOY") != "1" {
-		t.Skip("skipping local-deploy test; set E2E_RUN_LOCAL_DEPLOY=1 to run")
-	}
-
-	regURL := RegistryURL(t)
-	tmpDir := t.TempDir()
-	agentName := UniqueAgentName("driftbatch")
-	agentImage := fmt.Sprintf("localhost:5001/%s:e2e", agentName)
-	agentTag := defaultArtifactTag
-	runtimeID := "local"
-
-	t.Cleanup(func() {
-		RemoveDeploymentsByServerName(t, regURL, agentName)
-		removeLocalDeployment(t)
-		RunArctl(t, tmpDir, "delete", "agent", agentName, "--tag", agentTag, "--registry-url", regURL)
-	})
-
-	// Step 1: init → build+push → apply the agent. Build pushes to the
-	// daemon's private localhost:5001 registry so the subsequent local
-	// deploy can pull it.
-	result := RunArctl(t, tmpDir, "init", "agent", agentName,
-		"--framework", "adk", "--language", "python",
-		"--model-name", "gemini-2.5-flash",
-		"--image", agentImage,
-	)
-	RequireSuccess(t, result)
-
-	agentDir := filepath.Join(tmpDir, agentName)
-	result = RunArctl(t, tmpDir, "build", agentDir, "--push", "--image", agentImage)
-	RequireSuccess(t, result)
-
-	result = RunArctl(t, tmpDir, "apply", "-f", filepath.Join(agentDir, "agent.yaml"), "--registry-url", regURL)
-	RequireSuccess(t, result)
-
-	// Step 2: apply the initial deployment YAML (no env).
-	deployYAML := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
-kind: Deployment
-metadata:
-  name: %s
-spec:
-  targetRef:
-    kind: Agent
-    name: %s
-    tag: %s
-  runtimeRef:
-    kind: Runtime
-    name: %s
-`, agentName, agentName, agentTag, runtimeID)
-
-	yamlPath := writeDeclarativeYAML(t, tmpDir, "deploy.yaml", deployYAML)
-	result = RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
-	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "Deployment/"+agentName)
-	RequireOutputContains(t, result, "✓")
-
-	// Step 3: modify the env to create drift.
-	driftYAML := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
-kind: Deployment
-metadata:
-  name: %s
-spec:
-  targetRef:
-    kind: Agent
-    name: %s
-    tag: %s
-  runtimeRef:
-    kind: Runtime
-    name: %s
-  env:
-    NEW_VAR: "drift-value"
-`, agentName, agentName, agentTag, runtimeID)
-
-	driftPath := writeDeclarativeYAML(t, tmpDir, "deploy-drift.yaml", driftYAML)
-
-	// Apply drifted YAML without --force — expect failure.
-	result = RunArctl(t, tmpDir, "apply", "-f", driftPath, "--registry-url", regURL)
-	RequireFailure(t, result)
-	// Server should hint about --force.
-	combined := result.Stdout + result.Stderr
-	if !strings.Contains(combined, "force") {
-		t.Logf("Expected 'force' hint in output; got:\n%s", combined)
-	}
-
-	// Step 4: apply with --force — expect success.
-	result = RunArctl(t, tmpDir, "apply", "-f", driftPath, "--force", "--registry-url", regURL)
-	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "Deployment/"+agentName)
-	RequireOutputContains(t, result, "✓")
 }
 
 // TestBatchApply_DeleteFile verifies that arctl delete -f <file> deletes all
@@ -1724,36 +1470,77 @@ func TestDeclarativeDelete_NotFound(t *testing.T) {
 	RequireOutputContains(t, result, "not found")
 }
 
-// TestDeploymentGet_YAMLIncludesStatus creates an agent + local deployment,
-// then checks that `arctl get deployment NAME -o yaml` renders a .status
-// block (phase/id/origin) in addition to the declarative spec. Round-trips
-// the output through `arctl apply` to confirm status is silently dropped on
-// input.
-func TestDeploymentGet_YAMLIncludesStatus(t *testing.T) {
-	if IsK8sBackend() {
-		t.Skip("skipping local deployment status test: E2E_BACKEND=k8s")
-	}
-	// See TestApplyDeployment_HTTPIdempotent: local-deploy races on port 8080
-	// against other deploy tests when cleanup lags; opt-in via env var.
-	if os.Getenv("E2E_RUN_LOCAL_DEPLOY") != "1" {
-		t.Skip("skipping local-deploy test; set E2E_RUN_LOCAL_DEPLOY=1 to run")
+// waitForDeploymentCondition waits for the asynchronous Deployment controller
+// to persist a successful condition from the runtime adapter.
+func waitForDeploymentCondition(t *testing.T, regURL, name, conditionType string, timeout time.Duration) {
+	t.Helper()
+
+	endpoint := fmt.Sprintf("%s/deployments/%s", regURL, url.PathEscape(name))
+	client := &http.Client{Timeout: 5 * time.Second}
+	deadline := time.Now().Add(timeout)
+	var lastResponse string
+	var lastErr error
+
+	for time.Now().Before(deadline) {
+		resp, err := client.Get(endpoint)
+		if err != nil {
+			lastErr = err
+			time.Sleep(time.Second)
+			continue
+		}
+
+		body, readErr := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		lastResponse = string(body)
+		if readErr != nil {
+			lastErr = readErr
+		} else if resp.StatusCode != http.StatusOK {
+			lastErr = fmt.Errorf("GET %s returned HTTP %d", endpoint, resp.StatusCode)
+		} else {
+			var deployment struct {
+				Status struct {
+					Conditions []struct {
+						Type   string `json:"type"`
+						Status string `json:"status"`
+					} `json:"conditions"`
+				} `json:"status"`
+			}
+			if err := json.Unmarshal(body, &deployment); err != nil {
+				lastErr = err
+			} else {
+				for _, condition := range deployment.Status.Conditions {
+					if condition.Type == conditionType && condition.Status == "True" {
+						t.Logf("Deployment %s reached %s=True", name, conditionType)
+						return
+					}
+				}
+			}
+		}
+		time.Sleep(time.Second)
 	}
 
+	t.Fatalf("deployment %s did not reach %s=True within %s; last error: %v; last response: %s",
+		name, conditionType, timeout, lastErr, lastResponse)
+}
+
+// TestDeploymentLifecycle_Kubernetes verifies the complete OSS Deployment
+// path: arctl publishes an Agent, the registry admits its Deployment, and the
+// asynchronous controller successfully applies it through the Kubernetes
+// runtime adapter. It also pins idempotent Deployment re-apply behavior.
+func TestDeploymentLifecycle_Kubernetes(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
-	agentName := UniqueAgentName("e2estatus")
+	agentName := UniqueAgentName("e2elifecycle")
 	tag := defaultArtifactTag
-	// Local-provider deploys pull from localhost:5001 (the daemon's private
-	// registry). Scaffold → build+push so the image resolves at deploy time.
+	// Kubernetes deploys pull from the registry connected to the Kind cluster.
+	// Scaffold -> build+push so the image resolves at deploy time.
 	agentImage := fmt.Sprintf("localhost:5001/%s:e2e", agentName)
 
-	t.Cleanup(func() { RemoveDeploymentsByServerName(t, regURL, agentName) })
-	t.Cleanup(func() { removeLocalDeployment(t) })
 	t.Cleanup(func() {
+		RemoveDeploymentsByServerName(t, regURL, agentName)
 		RunArctl(t, tmpDir, "delete", "agent", agentName, "--tag", tag, "--registry-url", regURL)
 	})
 
-	// init → build+push → apply — same shape as TestApplyDeployment_HTTPIdempotent.
 	RequireSuccess(t, RunArctl(t, tmpDir,
 		"init", "agent", agentName,
 		"--framework", "adk", "--language", "python",
@@ -1776,47 +1563,42 @@ spec:
     tag: %s
   runtimeRef:
     kind: Runtime
-    name: local
+    name: kubernetes-default
 `, agentName, agentName, tag)
 	deployPath := writeDeclarativeYAML(t, tmpDir, "deployment.yaml", deployYAML)
-	RequireSuccess(t, RunArctl(t, tmpDir, "apply", "-f", deployPath, "--registry-url", regURL))
+	result := RunArctl(t, tmpDir, "apply", "-f", deployPath, "--registry-url", regURL)
+	RequireSuccess(t, result)
+	RequireOutputContains(t, result, "Deployment/"+agentName)
 
-	// Fetch as YAML and assert both spec and status blocks are present.
-	result := RunArctl(t, tmpDir, "get", "deployment", agentName, "-o", "yaml", "--registry-url", regURL)
+	// RuntimeConfigured=True is emitted only after the Kubernetes adapter has
+	// translated and applied the runtime resources and the controller has
+	// persisted its result.
+	waitForDeploymentCondition(t, regURL, agentName, "RuntimeConfigured", 60*time.Second)
+
+	result = RunArctl(t, tmpDir, "get", "deployment", agentName, "-o", "yaml", "--registry-url", regURL)
 	RequireSuccess(t, result)
 	RequireOutputContains(t, result, "apiVersion: ar.dev/v1alpha1")
 	RequireOutputContains(t, result, "kind: Deployment")
-	// Spec fields — declarative, round-trippable.
 	RequireOutputContains(t, result, "runtimeRef:")
-	RequireOutputContains(t, result, "name: local")
+	RequireOutputContains(t, result, "name: kubernetes-default")
 	RequireOutputContains(t, result, "kind: Runtime")
-	// Status block — server-managed.
 	RequireOutputContains(t, result, "status:")
-	// phase may be "deploying" or "deployed" depending on how fast the
-	// reconciler runs for the local runtime; both assert the status block.
-	if !strings.Contains(result.Stdout, "phase:") {
-		t.Fatalf("expected .status.phase in get output, got:\n%s", result.Stdout)
-	}
-	if !strings.Contains(result.Stdout, "id:") {
-		t.Fatalf("expected .status.id (server-generated UUID) in get output, got:\n%s", result.Stdout)
-	}
+	RequireOutputContains(t, result, "conditions:")
+	RequireOutputContains(t, result, "type: Progressing")
+	RequireOutputContains(t, result, "type: RuntimeConfigured")
+	RequireOutputContains(t, result, `status: "True"`)
 
-	// Round-trip guarantee: apply the yaml we just fetched — the .status
-	// block must be silently ignored on decode; apply returns configured/
-	// unchanged rather than a "status not allowed" error.
-	roundTripPath := writeDeclarativeYAML(t, tmpDir, "roundtrip.yaml", result.Stdout)
-	result = RunArctl(t, tmpDir, "apply", "-f", roundTripPath, "--registry-url", regURL)
+	// Re-applying the same declarative intent must remain a successful no-op.
+	result = RunArctl(t, tmpDir, "apply", "-f", deployPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
+	RequireOutputContains(t, result, "Deployment/"+agentName)
+	RequireOutputContains(t, result, "unchanged")
 }
 
 // TestDeploymentApply_BadTemplateRef applies a deployment whose referenced
 // agent does not exist. Apply must exit non-zero with a clear error message
 // identifying the missing template — not silently create a ghost row.
 func TestDeploymentApply_BadTemplateRef(t *testing.T) {
-	if IsK8sBackend() {
-		t.Skip("skipping bad-templateRef test: E2E_BACKEND=k8s")
-	}
-
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 	// Name intentionally NOT created as an agent.
@@ -1833,7 +1615,7 @@ spec:
     tag: latest
   runtimeRef:
     kind: Runtime
-    name: local
+    name: kubernetes-default
 `, missingName, missingName)
 	deployPath := writeDeclarativeYAML(t, tmpDir, "deployment.yaml", deployYAML)
 

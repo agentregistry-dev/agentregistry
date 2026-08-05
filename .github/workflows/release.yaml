@@ -4,17 +4,27 @@ on:
   push:
     tags:
     - "v*.*.*"
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version number'
 
 env:
-  VERSION: ${{ github.event.inputs.version || github.ref_name }}
+  VERSION: ${{ github.ref_name }}
   DOCKER_REGISTRY: ghcr.io
+  DOCKER_BUILD_REGISTRY: ghcr.io
 
 jobs:
+  validate:
+    name: Validate release version
+    runs-on: ubuntu-latest
+    steps:
+    - name: Validate version
+      shell: bash
+      run: |
+        if [[ ! "${VERSION}" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+          echo "::error::version must match vX.Y.Z; got ${VERSION}"
+          exit 1
+        fi
+
   docker:
+    needs: validate
     strategy:
       matrix:
         image:
@@ -121,7 +131,3 @@ jobs:
           bin/arctl-*
           build/charts/*.tgz
           build/charts/checksums.txt
-
-    - name: Log out of Helm registry
-      if: always()
-      run: $HELM registry logout "${HELM_REGISTRY}" || true

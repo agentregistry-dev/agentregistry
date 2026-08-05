@@ -112,6 +112,37 @@ func TestAgentValidate_AcceptsBlankOptionalFields(t *testing.T) {
 	require.NoError(t, a.Validate())
 }
 
+func TestAgentValidate_Protocol(t *testing.T) {
+	tests := []struct {
+		name     string
+		protocol *AgentProtocol
+		wantErr  bool
+	}{
+		{name: "omitted defaults at consumption"},
+		{name: "A2A", protocol: new(AgentProtocolA2A)},
+		{name: "HTTP", protocol: new(AgentProtocolHTTP)},
+		{name: "reject empty", protocol: new(AgentProtocol("")), wantErr: true},
+		{name: "reject lowercase", protocol: new(AgentProtocol("http")), wantErr: true},
+		{name: "reject unknown", protocol: new(AgentProtocol("GRPC")), wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			agent := &Agent{
+				Metadata: ObjectMeta{Namespace: "default", Name: "protocol-agent"},
+				Spec:     AgentSpec{Source: &AgentSource{Protocol: tt.protocol}},
+			}
+			err := agent.Validate()
+			if tt.wantErr {
+				require.Error(t, err)
+				require.Contains(t, failedFields(t, err), "spec.source.protocol")
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
 func TestAgentValidate_AccumulatesErrors(t *testing.T) {
 	a := &Agent{
 		Metadata: ObjectMeta{Namespace: "default", Name: "a"},
@@ -121,6 +152,41 @@ func TestAgentValidate_AccumulatesErrors(t *testing.T) {
 	}
 	paths := failedFields(t, a.Validate())
 	require.Contains(t, paths, "spec.title")
+}
+
+// iconURLCases is the shared table for spec.iconUrl. Every kind that exposes
+// the field funnels through the same validateIconURL rule, so each kind's test
+// reuses these cases to prove its own wiring rather than restating the rule.
+var iconURLCases = []struct {
+	name    string
+	iconURL string
+	wantErr bool
+}{
+	{"empty", "", false},
+	{"absolute https", "https://example.com/icons/icon.svg", false},
+	{"root-relative path", "/catalog-covers/icon.svg", false},
+	{"plain http", "http://example.com/icons/icon.svg", true},
+	{"javascript scheme", "javascript:alert(1)", true},
+	{"data scheme", "data:image/svg+xml;base64,PHN2Zy8+", true},
+	{"scheme-relative", "//example.com/icons/icon.svg", true},
+	{"bare path", "catalog-covers/icon.svg", true},
+}
+
+func TestAgentValidate_IconURL(t *testing.T) {
+	for _, tc := range iconURLCases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := &Agent{
+				Metadata: ObjectMeta{Namespace: "default", Name: "a"},
+				Spec:     AgentSpec{IconURL: tc.iconURL},
+			}
+			err := a.Validate()
+			if !tc.wantErr {
+				require.NoError(t, err)
+				return
+			}
+			require.Contains(t, failedFields(t, err), "spec.iconUrl")
+		})
+	}
 }
 
 func TestAgentValidate_AcceptsRepositoryWithBranchAndCommit(t *testing.T) {
@@ -325,6 +391,93 @@ func TestDeploymentValidate_ModelRef(t *testing.T) {
 					RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "agentcore"},
 					ModelRef:   tt.modelRef,
 					Harness:    tt.harness,
+				},
+			}
+			require.ElementsMatch(t, tt.wantFields, failedFields(t, d.Validate()))
+		})
+	}
+}
+
+func TestDeploymentValidate_EnvFrom(t *testing.T) {
+	tests := []struct {
+		name       string
+		targetKind string
+		envFrom    []EnvFromSource
+		wantFields []string
+	}{
+		{
+			name:       "omitted",
+			targetKind: KindMCPServer,
+		},
+		{
+			name:       "single secretRef",
+			targetKind: KindMCPServer,
+			envFrom:    []EnvFromSource{{SecretRef: &SecretEnvSource{Name: "mcp-secrets"}}},
+		},
+		{
+			name:       "multiple secretRefs",
+			targetKind: KindMCPServer,
+			envFrom: []EnvFromSource{
+				{SecretRef: &SecretEnvSource{Name: "mcp-secrets"}},
+				{SecretRef: &SecretEnvSource{Name: "shared-tokens"}},
+			},
+		},
+		{
+			name:       "rejected for Agent target",
+			targetKind: KindAgent,
+			envFrom:    []EnvFromSource{{SecretRef: &SecretEnvSource{Name: "mcp-secrets"}}},
+			wantFields: []string{"spec.envFrom"},
+		},
+		{
+			name:       "missing secretRef",
+			targetKind: KindMCPServer,
+			envFrom:    []EnvFromSource{{}},
+			wantFields: []string{"spec.envFrom[0].secretRef"},
+		},
+		{
+			name:       "inner missing secretRef",
+			targetKind: KindMCPServer,
+			envFrom: []EnvFromSource{
+				{SecretRef: &SecretEnvSource{Name: "mcp-secrets"}},
+				{},
+			},
+			wantFields: []string{"spec.envFrom[1].secretRef"},
+		},
+		{
+			name:       "multiple field errors",
+			targetKind: KindMCPServer,
+			envFrom: []EnvFromSource{
+				{SecretRef: &SecretEnvSource{Name: "mcp-secrets"}},
+				{SecretRef: &SecretEnvSource{Name: "Invalid Name"}},
+				{},
+			},
+			wantFields: []string{"spec.envFrom[1].secretRef.name", "spec.envFrom[2].secretRef"},
+		},
+		{
+			name:       "empty secret name",
+			targetKind: KindMCPServer,
+			envFrom:    []EnvFromSource{{SecretRef: &SecretEnvSource{}}},
+			wantFields: []string{"spec.envFrom[0].secretRef.name"},
+		},
+		{
+			name:       "invalid secret name",
+			targetKind: KindMCPServer,
+			envFrom: []EnvFromSource{
+				{SecretRef: &SecretEnvSource{Name: "mcp-secrets"}},
+				{SecretRef: &SecretEnvSource{Name: "Not Valid"}},
+			},
+			wantFields: []string{"spec.envFrom[1].secretRef.name"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := &Deployment{
+				Metadata: ObjectMeta{Namespace: "default", Name: "prod"},
+				Spec: DeploymentSpec{
+					TargetRef:  ResourceRef{Kind: tt.targetKind, Name: "weather", Tag: "stable"},
+					RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "kagent"},
+					EnvFrom:    tt.envFrom,
 				},
 			}
 			require.ElementsMatch(t, tt.wantFields, failedFields(t, d.Validate()))
@@ -704,6 +857,26 @@ func TestMCPServerValidate_RequiresSourceOrRemote(t *testing.T) {
 	require.Contains(t, paths, "spec")
 }
 
+func TestMCPServerValidate_IconURL(t *testing.T) {
+	for _, tc := range iconURLCases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := &MCPServer{
+				Metadata: ObjectMeta{Namespace: "default", Name: "tools", Tag: "v1"},
+				Spec: MCPServerSpec{
+					IconURL: tc.iconURL,
+					Remote:  &MCPRemote{Type: "streamable-http", URL: "https://example.test/mcp"},
+				},
+			}
+			err := m.Validate()
+			if !tc.wantErr {
+				require.NoError(t, err)
+				return
+			}
+			require.Contains(t, failedFields(t, err), "spec.iconUrl")
+		})
+	}
+}
+
 func TestMCPServerValidate_HTTPPortRange(t *testing.T) {
 	mk := func(port uint16) *MCPServer {
 		return &MCPServer{
@@ -1062,4 +1235,46 @@ func TestMCPServerValidateRegistries_UsesPerTypeServerName(t *testing.T) {
 	}
 	require.NoError(t, m.ValidateRegistries(context.Background(), validator))
 	require.Equal(t, "io.github.modelcontextprotocol/server-fetch", gotClaim)
+}
+
+// -----------------------------------------------------------------------------
+// Skill
+// -----------------------------------------------------------------------------
+
+func TestSkillValidate_IconURL(t *testing.T) {
+	for _, tc := range iconURLCases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &Skill{
+				Metadata: ObjectMeta{Namespace: "default", Name: "my-skill", Tag: "v1"},
+				Spec:     SkillSpec{IconURL: tc.iconURL},
+			}
+			err := s.Validate()
+			if !tc.wantErr {
+				require.NoError(t, err)
+				return
+			}
+			require.Contains(t, failedFields(t, err), "spec.iconUrl")
+		})
+	}
+}
+
+// -----------------------------------------------------------------------------
+// Prompt
+// -----------------------------------------------------------------------------
+
+func TestPromptValidate_IconURL(t *testing.T) {
+	for _, tc := range iconURLCases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := &Prompt{
+				Metadata: ObjectMeta{Namespace: "default", Name: "my-prompt", Tag: "v1"},
+				Spec:     PromptSpec{Content: "hello", IconURL: tc.iconURL},
+			}
+			err := p.Validate()
+			if !tc.wantErr {
+				require.NoError(t, err)
+				return
+			}
+			require.Contains(t, failedFields(t, err), "spec.iconUrl")
+		})
+	}
 }

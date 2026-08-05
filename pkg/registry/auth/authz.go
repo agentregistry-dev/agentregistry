@@ -47,52 +47,21 @@ func (a *Authorizer) IsRegistryAdmin(ctx context.Context) bool {
 	return a.Authz.IsRegistryAdmin(ctx, s)
 }
 
-// PublicActions defines which actions are allowed without authentication.
-// NOTE: All actions are currently public. Once we implement authN/authZ providers,
-// we should lock this down to read-only.
-var PublicActions = map[PermissionAction]bool{
-	PermissionActionRead:    true,
-	PermissionActionPublish: true,
-	PermissionActionEdit:    true,
-	PermissionActionDelete:  true,
-	PermissionActionDeploy:  true,
-}
-
-// PublicAuthzProvider implements AuthzProvider for the public version.
-type PublicAuthzProvider struct {
-	jwtManager *JWTManager
-}
+// PublicAuthzProvider implements the permissive default authorization policy.
+// Integrators can replace it through AppOptions.AuthzProvider.
+type PublicAuthzProvider struct{}
 
 // NewPublicAuthzProvider creates a new public authorization provider.
-func NewPublicAuthzProvider(jwtManager *JWTManager) *PublicAuthzProvider {
-	return &PublicAuthzProvider{
-		jwtManager: jwtManager,
-	}
+func NewPublicAuthzProvider() *PublicAuthzProvider {
+	return &PublicAuthzProvider{}
 }
 
-// Check verifies if the session can perform the action on the resource.
-func (o *PublicAuthzProvider) Check(ctx context.Context, s Session, verb PermissionAction, resource Resource) error {
-	if o.IsRegistryAdmin(ctx, s) {
-		return nil
-	}
-
-	if PublicActions[verb] {
-		return nil
-	}
-
-	if s == nil {
-		return ErrUnauthenticated
-	}
-
-	if o.jwtManager == nil {
-		return nil
-	}
-
-	return o.jwtManager.Check(ctx, s, verb, resource)
+// Check allows every action.
+func (*PublicAuthzProvider) Check(context.Context, Session, PermissionAction, Resource) error {
+	return nil
 }
 
-// IsRegistryAdmin always returns true for the public provider, mirroring
-// the PublicActions convention.
-func (o *PublicAuthzProvider) IsRegistryAdmin(_ context.Context, _ Session) bool {
+// IsRegistryAdmin returns true because the default provider applies no restrictions.
+func (*PublicAuthzProvider) IsRegistryAdmin(context.Context, Session) bool {
 	return true
 }

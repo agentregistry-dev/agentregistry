@@ -314,12 +314,23 @@ spec:
 	require.Equal(t, arv0.ApplyStatusCreated, out.Results[1].Status)
 	require.Empty(t, out.Results[1].Tag)
 
+	// Mutable objects are keyed by namespace/name, so applying the same
+	// Deployment again must update neither the row nor its generation.
+	resp = api.Post("/v0/apply", "Content-Type: application/yaml", strings.NewReader(string(yaml)))
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	out.Results = nil
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+	require.Len(t, out.Results, 2)
+	require.Equal(t, arv0.ApplyStatusUnchanged, out.Results[0].Status)
+	require.Equal(t, arv0.ApplyStatusUnchanged, out.Results[1].Status)
+
 	runtimeRow, err := runtimes.Get(t.Context(), "default", "local-test-runtime", "")
 	require.NoError(t, err)
 	require.Empty(t, runtimeRow.Metadata.Tag)
 	deploymentRow, err := deployments.Get(t.Context(), "default", "summarizer", "")
 	require.NoError(t, err)
 	require.Empty(t, deploymentRow.Metadata.Tag)
+	require.EqualValues(t, 1, deploymentRow.Metadata.Generation)
 }
 
 func TestRegisterDeleteApply_OmittedTagDeletesAllTags(t *testing.T) {

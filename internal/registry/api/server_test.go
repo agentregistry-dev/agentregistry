@@ -53,9 +53,9 @@ func TestTrailingSlashMiddleware(t *testing.T) {
 		},
 		{
 			name:             "deep nested path with trailing slash should redirect",
-			path:             "/v0/auth/github/token/",
+			path:             "/v0/agents/example/latest/",
 			expectedStatus:   http.StatusPermanentRedirect,
-			expectedLocation: "/v0/auth/github/token",
+			expectedLocation: "/v0/agents/example/latest",
 			expectRedirect:   true,
 		},
 		{

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -654,5 +655,70 @@ func TestKubernetesDeploymentScopedName_TruncatesLongBaseButPreservesSuffix(t *t
 	}
 	if !strings.HasSuffix(got, "-2d6d0c54") {
 		t.Fatalf("expected uuid short suffix to be preserved, got %s", got)
+	}
+}
+
+func TestKubernetesTranslateRuntimeConfig_LocalMCPSecretRefs(t *testing.T) {
+	ctx := context.Background()
+
+	desired := &runtimetypes.DesiredState{
+		MCPServers: []*runtimetypes.MCPServer{{
+			Name:          "secret-server",
+			MCPServerType: runtimetypes.MCPServerTypeLocal,
+			Namespace:     "kagent",
+			Local: &runtimetypes.LocalMCPServer{
+				TransportType: runtimetypes.TransportTypeStdio,
+				Deployment: runtimetypes.MCPServerDeployment{
+					Image:      "mcp-image:latest",
+					Cmd:        "python",
+					Env:        map[string]string{"env": "fromenv"},
+					SecretRefs: []string{"mcp-secrets", "shared-tokens"},
+				},
+			},
+		}},
+	}
+
+	config, err := kubernetesTranslateRuntimeConfig(ctx, desired)
+	if err != nil {
+		t.Fatalf("kubernetesTranslateRuntimeConfig failed: %v", err)
+	}
+	if len(config.MCPServers) != 1 {
+		t.Fatalf("expected 1 MCPServer, got %d", len(config.MCPServers))
+	}
+	got := config.MCPServers[0].Spec.Deployment.SecretRefs
+	want := []corev1.LocalObjectReference{{Name: "mcp-secrets"}, {Name: "shared-tokens"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("secretRefs = %+v, want %+v", got, want)
+	}
+	// The explicit env entry rides alongside the refs untouched; the kubelet
+	// resolves collisions (env wins over envFrom).
+	if config.MCPServers[0].Spec.Deployment.Env["env"] != "fromenv" {
+		t.Fatalf("env env = %q, want fromenv", config.MCPServers[0].Spec.Deployment.Env["env"])
+	}
+}
+
+func TestKubernetesTranslateRuntimeConfig_LocalMCPNoSecretRefsOmitted(t *testing.T) {
+	ctx := context.Background()
+
+	desired := &runtimetypes.DesiredState{
+		MCPServers: []*runtimetypes.MCPServer{{
+			Name:          "plain-server",
+			MCPServerType: runtimetypes.MCPServerTypeLocal,
+			Local: &runtimetypes.LocalMCPServer{
+				TransportType: runtimetypes.TransportTypeStdio,
+				Deployment: runtimetypes.MCPServerDeployment{
+					Image: "mcp-image:latest",
+					Cmd:   "python",
+				},
+			},
+		}},
+	}
+
+	config, err := kubernetesTranslateRuntimeConfig(ctx, desired)
+	if err != nil {
+		t.Fatalf("kubernetesTranslateRuntimeConfig failed: %v", err)
+	}
+	if refs := config.MCPServers[0].Spec.Deployment.SecretRefs; refs != nil {
+		t.Fatalf("secretRefs = %+v, want nil so the CRD omits the key", refs)
 	}
 }

@@ -9,8 +9,7 @@
 ## TL;DR
 
 ```console
-helm install my-agentregistry oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry \
-  --set config.jwtPrivateKey=$(openssl rand -hex 32)
+helm install my-agentregistry oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry
 ```
 
 A PostgreSQL instance is bundled and started automatically — no external database is required to get started.
@@ -31,15 +30,13 @@ It exposes both an HTTP REST API and an MCP server endpoint. A PostgreSQL instan
 ### Development / evaluation (bundled database)
 
 ```console
-helm install my-agentregistry oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry \
-  --set config.jwtPrivateKey=$(openssl rand -hex 32)
+helm install my-agentregistry oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry
 ```
 
 ### Production (external database)
 
 ```console
 helm install my-agentregistry oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry \
-  --set config.jwtPrivateKey=$(openssl rand -hex 32) \
   --set database.postgres.type=external \
   --set database.postgres.external.url=postgres://<user>:<password>@<host>:5432/<dbname>
 ```
@@ -63,7 +60,6 @@ The chart deploys the following Kubernetes resources:
 | Deployment | Agent Registry application |
 | Service | Exposes HTTP (`:12121`) and MCP (`:31313`) ports |
 | ConfigMap | Application configuration injected as environment variables |
-| Secret | JWT signing key (omitted when `config.existingSecret` is set) |
 | Secret (`-postgresql`) | Bundled PostgreSQL password (only when `database.postgres.type=bundled`) |
 | Deployment (`-postgresql`) | Bundled PostgreSQL instance (only when `database.postgres.type=bundled`) |
 | Service (`-postgresql`) | Internal service for bundled PostgreSQL (only when `database.postgres.type=bundled`) |
@@ -110,22 +106,6 @@ database:
 
 See [docs/byo-postgres.md](../../docs/byo-postgres.md) for a complete walkthrough.
 
-## Secrets
-
-Agent Registry requires a hex-encoded JWT signing key. Provide it directly:
-
-```yaml
-config:
-  jwtPrivateKey: "$(openssl rand -hex 32)"
-```
-
-Or reference an existing Secret (must contain key `AGENT_REGISTRY_JWT_PRIVATE_KEY`):
-
-```yaml
-config:
-  existingSecret: "my-agentregistry-secret"
-```
-
 ## RBAC
 
 By default, Agent Registry is granted cluster-wide access via a `ClusterRole`/`ClusterRoleBinding`. To restrict it to specific namespaces, set `rbac.watchedNamespaces`:
@@ -154,9 +134,6 @@ database:
     external:
       url: "postgres://agentregistry:changeme@pg.example.com:5432/agentregistry?sslmode=require"
 
-config:
-  existingSecret: "agentregistry-secrets"
-
 resources:
   requests:
     cpu: 250m
@@ -175,9 +152,6 @@ database:
     external:
       secretRef:
         name: my-db-creds
-
-config:
-  existingSecret: "agentregistry-secrets"
 ```
 
 ### Namespace-scoped RBAC

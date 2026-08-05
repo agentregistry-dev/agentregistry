@@ -169,7 +169,9 @@ dev-ui: ## Run the Next.js UI in development mode
 
 # Start local development environment (docker backend only, no Kind)
 .PHONY: run-docker
-run-docker: local-registry docker docker-tag-as-dev daemon-start ## Start local development environment (docker backend only, no Kind)
+run-docker: local-registry docker docker-tag-as-dev ## Start local development environment (docker backend only, no Kind)
+	DOCKER_REGISTRY=$(DOCKER_REGISTRY) VERSION=$(VERSION) \
+		docker compose -f docker/docker-compose.yml up -d --wait --pull always
 	@echo ""
 	@echo "agentregistry is running (docker backend):"
 	@echo "  UI:  http://localhost:12121"
@@ -195,23 +197,12 @@ run: run-k8s # Start local development environment (default: k8s)
 
 # Stop local development environment
 .PHONY: down
-down: daemon-stop delete-kind-cluster ## Stop the local development environment
+down: delete-kind-cluster ## Stop the local development environment
+	DOCKER_REGISTRY=$(DOCKER_REGISTRY) VERSION=$(VERSION) \
+		docker compose -f docker/docker-compose.yml down
 	@echo "agentregistry stopped"
 
 ARCTL ?= ./bin/arctl
-
-# Manage local daemon lifecycle via CLI helpers.
-.PHONY: daemon-start
-daemon-start: build-cli ## Start local daemon via CLI
-	$(ARCTL) daemon start
-
-.PHONY: daemon-stop
-daemon-stop: ## Stop local daemon via CLI
-	$(ARCTL) daemon stop
-
-.PHONY: daemon-stop-purge
-daemon-stop-purge: ## Stop local daemon and purge volumes via CLI
-	$(ARCTL) daemon stop --purge
 
 # Run Go tests (unit tests only)
 .PHONY: test-unit
@@ -237,28 +228,11 @@ test-cli-e2e: ## Run CLI subprocess e2e tests (no docker/k8s required; DB cases 
 	@echo "Running CLI e2e tests..."
 	$(GOTESTSUM) --format testdox -- -tags=e2e -timeout 5m ./pkg/cli/...
 
-# Run e2e tests against docker backend (skips Kind cluster setup and k8s tests)
-.PHONY: test-e2e-docker
-test-e2e-docker: local-registry docker docker-tag-as-dev daemon-start
-	@set -e; \
-	  trap '$(MAKE) --no-print-directory daemon-stop-purge >/dev/null 2>&1 || true' EXIT; \
-	  ARCTL_API_BASE_URL=http://localhost:12121/v0 E2E_BACKEND=docker GOOGLE_API_KEY=$(GOOGLE_API_KEY) OPENAI_API_KEY=$(OPENAI_API_KEY) \
-	    $(GOTESTSUM) --format testdox -- -v -tags=e2e -timeout 45m ./test/e2e/...
-
-# Run e2e tests against k8s backend (full Kind cluster setup)
-.PHONY: test-e2e-k8s
-test-e2e-k8s: setup-kind-cluster build-cli
-	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) E2E_BACKEND=k8s GOOGLE_API_KEY=$(GOOGLE_API_KEY) OPENAI_API_KEY=$(OPENAI_API_KEY) \
-	  $(GOTESTSUM) --format testdox -- -v -tags=e2e -timeout 45m ./test/e2e/...
-
-# Run e2e tests (default: k8s)
+# Run e2e tests against a local Kind cluster.
 .PHONY: test-e2e
-test-e2e: ## Run end-to-end tests (default: k8s)
-	@if [ "$(E2E_BACKEND)" = "docker" ]; then \
-	  $(MAKE) test-e2e-docker; \
-	else \
-	  $(MAKE) test-e2e-k8s; \
-	fi
+test-e2e: setup-kind-cluster build-cli ## Run end-to-end tests against Kubernetes
+	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) GOOGLE_API_KEY=$(GOOGLE_API_KEY) OPENAI_API_KEY=$(OPENAI_API_KEY) \
+	  $(GOTESTSUM) --format testdox -- -v -tags=e2e -timeout 45m ./test/e2e/...
 
 .PHONY: gen-openapi
 gen-openapi: ## Generate the OpenAPI specification
@@ -429,11 +403,7 @@ install-agentregistry: charts-generate ## Build images and Helm install AgentReg
 ifeq ($(BUILD),true)
 install-agentregistry: docker-server docker-agentgateway
 endif
-	@JWT_KEY=$$(kubectl --context $(KIND_CLUSTER_CONTEXT) -n $(KIND_NAMESPACE) \
-	    get secret agentregistry \
-	    -o jsonpath='{.data.AGENT_REGISTRY_JWT_PRIVATE_KEY}' 2>/dev/null | base64 -d); \
-	  if [ -z "$$JWT_KEY" ]; then JWT_KEY=$$(openssl rand -hex 32); fi; \
-	  $(HELM) upgrade --install agentregistry charts/agentregistry \
+	@$(HELM) upgrade --install agentregistry charts/agentregistry \
 	    --kube-context $(KIND_CLUSTER_CONTEXT) \
 	    --namespace $(KIND_NAMESPACE) \
 	    --create-namespace \
@@ -441,7 +411,6 @@ endif
 	    --set image.registry=$(DOCKER_REGISTRY) \
 	    --set image.repository=$(DOCKER_REPO) \
 	    --set image.tag=$(VERSION) \
-	    --set config.jwtPrivateKey="$$JWT_KEY" \
 	    --set service.type=LoadBalancer \
 	    --wait \
 	    --timeout=5m;
@@ -606,14 +575,12 @@ charts-docs: charts-generate ## Render chart README.md from values.yaml via helm
 	  --template-files=_templates.gotmpl \
 	  --template-files=README.md.gotmpl
 
-# Render chart templates to stdout (smoke test — catches template errors).
-# Uses minimum required values to pass chart validation.
+# Render chart templates to stdout (smoke test -- catches template errors).
 .PHONY: charts-render-test
 charts-render-test: charts-deps ## Render chart templates as a smoke test
 	@echo "Rendering chart templates for $(HELM_CHART_DIR)..."
 	$(HELM) template test-release $(HELM_CHART_DIR) \
-	  --values $(HELM_CHART_DIR)/values.yaml \
-	  --set config.jwtPrivateKey=deadbeef1234567890abcdef12345678
+	  --values $(HELM_CHART_DIR)/values.yaml
 
 # Package the chart into $(HELM_PACKAGE_DIR)/.
 .PHONY: charts-package

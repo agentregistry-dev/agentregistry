@@ -87,13 +87,21 @@ agentregistry puts all of that into a single registry with a CLI and a web UI. Y
 # 1. Install the CLI
 curl -fsSL https://raw.githubusercontent.com/agentregistry-dev/agentregistry/main/scripts/get-arctl | bash
 
-# 2. Start the agentregistry daemon by running any arctl command, such as arctl version.
-arctl version
+# 2. Download the Docker Compose file matching the installed CLI release
+export VERSION="$(arctl version | awk 'NR == 1 { print $3 }')"
+curl -fsSLo agentregistry-compose.yml \
+  "https://raw.githubusercontent.com/agentregistry-dev/agentregistry/${VERSION}/docker/docker-compose.yml"
 
-# 3. Open the agentregistry UI in your browser. http://localhost:12121 The UI is automatically exposed on port 12121 on your local machine when you start the agentregistry daemon.
+# 3. Start AgentRegistry and its bundled PostgreSQL database
+docker compose -f agentregistry-compose.yml up -d --wait
 ```
 
-That's it. Your IDE now has access to the deployed server through the agentgateway.
+Open the AgentRegistry UI at http://localhost:12121. To stop the registry while
+preserving its data, run:
+
+```bash
+docker compose -f agentregistry-compose.yml down
+```
 
 ---
 

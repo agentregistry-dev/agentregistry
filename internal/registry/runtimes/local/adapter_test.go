@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
@@ -232,4 +233,30 @@ func contains(s, sub string) bool {
 		}
 	}
 	return false
+}
+
+// TestV1Alpha1Apply_RejectsEnvFrom: the local docker-compose runtime has no
+// Secret store to resolve spec.envFrom against, so Apply must fail.
+func TestV1Alpha1Apply_RejectsEnvFrom(t *testing.T) {
+	adapter := NewLocalDeploymentAdapter(t.TempDir(), 21212)
+
+	_, err := adapter.Apply(context.Background(), types.ApplyInput{
+		Deployment: &v1alpha1.Deployment{
+			TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindDeployment},
+			Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "weather-local"},
+			Spec: v1alpha1.DeploymentSpec{
+				TargetRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather"},
+				RuntimeRef: v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "local"},
+				EnvFrom: []v1alpha1.EnvFromSource{
+					{SecretRef: &v1alpha1.SecretEnvSource{Name: "mcp-secrets"}},
+				},
+			},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected error for local runtime deployment with envFrom")
+	}
+	if want := "spec.envFrom is not supported by the Local runtime"; !strings.Contains(err.Error(), want) {
+		t.Fatalf("error = %q, want it to contain %q", err, want)
+	}
 }

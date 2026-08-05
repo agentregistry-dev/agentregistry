@@ -94,10 +94,11 @@ const (
 )
 
 type MCPServerDeployment struct {
-	Image string            `json:"image,omitempty"`
-	Cmd   string            `json:"cmd,omitempty"`
-	Args  []string          `json:"args,omitempty"`
-	Env   map[string]string `json:"env,omitempty"`
+	Image      string            `json:"image,omitempty"`
+	Cmd        string            `json:"cmd,omitempty"`
+	Args       []string          `json:"args,omitempty"`
+	Env        map[string]string `json:"env,omitempty"`
+	SecretRefs []string          `json:"secretRefs,omitempty"`
 }
 
 type AgentDeployment struct {

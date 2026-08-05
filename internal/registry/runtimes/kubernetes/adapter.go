@@ -141,12 +141,14 @@ func (a *kubernetesDeploymentAdapter) buildDesiredStateFromV1Alpha1(
 
 	switch target := in.Target.(type) {
 	case *v1alpha1.MCPServer:
+		envFrom := in.Deployment.Spec.EnvFrom
 		server, err := utils.SpecToRuntimeMCPServer(ctx, target.Metadata, target.Spec, utils.MCPServerTranslateOpts{
 			DeploymentID: deploymentID,
 			Namespace:    namespace,
 			EnvValues:    envValues,
 			ArgValues:    argValues,
 			HeaderValues: headerValues,
+			EnvFrom:      envFrom,
 		})
 		if err != nil {
 			return nil, err

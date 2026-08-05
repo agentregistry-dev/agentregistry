@@ -205,6 +205,30 @@ func validateWebsiteURL(u string) error {
 	return nil
 }
 
+// validateIconURL: optional field. When set, must be an absolute https:// URL
+// or a root-relative path. Other schemes are rejected because a catalog UI
+// renders the value as an image source: plain http:// is blocked as mixed
+// content, and javascript:/data: would make the field an injection point.
+func validateIconURL(u string) error {
+	if u == "" {
+		return nil
+	}
+	// A single leading slash is a path on the UI's own origin. Two is a
+	// scheme-relative reference to some other host, which is not what this
+	// field is for.
+	if strings.HasPrefix(u, "/") && !strings.HasPrefix(u, "//") {
+		return nil
+	}
+	parsed, err := url.Parse(u)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidURL, err)
+	}
+	if parsed.Scheme != "https" || parsed.Host == "" {
+		return fmt.Errorf("%w: must be an absolute https:// URL or a root-relative path", ErrInvalidURL)
+	}
+	return nil
+}
+
 // validateTitle: optional; when set, must not be whitespace-only.
 func validateTitle(title string) error {
 	if title == "" {
