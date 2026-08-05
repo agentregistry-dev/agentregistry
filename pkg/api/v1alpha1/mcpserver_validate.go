@@ -33,6 +33,7 @@ func validateMCPPackageName(s string) error {
 func validateMCPServerSpec(s *MCPServerSpec) FieldErrors {
 	var errs FieldErrors
 	errs.Append("spec.title", validateTitle(s.Title))
+	errs.Append("spec.iconUrl", validateIconURL(s.IconURL))
 
 	// Source (bundled) and Remote (pre-running) are the two ways to describe
 	// an MCP server. Exactly one must be set.

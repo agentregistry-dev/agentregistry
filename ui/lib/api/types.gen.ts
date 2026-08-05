@@ -21,6 +21,7 @@ export type AgentSource = {
 export type AgentSpec = {
     compatibleHarnesses?: Array<HarnessCompatibility> | null;
     description?: string;
+    iconUrl?: string;
     instructions?: ResourceRef;
     mcpServers?: Array<ResourceRef> | null;
     /**
@@ -371,6 +372,7 @@ export type McpServerSource = {
 
 export type McpServerSpec = {
     description?: string;
+    iconUrl?: string;
     remote?: McpRemote;
     source?: McpServerSource;
     title?: string;
@@ -419,6 +421,7 @@ export type ModelSpec = {
     auth?: ModelAuthConfig;
     description?: string;
     endpoint?: ModelEndpointConfig;
+    iconUrl?: string;
     model: string;
     provider: 'bedrock';
     title?: string;
@@ -582,6 +585,7 @@ export type PluginSourceOci = {
 export type PluginSpec = {
     description?: string;
     harnesses?: Array<string> | null;
+    iconUrl?: string;
     source?: PluginSource;
     title?: string;
 };
@@ -617,6 +621,7 @@ export type Prompt = {
 export type PromptSpec = {
     content?: string;
     description?: string;
+    iconUrl?: string;
 };
 
 export type Repository = {
@@ -741,6 +746,7 @@ export type SkillSource = {
 
 export type SkillSpec = {
     description?: string;
+    iconUrl?: string;
     source?: SkillSource;
     title?: string;
 };

@@ -43,6 +43,8 @@ components:
           - "null"
         description:
           type: string
+        iconUrl:
+          type: string
         instructions:
           $ref: '#/components/schemas/ResourceRef'
         mcpServers:
@@ -783,6 +785,8 @@ components:
       properties:
         description:
           type: string
+        iconUrl:
+          type: string
         remote:
           $ref: '#/components/schemas/MCPRemote'
         source:
@@ -883,6 +887,8 @@ components:
           type: string
         endpoint:
           $ref: '#/components/schemas/ModelEndpointConfig'
+        iconUrl:
+          type: string
         model:
           type: string
         provider:
@@ -1250,6 +1256,8 @@ components:
           type:
           - array
           - "null"
+        iconUrl:
+          type: string
         source:
           $ref: '#/components/schemas/PluginSource'
         title:
@@ -1324,6 +1332,8 @@ components:
         content:
           type: string
         description:
+          type: string
+        iconUrl:
           type: string
       type: object
     Repository:
@@ -1600,6 +1610,8 @@ components:
       additionalProperties: false
       properties:
         description:
+          type: string
+        iconUrl:
           type: string
         source:
           $ref: '#/components/schemas/SkillSource'

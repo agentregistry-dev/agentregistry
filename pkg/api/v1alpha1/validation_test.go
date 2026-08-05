@@ -154,6 +154,41 @@ func TestAgentValidate_AccumulatesErrors(t *testing.T) {
 	require.Contains(t, paths, "spec.title")
 }
 
+// iconURLCases is the shared table for spec.iconUrl. Every kind that exposes
+// the field funnels through the same validateIconURL rule, so each kind's test
+// reuses these cases to prove its own wiring rather than restating the rule.
+var iconURLCases = []struct {
+	name    string
+	iconURL string
+	wantErr bool
+}{
+	{"empty", "", false},
+	{"absolute https", "https://example.com/icons/icon.svg", false},
+	{"root-relative path", "/catalog-covers/icon.svg", false},
+	{"plain http", "http://example.com/icons/icon.svg", true},
+	{"javascript scheme", "javascript:alert(1)", true},
+	{"data scheme", "data:image/svg+xml;base64,PHN2Zy8+", true},
+	{"scheme-relative", "//example.com/icons/icon.svg", true},
+	{"bare path", "catalog-covers/icon.svg", true},
+}
+
+func TestAgentValidate_IconURL(t *testing.T) {
+	for _, tc := range iconURLCases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := &Agent{
+				Metadata: ObjectMeta{Namespace: "default", Name: "a"},
+				Spec:     AgentSpec{IconURL: tc.iconURL},
+			}
+			err := a.Validate()
+			if !tc.wantErr {
+				require.NoError(t, err)
+				return
+			}
+			require.Contains(t, failedFields(t, err), "spec.iconUrl")
+		})
+	}
+}
+
 func TestAgentValidate_AcceptsRepositoryWithBranchAndCommit(t *testing.T) {
 	a := &Agent{
 		Metadata: ObjectMeta{Namespace: "default", Name: "a"},
@@ -822,6 +857,26 @@ func TestMCPServerValidate_RequiresSourceOrRemote(t *testing.T) {
 	require.Contains(t, paths, "spec")
 }
 
+func TestMCPServerValidate_IconURL(t *testing.T) {
+	for _, tc := range iconURLCases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := &MCPServer{
+				Metadata: ObjectMeta{Namespace: "default", Name: "tools", Tag: "v1"},
+				Spec: MCPServerSpec{
+					IconURL: tc.iconURL,
+					Remote:  &MCPRemote{Type: "streamable-http", URL: "https://example.test/mcp"},
+				},
+			}
+			err := m.Validate()
+			if !tc.wantErr {
+				require.NoError(t, err)
+				return
+			}
+			require.Contains(t, failedFields(t, err), "spec.iconUrl")
+		})
+	}
+}
+
 func TestMCPServerValidate_HTTPPortRange(t *testing.T) {
 	mk := func(port uint16) *MCPServer {
 		return &MCPServer{
@@ -1180,4 +1235,46 @@ func TestMCPServerValidateRegistries_UsesPerTypeServerName(t *testing.T) {
 	}
 	require.NoError(t, m.ValidateRegistries(context.Background(), validator))
 	require.Equal(t, "io.github.modelcontextprotocol/server-fetch", gotClaim)
+}
+
+// -----------------------------------------------------------------------------
+// Skill
+// -----------------------------------------------------------------------------
+
+func TestSkillValidate_IconURL(t *testing.T) {
+	for _, tc := range iconURLCases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &Skill{
+				Metadata: ObjectMeta{Namespace: "default", Name: "my-skill", Tag: "v1"},
+				Spec:     SkillSpec{IconURL: tc.iconURL},
+			}
+			err := s.Validate()
+			if !tc.wantErr {
+				require.NoError(t, err)
+				return
+			}
+			require.Contains(t, failedFields(t, err), "spec.iconUrl")
+		})
+	}
+}
+
+// -----------------------------------------------------------------------------
+// Prompt
+// -----------------------------------------------------------------------------
+
+func TestPromptValidate_IconURL(t *testing.T) {
+	for _, tc := range iconURLCases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := &Prompt{
+				Metadata: ObjectMeta{Namespace: "default", Name: "my-prompt", Tag: "v1"},
+				Spec:     PromptSpec{Content: "hello", IconURL: tc.iconURL},
+			}
+			err := p.Validate()
+			if !tc.wantErr {
+				require.NoError(t, err)
+				return
+			}
+			require.Contains(t, failedFields(t, err), "spec.iconUrl")
+		})
+	}
 }
