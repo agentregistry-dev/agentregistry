@@ -17,9 +17,9 @@ const SchemaURL = "https://json.schemastore.org/claude-code-marketplace.json"
 
 // MarketplaceResponse is the top-level `marketplace.json` document.
 type MarketplaceResponse struct {
-	Schema  string        `json:"$schema,omitempty"`
-	Name    string        `json:"name"`
-	Owner   Owner         `json:"owner"`
+	Schema string `json:"$schema,omitempty"`
+	Name   string `json:"name"`
+	Owner  Owner  `json:"owner"`
 	// Plugins is never emitted as null: Claude Code's marketplace.json parser
 	// rejects a null plugins field outright, so an empty catalogue must still
 	// marshal as `[]`. The nullable:"false" tag keeps the generated OpenAPI
