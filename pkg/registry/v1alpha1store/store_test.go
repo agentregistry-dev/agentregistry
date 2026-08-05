@@ -801,6 +801,12 @@ func TestControlPlaneEventStore_PruneBeforeHonorsKeepAfterRevision(t *testing.T)
 	events := NewControlPlaneEventStore(pool, TestSchema())
 	ctx := context.Background()
 
+	// Migrations may legitimately emit control-plane invalidations. This test
+	// owns its event fixture, so discard bootstrap history before asserting
+	// exact prune counts.
+	_, err := pool.Exec(ctx, `TRUNCATE `+events.qualified+` RESTART IDENTITY`)
+	require.NoError(t, err)
+
 	upsertAgent(t, store, "pruned", v1alpha1.AgentSpec{Title: "first"}, nil)
 	upsertAgent(t, store, "pruned", v1alpha1.AgentSpec{Title: "second"}, nil)
 
