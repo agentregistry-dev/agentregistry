@@ -19,7 +19,8 @@ var KnownRuntimeTypes = map[string]struct{}{
 // Validate runs Runtime's structural checks and canonicalizes
 // Spec.Type to its CamelCase form.
 //
-// Manifests may write Spec.Type in any casing (`local`, `LOCAL`, `Local`)
+// Manifests may write Spec.Type in any casing (`kubernetes`, `KUBERNETES`,
+// `Kubernetes`)
 // for ergonomic UX; the validator looks the input up in
 // KnownRuntimeTypes case-insensitively and rewrites Spec.Type in place
 // to the canonical CamelCase value. Every consumer downstream of

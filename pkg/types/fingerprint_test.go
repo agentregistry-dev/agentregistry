@@ -286,7 +286,7 @@ func testApplyInput() ApplyInput {
 			},
 			Spec: v1alpha1.DeploymentSpec{
 				TargetRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather"},
-				RuntimeRef: v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "local"},
+				RuntimeRef: v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "kubernetes-default"},
 				Env:        map[string]string{"LOG_LEVEL": "debug"},
 			},
 		},
