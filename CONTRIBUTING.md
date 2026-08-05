@@ -25,7 +25,6 @@ Thank you for your interest in contributing to arctl! This document provides gui
 ./setup.sh
 
 # Or manually:
-go mod download
 cd ui && npm install && cd ..
 make build
 ```
@@ -283,7 +282,6 @@ tag on `main`.
 
 ```bash
 go mod tidy
-go mod download
 ```
 
 ### UI Build Failures

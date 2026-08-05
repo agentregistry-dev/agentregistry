@@ -130,9 +130,8 @@ clean-ui: ## Clean UI build artifacts
 
 # Build the Go CLI
 .PHONY: build-cli
-build-cli: mod-download ## Build the Go CLI
+build-cli: ## Build the Go CLI
 	@echo "Building Go CLI..."
-	@echo "Downloading Go dependencies..."
 	@echo "Building binary..."
 	go build -ldflags "$(LDFLAGS)" \
 		-o bin/arctl cmd/cli/main.go
@@ -140,9 +139,8 @@ build-cli: mod-download ## Build the Go CLI
 
 # Build the Go server (with embedded UI)
 .PHONY: build-server
-build-server: mod-download ## Build the Go server binary
+build-server: ## Build the Go server binary
 	@echo "Building Go CLI..."
-	@echo "Downloading Go dependencies..."
 	@echo "Building binary..."
 	go build -ldflags "$(LDFLAGS)" \
 		-o bin/arctl-server cmd/server/main.go
@@ -527,10 +525,6 @@ verify: fmt mod-tidy gen-client charts-docs ## Run all verification checks
 mod-tidy: ## Run go mod tidy on the main module and tools module
 	go mod tidy
 	cd $(TOOLS_DIR) && go mod tidy
-
-.PHONY: mod-download
-mod-download: ## Run go mod download
-	go mod download
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Helm / Chart targets
