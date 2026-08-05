@@ -396,7 +396,7 @@ export type MarketplaceResponse = {
     $schema?: string;
     name: string;
     owner: Owner;
-    plugins: Array<PluginEntry> | null;
+    plugins: Array<PluginEntry>;
 };
 
 export type Model = {
