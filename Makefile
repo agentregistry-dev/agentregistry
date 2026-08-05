@@ -182,7 +182,7 @@ run-docker: local-registry docker docker-tag-as-dev ## Start local development e
 
 # Start local development environment with Kind cluster
 .PHONY: run-k8s
-run-k8s: local-registry create-kind-cluster build-cli ## Start local development environment with Kind cluster
+run-k8s: setup-kind-cluster build-cli ## Start local development environment with Kind cluster
 	@echo ""
 	@echo "agentregistry is running (k8s backend):"
 	@echo "  UI:  http://localhost:12121"
