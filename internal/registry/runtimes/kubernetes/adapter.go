@@ -8,7 +8,6 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/constants"
 	runtimetypes "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/utils"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
@@ -137,12 +136,12 @@ func (a *kubernetesDeploymentAdapter) buildDesiredStateFromV1Alpha1(
 		return nil, fmt.Errorf("apply: target is required")
 	}
 	deploymentID := in.Deployment.Metadata.Name
-	envValues, argValues, headerValues := utils.SplitDeploymentRuntimeInputs(in.Deployment.Spec.Env)
+	envValues, argValues, headerValues := SplitDeploymentRuntimeInputs(in.Deployment.Spec.Env)
 
 	switch target := in.Target.(type) {
 	case *v1alpha1.MCPServer:
 		envFrom := in.Deployment.Spec.EnvFrom
-		server, err := utils.SpecToRuntimeMCPServer(ctx, target.Metadata, target.Spec, utils.MCPServerTranslateOpts{
+		server, err := SpecToRuntimeMCPServer(ctx, target.Metadata, target.Spec, MCPServerTranslateOpts{
 			DeploymentID: deploymentID,
 			Namespace:    namespace,
 			EnvValues:    envValues,
@@ -159,11 +158,11 @@ func (a *kubernetesDeploymentAdapter) buildDesiredStateFromV1Alpha1(
 		if in.Runtime != nil {
 			telemetryEndpoint = in.Runtime.Spec.TelemetryEndpoint
 		}
-		model, err := utils.ResolveDeploymentModelSpec(ctx, in.Deployment, in.Getter)
+		model, err := ResolveDeploymentModelSpec(ctx, in.Deployment, in.Getter)
 		if err != nil {
 			return nil, err
 		}
-		agent, servers, err := utils.SpecToRuntimeAgent(ctx, target.Metadata, target.Spec, utils.AgentTranslateOpts{
+		agent, servers, err := SpecToRuntimeAgent(ctx, target.Metadata, target.Spec, AgentTranslateOpts{
 			DeploymentID:      deploymentID,
 			Namespace:         namespace,
 			KagentURL:         "http://kagent-controller.kagent.svc.cluster.local",

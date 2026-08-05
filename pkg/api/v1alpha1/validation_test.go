@@ -902,7 +902,7 @@ func TestMCPServerValidate_HTTPPortRange(t *testing.T) {
 
 // TestMCPServerValidate_TransportTypeClosedSet asserts the transport type
 // is restricted to {stdio, http}. The resolver in
-// internal/registry/runtimes/utils/deployment_adapter_utils.go has a
+// internal/registry/runtimes/kubernetes/materialization.go has a
 // default→http switch, so a typo like "sse" would silently route to HTTP
 // if the validator didn't gate it here.
 func TestMCPServerValidate_TransportTypeClosedSet(t *testing.T) {

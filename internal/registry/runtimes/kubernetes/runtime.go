@@ -24,7 +24,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common/gitutil"
 	"github.com/agentregistry-dev/agentregistry/internal/constants"
 	runtimetypes "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/types"
-	runtimeutils "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/utils"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/logging"
 )
@@ -431,7 +430,7 @@ func kubernetesTranslateRemoteMCPServer(server *runtimetypes.MCPServer) (*v1alph
 		return nil, fmt.Errorf("remote MCP server config missing for %s", server.Name)
 	}
 
-	url := runtimeutils.BuildRemoteMCPURL(server.Remote)
+	url := BuildRemoteMCPURL(server.Remote)
 	return &v1alpha2.RemoteMCPServer{
 		TypeMeta: metav1.TypeMeta{APIVersion: "kagent.dev/v1alpha2", Kind: "RemoteMCPServer"},
 		ObjectMeta: metav1.ObjectMeta{

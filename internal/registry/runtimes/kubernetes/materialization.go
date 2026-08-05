@@ -1,9 +1,9 @@
-// Package utils hosts materialization helpers used by the Kubernetes runtime
-// adapter. The primary surface is
+// Package kubernetes owns materialization for the Kubernetes runtime adapter.
+// The primary surface is
 // TranslateMCPServer, which takes a v1alpha1.MCPServerSpec plus
 // per-deployment runtime overrides and projects it onto the
 // runtime-internal *runtimetypes.MCPServer that adapters dispatch.
-package utils
+package kubernetes
 
 import (
 	"context"
