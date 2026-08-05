@@ -30,6 +30,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/pluginmarketplace"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
 var logger = logging.New("plugin-marketplace")
@@ -91,12 +92,8 @@ func Register(api huma.API, cfg Config) {
 	}, getMarketplace(cfg))
 }
 
-type marketplaceOutput struct {
-	Body pluginmarketplace.MarketplaceResponse
-}
-
-func getMarketplace(cfg Config) func(context.Context, *struct{}) (*marketplaceOutput, error) {
-	return func(ctx context.Context, _ *struct{}) (*marketplaceOutput, error) {
+func getMarketplace(cfg Config) func(context.Context, *struct{}) (*types.Response[pluginmarketplace.MarketplaceResponse], error) {
+	return func(ctx context.Context, _ *struct{}) (*types.Response[pluginmarketplace.MarketplaceResponse], error) {
 		name := cfg.MarketplaceName
 		if name == "" {
 			name = DefaultMarketplaceName
@@ -167,9 +164,7 @@ func getMarketplace(cfg Config) func(context.Context, *struct{}) (*marketplaceOu
 			cursor = next
 		}
 
-		out := &marketplaceOutput{}
-		out.Body = resp
-		return out, nil
+		return &types.Response[pluginmarketplace.MarketplaceResponse]{Body: resp}, nil
 	}
 }
 
