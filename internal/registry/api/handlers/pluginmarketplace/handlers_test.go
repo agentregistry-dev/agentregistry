@@ -151,7 +151,7 @@ func TestGetMarketplace_TranslatesReadyPlugins(t *testing.T) {
 		Owner:  pluginmarketplace.Owner{Name: handler.DefaultMarketplaceName},
 		Plugins: []pluginmarketplace.PluginEntry{
 			{
-				Name: "code-formatter",
+				Name: "default.code-formatter",
 				Source: map[string]any{
 					"source": "url",
 					"url":    "https://github.com/acme/code-formatter",
@@ -167,6 +167,115 @@ func TestGetMarketplace_TranslatesReadyPlugins(t *testing.T) {
 	// Confirms the handler followed the fake's cursor across all three rows
 	// rather than stopping after the first page.
 	assert.Len(t, store.lastOpts, 3)
+}
+
+func TestGetMarketplace_CrossNamespaceNameCollision(t *testing.T) {
+	// Two distinct Plugin rows (different namespace, same name) are two
+	// distinct content-registry objects per (namespace, name, tag) identity
+	// (see pkg/api/v1alpha1/object.go). translate.go's FromPlugin now
+	// qualifies PluginEntry.Name with its namespace, so both rows survive
+	// translation as distinct entries instead of colliding under the same
+	// "name" in the emitted marketplace.json.
+	teamA := rawPlugin(t, "team-a", "code-formatter",
+		v1alpha1.PluginSpec{
+			Description: "Team A's formatter",
+			Source: &v1alpha1.PluginSource{
+				Type: v1alpha1.PluginSourceTypeGit,
+				Git: &v1alpha1.PluginSourceGit{
+					Repository: &v1alpha1.Repository{URL: "https://github.com/team-a/code-formatter"},
+				},
+			},
+		},
+		v1alpha1.PluginStatus{
+			Status:         readyCondition(),
+			ResolvedSource: &v1alpha1.PluginResolvedSource{Type: v1alpha1.PluginSourceTypeGit, Commit: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+			Manifest:       &v1alpha1.PluginManifest{Name: "code-formatter", Version: "1.0.0", Description: "Team A's formatter"},
+		})
+
+	teamB := rawPlugin(t, "team-b", "code-formatter",
+		v1alpha1.PluginSpec{
+			Description: "Team B's formatter",
+			Source: &v1alpha1.PluginSource{
+				Type: v1alpha1.PluginSourceTypeGit,
+				Git: &v1alpha1.PluginSourceGit{
+					Repository: &v1alpha1.Repository{URL: "https://github.com/team-b/code-formatter"},
+				},
+			},
+		},
+		v1alpha1.PluginStatus{
+			Status:         readyCondition(),
+			ResolvedSource: &v1alpha1.PluginResolvedSource{Type: v1alpha1.PluginSourceTypeGit, Commit: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+			Manifest:       &v1alpha1.PluginManifest{Name: "code-formatter", Version: "2.0.0", Description: "Team B's formatter"},
+		})
+
+	store := &fakeStore{rows: []*v1alpha1.RawObject{teamA, teamB}}
+	h := newAPI(t, handler.Config{Store: store})
+
+	rec := doGet(t, h, "/plugin-marketplace/marketplace.json")
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var got pluginmarketplace.MarketplaceResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+
+	require.Len(t, got.Plugins, 2, "both namespaced plugins survive translation")
+
+	names := map[string]bool{}
+	for _, p := range got.Plugins {
+		names[p.Name] = true
+	}
+	assert.True(t, names["team-a.code-formatter"], "team-a's plugin is qualified with its namespace")
+	assert.True(t, names["team-b.code-formatter"], "team-b's plugin is qualified with its namespace")
+}
+
+func TestGetMarketplace_QualifiedNameCollisionDedupsToFirst(t *testing.T) {
+	// Namespace-qualification narrows the collision surface but can't
+	// eliminate it: namespace "team" name "a.b" and namespace "team.a" name
+	// "b" both qualify to "team.a.b". The handler's defensive dedup must
+	// keep only the first-encountered entry and drop the rest.
+	first := rawPlugin(t, "team", "a.b",
+		v1alpha1.PluginSpec{
+			Description: "First, from namespace team",
+			Source: &v1alpha1.PluginSource{
+				Type: v1alpha1.PluginSourceTypeGit,
+				Git: &v1alpha1.PluginSourceGit{
+					Repository: &v1alpha1.Repository{URL: "https://github.com/team/a-b"},
+				},
+			},
+		},
+		v1alpha1.PluginStatus{
+			Status:         readyCondition(),
+			ResolvedSource: &v1alpha1.PluginResolvedSource{Type: v1alpha1.PluginSourceTypeGit, Commit: "1111111111111111111111111111111111111111"},
+			Manifest:       &v1alpha1.PluginManifest{Name: "a.b", Version: "1.0.0", Description: "First, from namespace team"},
+		})
+
+	second := rawPlugin(t, "team.a", "b",
+		v1alpha1.PluginSpec{
+			Description: "Second, from namespace team.a",
+			Source: &v1alpha1.PluginSource{
+				Type: v1alpha1.PluginSourceTypeGit,
+				Git: &v1alpha1.PluginSourceGit{
+					Repository: &v1alpha1.Repository{URL: "https://github.com/team-a/b"},
+				},
+			},
+		},
+		v1alpha1.PluginStatus{
+			Status:         readyCondition(),
+			ResolvedSource: &v1alpha1.PluginResolvedSource{Type: v1alpha1.PluginSourceTypeGit, Commit: "2222222222222222222222222222222222222222"},
+			Manifest:       &v1alpha1.PluginManifest{Name: "b", Version: "2.0.0", Description: "Second, from namespace team.a"},
+		})
+
+	store := &fakeStore{rows: []*v1alpha1.RawObject{first, second}}
+	h := newAPI(t, handler.Config{Store: store})
+
+	rec := doGet(t, h, "/plugin-marketplace/marketplace.json")
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var got pluginmarketplace.MarketplaceResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+
+	require.Len(t, got.Plugins, 1, "the colliding second entry is dropped, not both kept or both dropped")
+	assert.Equal(t, "team.a.b", got.Plugins[0].Name)
+	assert.Equal(t, "1.0.0", got.Plugins[0].Version, "the first-encountered entry survives")
 }
 
 func TestGetMarketplace_EmptyCatalogueEmitsEmptyArray(t *testing.T) {

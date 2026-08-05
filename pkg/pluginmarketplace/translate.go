@@ -16,6 +16,22 @@ var (
 	ErrUnsupportedSource = errors.New("resolved source type has no marketplace.json representation")
 )
 
+// nameSep joins namespace and name into a marketplace.json-safe qualified
+// name. Claude Code's plugin marketplace schema forbids "/" in a plugin
+// name, so "." is used instead (matching VS Code's ${publisher}.${name} and
+// JetBrains's reverse-DNS plugin IDs).
+const nameSep = "."
+
+// qualifiedName always prefixes name with its namespace — including the
+// default namespace — so the wire name is always fully qualified. Mirrors
+// pkg/mcpregistry.ServerName's rationale for the analogous problem.
+func qualifiedName(namespace, name string) string {
+	if namespace == "" {
+		namespace = v1alpha1.DefaultNamespace
+	}
+	return namespace + nameSep + name
+}
+
 // FromPlugin translates a resolved Plugin into a marketplace.json PluginEntry.
 // It returns ErrNotResolved for anything that isn't Ready with a non-nil
 // ResolvedSource, or whose Status hasn't caught up with the current Spec
@@ -51,7 +67,7 @@ func FromPlugin(p *v1alpha1.Plugin) (PluginEntry, error) {
 		source = URLSource{Source: "url", URL: repo.URL, SHA: sha}
 	}
 
-	entry := PluginEntry{Name: p.Metadata.Name, Source: source}
+	entry := PluginEntry{Name: qualifiedName(p.Metadata.NamespaceOrDefault(), p.Metadata.Name), Source: source}
 	if p.Status.Manifest != nil {
 		entry.Description = p.Status.Manifest.Description
 		// Left empty if unset; Claude Code falls back to the resolved SHA.

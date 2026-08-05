@@ -45,7 +45,7 @@ func TestFromPlugin_ReadyPlainGit(t *testing.T) {
 	require.NoError(t, err)
 
 	want := pluginmarketplace.PluginEntry{
-		Name: "code-formatter",
+		Name: "default.code-formatter",
 		Source: pluginmarketplace.URLSource{
 			Source: "url",
 			URL:    "https://github.com/acme/code-formatter",
@@ -79,7 +79,7 @@ func TestFromPlugin_MonorepoSubfolder(t *testing.T) {
 	require.NoError(t, err)
 
 	want := pluginmarketplace.PluginEntry{
-		Name: "deployment-tools",
+		Name: "default.deployment-tools",
 		Source: pluginmarketplace.GitSubdirSource{
 			Source: "git-subdir",
 			URL:    "https://github.com/acme/monorepo",

@@ -26,10 +26,13 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/logging"
 	"github.com/agentregistry-dev/agentregistry/pkg/pluginmarketplace"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
+
+var logger = logging.New("plugin-marketplace")
 
 // DefaultMarketplaceName is the `name`/`owner.name` emitted when Config
 // doesn't set MarketplaceName.
@@ -120,6 +123,7 @@ func getMarketplace(cfg Config) func(context.Context, *struct{}) (*marketplaceOu
 			}
 		}
 
+		seenNames := make(map[string]bool)
 		cursor := ""
 		for {
 			rows, next, err := cfg.Store.List(ctx, v1alpha1store.ListOpts{
@@ -147,6 +151,14 @@ func getMarketplace(cfg Config) func(context.Context, *struct{}) (*marketplaceOu
 					// partial/broken entry.
 					continue
 				}
+				if seenNames[entry.Name] {
+					logger.Warn("plugin marketplace: dropping plugin with a name that collides with an already-emitted entry",
+						"name", entry.Name,
+						"namespace", p.Metadata.NamespaceOrDefault(),
+						"plugin_name", p.Metadata.Name)
+					continue
+				}
+				seenNames[entry.Name] = true
 				resp.Plugins = append(resp.Plugins, entry)
 			}
 			if next == "" {
