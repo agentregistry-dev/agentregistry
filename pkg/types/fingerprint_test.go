@@ -299,7 +299,7 @@ func testApplyInput() ApplyInput {
 				UID:        "runtime-uid",
 				Generation: 1,
 			},
-			Spec: v1alpha1.RuntimeSpec{Type: "Local"},
+			Spec: v1alpha1.RuntimeSpec{Type: v1alpha1.TypeKubernetes},
 		},
 	}
 }

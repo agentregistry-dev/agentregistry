@@ -15,10 +15,11 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
+const discoveryTestRuntimeName = "kubernetes-default"
+
 func TestDeploymentDiscoveryController_MaterializesDiscoveredDeployment(t *testing.T) {
 	ctx := context.Background()
 	stores := newControllerTestStores(t)
-	seedRuntime(t, stores, "local")
 	adapter := &discoveryTestAdapter{results: []types.DiscoveryResult{{
 		TargetKind: v1alpha1.KindAgent,
 		Name:       "external-agent",
@@ -32,16 +33,16 @@ func TestDeploymentDiscoveryController_MaterializesDiscoveredDeployment(t *testi
 	require.NoError(t, err)
 	require.Equal(t, DeploymentDiscoverySyncResult{Runtimes: 1, Discovered: 1}, result)
 
-	name := discoveredDeploymentName("local", v1alpha1.KindAgent, "external-agent", "unknown", "default")
+	name := discoveredDeploymentName(discoveryTestRuntimeName, v1alpha1.KindAgent, "external-agent", "unknown", "default")
 	require.True(t, strings.HasPrefix(name, "discovered-external-agent-"))
 	deployment := loadDeployment(t, stores, name)
 	require.Equal(t, v1alpha1.DeploymentOriginDiscovered, deployment.Metadata.Annotations[v1alpha1.DeploymentOriginAnnotation])
-	require.Equal(t, "local", deployment.Metadata.Annotations[v1alpha1.DeploymentDiscoveredRuntimeAnnotation])
-	require.Equal(t, "Local", deployment.Metadata.Annotations[v1alpha1.DeploymentDiscoveredRuntimeTypeAnnotation])
+	require.Equal(t, discoveryTestRuntimeName, deployment.Metadata.Annotations[v1alpha1.DeploymentDiscoveredRuntimeAnnotation])
+	require.Equal(t, v1alpha1.TypeKubernetes, deployment.Metadata.Annotations[v1alpha1.DeploymentDiscoveredRuntimeTypeAnnotation])
 	require.Equal(t, v1alpha1.KindAgent, deployment.Spec.TargetRef.Kind)
 	require.Equal(t, "external-agent", deployment.Spec.TargetRef.Name)
 	require.Equal(t, "unknown", deployment.Spec.TargetRef.Tag)
-	require.Equal(t, "local", deployment.Spec.RuntimeRef.Name)
+	require.Equal(t, discoveryTestRuntimeName, deployment.Spec.RuntimeRef.Name)
 	require.Equal(t, v1alpha1.ConditionTrue, deployment.Status.GetCondition("Ready").Status)
 	require.Equal(t, v1alpha1.ConditionTrue, deployment.Status.GetCondition(deploymentDiscoveryCondition).Status)
 
@@ -55,7 +56,6 @@ func TestDeploymentDiscoveryController_MaterializesDiscoveredDeployment(t *testi
 func TestDeploymentDiscoveryController_MarksRowsStaleAfterConsecutiveMisses(t *testing.T) {
 	ctx := context.Background()
 	stores := newControllerTestStores(t)
-	seedRuntime(t, stores, "local")
 	adapter := &discoveryTestAdapter{results: []types.DiscoveryResult{{
 		TargetKind: v1alpha1.KindAgent,
 		Name:       "external-agent",
@@ -64,7 +64,7 @@ func TestDeploymentDiscoveryController_MarksRowsStaleAfterConsecutiveMisses(t *t
 	_, err := discovery.Sync(ctx)
 	require.NoError(t, err)
 
-	name := discoveredDeploymentName("local", v1alpha1.KindAgent, "external-agent", "unknown", "default")
+	name := discoveredDeploymentName(discoveryTestRuntimeName, v1alpha1.KindAgent, "external-agent", "unknown", "default")
 
 	// Misses below the staleness threshold only bump the counter; the
 	// conditions stay True (provider list APIs are eventually consistent).
@@ -97,7 +97,6 @@ func TestDeploymentDiscoveryController_MarksRowsStaleAfterConsecutiveMisses(t *t
 func TestDeploymentDiscoveryController_DeletesRowsAfterRepeatedMisses(t *testing.T) {
 	ctx := context.Background()
 	stores := newControllerTestStores(t)
-	seedRuntime(t, stores, "local")
 	adapter := &discoveryTestAdapter{results: []types.DiscoveryResult{{
 		TargetKind: v1alpha1.KindAgent,
 		Name:       "external-agent",
@@ -106,7 +105,7 @@ func TestDeploymentDiscoveryController_DeletesRowsAfterRepeatedMisses(t *testing
 	_, err := discovery.Sync(ctx)
 	require.NoError(t, err)
 
-	name := discoveredDeploymentName("local", v1alpha1.KindAgent, "external-agent", "unknown", "default")
+	name := discoveredDeploymentName(discoveryTestRuntimeName, v1alpha1.KindAgent, "external-agent", "unknown", "default")
 
 	adapter.results = nil
 	for miss := 1; miss < defaultDeploymentDiscoveryDeleteAfterMisses; miss++ {
@@ -125,7 +124,6 @@ func TestDeploymentDiscoveryController_DeletesRowsAfterRepeatedMisses(t *testing
 func TestDeploymentDiscoveryController_UsesConfiguredMissThresholds(t *testing.T) {
 	ctx := context.Background()
 	stores := newControllerTestStores(t)
-	seedRuntime(t, stores, "local")
 	adapter := &discoveryTestAdapter{results: []types.DiscoveryResult{{
 		TargetKind: v1alpha1.KindAgent,
 		Name:       "external-agent",
@@ -136,7 +134,7 @@ func TestDeploymentDiscoveryController_UsesConfiguredMissThresholds(t *testing.T
 	_, err := discovery.Sync(ctx)
 	require.NoError(t, err)
 
-	name := discoveredDeploymentName("local", v1alpha1.KindAgent, "external-agent", "unknown", "default")
+	name := discoveredDeploymentName(discoveryTestRuntimeName, v1alpha1.KindAgent, "external-agent", "unknown", "default")
 
 	adapter.results = nil
 	result, err := discovery.Sync(ctx)
@@ -156,7 +154,6 @@ func TestDeploymentDiscoveryController_UsesConfiguredMissThresholds(t *testing.T
 func TestDeploymentDiscoveryController_DeletesRowsWhenRuntimeRemoved(t *testing.T) {
 	ctx := context.Background()
 	stores := newControllerTestStores(t)
-	seedRuntime(t, stores, "local")
 	adapter := &discoveryTestAdapter{results: []types.DiscoveryResult{{
 		TargetKind: v1alpha1.KindAgent,
 		Name:       "external-agent",
@@ -165,21 +162,20 @@ func TestDeploymentDiscoveryController_DeletesRowsWhenRuntimeRemoved(t *testing.
 	_, err := discovery.Sync(ctx)
 	require.NoError(t, err)
 
-	require.NoError(t, stores[v1alpha1.KindRuntime].Delete(ctx, "default", "local", ""))
+	require.NoError(t, stores[v1alpha1.KindRuntime].Delete(ctx, "default", discoveryTestRuntimeName, ""))
 
 	result, err := discovery.Sync(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 1, result.Removed)
 	require.Zero(t, result.Stale)
 
-	name := discoveredDeploymentName("local", v1alpha1.KindAgent, "external-agent", "unknown", "default")
+	name := discoveredDeploymentName(discoveryTestRuntimeName, v1alpha1.KindAgent, "external-agent", "unknown", "default")
 	requireDeploymentMissing(t, stores, name)
 }
 
 func TestDeploymentDiscoveryController_ReobservedRowResetsMissCounter(t *testing.T) {
 	ctx := context.Background()
 	stores := newControllerTestStores(t)
-	seedRuntime(t, stores, "local")
 	results := []types.DiscoveryResult{{
 		TargetKind: v1alpha1.KindAgent,
 		Name:       "external-agent",
@@ -189,7 +185,7 @@ func TestDeploymentDiscoveryController_ReobservedRowResetsMissCounter(t *testing
 	_, err := discovery.Sync(ctx)
 	require.NoError(t, err)
 
-	name := discoveredDeploymentName("local", v1alpha1.KindAgent, "external-agent", "unknown", "default")
+	name := discoveredDeploymentName(discoveryTestRuntimeName, v1alpha1.KindAgent, "external-agent", "unknown", "default")
 
 	// Two misses, then the workload reappears: the counter must reset so the
 	// next miss streak starts from scratch.
@@ -220,7 +216,6 @@ func TestDeploymentDiscoveryController_ReobservedRowResetsMissCounter(t *testing
 func TestDeploymentDiscoveryController_ErrorDoesNotMarkRowsStale(t *testing.T) {
 	ctx := context.Background()
 	stores := newControllerTestStores(t)
-	seedRuntime(t, stores, "local")
 	adapter := &discoveryTestAdapter{results: []types.DiscoveryResult{{
 		TargetKind: v1alpha1.KindAgent,
 		Name:       "external-agent",
@@ -235,7 +230,7 @@ func TestDeploymentDiscoveryController_ErrorDoesNotMarkRowsStale(t *testing.T) {
 	require.Error(t, err)
 	require.Zero(t, result.Stale)
 
-	name := discoveredDeploymentName("local", v1alpha1.KindAgent, "external-agent", "unknown", "default")
+	name := discoveredDeploymentName(discoveryTestRuntimeName, v1alpha1.KindAgent, "external-agent", "unknown", "default")
 	deployment := loadDeployment(t, stores, name)
 	condition := deployment.Status.GetCondition(deploymentDiscoveryCondition)
 	require.NotNil(t, condition)
@@ -246,7 +241,6 @@ func TestDeploymentDiscoveryController_ErrorDoesNotMarkRowsStale(t *testing.T) {
 func TestDeploymentDiscoveryController_SkipsAdaptersWithoutDiscoverySource(t *testing.T) {
 	ctx := context.Background()
 	stores := newControllerTestStores(t)
-	seedRuntime(t, stores, "local")
 	discovery := newDeploymentDiscoveryTestController(stores, &lifecycleOnlyDiscoveryTestAdapter{})
 
 	result, err := discovery.Sync(ctx)
@@ -262,7 +256,6 @@ func TestDeploymentDiscoveryController_SkipsAdaptersWithoutDiscoverySource(t *te
 func TestDeploymentDiscoveryController_DedupesManagedDeploymentTargets(t *testing.T) {
 	ctx := context.Background()
 	stores := newControllerTestStores(t)
-	seedRuntime(t, stores, "local")
 	seedMCPServer(t, stores, "weather")
 	seedDeployment(t, stores, "managed-agent", v1alpha1.DesiredStateDeployed)
 	adapter := &discoveryTestAdapter{results: []types.DiscoveryResult{{
@@ -280,7 +273,6 @@ func TestDeploymentDiscoveryController_DedupesManagedDeploymentTargets(t *testin
 func TestDeploymentController_SkipsDiscoveredRows(t *testing.T) {
 	ctx := context.Background()
 	stores := newControllerTestStores(t)
-	seedRuntime(t, stores, "local")
 	adapter := &discoveryTestAdapter{results: []types.DiscoveryResult{{
 		TargetKind: v1alpha1.KindAgent,
 		Name:       "external-agent",
@@ -296,7 +288,7 @@ func TestDeploymentController_SkipsDiscoveredRows(t *testing.T) {
 	require.Zero(t, count)
 	require.Zero(t, controller.workQueue().Len())
 
-	name := discoveredDeploymentName("local", v1alpha1.KindAgent, "external-agent", "unknown", "default")
+	name := discoveredDeploymentName(discoveryTestRuntimeName, v1alpha1.KindAgent, "external-agent", "unknown", "default")
 	controller.workQueue().Add(deploymentQueueKey{Namespace: "default", Name: name})
 	processed, err := controller.RunOnce(ctx)
 	require.NoError(t, err)
@@ -312,7 +304,7 @@ func newDeploymentDiscoveryTestController(
 ) *DeploymentDiscoveryController {
 	return &DeploymentDiscoveryController{
 		Stores:   stores,
-		Adapters: map[string]types.DeploymentAdapter{"Local": adapter},
+		Adapters: map[string]types.DeploymentAdapter{v1alpha1.TypeKubernetes: adapter},
 	}
 }
 
@@ -321,7 +313,7 @@ type discoveryTestAdapter struct {
 	err     error
 }
 
-func (a *discoveryTestAdapter) Type() string { return "Local" }
+func (a *discoveryTestAdapter) Type() string { return v1alpha1.TypeKubernetes }
 
 func (a *discoveryTestAdapter) SupportedTargetKinds() []string {
 	return []string{v1alpha1.KindMCPServer, v1alpha1.KindAgent}
@@ -350,7 +342,7 @@ func (a *discoveryTestAdapter) Discover(context.Context, types.DiscoverInput) ([
 
 type lifecycleOnlyDiscoveryTestAdapter struct{}
 
-func (a *lifecycleOnlyDiscoveryTestAdapter) Type() string { return "Local" }
+func (a *lifecycleOnlyDiscoveryTestAdapter) Type() string { return v1alpha1.TypeKubernetes }
 
 func (a *lifecycleOnlyDiscoveryTestAdapter) SupportedTargetKinds() []string {
 	return []string{v1alpha1.KindMCPServer, v1alpha1.KindAgent}

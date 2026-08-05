@@ -19,7 +19,6 @@ For a `vX.Y.Z` release, `.github/workflows/release.yaml` publishes:
 
 - Multi-architecture Linux container images for `amd64` and `arm64`:
   - `ghcr.io/agentregistry-dev/agentregistry/server:vX.Y.Z`
-  - `ghcr.io/agentregistry-dev/agentregistry/arctl-agentgateway:vX.Y.Z`
 - CLI binaries and individual SHA-256 files for:
   - Linux `amd64` and `arm64`
   - macOS `amd64` and `arm64`
@@ -45,7 +44,7 @@ For a `vX.Y.Z` release, `.github/workflows/release.yaml` publishes:
    ```
 
 5. Monitor the `Release` workflow. The GitHub Release is created only after
-   both container images and the Helm chart have been published successfully.
+   the server image and Helm chart have been published successfully.
 
 Do not move or reuse a published release tag. If released content needs to
 change, publish a new patch version.
@@ -58,7 +57,6 @@ artifact:
 ```bash
 gh release view vX.Y.Z
 docker pull ghcr.io/agentregistry-dev/agentregistry/server:vX.Y.Z
-docker pull ghcr.io/agentregistry-dev/agentregistry/arctl-agentgateway:vX.Y.Z
 helm show chart \
   oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry \
   --version X.Y.Z

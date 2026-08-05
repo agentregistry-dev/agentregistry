@@ -1,7 +1,6 @@
 package types
 
 import (
-	composetypes "github.com/compose-spec/compose-go/v2/types"
 	v1alpha2 "github.com/kagent-dev/kagent/go/api/v1alpha2"
 	kmcpv1alpha1 "github.com/kagent-dev/kmcp/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -112,11 +111,4 @@ type KubernetesRuntimeConfig struct {
 	RemoteMCPServers []*v1alpha2.RemoteMCPServer `json:"remoteMCPServers"`
 	MCPServers       []*kmcpv1alpha1.MCPServer   `json:"mcpServers"`
 	ConfigMaps       []*corev1.ConfigMap         `json:"configMaps,omitempty"`
-}
-
-type DockerComposeConfig = composetypes.Project
-
-type LocalRuntimeConfig struct {
-	DockerCompose *DockerComposeConfig
-	AgentGateway  *AgentGatewayConfig
 }

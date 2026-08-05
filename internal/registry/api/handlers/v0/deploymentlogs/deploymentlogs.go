@@ -78,7 +78,7 @@ type deploymentLogsOutput struct {
 // adapter's context is cancelled).
 //
 // Non-streaming for now — huma lacks first-class SSE output and the
-// kubernetes/local adapters still return closed channels. When real log
+// kubernetes adapter still returns a closed channel. When real log
 // streaming lands upstream, swap this for an SSE/chunked handler at the
 // same path without touching the adapter resolver surface.
 func Register(api huma.API, cfg Config) {

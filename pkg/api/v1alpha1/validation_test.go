@@ -760,8 +760,8 @@ func TestDeploymentResolveRefs_ReportsDanglingDefaultHarnessModel(t *testing.T) 
 
 func TestRuntimeValidate_OK(t *testing.T) {
 	r := &Runtime{
-		Metadata: ObjectMeta{Namespace: "default", Name: "local"},
-		Spec:     RuntimeSpec{Type: TypeLocal},
+		Metadata: ObjectMeta{Namespace: "default", Name: "kubernetes-default"},
+		Spec:     RuntimeSpec{Type: TypeKubernetes},
 	}
 	require.NoError(t, r.Validate())
 }
@@ -781,14 +781,14 @@ func TestRuntimeValidate_RejectsUnknownType(t *testing.T) {
 // Downstream adapter dispatch relies on exact-match equality, so the
 // case-insensitive normalization MUST land at admission.
 func TestRuntimeValidate_CanonicalizesType(t *testing.T) {
-	for _, input := range []string{"local", "LOCAL", "Local", " Local "} {
+	for _, input := range []string{"kubernetes", "KUBERNETES", "Kubernetes", " Kubernetes "} {
 		r := &Runtime{
 			Metadata: ObjectMeta{Namespace: "default", Name: "x"},
 			Spec:     RuntimeSpec{Type: input},
 		}
 		require.NoError(t, r.Validate(), "input %q should validate", input)
-		require.Equal(t, TypeLocal, r.Spec.Type,
-			"input %q should canonicalize to %q, got %q", input, TypeLocal, r.Spec.Type)
+		require.Equal(t, TypeKubernetes, r.Spec.Type,
+			"input %q should canonicalize to %q, got %q", input, TypeKubernetes, r.Spec.Type)
 	}
 }
 

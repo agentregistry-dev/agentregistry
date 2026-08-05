@@ -1,18 +1,11 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useRef } from "react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { deployServer as deployServerApi, getHealthV0, type ServerResponse, type AgentResponse } from "@/lib/admin-api"
+import { deployServer as deployServerApi, type ServerResponse, type AgentResponse } from "@/lib/admin-api"
 import { Play, Plus, X, Loader2, CheckCircle } from "lucide-react"
 
 type DeployResourceType = "mcp" | "agent"
@@ -26,20 +19,7 @@ interface DeployDialogProps {
   onDeploySuccess?: () => void
 }
 
-interface RuntimeOption {
-  id: string
-  label: string
-  description: string
-}
-
-const DOCKER_RUNTIMES: RuntimeOption[] = [
-  { id: "local", label: "Local (Docker)", description: "Deploy as a Docker container on this machine" },
-  { id: "kubernetes-default", label: "Kubernetes", description: "Deploy to the connected Kubernetes cluster" },
-]
-
-const KUBERNETES_RUNTIMES: RuntimeOption[] = [
-  { id: "kubernetes-default", label: "Kubernetes", description: "Deploy to the local Kubernetes cluster" },
-]
+const runtimeId = "kubernetes-default"
 
 export function DeployDialog({ open, onOpenChange, resourceType, server, agent, onDeploySuccess }: DeployDialogProps) {
   const [deploying, setDeploying] = useState(false)
@@ -48,37 +28,8 @@ export function DeployDialog({ open, onOpenChange, resourceType, server, agent, 
   const [config, setConfig] = useState<Record<string, string>>({})
   const [newKey, setNewKey] = useState("")
   const [newValue, setNewValue] = useState("")
-  const [runtimeId, setRuntimeId] = useState("local")
   const [namespace, setNamespace] = useState("")
-  const [platformMode, setPlatformMode] = useState<string>("docker")
-  const [loadingPlatform, setLoadingPlatform] = useState(true)
   const keyInputRef = useRef<HTMLInputElement>(null)
-
-  const availableRuntimes = platformMode === "kubernetes" ? KUBERNETES_RUNTIMES : DOCKER_RUNTIMES
-
-  useEffect(() => {
-    if (open) {
-      fetchPlatformMode()
-    }
-  }, [open])
-
-  useEffect(() => {
-    if (platformMode === "kubernetes") {
-      setRuntimeId("kubernetes-default")
-    }
-  }, [platformMode])
-
-  const fetchPlatformMode = async () => {
-    try {
-      setLoadingPlatform(true)
-      const { data } = await getHealthV0({ throwOnError: true })
-      setPlatformMode(data.platform_mode || "docker")
-    } catch {
-      setPlatformMode("docker")
-    } finally {
-      setLoadingPlatform(false)
-    }
-  }
 
   const name = resourceType === "mcp"
     ? server?.server.name
@@ -91,8 +42,6 @@ export function DeployDialog({ open, onOpenChange, resourceType, server, agent, 
   const displayName = resourceType === "mcp"
     ? (server?.server.title || server?.server.name)
     : agent?.agent.name
-
-  const isKubernetesRuntime = runtimeId.startsWith("kubernetes")
 
   const handleAddConfig = () => {
     if (newKey.trim() && newValue.trim()) {
@@ -117,9 +66,7 @@ export function DeployDialog({ open, onOpenChange, resourceType, server, agent, 
       setError(null)
 
       const env: Record<string, string> = { ...config }
-      if (isKubernetesRuntime) {
-        env["KAGENT_NAMESPACE"] = namespace || "default"
-      }
+      env["KAGENT_NAMESPACE"] = namespace || "default"
 
       await deployServerApi({
         body: {
@@ -151,7 +98,6 @@ export function DeployDialog({ open, onOpenChange, resourceType, server, agent, 
     setConfig({})
     setNewKey("")
     setNewValue("")
-    setRuntimeId("local")
     setNamespace("")
   }
 
@@ -199,53 +145,22 @@ export function DeployDialog({ open, onOpenChange, resourceType, server, agent, 
             className="space-y-5"
             onSubmit={(e) => { e.preventDefault(); handleDeploy() }}
           >
-            {/* Runtime Selection */}
-            <fieldset className="space-y-2">
-              <Label htmlFor="deploy-runtime">Target</Label>
-              {loadingPlatform ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground" aria-live="polite">
-                  <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                  Loading&hellip;
-                </div>
-              ) : (
-                <>
-                  <Select value={runtimeId} onValueChange={setRuntimeId}>
-                    <SelectTrigger id="deploy-runtime">
-                      <SelectValue placeholder="Select target&hellip;" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableRuntimes.map((runtime) => (
-                        <SelectItem key={runtime.id} value={runtime.id}>
-                          {runtime.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    {availableRuntimes.find(p => p.id === runtimeId)?.description}
-                  </p>
-                </>
-              )}
-            </fieldset>
-
             {/* Kubernetes Namespace */}
-            {isKubernetesRuntime && (
-              <div className="space-y-2">
-                <Label htmlFor="deploy-namespace">Namespace</Label>
-                <Input
-                  id="deploy-namespace"
-                  name="namespace"
-                  placeholder="default"
-                  value={namespace}
-                  onChange={(e) => setNamespace(e.target.value)}
-                  autoComplete="off"
-                  spellCheck={false}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Leave empty for the default namespace.
-                </p>
-              </div>
-            )}
+            <div className="space-y-2">
+              <Label htmlFor="deploy-namespace">Kubernetes Namespace</Label>
+              <Input
+                id="deploy-namespace"
+                name="namespace"
+                placeholder="default"
+                value={namespace}
+                onChange={(e) => setNamespace(e.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <p className="text-xs text-muted-foreground">
+                Leave empty for the default namespace.
+              </p>
+            </div>
 
             {/* Environment Variables */}
             <fieldset className="space-y-3">
@@ -348,7 +263,7 @@ export function DeployDialog({ open, onOpenChange, resourceType, server, agent, 
               <Button type="button" variant="ghost" onClick={handleClose} disabled={deploying}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={deploying || loadingPlatform}>
+              <Button type="submit" disabled={deploying}>
                 {deploying ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin motion-reduce:animate-none" aria-hidden="true" />

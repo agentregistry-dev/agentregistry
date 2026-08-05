@@ -1,9 +1,9 @@
 package v1alpha1
 
 // Runtime is the typed envelope for kind=Runtime resources. A Runtime
-// describes an execution target (local docker daemon, a Kubernetes
-// cluster, a hosted agent runtime) that Deployment resources reference
-// via spec.runtimeRef.
+// describes an execution target (a Kubernetes cluster or a downstream
+// hosted agent runtime) that Deployment resources reference via
+// spec.runtimeRef.
 type Runtime struct {
 	TypeMeta `json:",inline" yaml:",inline"`
 	Metadata ObjectMeta  `json:"metadata" yaml:"metadata"`
@@ -16,13 +16,12 @@ func init() {
 }
 
 // Built-in runtime type discriminators. Canonical form is CamelCase.
-// Manifests may write Spec.Type in any casing (`local`, `LOCAL`,
-// `Local`); Runtime.Validate looks the input up case-insensitively in
-// KnownRuntimeTypes and rewrites Spec.Type to the canonical CamelCase
-// value at admission, so all downstream consumers compare against
-// these constants with exact-match equality.
+// Manifests may write Spec.Type in any casing; Runtime.Validate looks
+// the input up case-insensitively in KnownRuntimeTypes and rewrites
+// Spec.Type to the canonical CamelCase value at admission, so all
+// downstream consumers compare against these constants with exact-match
+// equality.
 const (
-	TypeLocal      = "Local"
 	TypeKubernetes = "Kubernetes"
 )
 

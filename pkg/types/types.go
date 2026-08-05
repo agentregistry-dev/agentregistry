@@ -210,8 +210,8 @@ type AppOptions struct {
 	RuntimeAdapters map[string]RuntimeAdapter
 
 	// DeploymentAdapters registers v1alpha1 DeploymentAdapter
-	// implementations keyed by lowercase Runtime.Spec.Type ("local",
-	// "kubernetes", ...). The Deployment controller and adjacent adapter
+	// implementations keyed by lowercase Runtime.Spec.Type ("kubernetes",
+	// "bedrockagentcore", ...). The Deployment controller and adjacent adapter
 	// resolver look up by the type string; downstream builds inject
 	// additional adapters here.
 	DeploymentAdapters map[string]DeploymentAdapter

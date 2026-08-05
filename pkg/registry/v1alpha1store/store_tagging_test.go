@@ -272,7 +272,7 @@ func TestUpsert_AuditorNotCalledForMutableObjectKinds(t *testing.T) {
 	_, err := store.Upsert(ctx, &v1alpha1.Runtime{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindRuntime},
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "p1"},
-		Spec:     v1alpha1.RuntimeSpec{Type: v1alpha1.TypeLocal},
+		Spec:     v1alpha1.RuntimeSpec{Type: v1alpha1.TypeKubernetes},
 	})
 	require.NoError(t, err)
 	require.Empty(t, auditor.Events(), "mutable-object kinds must not emit ResourceTagCreated")

@@ -167,10 +167,6 @@ export type HarnessCompatibility = {
 
 export type HealthBody = {
     /**
-     * Platform mode
-     */
-    platform_mode?: 'docker' | 'kubernetes';
-    /**
      * Health status
      */
     status: string;

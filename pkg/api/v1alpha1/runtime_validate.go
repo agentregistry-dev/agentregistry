@@ -13,7 +13,6 @@ import (
 // exact-match equality. Downstream builds may register additional
 // canonical values at init by inserting into this map.
 var KnownRuntimeTypes = map[string]struct{}{
-	TypeLocal:      {},
 	TypeKubernetes: {},
 }
 
@@ -29,7 +28,7 @@ var KnownRuntimeTypes = map[string]struct{}{
 // exactly one place.
 //
 // Runtime is unversioned: a connection handle to one execution
-// target (an AWS account + role, a kagent cluster, a local Docker engine).
+// target (an AWS account and role, a kagent cluster, or another hosted runtime).
 // Multiple coexisting versions of the same (namespace, name) carry no
 // meaning — there is no "v1" vs "v2" of the same AWS role — so the
 // (namespace, name) pair is the identity.

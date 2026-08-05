@@ -345,9 +345,9 @@ spec:
 apiVersion: ar.dev/v1alpha1
 kind: Runtime
 metadata:
-  name: local
+  name: kubernetes-default
 spec:
-  type: Local
+  type: Kubernetes
 `)
 	objs, err := Default.DecodeMulti(doc)
 	if err != nil {

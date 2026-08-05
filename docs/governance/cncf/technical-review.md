@@ -44,7 +44,7 @@ A concrete example shown in the project documentation is publishing an Anthropic
 _Additional Supported Use Cases:_
 - **MCP server aggregation via Agentgateway:** The registry integrates with [agentgateway](https://github.com/agentgateway/agentgateway) to expose all deployed MCP servers through a single unified endpoint. This allows AI IDE clients to connect once and access all available tools without per-server configuration.
 - **IDE configuration generation:** `arctl configure` generates ready-to-use configuration files for Claude Desktop, Cursor, and VS Code, reducing the friction of connecting AI tools to a local or team registry.
-- **Multi-environment artifact deployment:** Artifacts can be deployed to any target environment (local, cloud, Kubernetes) from a single registry, unifying AI infrastructure management across deployment targets.
+- **Kubernetes artifact deployment:** Artifacts can be deployed from a single registry into Kubernetes environments while `arctl run` supports local development workflows.
 - **Local development registry:** Developers can run a full registry locally via Docker Compose for testing and development workflows.
 
 **Explain which use cases have been identified as unsupported by the project.**
@@ -78,7 +78,7 @@ _Operators interact primarily through the Web UI and the CLI for governance work
 1. **Publish** -- Add AI artifacts (MCP servers, agents, skills) to the registry. This can be done via the Web UI using the `+ Add` button, selecting the artifact type (Agent, MCP Server, or Skill) and providing its metadata, name, description, version, and container image path or repository reference. The CLI `arctl apply -f skill.yaml` and `arctl apply -f mcp.yaml` commands are available for scripted or CI/CD-driven publishing.
 2. **Review** -- Inspect artifact metadata in the Web UI's artifact detail views (the Servers, Agents, and Skills views). Operators use this metadata to make approval decisions.
 3. **Curate and publish** -- Selectively publish approved artifacts into a curated catalog that developers can access, maintaining end-to-end audit and control from the registry.
-4. **Deploy to environments** -- Use `arctl deploy` or the Web UI to promote approved artifacts to target environments (local Docker, Kubernetes clusters).
+4. **Deploy to environments** -- Use `arctl deploy` or the Web UI to promote approved artifacts to Kubernetes clusters.
 
 _Developers interact primarily through the CLI for day-to-day workflows._
 1. **Install** — Install the `arctl` CLI via the provided shell script or by downloading a binary directly from the GitHub releases page:

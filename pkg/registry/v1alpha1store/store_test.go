@@ -127,11 +127,11 @@ func TestStore_GetByRefMutableRejectsTag(t *testing.T) {
 	runtimes := NewMutableObjectStore(pool, TestSchema(), "runtimes")
 	ctx := context.Background()
 
-	local, err := runtimes.GetByRef(ctx, testNS, "local", "")
+	kubernetes, err := runtimes.GetByRef(ctx, testNS, "kubernetes-default", "")
 	require.NoError(t, err)
-	require.Equal(t, "local", local.Metadata.Name)
+	require.Equal(t, "kubernetes-default", kubernetes.Metadata.Name)
 
-	_, err = runtimes.GetByRef(ctx, testNS, "local", "stable")
+	_, err = runtimes.GetByRef(ctx, testNS, "kubernetes-default", "stable")
 	require.ErrorContains(t, err, "tag pinning is not supported")
 }
 
@@ -159,8 +159,14 @@ func TestStore_DeleteByRefMutableDeletesByName(t *testing.T) {
 	runtimes := NewMutableObjectStore(pool, TestSchema(), "runtimes")
 	ctx := context.Background()
 
-	require.NoError(t, runtimes.DeleteByRef(ctx, testNS, "local", ""))
-	_, err := runtimes.GetByRef(ctx, testNS, "local", "")
+	_, err := runtimes.Upsert(ctx, &v1alpha1.Runtime{
+		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "custom"},
+		Spec:     v1alpha1.RuntimeSpec{Type: v1alpha1.TypeKubernetes},
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, runtimes.DeleteByRef(ctx, testNS, "custom", ""))
+	_, err = runtimes.GetByRef(ctx, testNS, "custom", "")
 	require.ErrorIs(t, err, pkgdb.ErrNotFound)
 
 	err = runtimes.DeleteByRef(ctx, testNS, "kubernetes-default", "stable")
@@ -543,17 +549,14 @@ func TestStore_SeededRuntimes(t *testing.T) {
 	runtimes := NewMutableObjectStore(pool, TestSchema(), "runtimes")
 	ctx := context.Background()
 
-	local, err := runtimes.GetLatest(ctx, "default", "local")
-	require.NoError(t, err)
-
 	var spec v1alpha1.RuntimeSpec
-	require.NoError(t, json.Unmarshal(local.Spec, &spec))
-	require.Equal(t, v1alpha1.TypeLocal, spec.Type)
-
 	k8s, err := runtimes.GetLatest(ctx, "default", "kubernetes-default")
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(k8s.Spec, &spec))
 	require.Equal(t, v1alpha1.TypeKubernetes, spec.Type)
+
+	_, err = runtimes.GetLatest(ctx, "default", "local")
+	require.ErrorIs(t, err, pkgdb.ErrNotFound)
 }
 
 // TestStore_NotifyPayloadDiscreteFields guards the R2 fix:

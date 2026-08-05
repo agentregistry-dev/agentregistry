@@ -928,7 +928,7 @@ kind: Runtime
 metadata:
   name: %s
 spec:
-  type: Local
+  type: Kubernetes
 `, agentName, runtimeName)
 
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "multi.yaml", multiYAML)
@@ -977,7 +977,7 @@ kind: Runtime
 metadata:
   name: %s
 spec:
-  type: Local
+  type: Kubernetes
 `, agentName, runtimeName)
 
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "multi.yaml", multiYAML)

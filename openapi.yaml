@@ -317,14 +317,6 @@ components:
     HealthBody:
       additionalProperties: false
       properties:
-        platform_mode:
-          description: Platform mode
-          enum:
-          - docker
-          - kubernetes
-          examples:
-          - docker
-          type: string
         status:
           description: Health status
           examples:

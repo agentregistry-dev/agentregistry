@@ -400,7 +400,7 @@ func TestMCPCatalogTools(t *testing.T) {
 
 			// list_X returns the seeded resource as a v1alpha1 envelope.
 			// Filter by the unique seeded name via search so the assertion holds for
-			// kinds that bootstrap default rows (e.g. Runtime seeds "local" and
+			// kinds that bootstrap default rows (e.g. Runtime seeds
 			// "kubernetes-default"). This also technically exercises the search filter.
 			listRes, err := clientSession.CallTool(ctx, &mcp.CallToolParams{
 				Name:      tc.listTool,

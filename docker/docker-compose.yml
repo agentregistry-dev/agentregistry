@@ -42,10 +42,8 @@ services:
     environment:
       AGENT_REGISTRY_DATABASE_URL: "postgres://agentregistry:agentregistry@postgres:5432/agentregistry?sslmode=disable"
       AGENT_REGISTRY_SERVER_ADDRESS: ":8080"
-      AGENT_REGISTRY_AGENT_GATEWAY_PORT: "21212"
       # Temporarily only for local development.
       AGENT_REGISTRY_ENABLE_REGISTRY_VALIDATION: "false"
-      AGENT_REGISTRY_PLATFORM_MODE: "docker"
       AGENT_REGISTRY_MCP_PORT: "31313"
       KUBECONFIG: "/root/.kube/config"
     ports:
@@ -54,10 +52,6 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      # The local deployment adapter manages containers through the host daemon.
-      - /var/run/docker.sock:/var/run/docker.sock
-      # Runtime configuration written by the server must be visible to the host.
-      - /tmp:/tmp
       - ~/.kube/config:/root/.kube/config.orig:ro
     depends_on:
       postgres:
