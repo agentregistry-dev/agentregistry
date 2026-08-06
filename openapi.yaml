@@ -24,6 +24,11 @@ components:
       properties:
         image:
           type: string
+        protocol:
+          enum:
+          - A2A
+          - HTTP
+          type: string
         repository:
           $ref: '#/components/schemas/Repository'
       type: object
@@ -37,6 +42,8 @@ components:
           - array
           - "null"
         description:
+          type: string
+        iconUrl:
           type: string
         instructions:
           $ref: '#/components/schemas/ResourceRef'
@@ -310,14 +317,6 @@ components:
     HealthBody:
       additionalProperties: false
       properties:
-        platform_mode:
-          description: Platform mode
-          enum:
-          - docker
-          - kubernetes
-          examples:
-          - docker
-          type: string
         status:
           description: Health status
           examples:
@@ -778,6 +777,8 @@ components:
       properties:
         description:
           type: string
+        iconUrl:
+          type: string
         remote:
           $ref: '#/components/schemas/MCPRemote'
         source:
@@ -813,6 +814,24 @@ components:
           type: string
       required:
       - type
+      type: object
+    MarketplaceResponse:
+      additionalProperties: false
+      properties:
+        $schema:
+          type: string
+        name:
+          type: string
+        owner:
+          $ref: '#/components/schemas/Owner'
+        plugins:
+          items:
+            $ref: '#/components/schemas/PluginEntry'
+          type: array
+      required:
+      - name
+      - owner
+      - plugins
       type: object
     Model:
       additionalProperties: false
@@ -878,6 +897,8 @@ components:
           type: string
         endpoint:
           $ref: '#/components/schemas/ModelEndpointConfig'
+        iconUrl:
+          type: string
         model:
           type: string
         provider:
@@ -976,6 +997,16 @@ components:
       required:
       - isLatest
       type: object
+    Owner:
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+        name:
+          type: string
+      required:
+      - name
+      type: object
     PathOrPaths:
       additionalProperties: false
       properties:
@@ -1056,6 +1087,20 @@ components:
           type: string
         version:
           type: string
+      type: object
+    PluginEntry:
+      additionalProperties: false
+      properties:
+        description:
+          type: string
+        name:
+          type: string
+        source: {}
+        version:
+          type: string
+      required:
+      - name
+      - source
       type: object
     PluginExperimental:
       additionalProperties: false
@@ -1245,6 +1290,8 @@ components:
           type:
           - array
           - "null"
+        iconUrl:
+          type: string
         source:
           $ref: '#/components/schemas/PluginSource'
         title:
@@ -1319,6 +1366,8 @@ components:
         content:
           type: string
         description:
+          type: string
+        iconUrl:
           type: string
       type: object
     Repository:
@@ -1596,6 +1645,8 @@ components:
       properties:
         description:
           type: string
+        iconUrl:
+          type: string
         source:
           $ref: '#/components/schemas/SkillSource'
         title:
@@ -1654,6 +1705,27 @@ info:
   version: dev
 openapi: 3.1.0
 paths:
+  /plugin-marketplace/marketplace.json:
+    get:
+      description: Read-only listing of resolved plugins in the Claude Code marketplace.json
+        format.
+      operationId: plugin-marketplace-get
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketplaceResponse'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorModel'
+          description: Error
+      summary: Get the plugin marketplace (Claude Code marketplace.json compatibility)
+      tags:
+      - plugins
   /v0.1/servers:
     get:
       description: Read-only listing of registered MCP servers in the official MCP

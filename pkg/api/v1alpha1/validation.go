@@ -77,9 +77,8 @@ type ResolverFunc func(ctx context.Context, ref ResourceRef) error
 // GetterFunc fetches a ResourceRef as a typed Object. It returns
 // ErrDanglingRef when the referenced object is missing; other errors
 // propagate as-is. Used by reconcilers / runtime adapters that need
-// the target's Spec (not just an existence check) — for example, the
-// local adapter walking an AgentSpec.MCPServers entry to build
-// agentgateway upstream config.
+// the target's Spec (not just an existence check), for example a runtime
+// adapter walking an AgentSpec.MCPServers entry to materialize dependencies.
 type GetterFunc func(ctx context.Context, ref ResourceRef) (Object, error)
 
 // -----------------------------------------------------------------------------
@@ -201,6 +200,30 @@ func validateWebsiteURL(u string) error {
 	}
 	if parsed.Host == "" {
 		return fmt.Errorf("%w: host is empty", ErrInvalidURL)
+	}
+	return nil
+}
+
+// validateIconURL: optional field. When set, must be an absolute https:// URL
+// or a root-relative path. Other schemes are rejected because a catalog UI
+// renders the value as an image source: plain http:// is blocked as mixed
+// content, and javascript:/data: would make the field an injection point.
+func validateIconURL(u string) error {
+	if u == "" {
+		return nil
+	}
+	// A single leading slash is a path on the UI's own origin. Two is a
+	// scheme-relative reference to some other host, which is not what this
+	// field is for.
+	if strings.HasPrefix(u, "/") && !strings.HasPrefix(u, "//") {
+		return nil
+	}
+	parsed, err := url.Parse(u)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidURL, err)
+	}
+	if parsed.Scheme != "https" || parsed.Host == "" {
+		return fmt.Errorf("%w: must be an absolute https:// URL or a root-relative path", ErrInvalidURL)
 	}
 	return nil
 }

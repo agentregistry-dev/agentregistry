@@ -9,6 +9,32 @@ func basePluginMeta() ObjectMeta {
 	return ObjectMeta{Namespace: "default", Name: "my-plugin", Tag: "v1"}
 }
 
+func TestPluginValidate_IconURL(t *testing.T) {
+	// Source is required, so every case carries an otherwise-valid one.
+	source := &PluginSource{
+		Type: PluginSourceTypeGit,
+		Git:  &PluginSourceGit{Repository: &Repository{URL: "https://github.com/org/repo", Branch: "main"}},
+	}
+	for _, tc := range iconURLCases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := &Plugin{
+				TypeMeta: TypeMeta{APIVersion: GroupVersion, Kind: KindPlugin},
+				Metadata: basePluginMeta(),
+				Spec:     PluginSpec{IconURL: tc.iconURL, Source: source},
+			}
+			err := p.Validate()
+			switch {
+			case !tc.wantErr && err != nil:
+				t.Fatalf("iconUrl %q: expected valid, got: %v", tc.iconURL, err)
+			case tc.wantErr && err == nil:
+				t.Fatalf("iconUrl %q: expected an error, got nil", tc.iconURL)
+			case tc.wantErr && !strings.Contains(err.Error(), "spec.iconUrl"):
+				t.Fatalf("iconUrl %q: error %q does not mention spec.iconUrl", tc.iconURL, err.Error())
+			}
+		})
+	}
+}
+
 func TestPluginValidate(t *testing.T) {
 	fullSHA := strings.Repeat("a1b2c3d4", 5) // 40 hex chars
 	gitPinned := &PluginSource{

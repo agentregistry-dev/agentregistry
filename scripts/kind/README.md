@@ -121,7 +121,7 @@ curl http://localhost:5001/v2/_catalog
 If the registry is empty, rebuild images:
 
 ```bash
-make docker-server docker-agentgateway
+make docker-server
 ```
 
 ### Helm install fails

@@ -273,18 +273,9 @@ refactor(db): simplify query methods
 
 ## Building for Release
 
-```bash
-# Full clean build
-make all
-
-# Test the binary
-./bin/arctl version
-./bin/arctl ui
-
-# Create release
-git tag -a v1.0.0 -m "Release v1.0.0"
-git push origin v1.0.0
-```
+Maintainers should follow the complete [release process](docs/releasing.md).
+Releases are built and published by GitHub Actions from an annotated SemVer
+tag on `main`.
 
 ## Common Issues
 

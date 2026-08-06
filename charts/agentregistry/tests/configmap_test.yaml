@@ -37,12 +37,6 @@ tests:
           path: data.AGENT_REGISTRY_SERVER_ADDRESS
           value: ":8080"
 
-  - it: sets AGENT_REGISTRY_AGENT_GATEWAY_PORT
-    asserts:
-      - equal:
-          path: data.AGENT_REGISTRY_AGENT_GATEWAY_PORT
-          value: "21212"
-
   - it: sets AGENT_REGISTRY_MCP_PORT
     asserts:
       - equal:

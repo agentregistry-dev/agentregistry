@@ -202,18 +202,19 @@ type AppOptions struct {
 
 	// RuntimeAdapters registers per-type PostUpsert/PostDelete
 	// hooks for the KindRuntime resource handler, keyed by the
-	// lowercase canonical Runtime.Spec.Type ("bedrockagentcore",
-	// "geminiagentruntime", "kagent", ...). Used by downstream builds
+	// canonical CamelCase Runtime.Spec.Type ("BedrockAgentCore",
+	// "GeminiAgentRuntime", "Kagent", ...). Used by downstream builds
 	// to mirror Runtime apply/delete into a type-specific sidecar
 	// table. Missing types = no sidecar reconciliation for that type
 	// — the v1alpha1 Runtime row still persists.
 	RuntimeAdapters map[string]RuntimeAdapter
 
 	// DeploymentAdapters registers v1alpha1 DeploymentAdapter
-	// implementations keyed by lowercase Runtime.Spec.Type ("local",
-	// "kubernetes", ...). The Deployment controller and adjacent adapter
-	// resolver look up by the type string; downstream builds inject
-	// additional adapters here.
+	// implementations keyed by canonical CamelCase Runtime.Spec.Type
+	// ("Kubernetes", "BedrockAgentCore", ...). The Deployment controller and
+	// adjacent adapter resolver use exact-match lookup after admission
+	// canonicalizes the Runtime type; downstream builds inject additional
+	// adapters here.
 	DeploymentAdapters map[string]DeploymentAdapter
 
 	// DeploymentDependencyKinds registers additional resource kinds whose

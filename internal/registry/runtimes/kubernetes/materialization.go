@@ -1,9 +1,9 @@
-// Package utils hosts shared helpers used by both the local and
-// kubernetes runtime adapters. The primary surface is
+// Package kubernetes owns materialization for the Kubernetes runtime adapter.
+// The primary surface is
 // TranslateMCPServer, which takes a v1alpha1.MCPServerSpec plus
 // per-deployment runtime overrides and projects it onto the
 // runtime-internal *runtimetypes.MCPServer that adapters dispatch.
-package utils
+package kubernetes
 
 import (
 	"context"
@@ -20,7 +20,7 @@ import (
 )
 
 // DefaultLocalAgentPort is the port kagent-runtime listens on inside the
-// agent container. Kept as a package const so both adapters + tests
+// agent container. Kept as a package const so the adapter and its tests
 // reference the same value.
 const DefaultLocalAgentPort uint16 = 8080
 

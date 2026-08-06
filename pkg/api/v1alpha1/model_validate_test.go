@@ -5,6 +5,27 @@ import (
 	"testing"
 )
 
+func TestModelValidate_IconURL(t *testing.T) {
+	for _, tc := range iconURLCases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := &Model{
+				TypeMeta: TypeMeta{APIVersion: GroupVersion, Kind: KindModel},
+				Metadata: ObjectMeta{Namespace: "default", Name: "my-model", Tag: "v1"},
+				Spec:     ModelSpec{Provider: "bedrock", Model: "us.anthropic.claude-opus-4-8", IconURL: tc.iconURL},
+			}
+			err := m.Validate()
+			switch {
+			case !tc.wantErr && err != nil:
+				t.Fatalf("iconUrl %q: expected valid, got: %v", tc.iconURL, err)
+			case tc.wantErr && err == nil:
+				t.Fatalf("iconUrl %q: expected an error, got nil", tc.iconURL)
+			case tc.wantErr && !strings.Contains(err.Error(), "spec.iconUrl"):
+				t.Fatalf("iconUrl %q: error %q does not mention spec.iconUrl", tc.iconURL, err.Error())
+			}
+		})
+	}
+}
+
 func TestModelValidate(t *testing.T) {
 	secretRef := &SecretKeyRef{Name: "bedrock-key", Key: "api-key"}
 

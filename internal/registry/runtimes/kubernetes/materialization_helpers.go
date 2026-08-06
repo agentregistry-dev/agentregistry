@@ -1,4 +1,4 @@
-package utils
+package kubernetes
 
 import (
 	"context"
@@ -17,8 +17,8 @@ import (
 type MCPServerTranslateOpts struct {
 	DeploymentID string
 	// Namespace, when non-empty, overrides meta.Namespace on the emitted
-	// runtime MCPServer. k8s callers set it to the target runtime namespace
-	// so label selectors line up; local callers usually leave it blank.
+	// runtime MCPServer. Kubernetes callers set it to the target runtime
+	// namespace so label selectors line up.
 	Namespace    string
 	EnvValues    map[string]string
 	ArgValues    map[string]string

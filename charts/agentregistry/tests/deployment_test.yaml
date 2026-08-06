@@ -25,7 +25,7 @@ tests:
     asserts:
       - matchRegex:
           path: spec.template.spec.containers[0].image
-          pattern: '^ghcr.io/agentregistry-dev/agentregistry/server:[^@\s]+$'
+          pattern: '^ghcr.io/agentregistry-dev/agentregistry/server:v[^@\s]+$'
 
   - it: uses digest when image.digest is set
     template: deployment.yaml

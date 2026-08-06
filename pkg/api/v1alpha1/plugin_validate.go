@@ -18,6 +18,7 @@ func (p *Plugin) Validate() error {
 func validatePluginSpec(s *PluginSpec) FieldErrors {
 	var errs FieldErrors
 	errs.Append("spec.title", validateTitle(s.Title))
+	errs.Append("spec.iconUrl", validateIconURL(s.IconURL))
 
 	// Source is required: it is the pointer the controller resolves and pins.
 	if s.Source == nil {

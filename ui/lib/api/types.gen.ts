@@ -14,12 +14,14 @@ export type Agent = {
 
 export type AgentSource = {
     image?: string;
+    protocol?: 'A2A' | 'HTTP';
     repository?: Repository;
 };
 
 export type AgentSpec = {
     compatibleHarnesses?: Array<HarnessCompatibility> | null;
     description?: string;
+    iconUrl?: string;
     instructions?: ResourceRef;
     mcpServers?: Array<ResourceRef> | null;
     /**
@@ -164,10 +166,6 @@ export type HarnessCompatibility = {
 };
 
 export type HealthBody = {
-    /**
-     * Platform mode
-     */
-    platform_mode?: 'docker' | 'kubernetes';
     /**
      * Health status
      */
@@ -370,6 +368,7 @@ export type McpServerSource = {
 
 export type McpServerSpec = {
     description?: string;
+    iconUrl?: string;
     remote?: McpRemote;
     source?: McpServerSource;
     title?: string;
@@ -387,6 +386,13 @@ export type McpTransport = {
     path?: string;
     port?: number;
     type: string;
+};
+
+export type MarketplaceResponse = {
+    $schema?: string;
+    name: string;
+    owner: Owner;
+    plugins: Array<PluginEntry>;
 };
 
 export type Model = {
@@ -418,6 +424,7 @@ export type ModelSpec = {
     auth?: ModelAuthConfig;
     description?: string;
     endpoint?: ModelEndpointConfig;
+    iconUrl?: string;
     model: string;
     provider: 'bedrock';
     title?: string;
@@ -464,6 +471,11 @@ export type OfficialMeta = {
     updatedAt?: string;
 };
 
+export type Owner = {
+    email?: string;
+    name: string;
+};
+
 export type PathOrPaths = {
     Values: Array<string> | null;
     WasArray: boolean;
@@ -501,6 +513,13 @@ export type PluginChannel = {
 export type PluginDependency = {
     marketplace?: string;
     name?: string;
+    version?: string;
+};
+
+export type PluginEntry = {
+    description?: string;
+    name: string;
+    source: unknown;
     version?: string;
 };
 
@@ -581,6 +600,7 @@ export type PluginSourceOci = {
 export type PluginSpec = {
     description?: string;
     harnesses?: Array<string> | null;
+    iconUrl?: string;
     source?: PluginSource;
     title?: string;
 };
@@ -616,6 +636,7 @@ export type Prompt = {
 export type PromptSpec = {
     content?: string;
     description?: string;
+    iconUrl?: string;
 };
 
 export type Repository = {
@@ -740,6 +761,7 @@ export type SkillSource = {
 
 export type SkillSpec = {
     description?: string;
+    iconUrl?: string;
     source?: SkillSource;
     title?: string;
 };
@@ -769,6 +791,31 @@ export type VersionBody = {
      */
     version: string;
 };
+
+export type PluginMarketplaceGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/plugin-marketplace/marketplace.json';
+};
+
+export type PluginMarketplaceGetErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type PluginMarketplaceGetError = PluginMarketplaceGetErrors[keyof PluginMarketplaceGetErrors];
+
+export type PluginMarketplaceGetResponses = {
+    /**
+     * OK
+     */
+    200: MarketplaceResponse;
+};
+
+export type PluginMarketplaceGetResponse = PluginMarketplaceGetResponses[keyof PluginMarketplaceGetResponses];
 
 export type McpRegistryListServersData = {
     body?: never;

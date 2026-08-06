@@ -278,13 +278,6 @@ dev-build: build-ui ## Build quickly for local development
 	@echo "Development build complete!"
 
 
-# Build custom agent gateway image with npx/uvx support
-.PHONY: docker-agentgateway
-docker-agentgateway: buildx-create ## Build the custom agent gateway image
-	@echo "Building custom agent gateway image..."
-	$(DOCKER_BUILDER) build --builder $(BUILDX_BUILDER_NAME) $(DOCKER_BUILD_ARGS) -f docker/agentgateway.Dockerfile -t $(DOCKER_BUILD_REGISTRY)/$(DOCKER_REPO)/arctl-agentgateway:$(VERSION) .
-	echo "✓ Agent gateway image built successfully";
-
 .PHONY: docker-server
 docker-server: .env buildx-create ## Build the server Docker image
 	@echo "Building server Docker image..."
@@ -333,7 +326,7 @@ buildx-create: local-registry ## Create the buildx builder on buildnet (run once
 	fi
 
 .PHONY: docker
-docker: docker-agentgateway docker-server ## Build the project Docker images
+docker: docker-server ## Build the project Docker image
 
 .PHONY: docker-tag-as-dev
 docker-tag-as-dev: ## Tag and push Docker images as :dev
@@ -341,9 +334,6 @@ docker-tag-as-dev: ## Tag and push Docker images as :dev
 	docker pull $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION)
 	docker tag $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION) $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:dev
 	docker push $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:dev
-	docker pull $(DOCKER_REGISTRY)/$(DOCKER_REPO)/arctl-agentgateway:$(VERSION)
-	docker tag $(DOCKER_REGISTRY)/$(DOCKER_REPO)/arctl-agentgateway:$(VERSION) $(DOCKER_REGISTRY)/$(DOCKER_REPO)/arctl-agentgateway:dev
-	docker push $(DOCKER_REGISTRY)/$(DOCKER_REPO)/arctl-agentgateway:dev
 	@echo "✓ Docker image pulled successfully"
 
 KIND_CLUSTER_NAME ?= agentregistry
@@ -401,7 +391,7 @@ BUILD ?= true
 .PHONY: install-agentregistry
 install-agentregistry: charts-generate ## Build images and Helm install AgentRegistry into the Kind cluster (BUILD=false to skip image builds)
 ifeq ($(BUILD),true)
-install-agentregistry: docker-server docker-agentgateway
+install-agentregistry: docker-server
 endif
 	@$(HELM) upgrade --install agentregistry charts/agentregistry \
 	    --kube-context $(KIND_CLUSTER_CONTEXT) \

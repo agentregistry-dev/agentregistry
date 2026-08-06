@@ -267,7 +267,7 @@ spec:
     tag: "1.0.0"
   runtimeRef:
     kind: Runtime
-    name: local
+    name: kubernetes-default
   desiredState: deployed
   env:
     OPENAI_API_KEY: "{{ .Secrets.openai }}"
@@ -385,9 +385,9 @@ spec:
 apiVersion: ar.dev/v1alpha1
 kind: Runtime
 metadata:
-  name: local
+  name: kubernetes-default
 spec:
-  type: Local
+  type: Kubernetes
 `)
 	objs, err := Default.DecodeMulti(doc)
 	if err != nil {
@@ -511,7 +511,7 @@ func TestEncode_RoundTrip_JSON(t *testing.T) {
 		Metadata: ObjectMeta{Name: "prod"},
 		Spec: DeploymentSpec{
 			TargetRef:    ResourceRef{Kind: KindAgent, Name: "x", Tag: "1"},
-			RuntimeRef:   ResourceRef{Kind: KindRuntime, Name: "local"},
+			RuntimeRef:   ResourceRef{Kind: KindRuntime, Name: "kubernetes-default"},
 			DesiredState: DesiredStateDeployed,
 			Env:          map[string]string{"FOO": "bar"},
 		},

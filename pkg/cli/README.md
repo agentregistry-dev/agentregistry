@@ -11,15 +11,25 @@ root := cli.Root(cli.Config{
 	Disabled: map[string]bool{
 		"db migrate goto": true,
 	},
-	ExtraCommands: []*cobra.Command{
-		runtime.NewCommand(),
-		user.UserCommand(ctx),
+	ExtraCommands: func(deps cliruntime.Deps) []*cobra.Command {
+		return []*cobra.Command{
+			runtime.NewCommand(deps),
+			user.UserCommand(ctx, deps),
+		}
 	},
 	ExtraMigrationSources: []migrate.Source{
 		entlegacymigrate.EnterpriseSource(),
 	},
 })
 ```
+
+Extra commands receive the same runtime, authentication provider, and kind
+registry as built-in commands. Commands using an extended downstream client
+should call `deps.Runtime.ResolveRegistryTarget` and pass the returned base URL
+and token to that client; commands using the OSS API client can call
+`deps.Runtime.RegistryClient` directly.
+`ResolveRegistryTarget` replaces the former partial `RegistryTarget` getter so
+callers cannot bypass token resolution.
 
 The OSS migration source is always registered first by `Root`. Extra migration
 sources are appended in config order. When more than one source is present,

@@ -42,6 +42,7 @@ internal/registry/api/ui/dist/
 *.swp
 *.swo
 *~
+*.omc
 
 # OS
 .DS_Store

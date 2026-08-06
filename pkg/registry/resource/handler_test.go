@@ -584,21 +584,21 @@ func TestResourceRegister_MutableObjectUsesNameOnlyRoute(t *testing.T) {
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindRuntime},
 		Metadata: v1alpha1.ObjectMeta{
 			Namespace: "default",
-			Name:      "local-test",
+			Name:      "kubernetes-test",
 		},
-		Spec: v1alpha1.RuntimeSpec{Type: v1alpha1.TypeLocal},
+		Spec: v1alpha1.RuntimeSpec{Type: v1alpha1.TypeKubernetes},
 	}
 
-	resp := api.Put("/v0/runtimes/local-test", runtime)
+	resp := api.Put("/v0/runtimes/kubernetes-test", runtime)
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 
-	resp = api.Get("/v0/runtimes/local-test")
+	resp = api.Get("/v0/runtimes/kubernetes-test")
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 
-	resp = api.Put("/v0/runtimes/local-test/1", runtime)
+	resp = api.Put("/v0/runtimes/kubernetes-test/1", runtime)
 	require.Equal(t, http.StatusNotFound, resp.Code, "mutable object route must be name-only")
 
-	resp = api.Delete("/v0/runtimes/local-test")
+	resp = api.Delete("/v0/runtimes/kubernetes-test")
 	require.Equal(t, http.StatusNoContent, resp.Code, resp.Body.String())
 }
 

@@ -9,8 +9,8 @@ import (
 )
 
 // DeploymentAdapter is the v1alpha1 runtime surface for deploying
-// Agent or MCPServer targets onto a concrete runtime (local
-// docker daemon, Kubernetes, hosted cloud runtimes, etc.).
+// Agent or MCPServer targets onto a concrete runtime (Kubernetes,
+// hosted cloud runtimes, etc.).
 //
 // One adapter per runtime type. Adapters are registered at app boot in
 // a map keyed by Type() string; the reconciler looks up by
@@ -42,7 +42,7 @@ import (
 // discovery is intentionally opt-in and is not part of the lifecycle contract.
 type DeploymentAdapter interface {
 	// Type returns the canonical CamelCase discriminator string
-	// ("Local", "Kubernetes", "BedrockAgentCore", ...). Runtime.Validate
+	// ("Kubernetes", "BedrockAgentCore", ...). Runtime.Validate
 	// canonicalizes Spec.Type at admission, so the reconciler's adapter
 	// lookup compares Type() against Spec.Type with exact-match equality.
 	Type() string
@@ -226,7 +226,7 @@ type DiscoveryResult struct {
 // state.
 type RuntimeAdapter interface {
 	// Type returns the canonical CamelCase discriminator string
-	// ("Local", "Kubernetes", "BedrockAgentCore", "GeminiAgentRuntime",
+	// ("Kubernetes", "BedrockAgentCore", "GeminiAgentRuntime",
 	// ...). Runtime.Validate canonicalizes Spec.Type at admission so
 	// dispatch can compare with exact-match equality.
 	Type() string

@@ -112,6 +112,37 @@ func TestAgentValidate_AcceptsBlankOptionalFields(t *testing.T) {
 	require.NoError(t, a.Validate())
 }
 
+func TestAgentValidate_Protocol(t *testing.T) {
+	tests := []struct {
+		name     string
+		protocol *AgentProtocol
+		wantErr  bool
+	}{
+		{name: "omitted defaults at consumption"},
+		{name: "A2A", protocol: new(AgentProtocolA2A)},
+		{name: "HTTP", protocol: new(AgentProtocolHTTP)},
+		{name: "reject empty", protocol: new(AgentProtocol("")), wantErr: true},
+		{name: "reject lowercase", protocol: new(AgentProtocol("http")), wantErr: true},
+		{name: "reject unknown", protocol: new(AgentProtocol("GRPC")), wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			agent := &Agent{
+				Metadata: ObjectMeta{Namespace: "default", Name: "protocol-agent"},
+				Spec:     AgentSpec{Source: &AgentSource{Protocol: tt.protocol}},
+			}
+			err := agent.Validate()
+			if tt.wantErr {
+				require.Error(t, err)
+				require.Contains(t, failedFields(t, err), "spec.source.protocol")
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
 func TestAgentValidate_AccumulatesErrors(t *testing.T) {
 	a := &Agent{
 		Metadata: ObjectMeta{Namespace: "default", Name: "a"},
@@ -121,6 +152,41 @@ func TestAgentValidate_AccumulatesErrors(t *testing.T) {
 	}
 	paths := failedFields(t, a.Validate())
 	require.Contains(t, paths, "spec.title")
+}
+
+// iconURLCases is the shared table for spec.iconUrl. Every kind that exposes
+// the field funnels through the same validateIconURL rule, so each kind's test
+// reuses these cases to prove its own wiring rather than restating the rule.
+var iconURLCases = []struct {
+	name    string
+	iconURL string
+	wantErr bool
+}{
+	{"empty", "", false},
+	{"absolute https", "https://example.com/icons/icon.svg", false},
+	{"root-relative path", "/catalog-covers/icon.svg", false},
+	{"plain http", "http://example.com/icons/icon.svg", true},
+	{"javascript scheme", "javascript:alert(1)", true},
+	{"data scheme", "data:image/svg+xml;base64,PHN2Zy8+", true},
+	{"scheme-relative", "//example.com/icons/icon.svg", true},
+	{"bare path", "catalog-covers/icon.svg", true},
+}
+
+func TestAgentValidate_IconURL(t *testing.T) {
+	for _, tc := range iconURLCases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := &Agent{
+				Metadata: ObjectMeta{Namespace: "default", Name: "a"},
+				Spec:     AgentSpec{IconURL: tc.iconURL},
+			}
+			err := a.Validate()
+			if !tc.wantErr {
+				require.NoError(t, err)
+				return
+			}
+			require.Contains(t, failedFields(t, err), "spec.iconUrl")
+		})
+	}
 }
 
 func TestAgentValidate_AcceptsRepositoryWithBranchAndCommit(t *testing.T) {
@@ -231,7 +297,7 @@ func TestDeploymentValidate_OK(t *testing.T) {
 		Metadata: ObjectMeta{Namespace: "default", Name: "prod"},
 		Spec: DeploymentSpec{
 			TargetRef:    ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
-			RuntimeRef:   ResourceRef{Kind: KindRuntime, Name: "local"},
+			RuntimeRef:   ResourceRef{Kind: KindRuntime, Name: "kubernetes-default"},
 			DesiredState: DesiredStateDeployed,
 		},
 	}
@@ -451,7 +517,7 @@ func TestDeploymentValidate_RejectsBadTargetKind(t *testing.T) {
 		Metadata: ObjectMeta{Namespace: "default", Name: "prod"},
 		Spec: DeploymentSpec{
 			TargetRef:  ResourceRef{Kind: KindSkill, Name: "skill", Tag: "stable"},
-			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "local"},
+			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "kubernetes-default"},
 		},
 	}
 	paths := failedFields(t, d.Validate())
@@ -475,7 +541,7 @@ func TestDeploymentValidate_RejectsBadDesiredState(t *testing.T) {
 		Metadata: ObjectMeta{Namespace: "default", Name: "prod"},
 		Spec: DeploymentSpec{
 			TargetRef:    ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
-			RuntimeRef:   ResourceRef{Kind: KindRuntime, Name: "local"},
+			RuntimeRef:   ResourceRef{Kind: KindRuntime, Name: "kubernetes-default"},
 			DesiredState: "running",
 		},
 	}
@@ -488,7 +554,7 @@ func TestDeploymentValidate_DeploymentRefsOK(t *testing.T) {
 		Metadata: ObjectMeta{Namespace: "default", Name: "agent-prod"},
 		Spec: DeploymentSpec{
 			TargetRef:    ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
-			RuntimeRef:   ResourceRef{Kind: KindRuntime, Name: "local"},
+			RuntimeRef:   ResourceRef{Kind: KindRuntime, Name: "kubernetes-default"},
 			DesiredState: DesiredStateDeployed,
 			DeploymentRefs: []DeploymentRef{
 				{Name: "weather-mcp-prod"},
@@ -504,7 +570,7 @@ func TestDeploymentValidate_DeploymentRefsRejectMissingName(t *testing.T) {
 		Metadata: ObjectMeta{Namespace: "default", Name: "agent-prod"},
 		Spec: DeploymentSpec{
 			TargetRef:      ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
-			RuntimeRef:     ResourceRef{Kind: KindRuntime, Name: "local"},
+			RuntimeRef:     ResourceRef{Kind: KindRuntime, Name: "kubernetes-default"},
 			DeploymentRefs: []DeploymentRef{{Namespace: "tools"}}, // missing Name
 		},
 	}
@@ -517,7 +583,7 @@ func TestDeploymentValidate_DeploymentRefsRejectBadNamespace(t *testing.T) {
 		Metadata: ObjectMeta{Namespace: "default", Name: "agent-prod"},
 		Spec: DeploymentSpec{
 			TargetRef:      ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
-			RuntimeRef:     ResourceRef{Kind: KindRuntime, Name: "local"},
+			RuntimeRef:     ResourceRef{Kind: KindRuntime, Name: "kubernetes-default"},
 			DeploymentRefs: []DeploymentRef{{Namespace: "Bad NS", Name: "ok"}},
 		},
 	}
@@ -532,7 +598,7 @@ func TestDeploymentValidate_AllowsEmptyTargetRefTag(t *testing.T) {
 		Metadata: ObjectMeta{Namespace: "default", Name: "prod"},
 		Spec: DeploymentSpec{
 			TargetRef:  ResourceRef{Kind: KindAgent, Name: "alice"},
-			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "local"},
+			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "kubernetes-default"},
 		},
 	}
 	require.NoError(t, d.Validate())
@@ -543,7 +609,7 @@ func TestDeploymentValidate_RejectsBadTargetRefTag(t *testing.T) {
 		Metadata: ObjectMeta{Namespace: "default", Name: "prod"},
 		Spec: DeploymentSpec{
 			TargetRef:  ResourceRef{Kind: KindAgent, Name: "alice", Tag: "bad tag"},
-			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "local"},
+			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "kubernetes-default"},
 		},
 	}
 	paths := failedFields(t, d.Validate())
@@ -560,7 +626,7 @@ func TestDeploymentResolveRefs_InheritsNamespace(t *testing.T) {
 		Metadata: ObjectMeta{Namespace: "team-b", Name: "prod"},
 		Spec: DeploymentSpec{
 			TargetRef:  ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
-			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "local"},
+			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "kubernetes-default"},
 		},
 	}
 	require.NoError(t, d.ResolveRefs(context.Background(), resolver))
@@ -605,7 +671,7 @@ func TestDeploymentResolveRefs_ModelRef(t *testing.T) {
 				Metadata: ObjectMeta{Namespace: "team-b", Name: "prod"},
 				Spec: DeploymentSpec{
 					TargetRef:  ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
-					RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "local"},
+					RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "kubernetes-default"},
 					ModelRef:   &tt.modelRef,
 				},
 			}
@@ -632,7 +698,7 @@ func TestDeploymentResolveRefs_UsesDefaultHarnessModel(t *testing.T) {
 		Metadata: ObjectMeta{Namespace: "team-b", Name: "prod"},
 		Spec: DeploymentSpec{
 			TargetRef:  ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
-			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "local"},
+			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "kubernetes-default"},
 			Harness:    &DeploymentHarness{Type: "claude-code"},
 		},
 	}
@@ -657,7 +723,7 @@ func TestDeploymentResolveRefs_ReportsDanglingModelRef(t *testing.T) {
 		Metadata: ObjectMeta{Namespace: "default", Name: "prod"},
 		Spec: DeploymentSpec{
 			TargetRef:  ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
-			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "local"},
+			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "kubernetes-default"},
 			ModelRef:   &ModelRef{Name: "missing"},
 		},
 	}
@@ -678,7 +744,7 @@ func TestDeploymentResolveRefs_ReportsDanglingDefaultHarnessModel(t *testing.T) 
 		Metadata: ObjectMeta{Namespace: "default", Name: "prod"},
 		Spec: DeploymentSpec{
 			TargetRef:  ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
-			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "local"},
+			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "kubernetes-default"},
 			Harness:    &DeploymentHarness{Type: "claude-code"},
 		},
 	}
@@ -694,8 +760,8 @@ func TestDeploymentResolveRefs_ReportsDanglingDefaultHarnessModel(t *testing.T) 
 
 func TestRuntimeValidate_OK(t *testing.T) {
 	r := &Runtime{
-		Metadata: ObjectMeta{Namespace: "default", Name: "local"},
-		Spec:     RuntimeSpec{Type: TypeLocal},
+		Metadata: ObjectMeta{Namespace: "default", Name: "kubernetes-default"},
+		Spec:     RuntimeSpec{Type: TypeKubernetes},
 	}
 	require.NoError(t, r.Validate())
 }
@@ -715,14 +781,14 @@ func TestRuntimeValidate_RejectsUnknownType(t *testing.T) {
 // Downstream adapter dispatch relies on exact-match equality, so the
 // case-insensitive normalization MUST land at admission.
 func TestRuntimeValidate_CanonicalizesType(t *testing.T) {
-	for _, input := range []string{"local", "LOCAL", "Local", " Local "} {
+	for _, input := range []string{"kubernetes", "KUBERNETES", "Kubernetes", " Kubernetes "} {
 		r := &Runtime{
 			Metadata: ObjectMeta{Namespace: "default", Name: "x"},
 			Spec:     RuntimeSpec{Type: input},
 		}
 		require.NoError(t, r.Validate(), "input %q should validate", input)
-		require.Equal(t, TypeLocal, r.Spec.Type,
-			"input %q should canonicalize to %q, got %q", input, TypeLocal, r.Spec.Type)
+		require.Equal(t, TypeKubernetes, r.Spec.Type,
+			"input %q should canonicalize to %q, got %q", input, TypeKubernetes, r.Spec.Type)
 	}
 }
 
@@ -791,6 +857,26 @@ func TestMCPServerValidate_RequiresSourceOrRemote(t *testing.T) {
 	require.Contains(t, paths, "spec")
 }
 
+func TestMCPServerValidate_IconURL(t *testing.T) {
+	for _, tc := range iconURLCases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := &MCPServer{
+				Metadata: ObjectMeta{Namespace: "default", Name: "tools", Tag: "v1"},
+				Spec: MCPServerSpec{
+					IconURL: tc.iconURL,
+					Remote:  &MCPRemote{Type: "streamable-http", URL: "https://example.test/mcp"},
+				},
+			}
+			err := m.Validate()
+			if !tc.wantErr {
+				require.NoError(t, err)
+				return
+			}
+			require.Contains(t, failedFields(t, err), "spec.iconUrl")
+		})
+	}
+}
+
 func TestMCPServerValidate_HTTPPortRange(t *testing.T) {
 	mk := func(port uint16) *MCPServer {
 		return &MCPServer{
@@ -816,7 +902,7 @@ func TestMCPServerValidate_HTTPPortRange(t *testing.T) {
 
 // TestMCPServerValidate_TransportTypeClosedSet asserts the transport type
 // is restricted to {stdio, http}. The resolver in
-// internal/registry/runtimes/utils/deployment_adapter_utils.go has a
+// internal/registry/runtimes/kubernetes/materialization.go has a
 // default→http switch, so a typo like "sse" would silently route to HTTP
 // if the validator didn't gate it here.
 func TestMCPServerValidate_TransportTypeClosedSet(t *testing.T) {
@@ -1149,4 +1235,46 @@ func TestMCPServerValidateRegistries_UsesPerTypeServerName(t *testing.T) {
 	}
 	require.NoError(t, m.ValidateRegistries(context.Background(), validator))
 	require.Equal(t, "io.github.modelcontextprotocol/server-fetch", gotClaim)
+}
+
+// -----------------------------------------------------------------------------
+// Skill
+// -----------------------------------------------------------------------------
+
+func TestSkillValidate_IconURL(t *testing.T) {
+	for _, tc := range iconURLCases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &Skill{
+				Metadata: ObjectMeta{Namespace: "default", Name: "my-skill", Tag: "v1"},
+				Spec:     SkillSpec{IconURL: tc.iconURL},
+			}
+			err := s.Validate()
+			if !tc.wantErr {
+				require.NoError(t, err)
+				return
+			}
+			require.Contains(t, failedFields(t, err), "spec.iconUrl")
+		})
+	}
+}
+
+// -----------------------------------------------------------------------------
+// Prompt
+// -----------------------------------------------------------------------------
+
+func TestPromptValidate_IconURL(t *testing.T) {
+	for _, tc := range iconURLCases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := &Prompt{
+				Metadata: ObjectMeta{Namespace: "default", Name: "my-prompt", Tag: "v1"},
+				Spec:     PromptSpec{Content: "hello", IconURL: tc.iconURL},
+			}
+			err := p.Validate()
+			if !tc.wantErr {
+				require.NoError(t, err)
+				return
+			}
+			require.Contains(t, failedFields(t, err), "spec.iconUrl")
+		})
+	}
 }

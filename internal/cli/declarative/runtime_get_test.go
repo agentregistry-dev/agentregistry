@@ -117,7 +117,7 @@ func TestRuntimeGet_TableOutput(t *testing.T) {
 }
 
 func TestRuntimeGet_ReturnsMatchByNamespaceName(t *testing.T) {
-	defaultRuntime := runtimeFixture("my-kagent", "Local", nil)
+	defaultRuntime := runtimeFixture("my-kagent", "Kubernetes", nil)
 	teamRuntime := runtimeFixture("my-kagent", "Kagent", map[string]any{"namespace": "team-kagent"})
 	teamRuntime.Metadata.Namespace = "team-a"
 	runtimes := []v1alpha1.Runtime{defaultRuntime, teamRuntime}
@@ -133,5 +133,5 @@ func TestRuntimeGet_ReturnsMatchByNamespaceName(t *testing.T) {
 	got := out.String()
 	assert.Contains(t, got, "my-kagent")
 	assert.Contains(t, got, "Kagent")
-	assert.NotContains(t, got, "Local")
+	assert.NotContains(t, got, "Kubernetes")
 }

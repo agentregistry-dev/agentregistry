@@ -15,7 +15,6 @@ import (
 func TestDeploymentControllerFullReconcileSchedulesDeployments(t *testing.T) {
 	ctx := context.Background()
 	stores := newControllerTestStores(t)
-	seedRuntime(t, stores, "local")
 	seedMCPServer(t, stores, "weather")
 	seedDeployment(t, stores, "api", v1alpha1.DesiredStateDeployed)
 	seedDeployment(t, stores, "worker", v1alpha1.DesiredStateDeployed)
@@ -30,7 +29,6 @@ func TestDeploymentControllerFullReconcileSchedulesDeployments(t *testing.T) {
 func TestDeploymentControllerHandleDeploymentEventSchedulesOneDeployment(t *testing.T) {
 	ctx := context.Background()
 	stores := newControllerTestStores(t)
-	seedRuntime(t, stores, "local")
 	seedMCPServer(t, stores, "weather")
 	target := seedDeployment(t, stores, "api", v1alpha1.DesiredStateDeployed)
 	seedDeployment(t, stores, "worker", v1alpha1.DesiredStateDeployed)
@@ -74,7 +72,6 @@ func TestDeploymentControllerHandleDependencyEventsFullReconcileDeployments(t *t
 	} {
 		t.Run(kind, func(t *testing.T) {
 			stores := newControllerTestStores(t)
-			seedRuntime(t, stores, "local")
 			seedMCPServer(t, stores, "weather")
 			seedDeployment(t, stores, "api", v1alpha1.DesiredStateDeployed)
 			seedDeployment(t, stores, "worker", v1alpha1.DesiredStateDeployed)
@@ -93,7 +90,6 @@ func TestDeploymentControllerHandleDependencyEventsFullReconcileDeployments(t *t
 func TestDeploymentControllerHandleConfiguredDependencyEventFullReconcilesDeployments(t *testing.T) {
 	ctx := context.Background()
 	stores := newControllerTestStores(t)
-	seedRuntime(t, stores, "local")
 	seedMCPServer(t, stores, "weather")
 	seedDeployment(t, stores, "api", v1alpha1.DesiredStateDeployed)
 	seedDeployment(t, stores, "worker", v1alpha1.DesiredStateDeployed)
@@ -111,7 +107,6 @@ func TestDeploymentControllerHandleConfiguredDependencyEventFullReconcilesDeploy
 func TestDeploymentControllerRetentionGapTriggersFullReconcile(t *testing.T) {
 	ctx := context.Background()
 	stores := newControllerTestStores(t)
-	seedRuntime(t, stores, "local")
 	seedMCPServer(t, stores, "weather")
 	seedDeployment(t, stores, "api", v1alpha1.DesiredStateDeployed)
 	controller := newDeploymentTestController(stores, &recordingDeploymentAdapter{})

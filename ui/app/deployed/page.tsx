@@ -10,7 +10,7 @@ import {
 } from "@/lib/admin-api"
 import { toFlatDeployment, type FlatDeployment } from "@/lib/deployment-flat"
 import { Input } from "@/components/ui/input"
-import { Trash2, AlertCircle, Calendar, Package, Copy, Check, Link2, Server, Bot as BotIcon, Search, X } from "lucide-react"
+import { Trash2, AlertCircle, Calendar, Server, Bot as BotIcon, Search, X } from "lucide-react"
 import {
   Select,
   SelectContent,
@@ -24,7 +24,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { toast } from "sonner"
 import {
   Dialog,
   DialogContent,
@@ -34,8 +33,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 
-const GATEWAY_BASE_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:21212"
-
 const STATUS_COLORS: Record<string, string> = {
   deployed:   'bg-green-500',
   discovered: 'bg-green-500',
@@ -44,44 +41,16 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled:  'bg-muted-foreground',
 }
 
-function sanitizeName(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9-]/g, '-')
-}
-
-function getAgentEndpointUrl(serverName: string, deploymentId: string): string {
-  const name = sanitizeName(serverName)
-  const id = sanitizeName(deploymentId)
-  return `${GATEWAY_BASE_URL}/agents/${name}-${id}`
-}
-
 export default function DeployedPage() {
   const [deployments, setDeployments] = useState<FlatDeployment[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [removing, setRemoving] = useState(false)
   const [serverToRemove, setServerToRemove] = useState<FlatDeployment | null>(null)
-  const [copied, setCopied] = useState(false)
-  const [copiedAgentId, setCopiedAgentId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [filterRuntime, setFilterRuntime] = useState<string>("all")
   const [filterOrigin, setFilterOrigin] = useState<string>("all")
   const [filterStatus, setFilterStatus] = useState<string>("all")
-
-  const gatewayUrl = `${GATEWAY_BASE_URL}/mcp`
-
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(gatewayUrl)
-    setCopied(true)
-    toast.success("Gateway URL copied to clipboard!")
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  const copyAgentUrl = (deploymentId: string, url: string) => {
-    navigator.clipboard.writeText(url)
-    setCopiedAgentId(deploymentId)
-    toast.success("Agent endpoint URL copied to clipboard!")
-    setTimeout(() => setCopiedAgentId(null), 2000)
-  }
 
   const fetchDeployments = async () => {
     try {
@@ -136,12 +105,12 @@ export default function DeployedPage() {
     }
   }
 
-  const uniqueRuntimes = [...new Set(deployments.map(d => d.runtimeId || "local"))]
+  const uniqueRuntimes = [...new Set(deployments.map(d => d.runtimeId || "unknown"))]
   const uniqueOrigins = [...new Set(deployments.map(d => d.origin))]
   const uniqueStatuses = [...new Set(deployments.map(d => d.status))]
 
   const filtered = deployments.filter(d => {
-    if (filterRuntime !== "all" && (d.runtimeId || "local") !== filterRuntime) return false
+    if (filterRuntime !== "all" && (d.runtimeId || "unknown") !== filterRuntime) return false
     if (filterOrigin !== "all" && d.origin !== filterOrigin) return false
     if (filterStatus !== "all" && d.status !== filterStatus) return false
     if (searchQuery) {
@@ -276,9 +245,6 @@ export default function DeployedPage() {
                         item={item}
                         onRemove={handleRemove}
                         removing={removing}
-                        copiedAgentId={copiedAgentId}
-                        onCopyAgentUrl={copyAgentUrl}
-                        getAgentEndpointUrl={getAgentEndpointUrl}
                       />
                     ))}
                   </div>
@@ -294,24 +260,6 @@ export default function DeployedPage() {
                       {mcpServers.length}
                     </Badge>
                   </div>
-                  <div className="flex items-center gap-3 px-4 py-3 bg-muted/60 border rounded-lg mb-4">
-                    <Link2 className="h-4 w-4 text-primary shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs text-muted-foreground mb-0.5">Gateway URL — connect MCP clients to all managed servers (local provider only)</p>
-                      <code className="text-sm font-mono text-foreground">{gatewayUrl}</code>
-                    </div>
-                    <button
-                      onClick={copyToClipboard}
-                      className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
-                      title="Copy gateway URL"
-                    >
-                      {copied ? (
-                        <Check className="h-4 w-4 text-green-500" />
-                      ) : (
-                        <Copy className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
                   <div className="divide-y">
                     {mcpServers.map((item) => (
                       <DeploymentRow
@@ -319,9 +267,6 @@ export default function DeployedPage() {
                         item={item}
                         onRemove={handleRemove}
                         removing={removing}
-                        copiedAgentId={copiedAgentId}
-                        onCopyAgentUrl={copyAgentUrl}
-                        getAgentEndpointUrl={getAgentEndpointUrl}
                       />
                     ))}
                   </div>
@@ -357,13 +302,10 @@ export default function DeployedPage() {
   )
 }
 
-function DeploymentRow({ item, onRemove, removing, copiedAgentId, onCopyAgentUrl, getAgentEndpointUrl }: {
+function DeploymentRow({ item, onRemove, removing }: {
   item: FlatDeployment
   onRemove: (d: FlatDeployment) => void
   removing: boolean
-  copiedAgentId: string | null
-  onCopyAgentUrl: (id: string, url: string) => void
-  getAgentEndpointUrl: (name: string, id: string) => string
 }) {
   const isAgent = item.resourceType === 'agent'
   const [showError, setShowError] = useState(false)
@@ -395,7 +337,7 @@ function DeploymentRow({ item, onRemove, removing, copiedAgentId, onCopyAgentUrl
 
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground mt-1">
             <span className="font-mono">{item.tag}</span>
-            <span>{item.runtimeId || "local"}</span>
+            <span>{item.runtimeId || "unknown"}</span>
             <span>{item.origin}</span>
             <span className="flex items-center gap-1">
               <Calendar className="h-3 w-3" />
@@ -405,26 +347,6 @@ function DeploymentRow({ item, onRemove, removing, copiedAgentId, onCopyAgentUrl
               <span className="font-mono">{item.env.namespace}</span>
             )}
           </div>
-
-          {isAgent && (!item.runtimeId || item.runtimeId === 'local') && (
-            <div className="flex items-center gap-2 mt-2.5 px-3 py-2 bg-muted/60 border rounded-md">
-              <Link2 className="h-3.5 w-3.5 text-primary shrink-0" />
-              <code className="text-sm font-mono text-foreground truncate flex-1">
-                {getAgentEndpointUrl(item.serverName, item.id)}
-              </code>
-              <button
-                className="text-muted-foreground hover:text-foreground transition-colors shrink-0 ml-1"
-                onClick={() => onCopyAgentUrl(item.id, getAgentEndpointUrl(item.serverName, item.id))}
-                title="Copy endpoint URL"
-              >
-                {copiedAgentId === item.id ? (
-                  <Check className="h-4 w-4 text-green-500" />
-                ) : (
-                  <Copy className="h-4 w-4" />
-                )}
-              </button>
-            </div>
-          )}
 
           {showError && item.error && (
             <div className="flex items-start gap-2 mt-2.5 px-3 py-2 bg-destructive/5 border border-destructive/20 rounded-md">

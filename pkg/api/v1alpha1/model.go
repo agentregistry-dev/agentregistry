@@ -39,6 +39,10 @@ type ModelSpec struct {
 	Title       string `json:"title,omitempty" yaml:"title,omitempty"`
 	Description string `json:"description,omitempty" yaml:"description,omitempty"`
 
+	// IconURL is the image a catalog UI shows for this model. Either an
+	// absolute https:// URL or a root-relative path served by the UI.
+	IconURL string `json:"iconUrl,omitempty" yaml:"iconUrl,omitempty"`
+
 	// Provider family. Currently only "bedrock" is supported.
 	Provider string `json:"provider" yaml:"provider" enum:"bedrock"`
 
