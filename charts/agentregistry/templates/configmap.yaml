@@ -12,5 +12,9 @@ metadata:
   {{- end }}
 data:
   AGENT_REGISTRY_SERVER_ADDRESS: {{ .Values.config.serverAddress | quote }}
-  AGENT_REGISTRY_MCP_PORT: {{ .Values.config.agentRegistryMcpPort | quote }}
+  {{- if .Values.config.registryMcpServer.enabled }}
+  AGENT_REGISTRY_MCP_PORT: {{ .Values.config.registryMcpServer.port | quote }}
+  {{- else }}
+  AGENT_REGISTRY_MCP_PORT: "0"
+  {{- end }}
   AGENT_REGISTRY_ENABLE_REGISTRY_VALIDATION: {{ .Values.config.enableRegistryValidation | quote }}

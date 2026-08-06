@@ -43,6 +43,14 @@ tests:
           path: data.AGENT_REGISTRY_MCP_PORT
           value: "31313"
 
+  - it: disables the Registry MCP server with port zero
+    set:
+      config.registryMcpServer.enabled: false
+    asserts:
+      - equal:
+          path: data.AGENT_REGISTRY_MCP_PORT
+          value: "0"
+
   - it: sets AGENT_REGISTRY_ENABLE_REGISTRY_VALIDATION
     asserts:
       - equal:

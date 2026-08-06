@@ -43,8 +43,11 @@ replicaCount: 1
 config:
   # -- Listen address for the HTTP server
   serverAddress: ":8080"
-  # -- Agent Registry MCP server port
-  agentRegistryMcpPort: "31313"
+  registryMcpServer:
+    # -- Enable the Registry MCP server
+    enabled: true
+    # -- Registry MCP server port
+    port: "31313"
   # -- Enable input validation on the registry API
   enableRegistryValidation: "false"
 
