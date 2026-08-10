@@ -46,7 +46,9 @@ optional base (skills → `skills/<name>/`, MCP servers → keyed `.mcp.json` me
 instructions → `AGENTS.md` append; overlay replaces same-named base content, recorded in
 a provenance report). Because any consumer reproduces byte-identical output from the
 pins, the registry keeps **hosting nothing** — server, CLI, and runner all compile
-independently.
+independently. (Registry tags are replace-on-change, so inline-kind pins carry a
+content hash that consumers re-verify at compile time, failing closed on mismatch —
+spike §5.)
 
 ## What deliberately does NOT change
 
@@ -68,7 +70,7 @@ independently.
 | Ref type | New kindless `ComponentRef{Namespace,Name,Tag}` — the field name determines the kind. |
 | Collision policy | **Overlay wins**, atomically per named component, recorded in the report; duplicate names *within* one spec are a validation error. |
 | Floating tags | Freeze at spec change; no auto-refresh in v1. |
-| Serving composed plugins to unmodified Claude Code | **v1 skips them** in the marketplace.json compat catalog (they have no single upstream git URL); gated on the git-backed marketplace (enterprise #1195). `arctl plugin pull` covers desktop consumption meanwhile. |
+| Serving composed plugins to unmodified Claude Code | **v1 skips them** in the marketplace.json compat catalog (they have no single upstream git URL); gated on the git-backed marketplace (enterprise #1195). Desktop consumption arrives with `arctl plugin pull` in **P2** — between P1 and P2 a composed plugin is declarable and governable but not yet consumable, an accepted gap of shipping P1 first. |
 | Approval gating | Already covered — Plugin is a tagged artifact kind and the enterprise approval gate is generic over those. |
 
 ## Phasing

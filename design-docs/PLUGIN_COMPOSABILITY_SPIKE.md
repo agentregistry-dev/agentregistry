@@ -1,7 +1,10 @@
 # Spike — Plugin Composability
 
 > Status: DRAFT spike, 2026-08-06 · Author: Scott (ilackarms) + Claude
-> Verified against OSS `main` @ `98ce4b08`. Companion docs: `design-docs/PLUGINS_AND_HARNESSES_RESEARCH.md` (v2), `docs/plugin-marketplace-compatibility.md`.
+> Verified against OSS `main` @ `98ce4b08`. Companion doc: `docs/plugin-marketplace-compatibility.md`.
+> Background research ("Plugins & Harnesses Research" v2) is NOT in this repo — it lives
+> on the enterprise design PR (solo-io/agentregistry-enterprise#899); this spike is
+> self-contained without it.
 
 ## 1. The ask
 
@@ -83,6 +86,13 @@ Key properties:
   compile is **byte-deterministic and reproducible anywhere** — server, CLI, or runner
   can all produce the identical flattened bundle. This is what lets the registry keep
   "hosting nothing" for the deploy path while still enabling optional serving (§7).
+  One honest qualifier: reproducibility is unconditional only for source-backed pins
+  (a git commit is content-addressed upstream). Inline-kind pins (Prompt/MCPServer)
+  are a `(tag, contentHash)` pair over registry rows whose tags are
+  **replace-on-change, not immutable** (`v1alpha1store/store.go:47-48` — a same-tag
+  re-apply with different content atomically replaces the row). Consumers therefore
+  MUST re-verify `contentHash` against the current row at compile time and **fail
+  closed on mismatch** — see §5.
 - **Composition happens in canonical space, translation after.** The overlay engine is
   harness-agnostic; `translate` (resurrected) runs on the composed result. Nothing is
   AgentCore- or kagent-specific in the compile step.
@@ -142,8 +152,11 @@ Validation changes (`plugin_validate.go`):
 - Existence-check refs via `ResolveRefs` (Plugin gains a `ResolveRefs` method next to
   Agent's; `accessors.go` dispatcher already exists). No kind defaulting or kind
   mismatch checks — `ComponentRef` makes both impossible by construction.
-- Reject duplicate skill/command *names* within the spec (the materialized path is
-  keyed by name).
+- Reject duplicate *names* within each of `skills`, `mcpServers`, and `commands` —
+  the materialized identity (a `skills/<name>/` path, a `commands/<name>.md` file, an
+  `.mcp.json` entry key) is the **bare ref name**, deliberately namespace-blind: two
+  refs differing only by namespace/tag still collide on disk, so they are rejected the
+  same as exact duplicates.
 
 Deliberately **excluded from v1**:
 - **`Plugins []ResourceRef` (nested plugin-includes-plugin) — out of scope, not merely
@@ -201,8 +214,11 @@ component set, then compose in memory, then scan":
      controller will get there; missing object ⇒ terminal `ComponentMissing`.
      Then shallow-clone the skill's pinned commit (same `gitutil` path, same
      clone bounds) to obtain its file tree.
-   - `Prompt` / `MCPServer` → inline content kinds, immutable-by-tag: read spec,
-     record `(tag, contentHash)`. No I/O.
+   - `Prompt` / `MCPServer` → inline content kinds: read the spec, record
+     `(tag, contentHash)` where the hash is sha256 of the stored spec bytes. No
+     network I/O. The controller reads content and records its pin in the SAME
+     reconcile, so the resolve-time snapshot is always coherent; the hash exists
+     to detect later row replacement (see the drift rules below).
 3. **Compose** (§6) into one `CanonicalBundle`.
 4. `ParseManifest` + `BuildInventory` on the composed bundle (unchanged code).
 5. Patch status: `ResolvedSource` + `ResolvedComponents` + composed
@@ -210,7 +226,26 @@ component set, then compose in memory, then scan":
 
 Pinning/drift semantics — the important call:
 
-- Refs with an **explicit tag** are stable forever (content kinds are immutable-by-tag).
+- **Tags are replace-on-change, not immutable** (`v1alpha1store/store.go:47-48`:
+  re-applying the same tag atomically replaces the row when content differs —
+  `UpsertReplaced`). An earlier draft of this spike leaned on "immutable-by-tag";
+  that premise was wrong, and the pin rules below are written for the real
+  semantics. What each pin kind guarantees:
+  - **Skill (commit pin):** reproducible regardless of registry row churn — the
+    commit is content-addressed at the git origin and refetchable as long as the
+    upstream repo lives (the same durability posture as base sources).
+  - **Prompt/MCPServer (`tag, contentHash` pin):** the registry keeps no
+    content-addressable copy of the pinned bytes, so if the referenced row is
+    later replaced same-tag, the pinned content is gone. **Compile-time contract:
+    every consumer re-fetches the row, re-hashes, and FAILS CLOSED on a
+    contentHash mismatch** — a mismatch means the composed output could not equal
+    what was reviewed/pinned, and silently using the current row would smuggle
+    unreviewed content into a deploy. Remediation is one step: touch the Plugin
+    spec (bump generation) → the controller re-pins against current rows → the
+    fingerprint moves → dependent deployments redeploy through the normal path.
+- Refs with an **explicit tag** are stable *in practice* (replacing a governed tag
+  in place is an anti-pattern the approval flow discourages), but the fail-closed
+  hash check above — not tag immutability — is what makes the guarantee real.
 - Refs with **blank tag ("latest")** float by design. The controller re-resolves on
   spec change (generation bump) and on the periodic **resync tick — but
   `pluginReconciled` gates on ObservedGeneration alone**, so today a resync would *not*
@@ -219,6 +254,12 @@ Pinning/drift semantics — the important call:
   6/17 decision and makes tag-floating drift a non-issue. If product later wants
   auto-refresh of floating refs, it's an explicit opt-in field
   (`spec.refreshPolicy: OnSpecChange | Periodic`), not a default.
+- **How a user intentionally refreshes a frozen pin set in v1:** make any real spec
+  change (identical re-apply is `UpsertNoOp` and bumps nothing) — re-pin a tag,
+  or edit a field like `description`. Generation bumps → full re-resolve. That is
+  the sanctioned v1 path; a first-class refresh verb (`refreshPolicy` or an
+  explicit re-resolve endpoint) is deferred until someone actually needs it.
+  Teams that want floating-ref hygiene should prefer explicit tags.
 - **Cross-object drift** (a referenced Skill's spec changes → new commit): the Skill's
   own controller re-pins the Skill, but the Plugin's recorded pin set is unchanged
   until the Plugin is touched — again, deliberate. The fingerprint machinery
@@ -247,9 +288,9 @@ Placement rules (v1):
 
 | Component | Destination | Merge rule |
 |---|---|---|
-| Skill `s` | `skills/<name>/**` (its repo tree, `SKILL.md` at root) | **Overlay wins (Scott, 2026-08-06).** If the base already has `skills/<name>/`, the ref **replaces the whole directory** (never a file-level interleave of base + ref trees). The replacement is recorded in the compose `Report` and surfaced in status, so shadowing is visible, not silent. Supports the "patch a vendored plugin's skill with the curated registry version" workflow directly. |
+| Skill `s` | `skills/<name>/**`, where `<name>` is the **ref's name** (the spec-side identity), NOT the SKILL.md frontmatter name — the two may differ, and the inventory scan reports the frontmatter name. The placed tree is the Skill's **resolved source tree**: its repo at the pinned commit, scoped to `Repository.Subfolder` when set. | **Overlay wins (Scott, 2026-08-06).** If the base already has `skills/<name>/`, the ref **replaces the whole directory** (never a file-level interleave of base + ref trees). The replacement is recorded in the compose `Report` and surfaced in status, so shadowing is visible, not silent. Supports the "patch a vendored plugin's skill with the curated registry version" workflow directly. |
 | Command (Prompt) | `commands/<name>.md` | Overlay wins, same as skills (whole-file replace, recorded). |
-| MCPServer | entry in `.mcp.json` | **Structured merge by server name; overlay entry replaces a same-named base entry** (recorded in `Report`). Mapping fidelity (verified against `mcpserver.go:16-59`): `Remote{Type,URL,Headers}` → a remote `.mcp.json` entry directly; `Source.Package` with npm/pypi origin → a stdio entry (`command`/`args` from `MCPPackageLaunch`, or origin-type defaults); OCI-package origins have no faithful desktop `.mcp.json` form → **rejected at Plugin validation** with a clear error. |
+| MCPServer | entry in `.mcp.json` | **Structured merge by server name; overlay entry replaces a same-named base entry** (recorded in `Report`). Mapping fidelity (verified against `mcpserver.go:16-59`): `Remote{Type,URL,Headers}` → a remote `.mcp.json` entry directly; `Source.Package` with npm/pypi origin → a stdio entry (`command`/`args` from `MCPPackageLaunch`, or origin-type defaults); OCI-package origins have no faithful desktop `.mcp.json` form → **rejected at controller resolve time** (terminal `ComponentInvalid`). Enforcement deliberately lives in the controller, not admission: admission's ref resolver is existence-only (it cannot see the referenced spec), and the referenced row can be replaced same-tag after admission anyway — resolve-time is the only check that isn't a TOCTOU. |
 | Instructions (Prompt) | `AGENTS.md` | **Append** with a `\n\n---\n\n` separator if the base has one; create otherwise. Only merge-by-concatenation in v1, and only here. |
 | `plugin.json` manifest | `.claude-plugin/plugin.json` | Base's manifest **passes through untouched** (preserving the hard-won losslessness). Composed components land in default-discovered paths (`skills/`, `commands/`, `.mcp.json`), so no manifest surgery is needed. If there is **no base**, generate a minimal manifest from `PluginSpec{Title,Description}` + plugin name. |
 
@@ -293,8 +334,12 @@ The compile is a library; it runs at every consumption point, always from status
    `FromPlugin` (`pkg/pluginmarketplace/translate.go:46`) hands Claude Code the
    *external git URL + SHA*; a composed plugin has no such URL. **DECIDED (Scott,
    2026-08-06): v1 skips composed plugins in the compat catalog** (the handler already
-   silently skips not-representable entries — OCI sources take the same path today);
-   desktop consumption of composed plugins goes through `arctl plugin pull`. Serving
+   silently skips not-representable entries — OCI sources take the same path today,
+   though the skip should be logged and called out in
+   `docs/plugin-marketplace-compatibility.md`, not just silent);
+   desktop consumption of composed plugins arrives with `arctl plugin pull` **in P2 —
+   between P1 and P2 a composed plugin is declarable, resolvable, and governable but
+   not yet consumable anywhere**, which is an accepted gap of shipping P1 first. Serving
    them to unmodified Claude Code **waits on the git-backed marketplace**
    (solo-io/agentregistry-enterprise#1195, dependency recorded there 2026-08-06): the
    registry materializes each composed plugin into the hosted marketplace repo —
@@ -343,5 +388,15 @@ Resolved (Scott, 2026-08-06):
    (enterprise `internal/registry/approval/service.go`), and Plugin registers with
    default `KindStorageTaggedArtifact` (OSS `kinds.go:138-139`) — every tagged kind is
    auto-gated generically. The historical F-2 gap was closed. Nothing to do.
+8. **Inline-kind pin integrity: fail closed** (2026-08-10, from design review). Tags
+   are replace-on-change (`UpsertReplaced`), so `(tag, contentHash)` pins can be
+   orphaned by a same-tag re-apply of the referenced Prompt/MCPServer. Every consumer
+   re-hashes the current row at compile time and fails closed on mismatch; remediation
+   is touching the Plugin spec to re-pin (§5). Warn-and-use-current was rejected — it
+   would smuggle unreviewed content into a deploy; silent re-resolve was rejected — it
+   would break the freeze-at-spec-change snapshot.
+9. **v1 pin refresh path** (2026-08-10, from design review): any real spec change
+   (generation bump) re-resolves the full pin set; identical re-apply is `UpsertNoOp`
+   by design. No first-class refresh verb in v1 (§5).
 
 No open questions remain.
