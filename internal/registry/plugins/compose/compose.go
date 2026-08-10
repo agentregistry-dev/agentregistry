@@ -20,6 +20,7 @@ package compose
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"path"
 	"slices"
 	"strings"
@@ -116,9 +117,7 @@ type Replacement struct {
 func Compose(in Inputs) (*bundle.CanonicalBundle, *Report, error) {
 	files := map[string][]byte{}
 	if in.Base != nil {
-		for p, b := range in.Base.Files {
-			files[p] = b
-		}
+		maps.Copy(files, in.Base.Files)
 	}
 	report := &Report{}
 
