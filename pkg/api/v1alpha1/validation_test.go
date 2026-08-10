@@ -1278,3 +1278,50 @@ func TestPromptValidate_IconURL(t *testing.T) {
 		})
 	}
 }
+
+func TestPluginResolveRefs_SuppliesKindPerField(t *testing.T) {
+	var seen []ResourceRef
+	resolver := func(ctx context.Context, ref ResourceRef) error {
+		seen = append(seen, ref)
+		return nil
+	}
+	p := &Plugin{
+		Metadata: ObjectMeta{Namespace: "team-a", Name: "p", Tag: "v1"},
+		Spec: PluginSpec{
+			Skills:       []ComponentRef{{Name: "log-triage", Tag: "v3"}},
+			MCPServers:   []ComponentRef{{Namespace: "shared", Name: "pagerduty"}},
+			Commands:     []ComponentRef{{Name: "declare-incident"}},
+			Instructions: &ComponentRef{Name: "guidelines"},
+		},
+	}
+	require.NoError(t, p.ResolveRefs(context.Background(), resolver))
+	require.Len(t, seen, 4)
+	// The holding field supplies the kind; blank namespaces inherit the plugin's.
+	require.Equal(t, ResourceRef{Kind: KindSkill, Namespace: "team-a", Name: "log-triage", Tag: "v3"}, seen[0])
+	require.Equal(t, ResourceRef{Kind: KindMCPServer, Namespace: "shared", Name: "pagerduty"}, seen[1])
+	require.Equal(t, ResourceRef{Kind: KindPrompt, Namespace: "team-a", Name: "declare-incident"}, seen[2])
+	require.Equal(t, ResourceRef{Kind: KindPrompt, Namespace: "team-a", Name: "guidelines"}, seen[3])
+}
+
+func TestPluginResolveRefs_ReportsDangling(t *testing.T) {
+	resolver := func(ctx context.Context, ref ResourceRef) error {
+		if ref.Name == "missing" {
+			return ErrDanglingRef
+		}
+		return nil
+	}
+	p := &Plugin{
+		Metadata: ObjectMeta{Namespace: "default", Name: "p", Tag: "v1"},
+		Spec: PluginSpec{
+			Skills: []ComponentRef{{Name: "ok"}, {Name: "missing"}},
+		},
+	}
+	err := p.ResolveRefs(context.Background(), resolver)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "spec.skills[1]")
+}
+
+func TestPluginResolveRefs_NilResolverIsNoOp(t *testing.T) {
+	p := &Plugin{Metadata: ObjectMeta{Namespace: "default", Name: "p"}}
+	require.NoError(t, p.ResolveRefs(context.Background(), nil))
+}

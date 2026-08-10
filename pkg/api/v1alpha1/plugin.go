@@ -40,9 +40,27 @@ type PluginSpec struct {
 	// deploy-time adapters decide which harnesses they can consume.
 	Harnesses []string `json:"harnesses,omitempty" yaml:"harnesses,omitempty"`
 
-	// Source is where the bundle is ingested from, pinned (git commit / OCI
-	// digest) so a published tag is reproducible.
+	// Source is the optional base layer of the bundle, pinned (git commit /
+	// OCI digest) so a published tag is reproducible. A plugin may instead be
+	// a pure composition of registry artifacts (no base source); at least one
+	// of Source or the composition fields below must be set.
 	Source *PluginSource `json:"source,omitempty" yaml:"source,omitempty"`
+
+	// Composition: registry artifacts overlaid onto the base at compile time.
+	// Each field fixes its refs' kind, so ComponentRef carries no Kind. The
+	// controller resolves every ref to a concrete pin recorded in
+	// status.ResolvedComponents; materialization reads only those pins.
+	//
+	// Skills overlay Skill repos at skills/<name>/ (whole-directory
+	// overlay-wins over same-named base content).
+	Skills []ComponentRef `json:"skills,omitempty" yaml:"skills,omitempty"`
+	// MCPServers merge into the bundle's .mcp.json keyed by server name
+	// (overlay entry replaces a same-named base entry).
+	MCPServers []ComponentRef `json:"mcpServers,omitempty" yaml:"mcpServers,omitempty"`
+	// Commands are Prompt refs materialized at commands/<name>.md.
+	Commands []ComponentRef `json:"commands,omitempty" yaml:"commands,omitempty"`
+	// Instructions is a Prompt ref appended to the bundle's AGENTS.md.
+	Instructions *ComponentRef `json:"instructions,omitempty" yaml:"instructions,omitempty"`
 }
 
 // PluginStatus is the Plugin observed-state subresource, written by the Plugin
@@ -60,8 +78,14 @@ type PluginStatus struct {
 	Status `json:",inline" yaml:",inline"`
 
 	// ResolvedSource is the controller's immutable pin of the user's source
-	// pointer (the concrete commit/digest the source resolved to).
+	// pointer (the concrete commit/digest the source resolved to). Nil when
+	// the plugin has no base source (pure composition).
 	ResolvedSource *PluginResolvedSource `json:"resolvedSource,omitempty" yaml:"resolvedSource,omitempty"`
+	// ResolvedComponents is the controller's pin of every composition ref, in
+	// spec order (skills, mcpServers, commands, instructions). The pin set
+	// freezes until the spec changes; compilation is a pure function of it.
+	// Entries carry Kind because this is a flattened cross-kind list.
+	ResolvedComponents []PluginResolvedComponent `json:"resolvedComponents,omitempty" yaml:"resolvedComponents,omitempty"`
 	// Manifest is the canonical typed plugin.json parsed from the source.
 	Manifest *PluginManifest `json:"manifest,omitempty" yaml:"manifest,omitempty"`
 	// Inventory is the server-derived risk surface / search index.
@@ -78,6 +102,21 @@ type PluginResolvedSource struct {
 	Commit string `json:"commit,omitempty" yaml:"commit,omitempty"`
 	// Digest is the resolved OCI digest, e.g. "sha256:…" (Type=oci; future).
 	Digest string `json:"digest,omitempty" yaml:"digest,omitempty"`
+}
+
+// PluginResolvedComponent records the concrete pin one composition ref
+// resolved to. Commit is set for source-backed kinds (Skill); ContentHash
+// (sha256 of the canonical spec JSON) for inline content kinds (Prompt,
+// MCPServer). Tag is the tag actually resolved, never blank.
+type PluginResolvedComponent struct {
+	Kind      string `json:"kind" yaml:"kind"`
+	Namespace string `json:"namespace" yaml:"namespace"`
+	Name      string `json:"name" yaml:"name"`
+	Tag       string `json:"tag" yaml:"tag"`
+	// Commit is the resolved full git commit SHA (source-backed kinds).
+	Commit string `json:"commit,omitempty" yaml:"commit,omitempty"`
+	// ContentHash pins inline content kinds: sha256 of the canonical spec JSON.
+	ContentHash string `json:"contentHash,omitempty" yaml:"contentHash,omitempty"`
 }
 
 // PluginSourceType selects which source sub-struct is set.

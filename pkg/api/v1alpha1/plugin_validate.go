@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	"context"
 	"fmt"
 	"strings"
 )
@@ -15,18 +16,90 @@ func (p *Plugin) Validate() error {
 	return errs
 }
 
+// ResolveRefs checks every composition ref in the Plugin's spec exists by
+// calling resolver. ComponentRef carries no Kind — each field supplies the
+// kind it implies — so there is no defaulting or mismatch surface here.
+func (p *Plugin) ResolveRefs(ctx context.Context, resolver ResolverFunc) error {
+	if resolver == nil {
+		return nil
+	}
+	var errs FieldErrors
+	ns := p.Metadata.Namespace
+	errs = append(errs, resolveComponentRefs(ctx, resolver, ns, "spec.skills", p.Spec.Skills, KindSkill)...)
+	errs = append(errs, resolveComponentRefs(ctx, resolver, ns, "spec.mcpServers", p.Spec.MCPServers, KindMCPServer)...)
+	errs = append(errs, resolveComponentRefs(ctx, resolver, ns, "spec.commands", p.Spec.Commands, KindPrompt)...)
+	if p.Spec.Instructions != nil {
+		errs = append(errs, resolveComponentRefs(ctx, resolver, ns, "spec.instructions", []ComponentRef{*p.Spec.Instructions}, KindPrompt)...)
+	}
+	if len(errs) == 0 {
+		return nil
+	}
+	return errs
+}
+
+// resolveComponentRefs resolves a slice of component refs against the kind
+// the holding field implies.
+func resolveComponentRefs(ctx context.Context, resolver ResolverFunc, ns, path string, refs []ComponentRef, kind string) FieldErrors {
+	var errs FieldErrors
+	for i, ref := range refs {
+		errs = append(errs, resolveRefWith(ctx, resolver, ref.AsResourceRef(kind, ns), fmt.Sprintf("%s[%d]", path, i))...)
+	}
+	return errs
+}
+
 func validatePluginSpec(s *PluginSpec) FieldErrors {
 	var errs FieldErrors
 	errs.Append("spec.title", validateTitle(s.Title))
 	errs.Append("spec.iconUrl", validateIconURL(s.IconURL))
 
-	// Source is required: it is the pointer the controller resolves and pins.
-	if s.Source == nil {
-		errs.Append("spec.source", fmt.Errorf("%w", ErrRequiredField))
-	} else {
+	// A plugin is a base source, a composition of registry artifacts, or both.
+	if s.Source == nil && !s.hasComposition() {
+		errs.Append("spec", fmt.Errorf("%w: set source and/or composition fields (skills/mcpServers/commands/instructions)", ErrRequiredField))
+	}
+	if s.Source != nil {
 		for _, e := range validatePluginSource(s.Source) {
 			errs.Append("spec.source."+e.Path, e.Cause)
 		}
+	}
+
+	// Materialized paths are keyed by name (skills/<name>/, commands/<name>.md),
+	// so duplicate names within one field have no defined precedence — reject.
+	// Overlay-vs-base collisions are legal (overlay wins) and handled at compose.
+	errs = append(errs, validateComponentRefs("spec.skills", s.Skills, KindSkill, true)...)
+	errs = append(errs, validateComponentRefs("spec.mcpServers", s.MCPServers, KindMCPServer, true)...)
+	errs = append(errs, validateComponentRefs("spec.commands", s.Commands, KindPrompt, true)...)
+	if s.Instructions != nil {
+		errs = append(errs, validateComponentRefs("spec.instructions", []ComponentRef{*s.Instructions}, KindPrompt, false)...)
+	}
+	return errs
+}
+
+// hasComposition reports whether any composition field is set.
+func (s *PluginSpec) hasComposition() bool {
+	return len(s.Skills) > 0 || len(s.MCPServers) > 0 || len(s.Commands) > 0 || s.Instructions != nil
+}
+
+// validateComponentRefs runs structural checks on component refs: name/
+// namespace/tag formats (via validateRef with the field's implied kind) and,
+// when rejectDuplicates is set, uniqueness of (namespace-defaulted) names.
+func validateComponentRefs(path string, refs []ComponentRef, kind string, rejectDuplicates bool) FieldErrors {
+	var errs FieldErrors
+	seen := map[string]struct{}{}
+	for i, ref := range refs {
+		for _, e := range validateRef(ref.AsResourceRef(kind, "")) {
+			// Kind is machine-supplied here; a kind error would be a
+			// programming bug, but the path stays honest either way.
+			errs.Append(fmt.Sprintf("%s[%d].%s", path, i, e.Path), e.Cause)
+		}
+		if !rejectDuplicates {
+			continue
+		}
+		if _, ok := seen[ref.Name]; ok {
+			errs.Append(fmt.Sprintf("%s[%d].name", path, i),
+				fmt.Errorf("%w: duplicate name %q (materialized path is keyed by name)", ErrInvalidFormat, ref.Name))
+			continue
+		}
+		seen[ref.Name] = struct{}{}
 	}
 	return errs
 }
