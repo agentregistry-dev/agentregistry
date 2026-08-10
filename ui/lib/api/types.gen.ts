@@ -68,6 +68,12 @@ export type CommandsField = {
     Paths: PathOrPaths;
 };
 
+export type ComponentRef = {
+    name: string;
+    namespace?: string;
+    tag?: string;
+};
+
 export type Condition = {
     lastTransitionTime?: string;
     message?: string;
@@ -572,6 +578,15 @@ export type PluginManifest = {
     version?: string;
 };
 
+export type PluginResolvedComponent = {
+    commit?: string;
+    contentHash?: string;
+    kind: string;
+    name: string;
+    namespace: string;
+    tag: string;
+};
+
 export type PluginResolvedSource = {
     commit?: string;
     digest?: string;
@@ -598,9 +613,13 @@ export type PluginSourceOci = {
 };
 
 export type PluginSpec = {
+    commands?: Array<ComponentRef> | null;
     description?: string;
     harnesses?: Array<string> | null;
     iconUrl?: string;
+    instructions?: ComponentRef;
+    mcpServers?: Array<ComponentRef> | null;
+    skills?: Array<ComponentRef> | null;
     source?: PluginSource;
     title?: string;
 };
@@ -610,6 +629,7 @@ export type PluginStatus = {
     details?: unknown;
     inventory?: PluginInventory;
     manifest?: PluginManifest;
+    resolvedComponents?: Array<PluginResolvedComponent> | null;
     resolvedSource?: PluginResolvedSource;
 };
 
