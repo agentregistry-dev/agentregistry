@@ -1,6 +1,7 @@
 package pluginmarketplace_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -219,4 +220,35 @@ func TestFromPlugin_ManifestDescriptionOverridesSpec(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "manifest-level description", got.Description)
 	assert.Equal(t, "2.0.0", got.Version)
+}
+
+// TestFromPlugin_ComposedIsSkipped guards the v1 serving decision: a composed
+// plugin (composition refs present) has no single upstream URL, so it must be
+// skipped even when its BASE source is resolved — serving the base alone
+// would silently drop the overlays.
+func TestFromPlugin_ComposedIsSkipped(t *testing.T) {
+	p := &v1alpha1.Plugin{
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "composed", Tag: "v1", Generation: 1},
+		Spec: v1alpha1.PluginSpec{
+			Source: &v1alpha1.PluginSource{
+				Type: v1alpha1.PluginSourceTypeGit,
+				Git:  &v1alpha1.PluginSourceGit{Repository: &v1alpha1.Repository{URL: "https://github.com/o/base"}},
+			},
+			Skills: []v1alpha1.ComponentRef{{Name: "curated"}},
+		},
+	}
+	p.Status.ObservedGeneration = 1
+	p.Status.ResolvedSource = &v1alpha1.PluginResolvedSource{Type: v1alpha1.PluginSourceTypeGit, Commit: "abc"}
+	p.Status.SetCondition(v1alpha1.Condition{Type: "Ready", Status: v1alpha1.ConditionTrue})
+
+	if _, err := pluginmarketplace.FromPlugin(p); !errors.Is(err, pluginmarketplace.ErrComposed) {
+		t.Fatalf("expected pluginmarketplace.ErrComposed, got %v", err)
+	}
+
+	// Pure composition (no base) is also skipped, via the same gate.
+	p.Spec.Source = nil
+	p.Status.ResolvedSource = nil
+	if _, err := pluginmarketplace.FromPlugin(p); !errors.Is(err, pluginmarketplace.ErrComposed) {
+		t.Fatalf("expected pluginmarketplace.ErrComposed for pure composition, got %v", err)
+	}
 }

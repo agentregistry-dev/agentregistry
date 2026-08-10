@@ -14,6 +14,13 @@ var (
 	// ErrUnsupportedSource is returned for a Plugin whose resolved source type
 	// has no marketplace.json representation (OCI).
 	ErrUnsupportedSource = errors.New("resolved source type has no marketplace.json representation")
+	// ErrComposed is returned for a Plugin with composition refs. A composed
+	// plugin has no single upstream git URL — serving just its base source
+	// would silently drop the overlays — so it is skipped until the registry
+	// can serve compiled bundles (git-backed marketplace,
+	// agentregistry-enterprise#1195). Consume composed plugins via
+	// deploy-time materialization or arctl pull instead.
+	ErrComposed = errors.New("composed plugin has no single-source marketplace.json representation")
 )
 
 // nameSep joins namespace and name into a marketplace.json-safe qualified
@@ -44,6 +51,9 @@ func qualifiedName(namespace, name string) string {
 // marketplace.json schema has no OCI/image source form) — callers must skip
 // these, never emit a partial/broken entry.
 func FromPlugin(p *v1alpha1.Plugin) (PluginEntry, error) {
+	if len(p.Spec.Skills) > 0 || len(p.Spec.MCPServers) > 0 || len(p.Spec.Commands) > 0 || p.Spec.Instructions != nil {
+		return PluginEntry{}, ErrComposed
+	}
 	if !p.Status.IsConditionTrue("Ready") || p.Status.ResolvedSource == nil {
 		return PluginEntry{}, ErrNotResolved
 	}
