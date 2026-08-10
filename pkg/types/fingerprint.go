@@ -192,12 +192,16 @@ func dependencyMaterial(kind string, obj v1alpha1.Object) (json.RawMessage, erro
 	switch kind {
 	case v1alpha1.KindPlugin:
 		plugin, ok := obj.(*v1alpha1.Plugin)
-		if !ok || plugin.Status.ResolvedSource == nil {
+		// A composed plugin's material is its full pin set: the base source pin
+		// (nil for pure composition) plus every component pin. Deployments must
+		// redeploy when either moves.
+		if !ok || (plugin.Status.ResolvedSource == nil && len(plugin.Status.ResolvedComponents) == 0) {
 			return nil, nil
 		}
 		return json.Marshal(struct {
-			ResolvedSource *v1alpha1.PluginResolvedSource `json:"resolvedSource"`
-		}{ResolvedSource: plugin.Status.ResolvedSource})
+			ResolvedSource     *v1alpha1.PluginResolvedSource     `json:"resolvedSource,omitempty"`
+			ResolvedComponents []v1alpha1.PluginResolvedComponent `json:"resolvedComponents,omitempty"`
+		}{ResolvedSource: plugin.Status.ResolvedSource, ResolvedComponents: plugin.Status.ResolvedComponents})
 	case v1alpha1.KindSkill:
 		skill, ok := obj.(*v1alpha1.Skill)
 		if !ok || skill.Status.ResolvedSource == nil {
