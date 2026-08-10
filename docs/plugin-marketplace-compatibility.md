@@ -23,6 +23,8 @@ Only the URL/git source forms are covered (phase 1). Codex and Cursor require a 
 
 Plugins that aren't `Ready` with a resolved source pin, or that resolved to an OCI source (no representation in this schema), are silently skipped — the document never contains a partial or broken entry.
 
+**Composed plugins are also skipped** (logged at debug level). A plugin with composition refs (`spec.skills` / `spec.mcpServers` / `spec.commands` / `spec.instructions`) has no single upstream git URL, and serving just its base source would silently drop the overlays. Composed plugins are consumed via deploy-time materialization or `arctl plugin pull`; serving them to unmodified Claude Code is gated on git-backed marketplace hosting (tracked upstream).
+
 ## Pointing a client at it
 
 ```
