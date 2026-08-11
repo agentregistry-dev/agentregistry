@@ -1,0 +1,71 @@
+name: Nightly Release
+
+on:
+  schedule:
+  - cron: "0 2 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  actions: read
+  contents: read
+  packages: write
+
+concurrency:
+  group: nightly-release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare nightly release
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.repository == 'agentregistry-dev/agentregistry' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    outputs:
+      has_commits: ${{ steps.changes.outputs.has_commits }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+        persist-credentials: false
+
+    - name: Find previous successful nightly
+      id: previous
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        previous_sha=$(gh api \
+          "repos/${GITHUB_REPOSITORY}/actions/workflows/nightly.yaml/runs?branch=main&status=completed&conclusion=success&per_page=1" \
+          --jq '.workflow_runs[0].head_sha // empty')
+        echo "sha=${previous_sha}" >> "${GITHUB_OUTPUT}"
+
+    - name: Check for changes since the previous nightly
+      id: changes
+      env:
+        PREVIOUS_SHA: ${{ steps.previous.outputs.sha }}
+      run: |
+        current_sha=$(git rev-parse HEAD)
+        if [[ -z "${PREVIOUS_SHA}" || "${current_sha}" != "${PREVIOUS_SHA}" ]]; then
+          echo "has_commits=true" >> "${GITHUB_OUTPUT}"
+          exit 0
+        fi
+
+        echo "has_commits=false" >> "${GITHUB_OUTPUT}"
+        echo "HEAD matches the previous successful nightly; skipping publication"
+
+    - name: Compute nightly version
+      id: version
+      run: |
+        short_sha=$(git rev-parse --short=12 HEAD)
+        echo "version=v0.0.0-alpha.${short_sha}" >> "${GITHUB_OUTPUT}"
+
+  publish:
+    name: Publish nightly image
+    needs: prepare
+    if: ${{ needs.prepare.outputs.has_commits == 'true' || github.event_name == 'workflow_dispatch' }}
+    uses: ./.github/workflows/release.yaml
+    with:
+      version: ${{ needs.prepare.outputs.version }}
+      image_alias: latest-dev
+    secrets: inherit

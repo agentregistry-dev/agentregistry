@@ -29,6 +29,32 @@ For a `vX.Y.Z` release, `.github/workflows/release.yaml` publishes:
 - A GitHub Release with generated release notes, the CLI files, the packaged
   Helm chart, and the chart checksum file.
 
+## Nightly images
+
+The `Nightly Release` workflow checks `main` once per day at 02:00 UTC. When
+`main` has changed since the previous successful nightly run, it publishes the
+multi-architecture server image with two tags:
+
+- `ghcr.io/agentregistry-dev/agentregistry/server:v0.0.0-alpha.<commit-sha>` is
+  immutable and identifies the exact source commit.
+- `ghcr.io/agentregistry-dev/agentregistry/server:latest-dev` moves to the most
+  recent successful nightly image.
+
+Nightly runs do not publish CLI binaries, Helm charts, Git tags, or GitHub
+Releases. They can also be started manually from GitHub Actions, including when
+`main` has not changed since the previous nightly. Manual runs must target the
+`main` branch.
+
+Prefer the immutable tag for repeatable deployments. To evaluate the moving
+tag with the Helm chart, override the image tag and pull policy explicitly:
+
+```bash
+helm upgrade --install agentregistry \
+  oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry \
+  --set image.tag=latest-dev \
+  --set image.pullPolicy=Always
+```
+
 ## Cut a release
 
 1. Choose the next version according to Semantic Versioning.
