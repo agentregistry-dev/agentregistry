@@ -72,6 +72,43 @@ func TestAgentHarnessValidate(t *testing.T) {
 			},
 			wantErr: "require compatibleHarnesses",
 		},
+		{
+			name: "image agent with skills but no harness is valid",
+			spec: AgentSpec{
+				Skills: []ResourceRef{{Kind: KindSkill, Name: "x"}},
+				Source: &AgentSource{Image: "ghcr.io/org/agent:1.0.0"},
+			},
+		},
+		{
+			name: "image agent with instructions but no harness is valid",
+			spec: AgentSpec{
+				Instructions: &ResourceRef{Kind: KindPrompt, Name: "x"},
+				Source:       &AgentSource{Image: "ghcr.io/org/agent:1.0.0"},
+			},
+		},
+		{
+			name: "image agent with plugins but no harness still rejected",
+			spec: AgentSpec{
+				Plugins: []ResourceRef{{Kind: KindPlugin, Name: "x"}},
+				Source:  &AgentSource{Image: "ghcr.io/org/agent:1.0.0"},
+			},
+			wantErr: "plugins require compatibleHarnesses",
+		},
+		{
+			name: "no source no harness agent with skills still rejected",
+			spec: AgentSpec{
+				Skills: []ResourceRef{{Kind: KindSkill, Name: "x"}},
+			},
+			wantErr: "require compatibleHarnesses",
+		},
+		{
+			name: "empty source struct does not count as image agent",
+			spec: AgentSpec{
+				Skills: []ResourceRef{{Kind: KindSkill, Name: "x"}},
+				Source: &AgentSource{},
+			},
+			wantErr: "require compatibleHarnesses",
+		},
 	}
 
 	for _, tt := range tests {

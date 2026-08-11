@@ -94,11 +94,19 @@ func validateAgentSpec(s *AgentSpec) FieldErrors {
 		errs = append(errs, validateResourceRefs("spec.instructions", []ResourceRef{*s.Instructions}, KindPrompt)...)
 	}
 
-	// Plugins/skills/instructions only apply to harness-compatible agents — a
-	// prebuilt Image cannot consume injected files by itself.
-	if (len(s.Plugins) > 0 || len(s.Skills) > 0 || s.Instructions != nil) &&
-		len(s.CompatibleHarnesses) == 0 {
-		errs.Append("spec", fmt.Errorf("%w: plugins/skills/instructions require compatibleHarnesses", ErrInvalidFormat))
+	// Plugins require harness composition support: without compatibleHarnesses,
+	// a prebuilt Image cannot consume an injected plugin any more than a
+	// harness-less Agent can. Skills/instructions relax this for Image agents:
+	// the deploy path can deliver them to an image agent directly as an Agent
+	// Plugins directory, so they only require compatibleHarnesses when there's
+	// no source image to deliver them through.
+	hasHarnessCompat := len(s.CompatibleHarnesses) > 0
+	hasSource := s.Source != nil && (s.Source.Image != "" || s.Source.Repository != nil)
+	if len(s.Plugins) > 0 && !hasHarnessCompat {
+		errs.Append("spec", fmt.Errorf("%w: plugins require compatibleHarnesses", ErrInvalidFormat))
+	}
+	if (len(s.Skills) > 0 || s.Instructions != nil) && !hasHarnessCompat && !hasSource {
+		errs.Append("spec", fmt.Errorf("%w: skills/instructions require compatibleHarnesses or source", ErrInvalidFormat))
 	}
 
 	return errs
