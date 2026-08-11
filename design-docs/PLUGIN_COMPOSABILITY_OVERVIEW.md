@@ -42,7 +42,8 @@ The spec holds **intent** (refs, possibly floating tags); the controller resolve
 component to a concrete pin (git commit, or tag+content-hash for inline kinds) and
 records the full pin set in **status** — pins freeze until the spec changes. Compilation
 is a **pure function of the pin set**: deterministic overlay of components onto the
-optional base (skills → `skills/<name>/`, MCP servers → keyed `.mcp.json` merge,
+optional base (skills → `skills/<name>/` keyed by the SKILL.md-declared name per the
+Agent Skills spec, MCP servers → keyed `.mcp.json` merge,
 instructions → `AGENTS.md` append; overlay replaces same-named base content, recorded in
 a provenance report). Because any consumer reproduces byte-identical output from the
 pins, the registry keeps **hosting nothing** — server, CLI, and runner all compile
@@ -69,6 +70,7 @@ spike §5.)
 | Hooks / sub-agents as refs | Base-source-only (per 6/25 decision) — keeps `hooks.json` merging out entirely. |
 | Ref type | New kindless `ComponentRef{Namespace,Name,Tag}` — the field name determines the kind. |
 | Collision policy | **Overlay wins**, atomically per named component, recorded in the report; duplicate names *within* one spec are a validation error. |
+| Formats (cross-lane, per the AR-Kagent sync + BYO contract ent#1265) | Canonical bundle stays the Claude-shaped superset; **agent-plugins.org** becomes P2's second translate target (input + delivery), skill dirs keyed by SKILL.md-declared name, fail-closed MCP headers for any server-staged bundle. Spike §9a. |
 | Floating tags | Freeze at spec change; no auto-refresh in v1. |
 | Serving composed plugins to unmodified Claude Code | **v1 skips them** in the marketplace.json compat catalog (they have no single upstream git URL); gated on the git-backed marketplace (enterprise #1195). Desktop consumption arrives with `arctl plugin pull` in **P2** — between P1 and P2 a composed plugin is declarable and governable but not yet consumable, an accepted gap of shipping P1 first. |
 | Approval gating | Already covered — Plugin is a tagged artifact kind and the enterprise approval gate is generic over those. |

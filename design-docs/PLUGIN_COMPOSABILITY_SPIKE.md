@@ -152,11 +152,14 @@ Validation changes (`plugin_validate.go`):
 - Existence-check refs via `ResolveRefs` (Plugin gains a `ResolveRefs` method next to
   Agent's; `accessors.go` dispatcher already exists). No kind defaulting or kind
   mismatch checks — `ComponentRef` makes both impossible by construction.
-- Reject duplicate *names* within each of `skills`, `mcpServers`, and `commands` —
-  the materialized identity (a `skills/<name>/` path, a `commands/<name>.md` file, an
-  `.mcp.json` entry key) is the **bare ref name**, deliberately namespace-blind: two
-  refs differing only by namespace/tag still collide on disk, so they are rejected the
-  same as exact duplicates.
+- Reject duplicate *ref names* within each of `skills`, `mcpServers`, and `commands`,
+  namespace-blind: two refs differing only by namespace/tag are still ambiguous. For
+  `mcpServers` and `commands` the ref name IS the materialized identity (the
+  `.mcp.json` entry key, the `commands/<name>.md` file). For `skills` the materialized
+  identity is the **SKILL.md-declared name** (§6) — only knowable after fetch — so
+  admission's ref-name check is a de-duplication of the refs themselves, and the
+  declared-name collision check runs at controller resolve (terminal
+  `ComponentInvalid`).
 
 Deliberately **excluded from v1**:
 - **`Plugins []ResourceRef` (nested plugin-includes-plugin) — out of scope, not merely
@@ -288,7 +291,7 @@ Placement rules (v1):
 
 | Component | Destination | Merge rule |
 |---|---|---|
-| Skill `s` | `skills/<name>/**`, where `<name>` is the **ref's name** (the spec-side identity), NOT the SKILL.md frontmatter name — the two may differ, and the inventory scan reports the frontmatter name. The placed tree is the Skill's **resolved source tree**: its repo at the pinned commit, scoped to `Repository.Subfolder` when set. | **Overlay wins (Scott, 2026-08-06).** If the base already has `skills/<name>/`, the ref **replaces the whole directory** (never a file-level interleave of base + ref trees). The replacement is recorded in the compose `Report` and surfaced in status, so shadowing is visible, not silent. Supports the "patch a vendored plugin's skill with the curated registry version" workflow directly. |
+| Skill `s` | `skills/<name>/**`, where `<name>` is the skill's **SKILL.md-declared frontmatter name** — NOT the registry ref's name. (REVISED 2026-08-11, superseding the earlier ref-name call: the Agent Skills spec *requires* the directory name to match the declared name, so ref-name keying produced spec-invalid output whenever the two differed; this also matches the BYO composition contract, enterprise #1265.) The ref name remains the registry identity recorded in the status pin. Missing SKILL.md, a missing/spec-violating declared name, or two refs whose trees declare the same name ⇒ terminal `ComponentInvalid` at resolve (declared names are only knowable after fetch, so admission cannot catch this; once `SkillStatus` records the declared name — an enterprise-#1265 work item — an apply-time pre-check can be added). The placed tree is the Skill's **resolved source tree**: its repo at the pinned commit, scoped to `Repository.Subfolder` when set. | **Overlay wins (Scott, 2026-08-06).** If the base already has `skills/<name>/`, the ref **replaces the whole directory** (never a file-level interleave of base + ref trees). The replacement is recorded in the compose `Report` and surfaced in status, so shadowing is visible, not silent. Supports the "patch a vendored plugin's skill with the curated registry version" workflow directly. |
 | Command (Prompt) | `commands/<name>.md` | Overlay wins, same as skills (whole-file replace, recorded). |
 | MCPServer | entry in `.mcp.json` | **Structured merge by server name; overlay entry replaces a same-named base entry** (recorded in `Report`). Mapping fidelity (verified against `mcpserver.go:16-59`): `Remote{Type,URL,Headers}` → a remote `.mcp.json` entry directly; `Source.Package` with npm/pypi origin → a stdio entry (`command`/`args` from `MCPPackageLaunch`, or origin-type defaults); OCI-package origins have no faithful desktop `.mcp.json` form → **rejected at controller resolve time** (terminal `ComponentInvalid`). Enforcement deliberately lives in the controller, not admission: admission's ref resolver is existence-only (it cannot see the referenced spec), and the referenced row can be replaced same-tag after admission anyway — resolve-time is the only check that isn't a TOCTOU. |
 | Instructions (Prompt) | `AGENTS.md` | **Append** with a `\n\n---\n\n` separator if the base has one; create otherwise. Only merge-by-concatenation in v1, and only here. |
@@ -366,6 +369,59 @@ The compile is a library; it runs at every consumption point, always from status
 - **P4 (product call) — serving composed plugins** to unmodified Claude Code (flattened
   archive endpoint or git-backed marketplace).
 
+## 9a. Cross-lane alignment — BYO composition contract & the AR-Kagent format decisions
+
+The BYO composition contract (enterprise #1265) and the 2026-08-11 AR-Kagent sync
+decisions (recorded on that PR) intersect this design at the format and delivery
+layers. What they change, and what they don't:
+
+1. **Skill directory naming (adopted, affects P1 — see §6).** The BYO contract keys
+   `skills/<name>/` on the SKILL.md-declared name because the Agent Skills spec
+   requires it. This spike's earlier ref-name keying was spec-invalid and is
+   superseded; PR #616 implements declared-name keying with terminal
+   `ComponentInvalid` on missing/invalid/colliding declared names.
+2. **Format plurality (reshapes P2, not the P1 data model).** The sync decided:
+   agent-plugins.org (the AWS/Cursor/Microsoft/OpenAI/Vercel standard) becomes a
+   supported *input* format for Plugin publishing alongside Claude's; Agents declare
+   the plugin format(s) they support (kagent-capabilities style); BYO agents receive
+   referenced Plugins **and** catalog resources via the filesystem in their declared
+   format; Claude harnesses receive Claude format. Consequences here:
+   - The **canonical bundle stays the Claude-shaped superset** (richest format,
+     dominant input today); agent-plugins.org becomes a concrete `translate` adapter
+     — replacing the hypothetical Codex adapter as P2's second target. Layout mapping
+     is small (`.claude-plugin/plugin.json`↔root `plugin.json`, `.mcp.json`↔`mcp.json`,
+     `AGENTS.md`↔`dev.agentregistry/prompt.md`); commands/hooks/sub-agents
+     drop-with-warning toward frameworks (the BYO doc itself: frameworks have no
+     counterpart).
+   - Plugin **ingest** eventually detects both manifest layouts (`ParseManifest`
+     grows a discriminator); a plugin's *deliverable formats* become a derived fact
+     (base layout + available adapters) worth surfacing in `PluginStatus` so
+     deploy-time matching against the Agent's declared format has data.
+3. **MCP entry fidelity is per-destination (P2 rule).** The BYO contract forbids
+   transport fallback and **fails closed on inline headers** (only the
+   gateway-generated `Host`; credentials must never land in a staged bundle).
+   Compose's `.mcp.json` mapping inherits that rule for any server-staged bundle;
+   the looser desktop mapping (verbatim headers, npm/pypi stdio entries) applies only
+   to `arctl pull` onto a developer's own machine.
+4. **Delivery convergence (validates the architecture).** The BYO contract's
+   S3-bundle + bootstrap + `AGENTREGISTRY_COMPOSITION_DIR` machinery is the delivery
+   vehicle P2's runner-compose slots into: resolve pins → compose canonical →
+   translate to the target format → existing staging. And its plan for Plugin refs —
+   delivered "as its own directory next to the generated one, **not merged into
+   it**" — independently matches this spike's no-nested-merge stance: composition
+   *within* a plugin is the compose engine; composition *across* plugins is sibling
+   directories.
+5. **Coordination items (sequencing, not design):** the BYO lane's OSS changes —
+   lifting `skills/instructions require compatibleHarnesses` for image Agents, and
+   recording the SKILL.md-declared name in `SkillStatus` — touch files this lane
+   owns (`agent_validate.go`, `skill.go`). Once `SkillStatus` carries the declared
+   name, this lane adds the apply-time collision pre-check (§6).
+
+**Unchanged by all of the above:** the pin model (`ResolvedComponents`, fail-closed
+content hash), freeze-at-spec-change, overlay-wins semantics, the kindless
+`ComponentRef`, and the marketplace skip — the sync decisions are about format and
+delivery, not sourcing or identity.
+
 ## 10. Decisions & open questions
 
 Resolved (Scott, 2026-08-06):
@@ -398,5 +454,13 @@ Resolved (Scott, 2026-08-06):
 9. **v1 pin refresh path** (2026-08-10, from design review): any real spec change
    (generation bump) re-resolves the full pin set; identical re-apply is `UpsertNoOp`
    by design. No first-class refresh verb in v1 (§5).
+10. **Skill destinations keyed by SKILL.md-declared name** (2026-08-11, superseding
+    the ref-name call): required by the Agent Skills spec and aligned with the BYO
+    composition contract (enterprise #1265). Ref name stays the registry identity in
+    pins; declared-name problems are terminal at resolve (§6, §9a).
+11. **Canonical stays the Claude-shaped superset; agent-plugins.org is a translate
+    adapter** (2026-08-11, from the AR-Kagent sync decisions): P2's second harness
+    format target, replacing the deferred Codex adapter. Per-destination MCP
+    fidelity (fail-closed headers for staged bundles) rides with it (§9a).
 
 No open questions remain.
