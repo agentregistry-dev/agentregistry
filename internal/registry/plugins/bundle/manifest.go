@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"path"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -64,6 +65,33 @@ func BuildInventory(b *CanonicalBundle) *v1alpha1.PluginInventory {
 	}
 	return m
 }
+
+// DeclaredSkillName returns the name a standalone skill tree declares in its
+// root SKILL.md frontmatter, validated against the Agent Skills spec's name
+// rules (agentskills.io: 1-64 chars; lowercase letters, digits, hyphens; no
+// leading/trailing/consecutive hyphens). The spec requires a skill's directory
+// name to MATCH this declared name, so consumers placing the tree (e.g. plugin
+// composition at skills/<name>/) must key on it — a registry ref's name is
+// registry identity, not the on-disk name. Missing SKILL.md, missing name, or
+// a spec-violating name is an ErrInvalidBundle.
+func DeclaredSkillName(files map[string][]byte) (string, error) {
+	content, ok := files["SKILL.md"]
+	if !ok {
+		return "", fmt.Errorf("%w: skill tree has no root SKILL.md", ErrInvalidBundle)
+	}
+	name, _ := parseSkillFrontmatter(content)
+	if name == "" {
+		return "", fmt.Errorf("%w: SKILL.md frontmatter declares no name", ErrInvalidBundle)
+	}
+	if !skillNameRegex.MatchString(name) || strings.Contains(name, "--") {
+		return "", fmt.Errorf("%w: skill name %q violates the Agent Skills spec name rules (1-64 chars; lowercase letters, digits, hyphens; no leading/trailing/consecutive hyphens)", ErrInvalidBundle, name)
+	}
+	return name, nil
+}
+
+// skillNameRegex encodes the Agent Skills spec name charset/anchoring; the
+// no-consecutive-hyphens rule is checked separately for a clearer error.
+var skillNameRegex = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$`)
 
 // parseSkillFrontmatter extracts name/description from a SKILL.md YAML
 // frontmatter block (--- ... ---). Returns empties on any parse failure.

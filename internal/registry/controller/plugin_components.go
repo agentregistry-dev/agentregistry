@@ -45,11 +45,21 @@ func (c *PluginController) resolveComponents(ctx context.Context, p *v1alpha1.Pl
 	var pins []v1alpha1.PluginResolvedComponent
 	ns := p.Metadata.NamespaceOrDefault()
 
+	// Skill destinations are keyed by the SKILL.md-DECLARED name (the Agent
+	// Skills spec requires directory == declared name), so collisions between
+	// declared names can only be caught here, after content is fetched —
+	// admission sees only ref names.
+	declaredNames := map[string]v1alpha1.ComponentRef{}
 	for _, ref := range p.Spec.Skills {
 		skill, pin, err := c.resolveSkill(ctx, ns, ref)
 		if err != nil {
 			return in, nil, err
 		}
+		if prev, ok := declaredNames[skill.Name]; ok {
+			return in, nil, fmt.Errorf("%w: skills %s and %s both declare SKILL.md name %q (directory would collide)",
+				errComponentInvalid, componentID(v1alpha1.KindSkill, ns, prev), componentID(v1alpha1.KindSkill, ns, ref), skill.Name)
+		}
+		declaredNames[skill.Name] = ref
 		in.Skills = append(in.Skills, skill)
 		pins = append(pins, pin)
 	}
@@ -102,7 +112,14 @@ func (c *PluginController) resolveSkill(ctx context.Context, ns string, ref v1al
 	if err != nil {
 		return compose.Skill{}, v1alpha1.PluginResolvedComponent{}, fmt.Errorf("fetch skill %s@%s: %w", componentID(v1alpha1.KindSkill, ns, ref), commit, err)
 	}
-	return compose.Skill{Name: ref.Name, Files: tree.Files},
+	// The on-disk directory name is the SKILL.md-declared name (Agent Skills
+	// spec: directory MUST match the declared name), not the registry ref
+	// name. Missing/invalid declared names are terminal.
+	declared, err := bundle.DeclaredSkillName(tree.Files)
+	if err != nil {
+		return compose.Skill{}, v1alpha1.PluginResolvedComponent{}, fmt.Errorf("%w: skill %s@%s: %v", errComponentInvalid, componentID(v1alpha1.KindSkill, ns, ref), commit, err)
+	}
+	return compose.Skill{Name: declared, Files: tree.Files},
 		componentPin(v1alpha1.KindSkill, ns, ref, commit, ""), nil
 }
 

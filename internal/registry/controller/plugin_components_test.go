@@ -248,3 +248,87 @@ func TestPluginReconcile_BasePlusOverlayComposes(t *testing.T) {
 		t.Errorf("inventory = %+v", inv)
 	}
 }
+
+// TestPluginReconcile_SkillDestUsesDeclaredName guards the cross-lane naming
+// contract (BYO composition doc / Agent Skills spec): the skills/<name>/
+// directory is keyed by the SKILL.md-declared name, not the registry ref name.
+func TestPluginReconcile_SkillDestUsesDeclaredName(t *testing.T) {
+	store := newFakePluginStore()
+	skillStatus := map[string]any{"resolvedSource": map[string]string{"commit": strings.Repeat("c", 40)}}
+	p := composedPlugin(2)
+	p.Spec.MCPServers, p.Spec.Commands, p.Spec.Instructions = nil, nil, nil
+	// Ref name "log-triage" but the fetched tree declares "triage-pro".
+	c := &PluginController{
+		Store:      store,
+		Resolver:   fakeResolver{},
+		Components: componentsFixture(t, skillStatus),
+		fetchTree:  fakeTree(map[string][]byte{"SKILL.md": []byte("---\nname: triage-pro\n---\nbody")}),
+	}
+	outcome, _, err := c.reconcile(context.Background(), p)
+	if err != nil || outcome != "resolved" {
+		t.Fatalf("reconcile = (%q, %v), want (resolved, nil)", outcome, err)
+	}
+	got := store.plugin(t, "default", "ir", "v1")
+	inv := got.Status.Inventory
+	if inv == nil || len(inv.Skills) != 1 || inv.Skills[0].Name != "triage-pro" {
+		t.Errorf("inventory should reflect the declared name, got %+v", inv)
+	}
+	// The pin keeps the REGISTRY identity (ref name), for re-resolution.
+	if len(got.Status.ResolvedComponents) != 1 || got.Status.ResolvedComponents[0].Name != "log-triage" {
+		t.Errorf("pin should keep the ref name, got %+v", got.Status.ResolvedComponents)
+	}
+}
+
+// TestPluginReconcile_InvalidDeclaredSkillNameIsTerminal: a fetched skill tree
+// with no/invalid SKILL.md name cannot be placed spec-compliantly.
+func TestPluginReconcile_InvalidDeclaredSkillNameIsTerminal(t *testing.T) {
+	store := newFakePluginStore()
+	skillStatus := map[string]any{"resolvedSource": map[string]string{"commit": strings.Repeat("d", 40)}}
+	p := composedPlugin(3)
+	p.Spec.MCPServers, p.Spec.Commands, p.Spec.Instructions = nil, nil, nil
+	c := &PluginController{
+		Store:      store,
+		Resolver:   fakeResolver{},
+		Components: componentsFixture(t, skillStatus),
+		fetchTree:  fakeTree(map[string][]byte{"SKILL.md": []byte("---\nname: Bad--Name\n---\n")}),
+	}
+	outcome, reason, err := c.reconcile(context.Background(), p)
+	if err != nil {
+		t.Fatalf("terminal must Forget, got %v", err)
+	}
+	if outcome != "failed" || reason != "ComponentInvalid" {
+		t.Fatalf("got (%q, %q), want (failed, ComponentInvalid)", outcome, reason)
+	}
+}
+
+// TestPluginReconcile_DeclaredNameCollisionIsTerminal: two refs whose trees
+// declare the same SKILL.md name would collide at skills/<name>/.
+func TestPluginReconcile_DeclaredNameCollisionIsTerminal(t *testing.T) {
+	store := newFakePluginStore()
+	commit := strings.Repeat("e", 40)
+	skills := fakeComponents{
+		"default/skill-a:latest": rawComponent(t, v1alpha1.KindSkill, "default", "skill-a", "latest",
+			v1alpha1.SkillSpec{Source: &v1alpha1.SkillSource{Repository: &v1alpha1.Repository{URL: "https://github.com/o/a"}}},
+			map[string]any{"resolvedSource": map[string]string{"commit": commit}}),
+		"default/skill-b:latest": rawComponent(t, v1alpha1.KindSkill, "default", "skill-b", "latest",
+			v1alpha1.SkillSpec{Source: &v1alpha1.SkillSource{Repository: &v1alpha1.Repository{URL: "https://github.com/o/b"}}},
+			map[string]any{"resolvedSource": map[string]string{"commit": commit}}),
+	}
+	p := composedPlugin(4)
+	p.Spec.Skills = []v1alpha1.ComponentRef{{Name: "skill-a"}, {Name: "skill-b"}}
+	p.Spec.MCPServers, p.Spec.Commands, p.Spec.Instructions = nil, nil, nil
+	c := &PluginController{
+		Store:      store,
+		Resolver:   fakeResolver{},
+		Components: map[string]componentGetter{v1alpha1.KindSkill: skills},
+		// Both trees declare the same name.
+		fetchTree: fakeTree(map[string][]byte{"SKILL.md": []byte("---\nname: same-name\n---\n")}),
+	}
+	outcome, reason, err := c.reconcile(context.Background(), p)
+	if err != nil {
+		t.Fatalf("terminal must Forget, got %v", err)
+	}
+	if outcome != "failed" || reason != "ComponentInvalid" {
+		t.Fatalf("got (%q, %q), want (failed, ComponentInvalid)", outcome, reason)
+	}
+}

@@ -61,6 +61,10 @@ type Inputs struct {
 
 // Skill is one resolved Skill component: the file tree of its pinned repo.
 type Skill struct {
+	// Name is the skill's SKILL.md-DECLARED name (bundle.DeclaredSkillName),
+	// not the registry ref name — the Agent Skills spec requires the
+	// skills/<name>/ directory to match the declared name. The caller derives
+	// and validates it before composing.
 	Name string
 	// Files is the skill repo's tree (SKILL.md at the root), path-keyed the
 	// same way as CanonicalBundle.Files.
