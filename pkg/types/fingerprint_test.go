@@ -400,3 +400,53 @@ func testMCPServerInNamespace(namespace, name, identifier string) *v1alpha1.MCPS
 		},
 	}
 }
+
+// TestPluginDependencyMaterial_IncludesComponentPins guards the composability
+// contract: a deployment's change-detection material must move when a composed
+// plugin's pin set moves, and a pure-composition plugin (no base source) must
+// still produce material.
+func TestPluginDependencyMaterial_IncludesComponentPins(t *testing.T) {
+	pin := func(commit string) []v1alpha1.PluginResolvedComponent {
+		return []v1alpha1.PluginResolvedComponent{{
+			Kind: v1alpha1.KindSkill, Namespace: "default", Name: "s", Tag: "v1", Commit: commit,
+		}}
+	}
+
+	base := testPlugin("default", "p", "aaaa")
+	base.Status.ResolvedComponents = pin("c1")
+	moved := testPlugin("default", "p", "aaaa")
+	moved.Status.ResolvedComponents = pin("c2")
+
+	m1, err := dependencyMaterial(v1alpha1.KindPlugin, base)
+	if err != nil {
+		t.Fatalf("dependencyMaterial: %v", err)
+	}
+	m2, err := dependencyMaterial(v1alpha1.KindPlugin, moved)
+	if err != nil {
+		t.Fatalf("dependencyMaterial: %v", err)
+	}
+	if materialHash(m1) == materialHash(m2) {
+		t.Error("component pin change must change the material hash")
+	}
+
+	// Pure composition: no base source pin, components only.
+	pure := testPlugin("default", "p", "aaaa")
+	pure.Status.ResolvedSource = nil
+	pure.Status.ResolvedComponents = pin("c1")
+	m3, err := dependencyMaterial(v1alpha1.KindPlugin, pure)
+	if err != nil {
+		t.Fatalf("dependencyMaterial: %v", err)
+	}
+	if len(m3) == 0 {
+		t.Error("pure-composition plugin must still produce material")
+	}
+
+	// Unchanged pin set is stable (no spurious redeploys).
+	again, err := dependencyMaterial(v1alpha1.KindPlugin, base)
+	if err != nil {
+		t.Fatalf("dependencyMaterial: %v", err)
+	}
+	if materialHash(m1) != materialHash(again) {
+		t.Error("unchanged pin set must produce a stable material hash")
+	}
+}

@@ -203,6 +203,11 @@ func (p *Plugin) MarshalStatus() (json.RawMessage, error) {
 			return nil, err
 		}
 	}
+	if len(p.Status.ResolvedComponents) > 0 {
+		if m["resolvedComponents"], err = json.Marshal(p.Status.ResolvedComponents); err != nil {
+			return nil, err
+		}
+	}
 	if p.Status.Manifest != nil {
 		if m["manifest"], err = json.Marshal(p.Status.Manifest); err != nil {
 			return nil, err
@@ -225,14 +230,16 @@ func (p *Plugin) UnmarshalStatus(data json.RawMessage) error {
 		return err
 	}
 	var custom struct {
-		ResolvedSource *PluginResolvedSource `json:"resolvedSource"`
-		Manifest       *PluginManifest       `json:"manifest"`
-		Inventory      *PluginInventory      `json:"inventory"`
+		ResolvedSource     *PluginResolvedSource     `json:"resolvedSource"`
+		ResolvedComponents []PluginResolvedComponent `json:"resolvedComponents"`
+		Manifest           *PluginManifest           `json:"manifest"`
+		Inventory          *PluginInventory          `json:"inventory"`
 	}
 	if err := json.Unmarshal(data, &custom); err != nil {
 		return err
 	}
 	p.Status.ResolvedSource, p.Status.Manifest, p.Status.Inventory = custom.ResolvedSource, custom.Manifest, custom.Inventory
+	p.Status.ResolvedComponents = custom.ResolvedComponents
 	return nil
 }
 

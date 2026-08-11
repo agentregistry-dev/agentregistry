@@ -1,7 +1,9 @@
 package bundle
 
 import (
+	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
@@ -80,5 +82,44 @@ func TestParseManifest(t *testing.T) {
 	bad := &CanonicalBundle{Files: map[string][]byte{ManifestPath: []byte("{not json")}}
 	if _, err := ParseManifest(bad); err == nil {
 		t.Fatal("expected error for malformed manifest")
+	}
+}
+
+func TestDeclaredSkillName(t *testing.T) {
+	tree := func(frontmatter string) map[string][]byte {
+		return map[string][]byte{"SKILL.md": []byte(frontmatter)}
+	}
+	tests := []struct {
+		name    string
+		files   map[string][]byte
+		want    string
+		wantErr string
+	}{
+		{"valid", tree("---\nname: log-triage\n---\nbody"), "log-triage", ""},
+		{"valid single char", tree("---\nname: a\n---\n"), "a", ""},
+		{"missing SKILL.md", map[string][]byte{"README.md": []byte("x")}, "", "no root SKILL.md"},
+		{"no frontmatter name", tree("---\ndescription: d\n---\n"), "", "declares no name"},
+		{"uppercase rejected", tree("---\nname: Log-Triage\n---\n"), "", "name rules"},
+		{"leading hyphen rejected", tree("---\nname: -triage\n---\n"), "", "name rules"},
+		{"trailing hyphen rejected", tree("---\nname: triage-\n---\n"), "", "name rules"},
+		{"consecutive hyphens rejected", tree("---\nname: log--triage\n---\n"), "", "name rules"},
+		{"too long rejected", tree("---\nname: " + strings.Repeat("a", 65) + "\n---\n"), "", "name rules"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := DeclaredSkillName(tt.files)
+			if tt.wantErr == "" {
+				if err != nil || got != tt.want {
+					t.Fatalf("DeclaredSkillName = (%q, %v), want (%q, nil)", got, err, tt.want)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("expected error containing %q, got %v", tt.wantErr, err)
+			}
+			if !errors.Is(err, ErrInvalidBundle) {
+				t.Errorf("error must wrap ErrInvalidBundle, got %v", err)
+			}
+		})
 	}
 }

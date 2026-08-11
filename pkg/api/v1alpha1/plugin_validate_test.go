@@ -56,9 +56,39 @@ func TestPluginValidate(t *testing.T) {
 			spec: PluginSpec{Source: &PluginSource{Type: PluginSourceTypeOCI, OCI: &PluginSourceOCI{Reference: "ghcr.io/org/plugin@sha256:" + strings.Repeat("a", 64)}}},
 		},
 		{
-			name:    "missing source",
+			name:    "missing source and composition",
 			spec:    PluginSpec{Title: "x"},
-			wantErr: "spec.source",
+			wantErr: "set source and/or composition",
+		},
+		{
+			name: "pure composition without source is valid",
+			spec: PluginSpec{Skills: []ComponentRef{{Name: "log-triage", Tag: "v1"}}},
+		},
+		{
+			name:    "composition ref requires name",
+			spec:    PluginSpec{Skills: []ComponentRef{{Tag: "v1"}}},
+			wantErr: "spec.skills[0].name",
+		},
+		{
+			name:    "duplicate skill names rejected",
+			spec:    PluginSpec{Skills: []ComponentRef{{Name: "a"}, {Name: "a", Tag: "v2"}}},
+			wantErr: "spec.skills[1].name",
+		},
+		{
+			name:    "duplicate command names rejected",
+			spec:    PluginSpec{Commands: []ComponentRef{{Name: "c"}, {Name: "c"}}},
+			wantErr: "spec.commands[1].name",
+		},
+		{
+			name: "instructions-only composition is valid",
+			spec: PluginSpec{Instructions: &ComponentRef{Name: "guidelines"}},
+		},
+		{
+			name: "source plus composition is valid",
+			spec: PluginSpec{
+				Source: &PluginSource{Type: PluginSourceTypeGit, Git: &PluginSourceGit{Repository: &Repository{URL: "https://github.com/org/repo"}}},
+				Skills: []ComponentRef{{Name: "log-triage"}},
+			},
 		},
 		{
 			name: "git source with branch only (controller resolves the commit)",

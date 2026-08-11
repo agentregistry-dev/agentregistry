@@ -142,6 +142,18 @@ components:
       - Paths
       - Map
       type: object
+    ComponentRef:
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+        namespace:
+          type: string
+        tag:
+          type: string
+      required:
+      - name
+      type: object
     Condition:
       additionalProperties: false
       properties:
@@ -1229,6 +1241,27 @@ components:
       required:
       - name
       type: object
+    PluginResolvedComponent:
+      additionalProperties: false
+      properties:
+        commit:
+          type: string
+        contentHash:
+          type: string
+        kind:
+          type: string
+        name:
+          type: string
+        namespace:
+          type: string
+        tag:
+          type: string
+      required:
+      - kind
+      - namespace
+      - name
+      - tag
+      type: object
     PluginResolvedSource:
       additionalProperties: false
       properties:
@@ -1282,6 +1315,12 @@ components:
     PluginSpec:
       additionalProperties: false
       properties:
+        commands:
+          items:
+            $ref: '#/components/schemas/ComponentRef'
+          type:
+          - array
+          - "null"
         description:
           type: string
         harnesses:
@@ -1292,6 +1331,20 @@ components:
           - "null"
         iconUrl:
           type: string
+        instructions:
+          $ref: '#/components/schemas/ComponentRef'
+        mcpServers:
+          items:
+            $ref: '#/components/schemas/ComponentRef'
+          type:
+          - array
+          - "null"
+        skills:
+          items:
+            $ref: '#/components/schemas/ComponentRef'
+          type:
+          - array
+          - "null"
         source:
           $ref: '#/components/schemas/PluginSource'
         title:
@@ -1311,6 +1364,12 @@ components:
           $ref: '#/components/schemas/PluginInventory'
         manifest:
           $ref: '#/components/schemas/PluginManifest'
+        resolvedComponents:
+          items:
+            $ref: '#/components/schemas/PluginResolvedComponent'
+          type:
+          - array
+          - "null"
         resolvedSource:
           $ref: '#/components/schemas/PluginResolvedSource'
       type: object

@@ -12,6 +12,7 @@ import (
 	"k8s.io/client-go/util/workqueue"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/plugins/bundle"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/plugins/compose"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/plugins/source"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
@@ -19,9 +20,12 @@ import (
 )
 
 // PluginControllerDeps are the Plugin controller's dependencies. Resolver pins
-// a plugin's source pointer and loads its bundle; it is required.
+// a plugin's base source pointer and loads its bundle; it is required.
+// FetchTree fetches a referenced Skill's repo at its pinned commit; nil
+// defaults to source.FetchGitTree.
 type PluginControllerDeps struct {
-	Resolver source.Resolver
+	Resolver  source.Resolver
+	FetchTree treeFetcher
 }
 
 // pluginStore is the subset of *v1alpha1store.Store the controller uses,
@@ -54,7 +58,12 @@ type pluginQueueKey struct {
 type PluginController struct {
 	Store    pluginStore
 	Resolver source.Resolver
-	Wakeups  <-chan struct{}
+	// Components provides read access to the kinds composition refs point at
+	// (Skill, MCPServer, Prompt).
+	Components map[string]componentGetter
+	// fetchTree fetches a referenced Skill's pinned git tree.
+	fetchTree treeFetcher
+	Wakeups   <-chan struct{}
 
 	pool   *pgxpool.Pool
 	resync time.Duration
@@ -84,11 +93,25 @@ func NewPluginController(
 	if deps.Resolver == nil {
 		return nil, errors.New("plugin controller: Resolver is required")
 	}
+	components := map[string]componentGetter{}
+	for _, kind := range []string{v1alpha1.KindSkill, v1alpha1.KindMCPServer, v1alpha1.KindPrompt} {
+		s := stores[kind]
+		if s == nil {
+			return nil, fmt.Errorf("plugin controller: %s store is required for composition", kind)
+		}
+		components[kind] = s
+	}
+	fetch := deps.FetchTree
+	if fetch == nil {
+		fetch = source.FetchGitTree
+	}
 	return &PluginController{
-		Store:    store,
-		Resolver: deps.Resolver,
-		pool:     pool,
-		resync:   defaultControllerResyncInterval,
+		Store:      store,
+		Resolver:   deps.Resolver,
+		Components: components,
+		fetchTree:  fetch,
+		pool:       pool,
+		resync:     defaultControllerResyncInterval,
 	}, nil
 }
 
@@ -314,36 +337,69 @@ func (c *PluginController) reconcile(ctx context.Context, p *v1alpha1.Plugin) (s
 		}
 	}
 
-	resolved, b, err := c.Resolver.Resolve(ctx, p)
-	if err != nil {
-		reason, terminal := classifyResolveErr(err)
-		bump := int64(0)
-		if terminal {
-			bump = gen
+	// Base source (optional since composition landed): resolve-and-pin as
+	// before. A pure-composition plugin skips this entirely.
+	var resolved *v1alpha1.PluginResolvedSource
+	var b *bundle.CanonicalBundle
+	if p.Spec.Source != nil {
+		var err error
+		resolved, b, err = c.Resolver.Resolve(ctx, p)
+		if err != nil {
+			reason, terminal := classifyResolveErr(err)
+			return c.failStatus(ctx, ns, name, tag, gen, reason, err, terminal)
 		}
-		patchErr := c.patchStatus(ctx, ns, name, tag, bump, func(st *v1alpha1.PluginStatus) {
-			setReady(st, v1alpha1.ConditionFalse, reason, err.Error())
-		})
-		if terminal {
-			return "failed", reason, patchErr
-		}
-		return "", "", err // retryable
 	}
 
-	manifest, err := bundle.ParseManifest(b)
+	// Composition refs: resolve each to its pin + content. Pending components
+	// (a referenced Skill its own controller hasn't pinned yet) are retryable.
+	comps, pins, err := c.resolveComponents(ctx, p)
 	if err != nil {
-		return "failed", "SourceInvalid", c.patchStatus(ctx, ns, name, tag, gen, func(st *v1alpha1.PluginStatus) {
-			setReady(st, v1alpha1.ConditionFalse, "SourceInvalid", err.Error())
-		})
+		reason, terminal := classifyComponentErr(err)
+		return c.failStatus(ctx, ns, name, tag, gen, reason, err, terminal)
 	}
-	inventory := bundle.BuildInventory(b)
+
+	// Compile: flatten base + components. Manifest/Inventory are computed over
+	// the COMPOSED bundle so status reflects the true surface.
+	comps.Base = b
+	composed, _, err := compose.Compose(comps)
+	if err != nil {
+		return c.failStatus(ctx, ns, name, tag, gen, "SourceInvalid", err, true)
+	}
+
+	manifest, err := bundle.ParseManifest(composed)
+	if err != nil {
+		return c.failStatus(ctx, ns, name, tag, gen, "SourceInvalid", err, true)
+	}
+	inventory := bundle.BuildInventory(composed)
 
 	return "resolved", "", c.patchStatus(ctx, ns, name, tag, gen, func(st *v1alpha1.PluginStatus) {
 		st.ResolvedSource = resolved
+		st.ResolvedComponents = pins
 		st.Manifest = manifest
 		st.Inventory = inventory
 		setReady(st, v1alpha1.ConditionTrue, "Resolved", "")
 	})
+}
+
+// failStatus records a reconcile failure on the Ready condition. Terminal
+// failures advance ObservedGeneration (no re-resolve until the spec changes)
+// and Forget; retryable ones leave it behind and return the error for
+// rate-limited backoff.
+func (c *PluginController) failStatus(ctx context.Context, ns, name, tag string, gen int64, reason string, cause error, terminal bool) (string, string, error) {
+	bump := int64(0)
+	if terminal {
+		bump = gen
+	}
+	patchErr := c.patchStatus(ctx, ns, name, tag, bump, func(st *v1alpha1.PluginStatus) {
+		setReady(st, v1alpha1.ConditionFalse, reason, cause.Error())
+	})
+	if terminal {
+		return "failed", reason, patchErr
+	}
+	if patchErr != nil {
+		return "", "", patchErr
+	}
+	return "", "", cause // retryable
 }
 
 // classifyResolveErr maps a resolver error to a status reason and whether it is

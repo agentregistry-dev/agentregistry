@@ -145,7 +145,16 @@ func getMarketplace(cfg Config) func(context.Context, *struct{}) (*types.Respons
 				if err != nil {
 					// Not-yet-resolved / unsupported-source plugins are silently
 					// skipped: the marketplace.json document never contains a
-					// partial/broken entry.
+					// partial/broken entry. Composed plugins are a durable,
+					// by-design omission (no single upstream URL until git-backed
+					// marketplace hosting lands) — log those so operators can see
+					// why a plugin is absent from the catalogue.
+					if errors.Is(err, pluginmarketplace.ErrComposed) {
+						logger.Debug("plugin marketplace: skipping composed plugin (no single-source representation; consume via deploy or arctl)",
+							"namespace", p.Metadata.NamespaceOrDefault(),
+							"plugin_name", p.Metadata.Name,
+							"tag", p.Metadata.Tag)
+					}
 					continue
 				}
 				if seenNames[entry.Name] {

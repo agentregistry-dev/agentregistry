@@ -105,6 +105,29 @@ func (r *GitResolver) resolveGit(ctx context.Context, g *v1alpha1.PluginSourceGi
 	return &v1alpha1.PluginResolvedSource{Type: v1alpha1.PluginSourceTypeGit, Commit: commit}, b, nil
 }
 
+// FetchGitTree loads the file tree of repo pinned at commit — the
+// component-fetch path for composed plugins (a referenced Skill's repo at the
+// commit its own controller pinned). Same host restrictions, clone bound, and
+// bundle ceilings as a plugin base resolve.
+func FetchGitTree(ctx context.Context, repo *v1alpha1.Repository, commit string) (*bundle.CanonicalBundle, error) {
+	if repo == nil || repo.URL == "" {
+		return nil, fmt.Errorf("%w: git source missing repository url", ErrUnsupportedSource)
+	}
+	ctx, cancel := context.WithTimeout(ctx, cloneTimeout)
+	defer cancel()
+
+	dir, err := os.MkdirTemp("", "arctl-plugin-comp-*")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
+
+	if err := gitutil.CloneAndCopyContext(ctx, repo.URL, "", commit, repo.Subfolder, dir, false); err != nil {
+		return nil, classifyGitErr(err, "clone component source")
+	}
+	return bundle.FromDir(dir)
+}
+
 // classifyGitErr maps a gitutil error to the resolver's terminal/retryable
 // contract: a non-github host or a missing ref is terminal (wrapped in a
 // terminal sentinel); anything else (network, transport) is retryable.
