@@ -7,7 +7,10 @@ on:
 
 permissions:
   actions: read
-  contents: read
+  # Reusable workflow permissions cannot exceed the caller's permissions.
+  # release.yaml needs contents: write for its stable release job, even though
+  # that job is skipped for nightly branch runs.
+  contents: write
   packages: write
 
 concurrency:
