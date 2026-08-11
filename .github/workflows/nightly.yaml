@@ -36,7 +36,7 @@ jobs:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         previous_sha=$(gh api \
-          "repos/${GITHUB_REPOSITORY}/actions/workflows/nightly.yaml/runs?branch=main&status=completed&conclusion=success&per_page=1" \
+          "repos/${GITHUB_REPOSITORY}/actions/workflows/nightly.yaml/runs?branch=main&status=success&per_page=1" \
           --jq '.workflow_runs[0].head_sha // empty')
         echo "sha=${previous_sha}" >> "${GITHUB_OUTPUT}"
 
@@ -57,7 +57,7 @@ jobs:
     - name: Compute nightly version
       id: version
       run: |
-        short_sha=$(git rev-parse --short=12 HEAD)
+        short_sha=$(git rev-parse --short HEAD)
         echo "version=v0.0.0-alpha.${short_sha}" >> "${GITHUB_OUTPUT}"
 
   publish:

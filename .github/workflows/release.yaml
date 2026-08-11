@@ -41,8 +41,8 @@ jobs:
 
         if [[ -n "${INPUT_VERSION}" ]]; then
           VERSION="${INPUT_VERSION}"
-          if [[ ! "${VERSION}" =~ ^v0\.0\.0-alpha\.[0-9a-f]{12}$ ]]; then
-            echo "::error::nightly version must match v0.0.0-alpha.<12-character-sha>; got ${VERSION}"
+          if [[ ! "${VERSION}" =~ ^v0\.0\.0-alpha\.[0-9a-f]{7,40}$ ]]; then
+            echo "::error::nightly version must match v0.0.0-alpha.<commit-sha>; got ${VERSION}"
             exit 1
           fi
         else
