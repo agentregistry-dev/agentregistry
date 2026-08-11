@@ -174,6 +174,10 @@ func (c *DeploymentController) Drain(ctx context.Context) (SyncResult, error) {
 // Run keeps Deployment reconciliation repaired. Wakeups should be wired to
 // coarse database invalidations; the resync ticker is a periodic safety
 // refresh. Adapter side effects run through the in-memory workqueue worker.
+// A Drain/Refresh failure marks the controller not ready and is retried on
+// the next wakeup or resync tick; it does not stop the loop, because exiting
+// shuts down the workqueue and silently discards scheduled rate-limited
+// retries.
 func (c *DeploymentController) Run(ctx context.Context, resyncInterval time.Duration) error {
 	if c == nil {
 		return errors.New("deployment controller: controller is required")
@@ -206,11 +210,17 @@ func (c *DeploymentController) Run(ctx context.Context, resyncInterval time.Dura
 			return err
 		case <-c.Wakeups:
 			if _, err := c.Drain(ctx); err != nil {
-				return err
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				logger.Error("deployment controller drain failed; retrying on next wakeup or resync", "error", err)
 			}
 		case <-ticks:
 			if _, err := c.Refresh(ctx); err != nil {
-				return err
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				logger.Error("deployment controller refresh failed; retrying on next wakeup or resync", "error", err)
 			}
 		}
 	}

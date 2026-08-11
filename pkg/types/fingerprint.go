@@ -12,9 +12,20 @@ import (
 
 // DeploymentDesiredFingerprinter lets an adapter define exactly which resolved
 // inputs determine its external output. Adapters that do not implement this
-// hook use DefaultApplyFingerprint.
+// hook use DefaultApplyFingerprint. Implement
+// DeploymentDesiredFingerprintResulter instead when the adapter can also
+// report the dependency snapshots behind the fingerprint.
 type DeploymentDesiredFingerprinter interface {
 	DesiredFingerprint(ctx context.Context, in ApplyInput) (string, error)
+}
+
+// DeploymentDesiredFingerprintResulter is the result-carrying variant of
+// DeploymentDesiredFingerprinter: it returns the dependency snapshots along
+// with the fingerprint so the controller can persist them as operator
+// evidence. The controller checks this interface first and falls back to
+// DeploymentDesiredFingerprinter.
+type DeploymentDesiredFingerprintResulter interface {
+	DesiredFingerprintResult(ctx context.Context, in ApplyInput) (ApplyFingerprintResult, error)
 }
 
 // ApplyFingerprintOptions carries adapter-owned inputs that are not already

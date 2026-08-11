@@ -4,6 +4,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync/atomic"
 	"testing"
@@ -416,6 +417,79 @@ func TestDeploymentController_QueuedDeploymentUsesLatestGeneration(t *testing.T)
 	require.Equal(t, latest.Metadata.Generation, adapter.lastApplyGeneration.Load())
 }
 
+// TestDeploymentController_ReappliesWhenReferencedSkillResolves regression-covers
+// the sequence where deployment reconciles race ahead of skill resolution: the
+// apply fails while the skill is unresolved, the Skill controller then lands a
+// status-only resolvedSource patch, and that write must emit a control-plane
+// event whose replay requeues the deployment so it succeeds.
+func TestDeploymentController_ReappliesWhenReferencedSkillResolves(t *testing.T) {
+	ctx := context.Background()
+	pool := v1alpha1store.NewTestPool(t)
+	stores := v1alpha1store.NewStores(pool, v1alpha1store.TestSchemaRegistry())
+	seedSkill(t, stores, "docs")
+	seedAgentWithSkill(t, stores, "assistant", "docs")
+	seedAgentDeployment(t, stores, "assistant-deploy", "assistant", v1alpha1.DesiredStateDeployed)
+
+	adapter := &recordingDeploymentAdapter{applyErr: errors.New("skill is not ready: no Ready=True resolved source")}
+	controller := newDeploymentTestController(stores, adapter)
+	controller.Events = v1alpha1store.NewControlPlaneEventStore(pool, v1alpha1store.TestSchema())
+
+	_, err := controller.Refresh(ctx)
+	require.NoError(t, err)
+	processed, err := controller.RunOnce(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, processed)
+	require.Equal(t, int32(1), adapter.applyCalls.Load())
+
+	adapter.applyErr = nil
+	resolveSkill(t, stores, "docs", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+
+	res, err := controller.Drain(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, res.Events, "status-only resolvedSource write must emit a control-plane event")
+
+	require.Eventually(t, func() bool {
+		if _, err := controller.RunOnce(ctx); err != nil {
+			return false
+		}
+		return adapter.applyCalls.Load() == 2
+	}, time.Second, 10*time.Millisecond)
+
+	got := loadDeployment(t, stores, "assistant-deploy")
+	ready := got.Status.GetCondition("Ready")
+	require.NotNil(t, ready)
+	require.Equal(t, v1alpha1.ConditionTrue, ready.Status)
+}
+
+func TestDeploymentController_ResultFingerprinterPersistsDependencies(t *testing.T) {
+	ctx := context.Background()
+	stores := newControllerTestStores(t)
+	seedMCPServer(t, stores, "weather")
+	seedAgent(t, stores, "assistant", []v1alpha1.ResourceRef{{Name: "weather"}})
+	seedAgentDeployment(t, stores, "assistant-deploy", "assistant", v1alpha1.DesiredStateDeployed)
+
+	adapter := &resultFingerprintingDeploymentAdapter{}
+	controller := newDeploymentTestController(stores, adapter)
+	_, err := controller.FullReconcile(ctx)
+	require.NoError(t, err)
+
+	processed, err := controller.RunOnce(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, processed)
+	require.Equal(t, int32(1), adapter.applyCalls.Load())
+
+	applied := loadDeployment(t, stores, "assistant-deploy")
+	var details deploymentControllerDetails
+	ok, err := applied.Status.GetDetailsKey(deploymentControllerDetailsKey, &details)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.NotEmpty(t, details.LastAppliedFingerprint)
+	require.Len(t, details.Dependencies, 1)
+	require.Equal(t, v1alpha1.KindMCPServer, details.Dependencies[0].Kind)
+	require.Equal(t, "weather", details.Dependencies[0].Name)
+	require.NotEmpty(t, details.Dependencies[0].MaterialHash)
+}
+
 func newControllerTestStores(t *testing.T) map[string]*v1alpha1store.Store {
 	t.Helper()
 	pool := v1alpha1store.NewTestPool(t)
@@ -469,6 +543,48 @@ func seedAgent(t *testing.T, stores map[string]*v1alpha1store.Store, name string
 		Spec: v1alpha1.AgentSpec{
 			Title:      "test agent",
 			MCPServers: mcpServers,
+		},
+	})
+	require.NoError(t, err)
+}
+
+func seedSkill(t *testing.T, stores map[string]*v1alpha1store.Store, name string) {
+	t.Helper()
+	_, err := stores[v1alpha1.KindSkill].Upsert(context.Background(), &v1alpha1.Skill{
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: name},
+		Spec: v1alpha1.SkillSpec{
+			Source: &v1alpha1.SkillSource{Repository: &v1alpha1.Repository{URL: "https://github.com/acme/" + name}},
+		},
+	})
+	require.NoError(t, err)
+}
+
+// resolveSkill lands the same status-only patch the Skill controller writes
+// when it pins a skill's source.
+func resolveSkill(t *testing.T, stores map[string]*v1alpha1store.Store, name, commit string) {
+	t.Helper()
+	err := stores[v1alpha1.KindSkill].ApplyPatch(context.Background(), "default", name, v1alpha1store.DefaultTag(), v1alpha1store.PatchOpts{
+		Status: func(current json.RawMessage) (json.RawMessage, error) {
+			sk := &v1alpha1.Skill{}
+			if err := sk.UnmarshalStatus(current); err != nil {
+				return nil, err
+			}
+			sk.Status.ResolvedSource = &v1alpha1.SkillResolvedSource{Commit: commit}
+			sk.Status.SetCondition(v1alpha1.Condition{Type: "Ready", Status: v1alpha1.ConditionTrue, Reason: "Resolved"})
+			return sk.MarshalStatus()
+		},
+	})
+	require.NoError(t, err)
+}
+
+func seedAgentWithSkill(t *testing.T, stores map[string]*v1alpha1store.Store, name, skillName string) {
+	t.Helper()
+	_, err := stores[v1alpha1.KindAgent].Upsert(context.Background(), &v1alpha1.Agent{
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: name},
+		Spec: v1alpha1.AgentSpec{
+			Title:  "test agent",
+			Source: &v1alpha1.AgentSource{Image: "ghcr.io/acme/" + name + ":1.0.0"},
+			Skills: []v1alpha1.ResourceRef{{Name: skillName}},
 		},
 	})
 	require.NoError(t, err)
@@ -586,4 +702,15 @@ func (a *recordingDeploymentAdapter) Logs(context.Context, types.LogsInput) (<-c
 	ch := make(chan types.LogLine)
 	close(ch)
 	return ch, nil
+}
+
+// resultFingerprintingDeploymentAdapter implements the result-carrying
+// fingerprint interface so its dependency snapshots must survive into the
+// persisted controller details.
+type resultFingerprintingDeploymentAdapter struct {
+	recordingDeploymentAdapter
+}
+
+func (a *resultFingerprintingDeploymentAdapter) DesiredFingerprintResult(ctx context.Context, in types.ApplyInput) (types.ApplyFingerprintResult, error) {
+	return types.DefaultApplyFingerprintResult(ctx, in, types.ApplyFingerprintOptions{AdapterType: a.Type()})
 }

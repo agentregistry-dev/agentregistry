@@ -400,6 +400,16 @@ type desiredApplyFingerprintResult struct {
 }
 
 func desiredApplyFingerprint(ctx context.Context, adapter types.DeploymentAdapter, input types.ApplyInput) (desiredApplyFingerprintResult, error) {
+	if fingerprinter, ok := adapter.(types.DeploymentDesiredFingerprintResulter); ok {
+		result, err := fingerprinter.DesiredFingerprintResult(ctx, input)
+		if err != nil {
+			return desiredApplyFingerprintResult{}, err
+		}
+		return desiredApplyFingerprintResult{
+			Fingerprint:  result.Fingerprint,
+			Dependencies: result.Dependencies,
+		}, nil
+	}
 	if fingerprinter, ok := adapter.(types.DeploymentDesiredFingerprinter); ok {
 		fingerprint, err := fingerprinter.DesiredFingerprint(ctx, input)
 		return desiredApplyFingerprintResult{Fingerprint: fingerprint}, err
