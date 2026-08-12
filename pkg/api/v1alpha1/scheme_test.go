@@ -227,7 +227,7 @@ spec:
     tag: "1.0.0"
   runtimeRef:
     kind: Runtime
-    name: kubernetes-default
+    name: test-runtime
   desiredState: deployed
   env:
     OPENAI_API_KEY: "{{ .Secrets.openai }}"
@@ -345,9 +345,9 @@ spec:
 apiVersion: ar.dev/v1alpha1
 kind: Runtime
 metadata:
-  name: kubernetes-default
+  name: test-runtime
 spec:
-  type: Kubernetes
+  type: TestRuntime
 `)
 	objs, err := Default.DecodeMulti(doc)
 	if err != nil {
@@ -471,7 +471,7 @@ func TestEncode_RoundTrip_JSON(t *testing.T) {
 		Metadata: ObjectMeta{Name: "prod"},
 		Spec: DeploymentSpec{
 			TargetRef:    ResourceRef{Kind: KindAgent, Name: "x", Tag: "1"},
-			RuntimeRef:   ResourceRef{Kind: KindRuntime, Name: "kubernetes-default"},
+			RuntimeRef:   ResourceRef{Kind: KindRuntime, Name: "test-runtime"},
 			DesiredState: DesiredStateDeployed,
 			Env:          map[string]string{"FOO": "bar"},
 		},
@@ -494,7 +494,7 @@ func TestYAMLDirect_EncodeDecodeRuntime(t *testing.T) {
 	r := &Runtime{
 		TypeMeta: TypeMeta{APIVersion: GroupVersion, Kind: KindRuntime},
 		Metadata: ObjectMeta{Name: "k8s"},
-		Spec:     RuntimeSpec{Type: TypeKubernetes, Config: map[string]any{"namespace": "agentregistry"}},
+		Spec:     RuntimeSpec{Type: testRuntimeType, Config: map[string]any{"namespace": "agentregistry"}},
 	}
 	y, err := yaml.Marshal(r)
 	if err != nil {
@@ -504,7 +504,7 @@ func TestYAMLDirect_EncodeDecodeRuntime(t *testing.T) {
 	if err := yaml.Unmarshal(y, &got); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if got.Spec.Type != TypeKubernetes ||
+	if got.Spec.Type != testRuntimeType ||
 		got.Spec.Config["namespace"] != "agentregistry" {
 		t.Fatalf("yaml round-trip mismatch: %+v", got)
 	}

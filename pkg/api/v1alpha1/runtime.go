@@ -1,9 +1,9 @@
 package v1alpha1
 
 // Runtime is the typed envelope for kind=Runtime resources. A Runtime
-// describes an execution target (a Kubernetes cluster or a downstream
-// hosted agent runtime) that Deployment resources reference via
-// spec.runtimeRef.
+// describes an execution target that Deployment resources reference via
+// spec.runtimeRef. Concrete runtime types and their behavior are registered by
+// applications embedding the registry.
 type Runtime struct {
 	TypeMeta `json:",inline" yaml:",inline"`
 	Metadata ObjectMeta  `json:"metadata" yaml:"metadata"`
@@ -15,19 +15,16 @@ func init() {
 	MustRegisterKind[*Runtime, RuntimeSpec](KindRuntime, WithMutableObjectStorage())
 }
 
-// Built-in runtime type discriminators. Canonical form is CamelCase.
-// Manifests may write Spec.Type in any casing; Runtime.Validate looks
-// the input up case-insensitively in KnownRuntimeTypes and rewrites
-// Spec.Type to the canonical CamelCase value at admission, so all
-// downstream consumers compare against these constants with exact-match
-// equality.
-const (
-	TypeKubernetes = "Kubernetes"
-)
+// TypeKubernetes is the canonical discriminator for Kubernetes runtime
+// implementations supplied by embedding applications. The OSS registry does
+// not register this type or provide a Kubernetes runtime implementation.
+//
+// Deprecated: use an application-owned runtime type.
+const TypeKubernetes = "Kubernetes"
 
 // RuntimeSpec describes a deployment target. Type is the discriminator;
-// Config carries type-specific configuration that downstream adapters
-// (internal/registry/runtimes/...) interpret. TelemetryEndpoint, when
+// Config carries type-specific configuration that registered adapters
+// interpret. TelemetryEndpoint, when
 // set, is exported to every Deployment served by this Runtime as
 // OTEL_EXPORTER_OTLP_ENDPOINT on the workload — telemetry is a property
 // of where things run, not of an individual Deployment.

@@ -281,9 +281,9 @@ func TestRegisterApply_MutableObjectResultsDoNotExposeVersion(t *testing.T) {
 kind: Runtime
 metadata:
   namespace: default
-  name: kubernetes-test-runtime
+  name: test-runtime
 spec:
-  type: kubernetes
+  type: Test
 ---
 apiVersion: ar.dev/v1alpha1
 kind: Deployment
@@ -297,7 +297,7 @@ spec:
     tag: stable
   runtimeRef:
     kind: Runtime
-    name: kubernetes-test-runtime
+    name: test-runtime
 `)
 	resp := api.Post("/v0/apply", "Content-Type: application/yaml", strings.NewReader(string(yaml)))
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
@@ -324,7 +324,7 @@ spec:
 	require.Equal(t, arv0.ApplyStatusUnchanged, out.Results[0].Status)
 	require.Equal(t, arv0.ApplyStatusUnchanged, out.Results[1].Status)
 
-	runtimeRow, err := runtimes.Get(t.Context(), "default", "kubernetes-test-runtime", "")
+	runtimeRow, err := runtimes.Get(t.Context(), "default", "test-runtime", "")
 	require.NoError(t, err)
 	require.Empty(t, runtimeRow.Metadata.Tag)
 	deploymentRow, err := deployments.Get(t.Context(), "default", "summarizer", "")

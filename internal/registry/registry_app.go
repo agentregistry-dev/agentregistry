@@ -28,7 +28,6 @@ import (
 	controller "github.com/agentregistry-dev/agentregistry/internal/registry/controller"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
 	pluginsource "github.com/agentregistry-dev/agentregistry/internal/registry/plugins/source"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/kubernetes"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
@@ -90,14 +89,11 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	}()
 
 	// v1alpha1 DeploymentAdapter map consumed by the Deployment controller and
-	// adjacent adapter resolver surfaces.
-	// Built from the kubernetes port; downstream applications extend via
-	// AppOptions.DeploymentAdapters. Keys are the canonical CamelCase
-	// Spec.Type values; Runtime.Validate canonicalizes user-supplied case
-	// at admission so adapter lookup can use exact-match.
-	deploymentAdapters := map[string]types.DeploymentAdapter{
-		v1alpha1.TypeKubernetes: kubernetes.NewKubernetesDeploymentAdapter(),
-	}
+	// adjacent adapter resolver surfaces. Applications register concrete
+	// implementations through AppOptions.DeploymentAdapters. Keys are the
+	// canonical CamelCase Spec.Type values; Runtime.Validate canonicalizes
+	// user-supplied case at admission so adapter lookup can use exact-match.
+	deploymentAdapters := map[string]types.DeploymentAdapter{}
 	maps.Copy(deploymentAdapters, options.DeploymentAdapters)
 	pool := db.Pool()
 	stores := buildStores(pool, options.V1Alpha1StoreTables, options.V1Alpha1MutableStoreKinds, options.Auditor)

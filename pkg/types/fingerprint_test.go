@@ -286,7 +286,7 @@ func testApplyInput() ApplyInput {
 			},
 			Spec: v1alpha1.DeploymentSpec{
 				TargetRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather"},
-				RuntimeRef: v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "kubernetes-default"},
+				RuntimeRef: v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "test-runtime"},
 				Env:        map[string]string{"LOG_LEVEL": "debug"},
 			},
 		},
@@ -299,7 +299,7 @@ func testApplyInput() ApplyInput {
 				UID:        "runtime-uid",
 				Generation: 1,
 			},
-			Spec: v1alpha1.RuntimeSpec{Type: v1alpha1.TypeKubernetes},
+			Spec: v1alpha1.RuntimeSpec{Type: "Test"},
 		},
 	}
 }

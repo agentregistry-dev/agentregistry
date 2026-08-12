@@ -17,7 +17,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/yaml"
@@ -897,7 +896,7 @@ spec:
 // --- Batch apply endpoint tests ---
 
 // TestBatchApply_MultiResource verifies that applying a multi-document YAML
-// containing an agent and a runtime in one file succeeds and returns per-resource
+// containing an agent and a skill in one file succeeds and returns per-resource
 // "applied" status for each resource.
 func TestBatchApply_MultiResource(t *testing.T) {
 	regURL := RegistryURL(t)
@@ -905,13 +904,13 @@ func TestBatchApply_MultiResource(t *testing.T) {
 
 	agentName := UniqueAgentName("batchagent")
 	agentTag := defaultArtifactTag
-	runtimeName := "e2e-batch-rt-" + UniqueNameWithPrefix("rt")
+	skillName := UniqueNameWithPrefix("e2e-batch-skill")
 
 	// Pre-clean and register cleanup for both resources.
 	RunArctl(t, tmpDir, "delete", "agent", agentName, "--tag", agentTag, "--registry-url", regURL)
 	t.Cleanup(func() {
 		RunArctl(t, tmpDir, "delete", "agent", agentName, "--tag", agentTag, "--registry-url", regURL)
-		RunArctl(t, tmpDir, "delete", "runtime", runtimeName, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "skill", skillName, "--tag", agentTag, "--registry-url", regURL)
 	})
 
 	multiYAML := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
@@ -924,12 +923,12 @@ spec:
   description: "Batch multi-resource apply test agent"
 ---
 apiVersion: ar.dev/v1alpha1
-kind: Runtime
+kind: Skill
 metadata:
   name: %s
 spec:
-  type: Kubernetes
-`, agentName, runtimeName)
+  description: "Batch multi-resource apply test skill"
+`, agentName, skillName)
 
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "multi.yaml", multiYAML)
 
@@ -939,7 +938,7 @@ spec:
 	// Each resource must appear in the output as "applied".
 	RequireOutputContains(t, result, "Agent/"+agentName)
 	RequireOutputContains(t, result, "✓")
-	RequireOutputContains(t, result, "Runtime/"+runtimeName)
+	RequireOutputContains(t, result, "Skill/"+skillName)
 
 	// Verify agent exists via HTTP.
 	verifyAgentExists(t, regURL, agentName, agentTag)
@@ -955,12 +954,12 @@ func TestBatchApply_Idempotent(t *testing.T) {
 
 	agentName := UniqueAgentName("idempbatch")
 	agentTag := defaultArtifactTag
-	runtimeName := "e2e-idemp-rt-" + UniqueNameWithPrefix("rt")
+	promptName := UniqueNameWithPrefix("e2e-idemp-prompt")
 
 	RunArctl(t, tmpDir, "delete", "agent", agentName, "--tag", agentTag, "--registry-url", regURL)
 	t.Cleanup(func() {
 		RunArctl(t, tmpDir, "delete", "agent", agentName, "--tag", agentTag, "--registry-url", regURL)
-		RunArctl(t, tmpDir, "delete", "runtime", runtimeName, "--registry-url", regURL)
+		RunArctl(t, tmpDir, "delete", "prompt", promptName, "--tag", agentTag, "--registry-url", regURL)
 	})
 
 	multiYAML := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
@@ -973,12 +972,12 @@ spec:
   description: "Idempotent batch apply test"
 ---
 apiVersion: ar.dev/v1alpha1
-kind: Runtime
+kind: Prompt
 metadata:
   name: %s
 spec:
-  type: Kubernetes
-`, agentName, runtimeName)
+  content: "Idempotent batch apply test prompt"
+`, agentName, promptName)
 
 	yamlPath := writeDeclarativeYAML(t, tmpDir, "multi.yaml", multiYAML)
 
@@ -986,12 +985,14 @@ spec:
 	result := RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
 	RequireOutputContains(t, result, "Agent/"+agentName)
+	RequireOutputContains(t, result, "Prompt/"+promptName)
 	RequireOutputContains(t, result, "✓")
 
 	// Second apply — same file, must not fail (upsert semantics).
 	result = RunArctl(t, tmpDir, "apply", "-f", yamlPath, "--registry-url", regURL)
 	RequireSuccess(t, result)
 	RequireOutputContains(t, result, "Agent/"+agentName)
+	RequireOutputContains(t, result, "Prompt/"+promptName)
 	RequireOutputContains(t, result, "✓")
 
 	// Both resources must still exist after both applies.
@@ -1470,131 +1471,6 @@ func TestDeclarativeDelete_NotFound(t *testing.T) {
 	RequireOutputContains(t, result, "not found")
 }
 
-// waitForDeploymentCondition waits for the asynchronous Deployment controller
-// to persist a successful condition from the runtime adapter.
-func waitForDeploymentCondition(t *testing.T, regURL, name, conditionType string, timeout time.Duration) {
-	t.Helper()
-
-	endpoint := fmt.Sprintf("%s/deployments/%s", regURL, url.PathEscape(name))
-	client := &http.Client{Timeout: 5 * time.Second}
-	deadline := time.Now().Add(timeout)
-	var lastResponse string
-	var lastErr error
-
-	for time.Now().Before(deadline) {
-		resp, err := client.Get(endpoint)
-		if err != nil {
-			lastErr = err
-			time.Sleep(time.Second)
-			continue
-		}
-
-		body, readErr := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		lastResponse = string(body)
-		if readErr != nil {
-			lastErr = readErr
-		} else if resp.StatusCode != http.StatusOK {
-			lastErr = fmt.Errorf("GET %s returned HTTP %d", endpoint, resp.StatusCode)
-		} else {
-			var deployment struct {
-				Status struct {
-					Conditions []struct {
-						Type   string `json:"type"`
-						Status string `json:"status"`
-					} `json:"conditions"`
-				} `json:"status"`
-			}
-			if err := json.Unmarshal(body, &deployment); err != nil {
-				lastErr = err
-			} else {
-				for _, condition := range deployment.Status.Conditions {
-					if condition.Type == conditionType && condition.Status == "True" {
-						t.Logf("Deployment %s reached %s=True", name, conditionType)
-						return
-					}
-				}
-			}
-		}
-		time.Sleep(time.Second)
-	}
-
-	t.Fatalf("deployment %s did not reach %s=True within %s; last error: %v; last response: %s",
-		name, conditionType, timeout, lastErr, lastResponse)
-}
-
-// TestDeploymentLifecycle_Kubernetes verifies the complete OSS Deployment
-// path: arctl publishes an Agent, the registry admits its Deployment, and the
-// asynchronous controller successfully applies it through the Kubernetes
-// runtime adapter. It also pins idempotent Deployment re-apply behavior.
-func TestDeploymentLifecycle_Kubernetes(t *testing.T) {
-	regURL := RegistryURL(t)
-	tmpDir := t.TempDir()
-	agentName := UniqueAgentName("e2elifecycle")
-	tag := defaultArtifactTag
-	// Kubernetes deploys pull from the registry connected to the Kind cluster.
-	// Scaffold -> build+push so the image resolves at deploy time.
-	agentImage := fmt.Sprintf("localhost:5001/%s:e2e", agentName)
-
-	t.Cleanup(func() {
-		RemoveDeploymentsByServerName(t, regURL, agentName)
-		RunArctl(t, tmpDir, "delete", "agent", agentName, "--tag", tag, "--registry-url", regURL)
-	})
-
-	RequireSuccess(t, RunArctl(t, tmpDir,
-		"init", "agent", agentName,
-		"--framework", "adk", "--language", "python",
-		"--model-name", "gemini-2.5-flash",
-		"--image", agentImage,
-	))
-	agentDir := filepath.Join(tmpDir, agentName)
-	RequireSuccess(t, RunArctl(t, tmpDir, "build", agentDir, "--push", "--image", agentImage))
-	RequireSuccess(t, RunArctl(t, tmpDir, "apply", "-f",
-		filepath.Join(agentDir, "agent.yaml"), "--registry-url", regURL))
-
-	deployYAML := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
-kind: Deployment
-metadata:
-  name: %s
-spec:
-  targetRef:
-    kind: Agent
-    name: %s
-    tag: %s
-  runtimeRef:
-    kind: Runtime
-    name: kubernetes-default
-`, agentName, agentName, tag)
-	deployPath := writeDeclarativeYAML(t, tmpDir, "deployment.yaml", deployYAML)
-	result := RunArctl(t, tmpDir, "apply", "-f", deployPath, "--registry-url", regURL)
-	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "Deployment/"+agentName)
-
-	// RuntimeConfigured=True is emitted only after the Kubernetes adapter has
-	// translated and applied the runtime resources and the controller has
-	// persisted its result.
-	waitForDeploymentCondition(t, regURL, agentName, "RuntimeConfigured", 60*time.Second)
-
-	result = RunArctl(t, tmpDir, "get", "deployment", agentName, "-o", "yaml", "--registry-url", regURL)
-	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "apiVersion: ar.dev/v1alpha1")
-	RequireOutputContains(t, result, "kind: Deployment")
-	RequireOutputContains(t, result, "runtimeRef:")
-	RequireOutputContains(t, result, "name: kubernetes-default")
-	RequireOutputContains(t, result, "kind: Runtime")
-	RequireOutputContains(t, result, "status:")
-	RequireOutputContains(t, result, "conditions:")
-	RequireOutputContains(t, result, "type: Progressing")
-	RequireOutputContains(t, result, "type: RuntimeConfigured")
-	RequireOutputContains(t, result, `status: "True"`)
-
-	// Re-applying the same declarative intent must remain a successful no-op.
-	result = RunArctl(t, tmpDir, "apply", "-f", deployPath, "--registry-url", regURL)
-	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "Deployment/"+agentName)
-	RequireOutputContains(t, result, "unchanged")
-}
-
 // TestDeploymentApply_BadTemplateRef applies a deployment whose referenced
 // agent does not exist. Apply must exit non-zero with a clear error message
 // identifying the missing template — not silently create a ghost row.
@@ -1615,7 +1491,7 @@ spec:
     tag: latest
   runtimeRef:
     kind: Runtime
-    name: kubernetes-default
+    name: missing-runtime
 `, missingName, missingName)
 	deployPath := writeDeclarativeYAML(t, tmpDir, "deployment.yaml", deployYAML)
 

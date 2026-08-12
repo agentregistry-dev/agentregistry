@@ -127,11 +127,17 @@ func TestStore_GetByRefMutableRejectsTag(t *testing.T) {
 	runtimes := NewMutableObjectStore(pool, TestSchema(), "runtimes")
 	ctx := context.Background()
 
-	kubernetes, err := runtimes.GetByRef(ctx, testNS, "kubernetes-default", "")
+	_, err := runtimes.Upsert(ctx, &v1alpha1.Runtime{
+		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "test-runtime"},
+		Spec:     v1alpha1.RuntimeSpec{Type: "Test"},
+	})
 	require.NoError(t, err)
-	require.Equal(t, "kubernetes-default", kubernetes.Metadata.Name)
 
-	_, err = runtimes.GetByRef(ctx, testNS, "kubernetes-default", "stable")
+	runtime, err := runtimes.GetByRef(ctx, testNS, "test-runtime", "")
+	require.NoError(t, err)
+	require.Equal(t, "test-runtime", runtime.Metadata.Name)
+
+	_, err = runtimes.GetByRef(ctx, testNS, "test-runtime", "stable")
 	require.ErrorContains(t, err, "tag pinning is not supported")
 }
 
@@ -161,7 +167,7 @@ func TestStore_DeleteByRefMutableDeletesByName(t *testing.T) {
 
 	_, err := runtimes.Upsert(ctx, &v1alpha1.Runtime{
 		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "custom"},
-		Spec:     v1alpha1.RuntimeSpec{Type: v1alpha1.TypeKubernetes},
+		Spec:     v1alpha1.RuntimeSpec{Type: "Test"},
 	})
 	require.NoError(t, err)
 
@@ -169,7 +175,7 @@ func TestStore_DeleteByRefMutableDeletesByName(t *testing.T) {
 	_, err = runtimes.GetByRef(ctx, testNS, "custom", "")
 	require.ErrorIs(t, err, pkgdb.ErrNotFound)
 
-	err = runtimes.DeleteByRef(ctx, testNS, "kubernetes-default", "stable")
+	err = runtimes.DeleteByRef(ctx, testNS, "test-runtime", "stable")
 	require.ErrorContains(t, err, "tag pinning is not supported")
 }
 
@@ -543,17 +549,14 @@ func TestStore_FindReferrers(t *testing.T) {
 	require.Equal(t, "refs-bar", results[0].Metadata.Name)
 }
 
-func TestStore_SeededRuntimes(t *testing.T) {
+func TestStore_NoSeededRuntimes(t *testing.T) {
 	pool := NewTestPool(t)
 	// Runtime is a mutable object keyed by namespace/name.
 	runtimes := NewMutableObjectStore(pool, TestSchema(), "runtimes")
 	ctx := context.Background()
 
-	var spec v1alpha1.RuntimeSpec
-	k8s, err := runtimes.GetLatest(ctx, "default", "kubernetes-default")
-	require.NoError(t, err)
-	require.NoError(t, json.Unmarshal(k8s.Spec, &spec))
-	require.Equal(t, v1alpha1.TypeKubernetes, spec.Type)
+	_, err := runtimes.GetLatest(ctx, "default", "kubernetes-default")
+	require.ErrorIs(t, err, pkgdb.ErrNotFound)
 
 	_, err = runtimes.GetLatest(ctx, "default", "local")
 	require.ErrorIs(t, err, pkgdb.ErrNotFound)

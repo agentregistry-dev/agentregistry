@@ -5,23 +5,19 @@ import (
 	"strings"
 )
 
-// KnownRuntimeTypes is the set of canonical Runtime spec.type values
-// the generic validator recognizes. Keys are stored in their canonical
-// CamelCase form. Validate() does the case-insensitive admission match
-// against this set and rewrites Spec.Type to the canonical form, so
-// downstream code can compare Spec.Type against the constants with
-// exact-match equality. Downstream builds may register additional
-// canonical values at init by inserting into this map.
-var KnownRuntimeTypes = map[string]struct{}{
-	TypeKubernetes: {},
-}
+// KnownRuntimeTypes is the set of canonical Runtime spec.type values the
+// generic validator recognizes. Applications register the runtime types they
+// provide by inserting their canonical CamelCase values into this map during
+// initialization. Validate does the case-insensitive admission match against
+// this set and rewrites Spec.Type to the canonical form, so consumers can use
+// exact-match equality after admission.
+var KnownRuntimeTypes = map[string]struct{}{}
 
 // Validate runs Runtime's structural checks and canonicalizes
 // Spec.Type to its CamelCase form.
 //
-// Manifests may write Spec.Type in any casing (`kubernetes`, `KUBERNETES`,
-// `Kubernetes`)
-// for ergonomic UX; the validator looks the input up in
+// Manifests may write Spec.Type in any casing for ergonomic UX; the validator
+// looks the input up in
 // KnownRuntimeTypes case-insensitively and rewrites Spec.Type in place
 // to the canonical CamelCase value. Every consumer downstream of
 // Validate (adapter dispatch, status messages, storage) compares

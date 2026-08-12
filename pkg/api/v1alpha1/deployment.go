@@ -54,8 +54,9 @@ const (
 // Deployment contributes only runtime overrides (env, runtimeConfig) and
 // lifecycle intent (desiredState).
 //
-// RuntimeRef is required and must name a top-level Runtime. The Runtime
-// resolves how and where the target is executed (Kubernetes or a downstream runtime).
+// RuntimeRef is required and must name a top-level Runtime. The embedding
+// application registers the adapters that resolve how and where the target is
+// executed.
 type DeploymentSpec struct {
 	TargetRef  ResourceRef `json:"targetRef" yaml:"targetRef"`
 	RuntimeRef ResourceRef `json:"runtimeRef" yaml:"runtimeRef"`
