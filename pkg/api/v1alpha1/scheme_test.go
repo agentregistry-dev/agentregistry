@@ -248,7 +248,7 @@ spec:
 	}
 }
 
-func TestScheme_Decode_DeploymentEnvFrom(t *testing.T) {
+func TestScheme_Decode_DeploymentRuntimeConfig(t *testing.T) {
 	doc := []byte(`
 apiVersion: ar.dev/v1alpha1
 kind: Deployment
@@ -264,9 +264,9 @@ spec:
     name: kagent
   env:
     LOG_LEVEL: debug
-  envFrom:
-    - secretRef:
-        name: mcp-secrets
+  runtimeConfig:
+    secretRefs:
+      - mcp-secrets
 `)
 	obj, err := Default.Decode(doc)
 	if err != nil {
@@ -276,12 +276,12 @@ spec:
 	if !ok {
 		t.Fatalf("want *Deployment, got %T", obj)
 	}
-	wantEnvFrom := []EnvFromSource{{SecretRef: &SecretEnvSource{Name: "mcp-secrets"}}}
-	if !reflect.DeepEqual(d.Spec.EnvFrom, wantEnvFrom) {
-		t.Fatalf("envFrom mismatch: %+v", d.Spec.EnvFrom)
+	wantRuntimeConfig := map[string]any{"secretRefs": []any{"mcp-secrets"}}
+	if !reflect.DeepEqual(d.Spec.RuntimeConfig, wantRuntimeConfig) {
+		t.Fatalf("runtimeConfig mismatch: %+v", d.Spec.RuntimeConfig)
 	}
 
-	// JSON round-trip: the stored spec must carry envFrom losslessly.
+	// JSON round-trip: the stored spec must carry runtimeConfig losslessly.
 	raw, err := json.Marshal(d.Spec)
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
