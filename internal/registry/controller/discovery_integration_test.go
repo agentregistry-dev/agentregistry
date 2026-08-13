@@ -15,7 +15,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
-const discoveryTestRuntimeName = "kubernetes-default"
+const discoveryTestRuntimeName = "test-runtime"
 
 func TestDeploymentDiscoveryController_MaterializesDiscoveredDeployment(t *testing.T) {
 	ctx := context.Background()
@@ -38,7 +38,7 @@ func TestDeploymentDiscoveryController_MaterializesDiscoveredDeployment(t *testi
 	deployment := loadDeployment(t, stores, name)
 	require.Equal(t, v1alpha1.DeploymentOriginDiscovered, deployment.Metadata.Annotations[v1alpha1.DeploymentOriginAnnotation])
 	require.Equal(t, discoveryTestRuntimeName, deployment.Metadata.Annotations[v1alpha1.DeploymentDiscoveredRuntimeAnnotation])
-	require.Equal(t, v1alpha1.TypeKubernetes, deployment.Metadata.Annotations[v1alpha1.DeploymentDiscoveredRuntimeTypeAnnotation])
+	require.Equal(t, "Test", deployment.Metadata.Annotations[v1alpha1.DeploymentDiscoveredRuntimeTypeAnnotation])
 	require.Equal(t, v1alpha1.KindAgent, deployment.Spec.TargetRef.Kind)
 	require.Equal(t, "external-agent", deployment.Spec.TargetRef.Name)
 	require.Equal(t, "unknown", deployment.Spec.TargetRef.Tag)
@@ -304,7 +304,7 @@ func newDeploymentDiscoveryTestController(
 ) *DeploymentDiscoveryController {
 	return &DeploymentDiscoveryController{
 		Stores:   stores,
-		Adapters: map[string]types.DeploymentAdapter{v1alpha1.TypeKubernetes: adapter},
+		Adapters: map[string]types.DeploymentAdapter{"Test": adapter},
 	}
 }
 
@@ -313,7 +313,7 @@ type discoveryTestAdapter struct {
 	err     error
 }
 
-func (a *discoveryTestAdapter) Type() string { return v1alpha1.TypeKubernetes }
+func (a *discoveryTestAdapter) Type() string { return "Test" }
 
 func (a *discoveryTestAdapter) SupportedTargetKinds() []string {
 	return []string{v1alpha1.KindMCPServer, v1alpha1.KindAgent}
@@ -342,7 +342,7 @@ func (a *discoveryTestAdapter) Discover(context.Context, types.DiscoverInput) ([
 
 type lifecycleOnlyDiscoveryTestAdapter struct{}
 
-func (a *lifecycleOnlyDiscoveryTestAdapter) Type() string { return v1alpha1.TypeKubernetes }
+func (a *lifecycleOnlyDiscoveryTestAdapter) Type() string { return "Test" }
 
 func (a *lifecycleOnlyDiscoveryTestAdapter) SupportedTargetKinds() []string {
 	return []string{v1alpha1.KindMCPServer, v1alpha1.KindAgent}

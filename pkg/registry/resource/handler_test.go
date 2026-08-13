@@ -23,6 +23,12 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
+const testRuntimeType = "Test"
+
+func init() {
+	v1alpha1.KnownRuntimeTypes[testRuntimeType] = struct{}{}
+}
+
 // registerAgent wires the generic resource handler for *v1alpha1.Agent and
 // the multi-doc apply endpoint onto the given Huma API, against the supplied
 // Store. It's a test-local helper so we don't pull the full registry_app
@@ -584,21 +590,21 @@ func TestResourceRegister_MutableObjectUsesNameOnlyRoute(t *testing.T) {
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindRuntime},
 		Metadata: v1alpha1.ObjectMeta{
 			Namespace: "default",
-			Name:      "kubernetes-test",
+			Name:      "test-runtime",
 		},
-		Spec: v1alpha1.RuntimeSpec{Type: v1alpha1.TypeKubernetes},
+		Spec: v1alpha1.RuntimeSpec{Type: testRuntimeType},
 	}
 
-	resp := api.Put("/v0/runtimes/kubernetes-test", runtime)
+	resp := api.Put("/v0/runtimes/test-runtime", runtime)
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 
-	resp = api.Get("/v0/runtimes/kubernetes-test")
+	resp = api.Get("/v0/runtimes/test-runtime")
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 
-	resp = api.Put("/v0/runtimes/kubernetes-test/1", runtime)
+	resp = api.Put("/v0/runtimes/test-runtime/1", runtime)
 	require.Equal(t, http.StatusNotFound, resp.Code, "mutable object route must be name-only")
 
-	resp = api.Delete("/v0/runtimes/kubernetes-test")
+	resp = api.Delete("/v0/runtimes/test-runtime")
 	require.Equal(t, http.StatusNoContent, resp.Code, resp.Body.String())
 }
 

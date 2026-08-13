@@ -289,7 +289,7 @@ func TestDeploymentController_DeleteWaitsForRemoveThenPurgesFinalizedRow(t *test
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: deployment.Metadata.Name},
 		Spec: v1alpha1.DeploymentSpec{
 			TargetRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Tag: v1alpha1store.DefaultTag()},
-			RuntimeRef: v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "kubernetes-default"},
+			RuntimeRef: v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "test-runtime"},
 		},
 	}, v1alpha1store.UpsertOpts{InitialFinalizers: []string{DeploymentControllerFinalizer}})
 	require.NoError(t, err, "finalized deletes must not block same-name apply")
@@ -377,7 +377,7 @@ func TestDeploymentController_DeleteFinalizesWhenRuntimeRefMissing(t *testing.T)
 	stores := newControllerTestStores(t)
 	seedMCPServer(t, stores, "weather")
 	deployment := seedDeployment(t, stores, "delete-missing-runtime", v1alpha1.DesiredStateDeployed)
-	require.NoError(t, stores[v1alpha1.KindRuntime].Delete(ctx, "default", "kubernetes-default", ""))
+	require.NoError(t, stores[v1alpha1.KindRuntime].Delete(ctx, "default", "test-runtime", ""))
 	require.NoError(t, stores[v1alpha1.KindDeployment].Delete(ctx, "default", deployment.Metadata.Name, ""))
 
 	adapter := &recordingDeploymentAdapter{}
@@ -493,7 +493,13 @@ func TestDeploymentController_ResultFingerprinterPersistsDependencies(t *testing
 func newControllerTestStores(t *testing.T) map[string]*v1alpha1store.Store {
 	t.Helper()
 	pool := v1alpha1store.NewTestPool(t)
-	return v1alpha1store.NewStores(pool, v1alpha1store.TestSchemaRegistry())
+	stores := v1alpha1store.NewStores(pool, v1alpha1store.TestSchemaRegistry())
+	_, err := stores[v1alpha1.KindRuntime].Upsert(context.Background(), &v1alpha1.Runtime{
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "test-runtime"},
+		Spec:     v1alpha1.RuntimeSpec{Type: "Test"},
+	})
+	require.NoError(t, err)
+	return stores
 }
 
 func newDeploymentTestController(
@@ -505,7 +511,7 @@ func newDeploymentTestController(
 	}
 	return &DeploymentController{
 		Stores:   stores,
-		Adapters: map[string]types.DeploymentAdapter{v1alpha1.TypeKubernetes: adapter},
+		Adapters: map[string]types.DeploymentAdapter{"Test": adapter},
 		Getter:   internaldb.NewGetter(stores),
 	}
 }
@@ -596,7 +602,7 @@ func seedDeployment(t *testing.T, stores map[string]*v1alpha1store.Store, name, 
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: name},
 		Spec: v1alpha1.DeploymentSpec{
 			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Tag: v1alpha1store.DefaultTag()},
-			RuntimeRef:   v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "kubernetes-default"},
+			RuntimeRef:   v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "test-runtime"},
 			DesiredState: desiredState,
 		},
 	}
@@ -613,7 +619,7 @@ func seedAgentDeployment(t *testing.T, stores map[string]*v1alpha1store.Store, n
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: name},
 		Spec: v1alpha1.DeploymentSpec{
 			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindAgent, Name: agentName, Tag: v1alpha1store.DefaultTag()},
-			RuntimeRef:   v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "kubernetes-default"},
+			RuntimeRef:   v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "test-runtime"},
 			DesiredState: desiredState,
 		},
 	}
@@ -660,7 +666,7 @@ type recordingDeploymentAdapter struct {
 	removeErr           error
 }
 
-func (a *recordingDeploymentAdapter) Type() string { return v1alpha1.TypeKubernetes }
+func (a *recordingDeploymentAdapter) Type() string { return "Test" }
 
 func (a *recordingDeploymentAdapter) SupportedTargetKinds() []string {
 	return []string{v1alpha1.KindMCPServer, v1alpha1.KindAgent}

@@ -4,28 +4,63 @@ on:
   push:
     tags:
     - "v*.*.*"
+  workflow_call:
+    inputs:
+      version:
+        description: Nightly version, including the leading v
+        required: true
+        type: string
+      image_alias:
+        description: Optional moving container image tag
+        required: false
+        default: ""
+        type: string
 
 env:
-  VERSION: ${{ github.ref_name }}
+  # Include the caller's owner so reusable releases from forks publish to the
+  # fork owner's GHCR namespace.
+  IMAGE_REGISTRY: ghcr.io/${{ github.repository_owner }}
   DOCKER_REGISTRY: ghcr.io
-  DOCKER_BUILD_REGISTRY: ghcr.io
+  DOCKER_REPO: agentregistry
 
 jobs:
   validate:
     name: Validate release version
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
     - name: Validate version
+      id: version
       shell: bash
+      env:
+        INPUT_VERSION: ${{ inputs.version }}
+        REF_VERSION: ${{ github.ref_name }}
       run: |
-        if [[ ! "${VERSION}" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-          echo "::error::version must match vX.Y.Z; got ${VERSION}"
-          exit 1
+        set -euo pipefail
+
+        if [[ -n "${INPUT_VERSION}" ]]; then
+          VERSION="${INPUT_VERSION}"
+          if [[ ! "${VERSION}" =~ ^v0\.0\.0-alpha\.[0-9a-f]{7,40}$ ]]; then
+            echo "::error::nightly version must match v0.0.0-alpha.<commit-sha>; got ${VERSION}"
+            exit 1
+          fi
+        else
+          VERSION="${REF_VERSION}"
+          if [[ ! "${VERSION}" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::release version must match vX.Y.Z; got ${VERSION}"
+            exit 1
+          fi
         fi
+
+        echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
 
   docker:
     needs: validate
     runs-on: ubuntu-latest
+    env:
+      DOCKER_BUILD_REGISTRY: ghcr.io/${{ github.repository_owner }}
+      VERSION: ${{ needs.validate.outputs.version }}
     permissions:
       contents: read
       packages: write
@@ -67,11 +102,23 @@ jobs:
         DOCKER_BUILDER: "docker buildx"
       run: make docker-server
 
+    - name: Promote image alias
+      if: ${{ inputs.image_alias != '' }}
+      env:
+        IMAGE_ALIAS: ${{ inputs.image_alias }}
+      run: |
+        docker buildx imagetools create \
+          --tag "${IMAGE_REGISTRY}/${DOCKER_REPO}/server:${IMAGE_ALIAS}" \
+          "${IMAGE_REGISTRY}/${DOCKER_REPO}/server:${VERSION}"
+
   release:
     needs:
     - docker
+    - validate
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     env:
+      VERSION: ${{ needs.validate.outputs.version }}
       HELM_PLUGIN_UNITTEST_VERSION: v1.0.3
       HELM_REGISTRY: ${{ secrets.HELM_REGISTRY || 'ghcr.io' }}
       HELM_REPO: ${{ secrets.HELM_REPO || 'agentregistry-dev/agentregistry' }}

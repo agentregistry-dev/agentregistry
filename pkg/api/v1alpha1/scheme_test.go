@@ -227,7 +227,7 @@ spec:
     tag: "1.0.0"
   runtimeRef:
     kind: Runtime
-    name: kubernetes-default
+    name: test-runtime
   desiredState: deployed
   env:
     OPENAI_API_KEY: "{{ .Secrets.openai }}"
@@ -248,7 +248,7 @@ spec:
 	}
 }
 
-func TestScheme_Decode_DeploymentEnvFrom(t *testing.T) {
+func TestScheme_Decode_DeploymentRuntimeConfig(t *testing.T) {
 	doc := []byte(`
 apiVersion: ar.dev/v1alpha1
 kind: Deployment
@@ -264,9 +264,9 @@ spec:
     name: kagent
   env:
     LOG_LEVEL: debug
-  envFrom:
-    - secretRef:
-        name: mcp-secrets
+  runtimeConfig:
+    secretRefs:
+      - mcp-secrets
 `)
 	obj, err := Default.Decode(doc)
 	if err != nil {
@@ -276,12 +276,12 @@ spec:
 	if !ok {
 		t.Fatalf("want *Deployment, got %T", obj)
 	}
-	wantEnvFrom := []EnvFromSource{{SecretRef: &SecretEnvSource{Name: "mcp-secrets"}}}
-	if !reflect.DeepEqual(d.Spec.EnvFrom, wantEnvFrom) {
-		t.Fatalf("envFrom mismatch: %+v", d.Spec.EnvFrom)
+	wantRuntimeConfig := map[string]any{"secretRefs": []any{"mcp-secrets"}}
+	if !reflect.DeepEqual(d.Spec.RuntimeConfig, wantRuntimeConfig) {
+		t.Fatalf("runtimeConfig mismatch: %+v", d.Spec.RuntimeConfig)
 	}
 
-	// JSON round-trip: the stored spec must carry envFrom losslessly.
+	// JSON round-trip: the stored spec must carry runtimeConfig losslessly.
 	raw, err := json.Marshal(d.Spec)
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
@@ -345,9 +345,9 @@ spec:
 apiVersion: ar.dev/v1alpha1
 kind: Runtime
 metadata:
-  name: kubernetes-default
+  name: test-runtime
 spec:
-  type: Kubernetes
+  type: TestRuntime
 `)
 	objs, err := Default.DecodeMulti(doc)
 	if err != nil {
@@ -471,7 +471,7 @@ func TestEncode_RoundTrip_JSON(t *testing.T) {
 		Metadata: ObjectMeta{Name: "prod"},
 		Spec: DeploymentSpec{
 			TargetRef:    ResourceRef{Kind: KindAgent, Name: "x", Tag: "1"},
-			RuntimeRef:   ResourceRef{Kind: KindRuntime, Name: "kubernetes-default"},
+			RuntimeRef:   ResourceRef{Kind: KindRuntime, Name: "test-runtime"},
 			DesiredState: DesiredStateDeployed,
 			Env:          map[string]string{"FOO": "bar"},
 		},
@@ -494,7 +494,7 @@ func TestYAMLDirect_EncodeDecodeRuntime(t *testing.T) {
 	r := &Runtime{
 		TypeMeta: TypeMeta{APIVersion: GroupVersion, Kind: KindRuntime},
 		Metadata: ObjectMeta{Name: "k8s"},
-		Spec:     RuntimeSpec{Type: TypeKubernetes, Config: map[string]any{"namespace": "agentregistry"}},
+		Spec:     RuntimeSpec{Type: testRuntimeType, Config: map[string]any{"namespace": "agentregistry"}},
 	}
 	y, err := yaml.Marshal(r)
 	if err != nil {
@@ -504,7 +504,7 @@ func TestYAMLDirect_EncodeDecodeRuntime(t *testing.T) {
 	if err := yaml.Unmarshal(y, &got); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if got.Spec.Type != TypeKubernetes ||
+	if got.Spec.Type != testRuntimeType ||
 		got.Spec.Config["namespace"] != "agentregistry" {
 		t.Fatalf("yaml round-trip mismatch: %+v", got)
 	}

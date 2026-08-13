@@ -54,8 +54,9 @@ const (
 // Deployment contributes only runtime overrides (env, runtimeConfig) and
 // lifecycle intent (desiredState).
 //
-// RuntimeRef is required and must name a top-level Runtime. The Runtime
-// resolves how and where the target is executed (Kubernetes or a downstream runtime).
+// RuntimeRef is required and must name a top-level Runtime. The embedding
+// application registers the adapters that resolve how and where the target is
+// executed.
 type DeploymentSpec struct {
 	TargetRef  ResourceRef `json:"targetRef" yaml:"targetRef"`
 	RuntimeRef ResourceRef `json:"runtimeRef" yaml:"runtimeRef"`
@@ -73,12 +74,10 @@ type DeploymentSpec struct {
 	// kind's reconciler.
 	DeploymentRefs []DeploymentRef   `json:"deploymentRefs,omitempty" yaml:"deploymentRefs,omitempty"`
 	Env            map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
-	// EnvFrom sources environment variables for the deployed workload from
-	// references the runtime resolves. Only Secret references are supported
-	// for MCPServer deployments. Explicit Env entries win over keys sourced
-	// via EnvFrom.
-	EnvFrom       []EnvFromSource `json:"envFrom,omitempty" yaml:"envFrom,omitempty"`
-	RuntimeConfig map[string]any  `json:"runtimeConfig,omitempty" yaml:"runtimeConfig,omitempty"`
+	// RuntimeConfig carries adapter-specific per-Deployment configuration.
+	// Its schema is selected by the resolved Runtime type and validated by that
+	// runtime's DeploymentAdapter.
+	RuntimeConfig map[string]any `json:"runtimeConfig,omitempty" yaml:"runtimeConfig,omitempty"`
 	// Harness selects a compatible harness for Agent deployments and configures
 	// rollout-specific harness policy. Omitted for BYO image/source Agent
 	// deployments and MCPServer deployments.
@@ -99,20 +98,6 @@ func (s *DeploymentSpec) EffectiveModelRef() *ModelRef {
 		return &ModelRef{Name: DefaultModelName}
 	}
 	return nil
-}
-
-// EnvFromSource selects one external source of environment variables.
-// Exactly one member must be set. Only SecretRef is supported.
-type EnvFromSource struct {
-	// SecretRef names a Secret whose keys become environment variables in
-	// the deployed workload. The Secret is runtime-local (e.g. for Kubernetes,
-	// a Secret in the runtime's namespace), not a registry Secret.
-	SecretRef *SecretEnvSource `json:"secretRef,omitempty" yaml:"secretRef,omitempty"`
-}
-
-// SecretEnvSource identifies the referenced Secret by name.
-type SecretEnvSource struct {
-	Name string `json:"name" yaml:"name"`
 }
 
 // DeploymentHarness selects the concrete harness to run for one Deployment.

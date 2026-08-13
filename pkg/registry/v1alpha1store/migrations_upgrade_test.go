@@ -48,7 +48,7 @@ func TestRemoveLocalRuntimeSeedMigrationUpgradeAndRollback(t *testing.T) {
 	require.NoError(t, err)
 	var kubernetesSpec v1alpha1.RuntimeSpec
 	require.NoError(t, json.Unmarshal(kubernetes.Spec, &kubernetesSpec))
-	require.Equal(t, v1alpha1.TypeKubernetes, kubernetesSpec.Type)
+	require.Equal(t, "Kubernetes", kubernetesSpec.Type)
 
 	require.NoError(t, migrator.Migrate(12))
 
@@ -178,6 +178,87 @@ func TestReassertControlPlaneEventFunctionRepairsStaleDatabases(t *testing.T) {
 	require.Len(t, batch, 1, "repaired function must emit the resolvedSource event")
 	require.Equal(t, v1alpha1.KindSkill, batch[0].Key.Kind)
 	require.Equal(t, "docs", batch[0].Key.Name)
+}
+
+func TestRemoveKubernetesRuntimeSeedMigrationUpgradeAndRollback(t *testing.T) {
+	pool, dsn := NewTestPoolWithDSN(t, adminDSN())
+	ctx := context.Background()
+
+	migrator, err := NewOSSMigrator(ctx, dsn)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, _ = migrator.Close()
+	})
+	require.NoError(t, migrator.Migrate(13))
+
+	runtimes := NewMutableObjectStore(pool, TestSchema(), "runtimes")
+	_, err = runtimes.GetLatest(ctx, "default", "kubernetes-default")
+	require.NoError(t, err)
+
+	require.NoError(t, migrator.Up())
+	_, err = runtimes.GetLatest(ctx, "default", "kubernetes-default")
+	require.ErrorIs(t, err, pkgdb.ErrNotFound)
+
+	require.NoError(t, migrator.Migrate(13))
+	restored, err := runtimes.GetLatest(ctx, "default", "kubernetes-default")
+	require.NoError(t, err)
+	var restoredSpec v1alpha1.RuntimeSpec
+	require.NoError(t, json.Unmarshal(restored.Spec, &restoredSpec))
+	require.Equal(t, "Kubernetes", restoredSpec.Type)
+}
+
+func TestRemoveKubernetesRuntimeSeedMigrationPreservesModifiedOrReferencedSeed(t *testing.T) {
+	t.Run("modified", func(t *testing.T) {
+		pool, dsn := NewTestPoolWithDSN(t, adminDSN())
+		ctx := context.Background()
+
+		migrator, err := NewOSSMigrator(ctx, dsn)
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			_, _ = migrator.Close()
+		})
+		require.NoError(t, migrator.Migrate(13))
+
+		_, err = pool.Exec(ctx, `
+			UPDATE runtimes
+			SET annotations = '{"keep":"value"}'::jsonb
+			WHERE namespace = 'default' AND name = 'kubernetes-default'
+		`)
+		require.NoError(t, err)
+		require.NoError(t, migrator.Up())
+
+		runtimes := NewMutableObjectStore(pool, TestSchema(), "runtimes")
+		modified, err := runtimes.GetLatest(ctx, "default", "kubernetes-default")
+		require.NoError(t, err)
+		require.Equal(t, "value", modified.Metadata.Annotations["keep"])
+	})
+
+	t.Run("referenced", func(t *testing.T) {
+		pool, dsn := NewTestPoolWithDSN(t, adminDSN())
+		ctx := context.Background()
+
+		migrator, err := NewOSSMigrator(ctx, dsn)
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			_, _ = migrator.Close()
+		})
+		require.NoError(t, migrator.Migrate(13))
+
+		_, err = pool.Exec(ctx, `
+			INSERT INTO deployments (namespace, name, spec)
+			VALUES (
+				'default',
+				'uses-kubernetes-default',
+				'{"targetRef":{"kind":"Agent","name":"test"},"runtimeRef":{"kind":"Runtime","name":"kubernetes-default"}}'::jsonb
+			)
+		`)
+		require.NoError(t, err)
+		require.NoError(t, migrator.Up())
+
+		runtimes := NewMutableObjectStore(pool, TestSchema(), "runtimes")
+		_, err = runtimes.GetLatest(ctx, "default", "kubernetes-default")
+		require.NoError(t, err)
+	})
 }
 
 func TestRemoveLocalRuntimeSeedMigrationPreservesModifiedSeed(t *testing.T) {

@@ -9,6 +9,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const testRuntimeType = "TestRuntime"
+
+func init() {
+	KnownRuntimeTypes[testRuntimeType] = struct{}{}
+}
+
 // Helper: extract field paths from a Validate() result so tests can
 // assert on "which fields failed" rather than on full error messages.
 func failedFields(t *testing.T, err error) []string {
@@ -297,7 +303,7 @@ func TestDeploymentValidate_OK(t *testing.T) {
 		Metadata: ObjectMeta{Namespace: "default", Name: "prod"},
 		Spec: DeploymentSpec{
 			TargetRef:    ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
-			RuntimeRef:   ResourceRef{Kind: KindRuntime, Name: "kubernetes-default"},
+			RuntimeRef:   ResourceRef{Kind: KindRuntime, Name: "test-runtime"},
 			DesiredState: DesiredStateDeployed,
 		},
 	}
@@ -398,93 +404,6 @@ func TestDeploymentValidate_ModelRef(t *testing.T) {
 	}
 }
 
-func TestDeploymentValidate_EnvFrom(t *testing.T) {
-	tests := []struct {
-		name       string
-		targetKind string
-		envFrom    []EnvFromSource
-		wantFields []string
-	}{
-		{
-			name:       "omitted",
-			targetKind: KindMCPServer,
-		},
-		{
-			name:       "single secretRef",
-			targetKind: KindMCPServer,
-			envFrom:    []EnvFromSource{{SecretRef: &SecretEnvSource{Name: "mcp-secrets"}}},
-		},
-		{
-			name:       "multiple secretRefs",
-			targetKind: KindMCPServer,
-			envFrom: []EnvFromSource{
-				{SecretRef: &SecretEnvSource{Name: "mcp-secrets"}},
-				{SecretRef: &SecretEnvSource{Name: "shared-tokens"}},
-			},
-		},
-		{
-			name:       "rejected for Agent target",
-			targetKind: KindAgent,
-			envFrom:    []EnvFromSource{{SecretRef: &SecretEnvSource{Name: "mcp-secrets"}}},
-			wantFields: []string{"spec.envFrom"},
-		},
-		{
-			name:       "missing secretRef",
-			targetKind: KindMCPServer,
-			envFrom:    []EnvFromSource{{}},
-			wantFields: []string{"spec.envFrom[0].secretRef"},
-		},
-		{
-			name:       "inner missing secretRef",
-			targetKind: KindMCPServer,
-			envFrom: []EnvFromSource{
-				{SecretRef: &SecretEnvSource{Name: "mcp-secrets"}},
-				{},
-			},
-			wantFields: []string{"spec.envFrom[1].secretRef"},
-		},
-		{
-			name:       "multiple field errors",
-			targetKind: KindMCPServer,
-			envFrom: []EnvFromSource{
-				{SecretRef: &SecretEnvSource{Name: "mcp-secrets"}},
-				{SecretRef: &SecretEnvSource{Name: "Invalid Name"}},
-				{},
-			},
-			wantFields: []string{"spec.envFrom[1].secretRef.name", "spec.envFrom[2].secretRef"},
-		},
-		{
-			name:       "empty secret name",
-			targetKind: KindMCPServer,
-			envFrom:    []EnvFromSource{{SecretRef: &SecretEnvSource{}}},
-			wantFields: []string{"spec.envFrom[0].secretRef.name"},
-		},
-		{
-			name:       "invalid secret name",
-			targetKind: KindMCPServer,
-			envFrom: []EnvFromSource{
-				{SecretRef: &SecretEnvSource{Name: "mcp-secrets"}},
-				{SecretRef: &SecretEnvSource{Name: "Not Valid"}},
-			},
-			wantFields: []string{"spec.envFrom[1].secretRef.name"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			d := &Deployment{
-				Metadata: ObjectMeta{Namespace: "default", Name: "prod"},
-				Spec: DeploymentSpec{
-					TargetRef:  ResourceRef{Kind: tt.targetKind, Name: "weather", Tag: "stable"},
-					RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "kagent"},
-					EnvFrom:    tt.envFrom,
-				},
-			}
-			require.ElementsMatch(t, tt.wantFields, failedFields(t, d.Validate()))
-		})
-	}
-}
-
 func TestDeploymentValidate_RejectsHarnessSelectionWithoutType(t *testing.T) {
 	d := &Deployment{
 		Metadata: ObjectMeta{Namespace: "default", Name: "prod"},
@@ -517,7 +436,7 @@ func TestDeploymentValidate_RejectsBadTargetKind(t *testing.T) {
 		Metadata: ObjectMeta{Namespace: "default", Name: "prod"},
 		Spec: DeploymentSpec{
 			TargetRef:  ResourceRef{Kind: KindSkill, Name: "skill", Tag: "stable"},
-			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "kubernetes-default"},
+			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "test-runtime"},
 		},
 	}
 	paths := failedFields(t, d.Validate())
@@ -541,7 +460,7 @@ func TestDeploymentValidate_RejectsBadDesiredState(t *testing.T) {
 		Metadata: ObjectMeta{Namespace: "default", Name: "prod"},
 		Spec: DeploymentSpec{
 			TargetRef:    ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
-			RuntimeRef:   ResourceRef{Kind: KindRuntime, Name: "kubernetes-default"},
+			RuntimeRef:   ResourceRef{Kind: KindRuntime, Name: "test-runtime"},
 			DesiredState: "running",
 		},
 	}
@@ -554,7 +473,7 @@ func TestDeploymentValidate_DeploymentRefsOK(t *testing.T) {
 		Metadata: ObjectMeta{Namespace: "default", Name: "agent-prod"},
 		Spec: DeploymentSpec{
 			TargetRef:    ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
-			RuntimeRef:   ResourceRef{Kind: KindRuntime, Name: "kubernetes-default"},
+			RuntimeRef:   ResourceRef{Kind: KindRuntime, Name: "test-runtime"},
 			DesiredState: DesiredStateDeployed,
 			DeploymentRefs: []DeploymentRef{
 				{Name: "weather-mcp-prod"},
@@ -570,7 +489,7 @@ func TestDeploymentValidate_DeploymentRefsRejectMissingName(t *testing.T) {
 		Metadata: ObjectMeta{Namespace: "default", Name: "agent-prod"},
 		Spec: DeploymentSpec{
 			TargetRef:      ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
-			RuntimeRef:     ResourceRef{Kind: KindRuntime, Name: "kubernetes-default"},
+			RuntimeRef:     ResourceRef{Kind: KindRuntime, Name: "test-runtime"},
 			DeploymentRefs: []DeploymentRef{{Namespace: "tools"}}, // missing Name
 		},
 	}
@@ -583,7 +502,7 @@ func TestDeploymentValidate_DeploymentRefsRejectBadNamespace(t *testing.T) {
 		Metadata: ObjectMeta{Namespace: "default", Name: "agent-prod"},
 		Spec: DeploymentSpec{
 			TargetRef:      ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
-			RuntimeRef:     ResourceRef{Kind: KindRuntime, Name: "kubernetes-default"},
+			RuntimeRef:     ResourceRef{Kind: KindRuntime, Name: "test-runtime"},
 			DeploymentRefs: []DeploymentRef{{Namespace: "Bad NS", Name: "ok"}},
 		},
 	}
@@ -598,7 +517,7 @@ func TestDeploymentValidate_AllowsEmptyTargetRefTag(t *testing.T) {
 		Metadata: ObjectMeta{Namespace: "default", Name: "prod"},
 		Spec: DeploymentSpec{
 			TargetRef:  ResourceRef{Kind: KindAgent, Name: "alice"},
-			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "kubernetes-default"},
+			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "test-runtime"},
 		},
 	}
 	require.NoError(t, d.Validate())
@@ -609,7 +528,7 @@ func TestDeploymentValidate_RejectsBadTargetRefTag(t *testing.T) {
 		Metadata: ObjectMeta{Namespace: "default", Name: "prod"},
 		Spec: DeploymentSpec{
 			TargetRef:  ResourceRef{Kind: KindAgent, Name: "alice", Tag: "bad tag"},
-			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "kubernetes-default"},
+			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "test-runtime"},
 		},
 	}
 	paths := failedFields(t, d.Validate())
@@ -626,7 +545,7 @@ func TestDeploymentResolveRefs_InheritsNamespace(t *testing.T) {
 		Metadata: ObjectMeta{Namespace: "team-b", Name: "prod"},
 		Spec: DeploymentSpec{
 			TargetRef:  ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
-			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "kubernetes-default"},
+			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "test-runtime"},
 		},
 	}
 	require.NoError(t, d.ResolveRefs(context.Background(), resolver))
@@ -671,7 +590,7 @@ func TestDeploymentResolveRefs_ModelRef(t *testing.T) {
 				Metadata: ObjectMeta{Namespace: "team-b", Name: "prod"},
 				Spec: DeploymentSpec{
 					TargetRef:  ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
-					RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "kubernetes-default"},
+					RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "test-runtime"},
 					ModelRef:   &tt.modelRef,
 				},
 			}
@@ -698,7 +617,7 @@ func TestDeploymentResolveRefs_UsesDefaultHarnessModel(t *testing.T) {
 		Metadata: ObjectMeta{Namespace: "team-b", Name: "prod"},
 		Spec: DeploymentSpec{
 			TargetRef:  ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
-			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "kubernetes-default"},
+			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "test-runtime"},
 			Harness:    &DeploymentHarness{Type: "claude-code"},
 		},
 	}
@@ -723,7 +642,7 @@ func TestDeploymentResolveRefs_ReportsDanglingModelRef(t *testing.T) {
 		Metadata: ObjectMeta{Namespace: "default", Name: "prod"},
 		Spec: DeploymentSpec{
 			TargetRef:  ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
-			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "kubernetes-default"},
+			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "test-runtime"},
 			ModelRef:   &ModelRef{Name: "missing"},
 		},
 	}
@@ -744,7 +663,7 @@ func TestDeploymentResolveRefs_ReportsDanglingDefaultHarnessModel(t *testing.T) 
 		Metadata: ObjectMeta{Namespace: "default", Name: "prod"},
 		Spec: DeploymentSpec{
 			TargetRef:  ResourceRef{Kind: KindAgent, Name: "alice", Tag: "stable"},
-			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "kubernetes-default"},
+			RuntimeRef: ResourceRef{Kind: KindRuntime, Name: "test-runtime"},
 			Harness:    &DeploymentHarness{Type: "claude-code"},
 		},
 	}
@@ -758,10 +677,10 @@ func TestDeploymentResolveRefs_ReportsDanglingDefaultHarnessModel(t *testing.T) 
 // Runtime
 // -----------------------------------------------------------------------------
 
-func TestRuntimeValidate_OK(t *testing.T) {
+func TestRuntimeValidate_RegisteredType(t *testing.T) {
 	r := &Runtime{
-		Metadata: ObjectMeta{Namespace: "default", Name: "kubernetes-default"},
-		Spec:     RuntimeSpec{Type: TypeKubernetes},
+		Metadata: ObjectMeta{Namespace: "default", Name: "test-runtime"},
+		Spec:     RuntimeSpec{Type: testRuntimeType},
 	}
 	require.NoError(t, r.Validate())
 }
@@ -781,14 +700,14 @@ func TestRuntimeValidate_RejectsUnknownType(t *testing.T) {
 // Downstream adapter dispatch relies on exact-match equality, so the
 // case-insensitive normalization MUST land at admission.
 func TestRuntimeValidate_CanonicalizesType(t *testing.T) {
-	for _, input := range []string{"kubernetes", "KUBERNETES", "Kubernetes", " Kubernetes "} {
+	for _, input := range []string{"testruntime", "TESTRUNTIME", "TestRuntime", " TestRuntime "} {
 		r := &Runtime{
 			Metadata: ObjectMeta{Namespace: "default", Name: "x"},
 			Spec:     RuntimeSpec{Type: input},
 		}
 		require.NoError(t, r.Validate(), "input %q should validate", input)
-		require.Equal(t, TypeKubernetes, r.Spec.Type,
-			"input %q should canonicalize to %q, got %q", input, TypeKubernetes, r.Spec.Type)
+		require.Equal(t, testRuntimeType, r.Spec.Type,
+			"input %q should canonicalize to %q, got %q", input, testRuntimeType, r.Spec.Type)
 	}
 }
 
@@ -900,11 +819,9 @@ func TestMCPServerValidate_HTTPPortRange(t *testing.T) {
 	require.NotContains(t, failedFields(t, mk(8080).Validate()), portPath, "http with a valid port must pass the port check")
 }
 
-// TestMCPServerValidate_TransportTypeClosedSet asserts the transport type
-// is restricted to {stdio, http}. The resolver in
-// internal/registry/runtimes/kubernetes/materialization.go has a
-// default→http switch, so a typo like "sse" would silently route to HTTP
-// if the validator didn't gate it here.
+// TestMCPServerValidate_TransportTypeClosedSet asserts the transport type is
+// restricted to {stdio, http} so integrations cannot interpret unknown values
+// inconsistently.
 func TestMCPServerValidate_TransportTypeClosedSet(t *testing.T) {
 	m := &MCPServer{
 		Metadata: ObjectMeta{Namespace: "default", Name: "tools", Tag: "v1"},

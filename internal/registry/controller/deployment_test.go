@@ -49,7 +49,7 @@ func deploymentFixture(desiredState string) *v1alpha1.Deployment {
 		},
 		Spec: v1alpha1.DeploymentSpec{
 			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Tag: "stable"},
-			RuntimeRef:   v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "kubernetes-default"},
+			RuntimeRef:   v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "test-runtime"},
 			DesiredState: desiredState,
 		},
 	}

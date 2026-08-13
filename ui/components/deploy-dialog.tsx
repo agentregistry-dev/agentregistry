@@ -19,8 +19,6 @@ interface DeployDialogProps {
   onDeploySuccess?: () => void
 }
 
-const runtimeId = "kubernetes-default"
-
 export function DeployDialog({ open, onOpenChange, resourceType, server, agent, onDeploySuccess }: DeployDialogProps) {
   const [deploying, setDeploying] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -28,7 +26,7 @@ export function DeployDialog({ open, onOpenChange, resourceType, server, agent, 
   const [config, setConfig] = useState<Record<string, string>>({})
   const [newKey, setNewKey] = useState("")
   const [newValue, setNewValue] = useState("")
-  const [namespace, setNamespace] = useState("")
+  const [runtimeId, setRuntimeId] = useState("")
   const keyInputRef = useRef<HTMLInputElement>(null)
 
   const name = resourceType === "mcp"
@@ -59,21 +57,18 @@ export function DeployDialog({ open, onOpenChange, resourceType, server, agent, 
   }
 
   const handleDeploy = async () => {
-    if (!name || !tag) return
+    if (!name || !tag || !runtimeId.trim()) return
 
     try {
       setDeploying(true)
       setError(null)
 
-      const env: Record<string, string> = { ...config }
-      env["KAGENT_NAMESPACE"] = namespace || "default"
-
       await deployServerApi({
         body: {
           serverName: name,
           tag,
-          env,
-          runtimeId,
+          env: config,
+          runtimeId: runtimeId.trim(),
           resourceType,
         },
         throwOnError: true,
@@ -98,7 +93,7 @@ export function DeployDialog({ open, onOpenChange, resourceType, server, agent, 
     setConfig({})
     setNewKey("")
     setNewValue("")
-    setNamespace("")
+    setRuntimeId("")
   }
 
   const handleClose = () => {
@@ -145,20 +140,21 @@ export function DeployDialog({ open, onOpenChange, resourceType, server, agent, 
             className="space-y-5"
             onSubmit={(e) => { e.preventDefault(); handleDeploy() }}
           >
-            {/* Kubernetes Namespace */}
+            {/* Runtime */}
             <div className="space-y-2">
-              <Label htmlFor="deploy-namespace">Kubernetes Namespace</Label>
+              <Label htmlFor="deploy-runtime">Runtime</Label>
               <Input
-                id="deploy-namespace"
-                name="namespace"
-                placeholder="default"
-                value={namespace}
-                onChange={(e) => setNamespace(e.target.value)}
+                id="deploy-runtime"
+                name="runtime"
+                placeholder="Runtime name"
+                value={runtimeId}
+                onChange={(e) => setRuntimeId(e.target.value)}
                 autoComplete="off"
                 spellCheck={false}
+                required
               />
               <p className="text-xs text-muted-foreground">
-                Leave empty for the default namespace.
+                Choose a Runtime registered by your AgentRegistry deployment.
               </p>
             </div>
 
@@ -263,7 +259,7 @@ export function DeployDialog({ open, onOpenChange, resourceType, server, agent, 
               <Button type="button" variant="ghost" onClick={handleClose} disabled={deploying}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={deploying}>
+              <Button type="submit" disabled={deploying || !runtimeId.trim()}>
                 {deploying ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin motion-reduce:animate-none" aria-hidden="true" />
