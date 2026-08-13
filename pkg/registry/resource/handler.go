@@ -202,10 +202,12 @@ type AuthorizeInput struct {
 	// Tag is populated for exact tagged content resource operations.
 	// Batch delete leaves Tag empty when deleting every tag for a name.
 	Tag string
-	// Object is non-nil only when Verb == "apply"; it carries the decoded
-	// request body post-validation-stamping (path identity already merged
-	// into metadata), so the hook can inspect labels / annotations / spec
-	// in authz decisions.
+	// Object carries the resource document for the hook to inspect: nil for
+	// "get" and "list", the decoded request body post-validation-stamping on
+	// "apply", and deleteOpts.PreDeleteObject on "delete".
+	// That delete value is nil unless DeleteAdmission or PostDelete is wired
+	// and is the caller's own document on the batch path, so a delete
+	// authorizer must re-read the stored document rather than trust it.
 	Object v1alpha1.Object
 }
 
