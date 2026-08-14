@@ -183,8 +183,14 @@ func (c *DeploymentController) Run(ctx context.Context, resyncInterval time.Dura
 		return errors.New("deployment controller: controller is required")
 	}
 	if !c.Ready() {
+		// A failed initial refresh is transient like any other: the loop's
+		// resync tick retries it. Returning here would leave the controller
+		// permanently dead — the runner does not restart it.
 		if _, err := c.Refresh(ctx); err != nil {
-			return err
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			logger.Error("deployment controller initial refresh failed; retrying on next wakeup or resync", "error", err)
 		}
 	}
 	queue := c.workQueue()
