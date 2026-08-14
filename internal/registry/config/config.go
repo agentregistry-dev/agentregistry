@@ -15,8 +15,12 @@ type Config struct {
 	ServerAddress string `env:"SERVER_ADDRESS" envDefault:":8080"`
 	MCPPort       uint16 `env:"MCP_PORT" envDefault:"0"`
 	DatabaseURL   string `env:"DATABASE_URL" envDefault:"postgres://agentregistry:agentregistry@localhost:5432/agentregistry?sslmode=disable"`
-	Version       string `env:"VERSION" envDefault:"dev"`
-	LogLevel      string `env:"LOG_LEVEL" envDefault:"info"`
+	// Version is set at build time via -ldflags "-X github.com/agentregistry-dev/agentregistry/internal/version.Version=..."
+	// and read from the version package; see internal/version/version.go. There is
+	// intentionally no VERSION env var override — the build-time value is the only
+	// source of truth so a deployed binary's reported version always matches what
+	// it was built with.
+	LogLevel string `env:"LOG_LEVEL" envDefault:"info"`
 
 	// MCP Registry compatibility (read-only)
 	//

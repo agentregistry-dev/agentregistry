@@ -139,7 +139,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		BuildTime: version.BuildDate,
 	}
 
-	shutdownTelemetry, metrics, err := telemetry.InitMetrics(cfg.Version)
+	shutdownTelemetry, metrics, err := telemetry.InitMetrics(version.Version)
 	if err != nil {
 		return fmt.Errorf("failed to initialize metrics: %w", err)
 	}
