@@ -3,6 +3,7 @@ package v1alpha1
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"k8s.io/utils/ptr"
 )
@@ -101,7 +102,11 @@ func validateAgentSpec(s *AgentSpec) FieldErrors {
 	// Plugins directory, so they only require compatibleHarnesses when there's
 	// no source image to deliver them through.
 	hasHarnessCompat := len(s.CompatibleHarnesses) > 0
-	hasSource := s.Source != nil && (s.Source.Image != "" || s.Source.Repository != nil)
+	// A source counts only when it can actually deliver files: a whitespace
+	// image or an empty Repository struct is not a delivery path.
+	hasSource := s.Source != nil &&
+		(strings.TrimSpace(s.Source.Image) != "" ||
+			(s.Source.Repository != nil && strings.TrimSpace(s.Source.Repository.URL) != ""))
 	if len(s.Plugins) > 0 && !hasHarnessCompat {
 		errs.Append("spec", fmt.Errorf("%w: plugins require compatibleHarnesses", ErrInvalidFormat))
 	}

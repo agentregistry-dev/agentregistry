@@ -109,6 +109,22 @@ func TestAgentHarnessValidate(t *testing.T) {
 			},
 			wantErr: "require compatibleHarnesses",
 		},
+		{
+			name: "whitespace image does not count as image agent",
+			spec: AgentSpec{
+				Skills: []ResourceRef{{Kind: KindSkill, Name: "x"}},
+				Source: &AgentSource{Image: "   "},
+			},
+			wantErr: "require compatibleHarnesses",
+		},
+		{
+			name: "empty repository struct does not count as source",
+			spec: AgentSpec{
+				Skills: []ResourceRef{{Kind: KindSkill, Name: "x"}},
+				Source: &AgentSource{Repository: &Repository{}},
+			},
+			wantErr: "require compatibleHarnesses",
+		},
 	}
 
 	for _, tt := range tests {
