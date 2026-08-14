@@ -66,7 +66,7 @@ func TestRemoveLocalRuntimeSeedMigrationUpgradeAndRollback(t *testing.T) {
 // variant that shipped before the Plugin/Skill resolvedSource exception was
 // added to migration 009. The exception was added by editing 009 in place, so
 // databases migrated before that edit still run this variant, which swallows
-// ALL status-only updates. Migration 014 must converge them.
+// ALL status-only updates. Migration 015 must converge them.
 const preExemptionControlPlaneEventFunction = `
 CREATE OR REPLACE FUNCTION record_control_plane_event()
 RETURNS TRIGGER AS $$
