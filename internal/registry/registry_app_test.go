@@ -15,8 +15,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
 func TestDeploymentControllerConfigMapsRetentionSettings(t *testing.T) {
@@ -202,4 +205,54 @@ func TestBuildMCPMux(t *testing.T) {
 		buildMCPMux(handler, meta).ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/", nil))
 		assert.Equal(t, catchAll, rec.Code)
 	})
+}
+
+// TestCrudPerKindHooksCopiesAuthorizeInput pins the adapter's field-for-field
+// contract: every AuthorizeInput field reaches the public hooks, Object included.
+func TestCrudPerKindHooksCopiesAuthorizeInput(t *testing.T) {
+	obj := &v1alpha1.Deployment{
+		Metadata: v1alpha1.ObjectMeta{Namespace: "prod", Name: "checkout"},
+		Spec: v1alpha1.DeploymentSpec{
+			TargetRef: v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "solo-docs"},
+		},
+	}
+	in := resource.AuthorizeInput{
+		Verb:      "apply",
+		Kind:      v1alpha1.KindDeployment,
+		Namespace: "prod",
+		Name:      "checkout",
+		Tag:       "v1",
+		Object:    obj,
+	}
+	want := types.AuthorizeInput{
+		Verb:      "apply",
+		Kind:      v1alpha1.KindDeployment,
+		Namespace: "prod",
+		Name:      "checkout",
+		Tag:       "v1",
+		Object:    obj,
+	}
+
+	var gotAuthorizer, gotListFilter types.AuthorizeInput
+	hooks := crudPerKindHooks(types.AppOptions{
+		Authorizers: map[string]types.Authorizer{
+			v1alpha1.KindDeployment: func(_ context.Context, got types.AuthorizeInput) error {
+				gotAuthorizer = got
+				return nil
+			},
+		},
+		ListFilters: map[string]types.ListFilter{
+			v1alpha1.KindDeployment: func(_ context.Context, got types.AuthorizeInput) (string, []any, error) {
+				gotListFilter = got
+				return "", nil, nil
+			},
+		},
+	})
+
+	require.NoError(t, hooks.Authorizers[v1alpha1.KindDeployment](t.Context(), in))
+	_, _, err := hooks.ListFilters[v1alpha1.KindDeployment](t.Context(), in)
+	require.NoError(t, err)
+
+	assert.Equal(t, want, gotAuthorizer)
+	assert.Equal(t, want, gotListFilter)
 }

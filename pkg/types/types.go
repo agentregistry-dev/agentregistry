@@ -36,6 +36,11 @@ type AuthorizeInput struct {
 	Name string
 	// Tag is the resource tag for content kinds; "" for list/get-latest.
 	Tag string
+	// Object carries the resource document for hooks to inspect: nil for
+	// "get" and "list", the validated request body on "apply".
+	// On "delete" it may be nil or, on the batch path, caller-supplied — so
+	// re-read the stored document instead of authorizing against it.
+	Object v1alpha1.Object
 }
 
 // Authorizer gates a single resource handler invocation. Return
