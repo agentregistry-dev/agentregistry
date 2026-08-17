@@ -177,7 +177,9 @@ func (c *DeploymentController) Drain(ctx context.Context) (SyncResult, error) {
 // A Drain/Refresh failure marks the controller not ready and is retried on
 // the next wakeup or resync tick; it does not stop the loop, because exiting
 // shuts down the workqueue and silently discards scheduled rate-limited
-// retries.
+// retries. With resyncInterval <= 0 there is no ticker, so retry depends
+// entirely on wakeups arriving — production wiring should pass a positive
+// interval.
 func (c *DeploymentController) Run(ctx context.Context, resyncInterval time.Duration) error {
 	if c == nil {
 		return errors.New("deployment controller: controller is required")

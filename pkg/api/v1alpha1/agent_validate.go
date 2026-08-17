@@ -98,9 +98,10 @@ func validateAgentSpec(s *AgentSpec) FieldErrors {
 	// Plugins require harness composition support: without compatibleHarnesses,
 	// a prebuilt Image cannot consume an injected plugin any more than a
 	// harness-less Agent can. Skills/instructions relax this for Image agents:
-	// the deploy path can deliver them to an image agent directly as an Agent
-	// Plugins directory, so they only require compatibleHarnesses when there's
-	// no source image to deliver them through.
+	// validation permits the refs because a deploy implementation can deliver
+	// them to the image's filesystem as an Agent Plugins directory — this repo
+	// performs no such delivery itself — so they only require
+	// compatibleHarnesses when there's no source image to deliver them through.
 	hasHarnessCompat := len(s.CompatibleHarnesses) > 0
 	// A source counts only when it can actually deliver files: a whitespace
 	// image or an empty Repository struct is not a delivery path.

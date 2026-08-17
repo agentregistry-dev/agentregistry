@@ -142,6 +142,65 @@ func TestDeploymentControllerRunSurvivesTransientDrainFailure(t *testing.T) {
 	}
 }
 
+// TestDeploymentControllerRunRecoversFromFailedInitialRefresh covers the
+// startup corner where the first Refresh fails (e.g. the database is not
+// reachable yet): Run must stay alive, report not ready, and recover on the
+// next wakeup. Recovery here goes through Drain, which replays retained
+// events without listing deployments — a deployment with no retained event
+// is not requeued until a resync tick's full Refresh, which is why
+// production wiring keeps resyncInterval > 0.
+func TestDeploymentControllerRunRecoversFromFailedInitialRefresh(t *testing.T) {
+	reader := &flakyEventReader{}
+	reader.set(true, nil)
+	wakeups := make(chan struct{}, 1)
+	controller := &DeploymentController{
+		Stores: map[string]*v1alpha1store.Store{
+			v1alpha1.KindDeployment: v1alpha1store.NewStore(nil, pkgdb.MustNewSchema(pkgdb.OSSSchema), "deployments"),
+		},
+		Adapters: map[string]types.DeploymentAdapter{"Stub": stubDeploymentAdapter{}},
+		Getter: func(context.Context, v1alpha1.ResourceRef) (v1alpha1.Object, error) {
+			return nil, pkgdb.ErrNotFound
+		},
+		Events:  reader,
+		Wakeups: wakeups,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	runErr := make(chan error, 1)
+	go func() { runErr <- controller.Run(ctx, 0) }()
+
+	require.Eventually(t, func() bool {
+		err := controller.ReadinessError()
+		return err != nil && !errors.Is(err, ErrControllerNotReady)
+	}, time.Second, time.Millisecond,
+		"the failed initial refresh should surface through ReadinessError")
+	require.False(t, controller.Ready())
+
+	reader.set(false, []v1alpha1store.ControlPlaneEvent{{
+		Revision: 1,
+		Key:      v1alpha1store.ResourceKey{Kind: "Ignored", Namespace: "default", Name: "x"},
+	}})
+	wakeups <- struct{}{}
+	require.Eventually(t, func() bool { return controller.Ready() && controller.Checkpoint() == 1 },
+		time.Second, time.Millisecond,
+		"the loop must survive the failed initial refresh and recover on the next wakeup")
+
+	select {
+	case err := <-runErr:
+		t.Fatalf("Run exited on a failed initial refresh: %v", err)
+	default:
+	}
+
+	cancel()
+	select {
+	case err := <-runErr:
+		require.ErrorIs(t, err, context.Canceled)
+	case <-time.After(time.Second):
+		t.Fatal("Run did not stop after context cancellation")
+	}
+}
+
 type stubDeploymentAdapter struct{}
 
 func (stubDeploymentAdapter) Type() string { return "Stub" }
