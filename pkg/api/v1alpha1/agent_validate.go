@@ -3,6 +3,7 @@ package v1alpha1
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"k8s.io/utils/ptr"
 )
@@ -82,8 +83,8 @@ func validateAgentSpec(s *AgentSpec) FieldErrors {
 
 	// Composition refs default their Kind IN PLACE — the deploy-time resolver
 	// does no defaulting, so the persisted ref must carry the kind. MCPServers
-	// are available to any MCP-capable runtime; plugins/skills/instructions are
-	// harness composition inputs and are gated below.
+	// are available to any MCP-capable runtime; plugins/skills/instructions can
+	// also be delivered to an image Agent and are gated below.
 	errs = append(errs, validateResourceRefs("spec.mcpServers", s.MCPServers, KindMCPServer)...)
 	errs = append(errs, validateResourceRefs("spec.plugins", s.Plugins, KindPlugin)...)
 	errs = append(errs, validateResourceRefs("spec.skills", s.Skills, KindSkill)...)
@@ -94,11 +95,13 @@ func validateAgentSpec(s *AgentSpec) FieldErrors {
 		errs = append(errs, validateResourceRefs("spec.instructions", []ResourceRef{*s.Instructions}, KindPrompt)...)
 	}
 
-	// Plugins/skills/instructions only apply to harness-compatible agents — a
-	// prebuilt Image cannot consume injected files by itself.
-	if (len(s.Plugins) > 0 || len(s.Skills) > 0 || s.Instructions != nil) &&
-		len(s.CompatibleHarnesses) == 0 {
-		errs.Append("spec", fmt.Errorf("%w: plugins/skills/instructions require compatibleHarnesses", ErrInvalidFormat))
+	hasHarnessCompat := len(s.CompatibleHarnesses) > 0
+	hasImage := s.Source != nil && strings.TrimSpace(s.Source.Image) != ""
+	if len(s.Plugins) > 0 && !hasHarnessCompat && !hasImage {
+		errs.Append("spec", fmt.Errorf("%w: plugins require compatibleHarnesses or source image", ErrInvalidFormat))
+	}
+	if (len(s.Skills) > 0 || s.Instructions != nil) && !hasHarnessCompat && !hasImage {
+		errs.Append("spec", fmt.Errorf("%w: skills/instructions require compatibleHarnesses or source image", ErrInvalidFormat))
 	}
 
 	return errs
