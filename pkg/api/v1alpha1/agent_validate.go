@@ -103,16 +103,17 @@ func validateAgentSpec(s *AgentSpec) FieldErrors {
 	// performs no such delivery itself — so they only require
 	// compatibleHarnesses when there's no source image to deliver them through.
 	hasHarnessCompat := len(s.CompatibleHarnesses) > 0
-	// A source counts only when it can actually deliver files: a whitespace
-	// image or an empty Repository struct is not a delivery path.
-	hasSource := s.Source != nil &&
-		(strings.TrimSpace(s.Source.Image) != "" ||
-			(s.Source.Repository != nil && strings.TrimSpace(s.Source.Repository.URL) != ""))
+	// A source counts only when delivery can actually reach it: composition
+	// files are delivered into a container image, so only a non-blank
+	// Source.Image qualifies. A repository source has no delivery path — a
+	// repository-built agent would pass validation and then silently receive
+	// no files.
+	hasSource := s.Source != nil && strings.TrimSpace(s.Source.Image) != ""
 	if len(s.Plugins) > 0 && !hasHarnessCompat {
 		errs.Append("spec", fmt.Errorf("%w: plugins require compatibleHarnesses", ErrInvalidFormat))
 	}
 	if (len(s.Skills) > 0 || s.Instructions != nil) && !hasHarnessCompat && !hasSource {
-		errs.Append("spec", fmt.Errorf("%w: skills/instructions require compatibleHarnesses or source", ErrInvalidFormat))
+		errs.Append("spec", fmt.Errorf("%w: skills/instructions require compatibleHarnesses or a source image", ErrInvalidFormat))
 	}
 
 	return errs

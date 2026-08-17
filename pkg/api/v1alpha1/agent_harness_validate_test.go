@@ -125,6 +125,14 @@ func TestAgentHarnessValidate(t *testing.T) {
 			},
 			wantErr: "require compatibleHarnesses",
 		},
+		{
+			name: "repository source does not count: composition delivery needs an image",
+			spec: AgentSpec{
+				Skills: []ResourceRef{{Kind: KindSkill, Name: "x"}},
+				Source: &AgentSource{Repository: &Repository{URL: "https://github.com/org/agent"}},
+			},
+			wantErr: "require compatibleHarnesses",
+		},
 	}
 
 	for _, tt := range tests {
