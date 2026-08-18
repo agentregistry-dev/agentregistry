@@ -139,24 +139,25 @@ func TestSkillEnqueueAllSkipsUndecodableRow(t *testing.T) {
 	}
 }
 
+// TestSkillReconcile drives reconcile against a real (anonymous) git source.
+// Every case is chosen to fail or succeed before any network call: an explicit
+// full SHA short-circuits the pin, a non-GitHub host is rejected at URL parse,
+// and an option-like ref is rejected as argument injection.
 func TestSkillReconcile(t *testing.T) {
 	const ns, name, tag = "default", "s", "v1"
-	newSkill := func(gen int64) *v1alpha1.Skill {
+	const pinnedSHA = "0123456789abcdef0123456789abcdef01234567"
+	newSkill := func(gen int64, repo *v1alpha1.Repository) *v1alpha1.Skill {
 		s := &v1alpha1.Skill{Metadata: v1alpha1.ObjectMeta{Namespace: ns, Name: name, Tag: tag, Generation: gen}}
-		s.Spec.Source = &v1alpha1.SkillSource{
-			Repository: &v1alpha1.Repository{URL: "https://github.com/o/r", Branch: "main"},
-		}
+		s.Spec.Source = &v1alpha1.SkillSource{Repository: repo}
 		return s
 	}
+	git := gitutil.NewSource(nil)
 
 	t.Run("success transitions Progressing then Resolved and bumps observedGeneration", func(t *testing.T) {
 		store := newFakeSkillStore()
-		c := &SkillController{Store: store}
-		sk := newSkill(2)
-		if err := c.announceProgressing(context.Background(), sk); err != nil {
-			t.Fatalf("announceProgressing: %v", err)
-		}
-		outcome, _, err := c.recordResolve(context.Background(), sk, "deadbeef", nil)
+		c := &SkillController{Store: store, Git: git}
+		sk := newSkill(2, &v1alpha1.Repository{URL: "https://github.com/o/r", Commit: pinnedSHA})
+		outcome, _, err := c.reconcile(context.Background(), sk)
 		if err != nil || outcome != "resolved" {
 			t.Fatalf("reconcile = (%q, %v), want (resolved, nil)", outcome, err)
 		}
@@ -170,16 +171,16 @@ func TestSkillReconcile(t *testing.T) {
 		if got.Status.ObservedGeneration != 2 {
 			t.Errorf("observedGeneration = %d, want 2", got.Status.ObservedGeneration)
 		}
-		if got.Status.ResolvedSource == nil || got.Status.ResolvedSource.Commit != "deadbeef" {
+		if got.Status.ResolvedSource == nil || got.Status.ResolvedSource.Commit != pinnedSHA {
 			t.Errorf("resolvedSource = %+v", got.Status.ResolvedSource)
 		}
 	})
 
 	t.Run("terminal unsupported host forgets and bumps observedGeneration", func(t *testing.T) {
 		store := newFakeSkillStore()
-		c := &SkillController{Store: store}
-		pinErr := fmt.Errorf("x: %w", gitutil.ErrUnsupportedHost)
-		outcome, reason, err := c.recordResolve(context.Background(), newSkill(3), "", pinErr)
+		c := &SkillController{Store: store, Git: git}
+		sk := newSkill(3, &v1alpha1.Repository{URL: "https://git.example.com/o/r", Branch: "main"})
+		outcome, reason, err := c.reconcile(context.Background(), sk)
 		if err != nil {
 			t.Fatalf("terminal failure must return nil error (Forget), got %v", err)
 		}
@@ -197,8 +198,9 @@ func TestSkillReconcile(t *testing.T) {
 
 	t.Run("retryable failure requeues and leaves observedGeneration behind", func(t *testing.T) {
 		store := newFakeSkillStore()
-		c := &SkillController{Store: store}
-		_, _, err := c.recordResolve(context.Background(), newSkill(4), "", errors.New("dial tcp: timeout"))
+		c := &SkillController{Store: store, Git: git}
+		sk := newSkill(4, &v1alpha1.Repository{URL: "https://github.com/o/r", Branch: "--upload-pack=touch /tmp/pwn"})
+		_, _, err := c.reconcile(context.Background(), sk)
 		if err == nil {
 			t.Fatal("retryable failure must return a non-nil error (requeue)")
 		}
@@ -213,7 +215,7 @@ func TestSkillReconcile(t *testing.T) {
 
 	t.Run("missing source is terminal SourceMissing", func(t *testing.T) {
 		store := newFakeSkillStore()
-		c := &SkillController{Store: store}
+		c := &SkillController{Store: store, Git: git}
 		s := &v1alpha1.Skill{Metadata: v1alpha1.ObjectMeta{Namespace: ns, Name: name, Tag: tag, Generation: 6}}
 		outcome, reason, err := c.reconcile(context.Background(), s)
 		if err != nil {
