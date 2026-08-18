@@ -31,13 +31,6 @@ var (
 	ErrSourceNotFound = errors.New("source: git ref not found")
 )
 
-// Fetcher pins a repository's ref and copies the tree at that pin into
-// targetDir, returning the commit. *gitutil.Source implements it; tests fake it
-// to keep resolve off the network.
-type Fetcher interface {
-	Fetch(ctx context.Context, namespace string, repo *v1alpha1.Repository, targetDir string) (commit string, err error)
-}
-
 // Resolve pins a plugin's source and loads its bundle at that pin. Transient
 // failures (network, clone, credential lookup) are returned as plain errors
 // (retryable); permanent rejections wrap ErrUnsupportedSource, and malformed
@@ -45,7 +38,7 @@ type Fetcher interface {
 //
 // It shells out to system git, and only github.com is supported today (matching
 // existing skill/agent source behavior). OCI sources are not yet implemented.
-func Resolve(ctx context.Context, p *v1alpha1.Plugin, git Fetcher) (*v1alpha1.PluginResolvedSource, *bundle.CanonicalBundle, error) {
+func Resolve(ctx context.Context, p *v1alpha1.Plugin, git *gitutil.Source) (*v1alpha1.PluginResolvedSource, *bundle.CanonicalBundle, error) {
 	if p == nil || p.Spec.Source == nil {
 		return nil, nil, fmt.Errorf("%w: plugin has no source", ErrUnsupportedSource)
 	}
@@ -60,7 +53,7 @@ func Resolve(ctx context.Context, p *v1alpha1.Plugin, git Fetcher) (*v1alpha1.Pl
 	}
 }
 
-func resolveGit(ctx context.Context, namespace string, g *v1alpha1.PluginSourceGit, git Fetcher) (*v1alpha1.PluginResolvedSource, *bundle.CanonicalBundle, error) {
+func resolveGit(ctx context.Context, namespace string, g *v1alpha1.PluginSourceGit, git *gitutil.Source) (*v1alpha1.PluginResolvedSource, *bundle.CanonicalBundle, error) {
 	if g == nil || g.Repository == nil || g.Repository.URL == "" {
 		return nil, nil, fmt.Errorf("%w: git source missing repository url", ErrUnsupportedSource)
 	}

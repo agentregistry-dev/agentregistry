@@ -17,16 +17,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
-// gitPinner pins a skill's git source ref to a concrete commit SHA. It is the
-// only I/O-bearing dependency of the Skill controller, so tests inject a fake
-// instead of touching the network. *gitutil.Source implements it.
-//
-// Pinning is all a skill needs: it has no manifest/inventory to scan, so the
-// controller never fetches a tree. Materialization happens at deploy time.
-type gitPinner interface {
-	Pin(ctx context.Context, namespace string, repo *v1alpha1.Repository) (commit string, err error)
-}
-
 // SkillControllerDeps are the Skill controller's dependencies. Git pins a
 // skill's git source ref to a commit; it defaults to an anonymous source when
 // nil, which cannot read private repositories.
@@ -65,7 +55,7 @@ type skillQueueKey struct {
 // OWN control-plane LISTEN subscription.
 type SkillController struct {
 	Store   skillStore
-	Git     gitPinner
+	Git     *gitutil.Source
 	Wakeups <-chan struct{}
 
 	pool   *pgxpool.Pool
@@ -322,22 +312,40 @@ func (c *SkillController) reconcile(ctx context.Context, sk *v1alpha1.Skill) (st
 		})
 	}
 
-	// First observe: announce Progressing (no observedGeneration bump, so a
-	// crash mid-reconcile re-runs). On retries the condition already carries the
-	// last failure reason; don't flap it back to Progressing.
-	if sk.Status.GetCondition(skillReadyCondition) == nil {
-		if err := c.patchStatus(ctx, ns, name, tag, 0, func(st *v1alpha1.SkillStatus) {
-			setSkillReady(st, v1alpha1.ConditionFalse, "Progressing", "resolving skill source")
-		}); err != nil {
-			return "", "", err
-		}
+	if err := c.announceProgressing(ctx, sk); err != nil {
+		return "", "", err
 	}
 
 	// Bound the pin so a slow or hostile origin cannot hang the worker; gitutil
-	// kills the git child when ctx expires.
+	// kills the git child when ctx expires. Pinning is all a skill needs — it has
+	// no manifest/inventory to scan, so the tree is fetched at deploy time.
 	pinCtx, cancel := context.WithTimeout(ctx, skillResolveTimeout)
 	defer cancel()
 	commit, err := c.Git.Pin(pinCtx, ns, sk.Spec.Source.Repository)
+	return c.recordResolve(ctx, sk, commit, err)
+}
+
+// announceProgressing marks a first-observed skill Progressing before any I/O.
+// No observedGeneration bump, so a crash mid-reconcile re-runs. On retries the
+// condition already carries the last failure reason; don't flap it back.
+func (c *SkillController) announceProgressing(ctx context.Context, sk *v1alpha1.Skill) error {
+	if sk.Status.GetCondition(skillReadyCondition) != nil {
+		return nil
+	}
+	return c.patchStatus(ctx, sk.Metadata.NamespaceOrDefault(), sk.Metadata.Name, sk.Metadata.Tag, 0,
+		func(st *v1alpha1.SkillStatus) {
+			setSkillReady(st, v1alpha1.ConditionFalse, "Progressing", "resolving skill source")
+		})
+}
+
+// recordResolve records a pin outcome in status: a terminal failure bumps
+// observedGeneration and is forgotten, a retryable one is returned for backoff,
+// and success stores the commit. It is the controller's whole status machine, so
+// tests drive it with fabricated pin results instead of touching the network.
+func (c *SkillController) recordResolve(ctx context.Context, sk *v1alpha1.Skill, commit string, err error) (string, string, error) {
+	gen := sk.Metadata.Generation
+	ns, name, tag := sk.Metadata.NamespaceOrDefault(), sk.Metadata.Name, sk.Metadata.Tag
+
 	if err != nil {
 		reason, terminal := classifySkillResolveErr(err)
 		bump := int64(0)
