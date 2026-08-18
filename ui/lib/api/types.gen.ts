@@ -637,6 +637,7 @@ export type PromptSpec = {
 export type Repository = {
     branch?: string;
     commit?: string;
+    secretRef?: SecretKeyRef;
     subfolder?: string;
     url?: string;
 };

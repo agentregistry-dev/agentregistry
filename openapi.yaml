@@ -1365,6 +1365,8 @@ components:
           type: string
         commit:
           type: string
+        secretRef:
+          $ref: '#/components/schemas/SecretKeyRef'
         subfolder:
           type: string
         url:
