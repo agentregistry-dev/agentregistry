@@ -105,7 +105,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	// The Plugin controller resolves each plugin's pinned source pointer to a
 	// concrete commit/digest and records the manifest/inventory in PluginStatus
 	// out of band of the API write — same pattern as the Deployment controller.
-	pluginController, err := controller.NewPluginController(pool, stores, controller.PluginControllerDeps{Resolver: pluginsource.NewGitResolver()})
+	pluginController, err := controller.NewPluginController(pool, stores, controller.PluginControllerDeps{Resolver: pluginsource.NewGitResolver(options.GitCredentials)})
 	if err != nil {
 		return fmt.Errorf("create plugin controller: %w", err)
 	}
@@ -119,7 +119,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	// concrete commit and records it in SkillStatus out of band of the API write
 	// — the resolve-and-pin counterpart to the Plugin controller, minus the
 	// manifest/inventory scan (a skill has no bundle to enumerate).
-	skillController, err := controller.NewSkillController(pool, stores, controller.SkillControllerDeps{})
+	skillController, err := controller.NewSkillController(pool, stores, controller.SkillControllerDeps{GitCredentials: options.GitCredentials})
 	if err != nil {
 		return fmt.Errorf("create skill controller: %w", err)
 	}

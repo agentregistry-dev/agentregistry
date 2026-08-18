@@ -14,7 +14,7 @@ import (
 // ErrUnsupportedSource so the controller marks the plugin terminally failed
 // rather than retrying forever.
 func TestGitResolverUnsupportedSources(t *testing.T) {
-	r := NewGitResolver()
+	r := NewGitResolver(nil)
 	ctx := context.Background()
 
 	tests := []struct {

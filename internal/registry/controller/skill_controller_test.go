@@ -149,10 +149,10 @@ func TestSkillReconcile(t *testing.T) {
 		return s
 	}
 	resolveTo := func(commit string) SkillResolveFunc {
-		return func(context.Context, *v1alpha1.Repository) (string, error) { return commit, nil }
+		return func(context.Context, string, *v1alpha1.Repository) (string, error) { return commit, nil }
 	}
 	resolveErr := func(err error) SkillResolveFunc {
-		return func(context.Context, *v1alpha1.Repository) (string, error) { return "", err }
+		return func(context.Context, string, *v1alpha1.Repository) (string, error) { return "", err }
 	}
 
 	t.Run("success transitions Progressing then Resolved and bumps observedGeneration", func(t *testing.T) {

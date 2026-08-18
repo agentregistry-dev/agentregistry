@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"sync"
 	"time"
 
@@ -15,33 +16,40 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
 // SkillResolveFunc resolves a skill's git source ref to a concrete commit SHA.
 // It is the only I/O-bearing dependency of the Skill controller, so tests inject
 // a fake instead of touching the network.
-type SkillResolveFunc func(ctx context.Context, repo *v1alpha1.Repository) (commit string, err error)
+type SkillResolveFunc func(ctx context.Context, namespace string, repo *v1alpha1.Repository) (commit string, err error)
 
 // SkillControllerDeps are the Skill controller's dependencies. Resolve pins a
 // skill's git source ref to a commit; it defaults to a git ls-remote resolver
-// when nil.
+// when nil, which GitCredentials authenticates.
 type SkillControllerDeps struct {
-	Resolve SkillResolveFunc
+	Resolve        SkillResolveFunc
+	GitCredentials types.GitCredentialFunc
 }
 
-// defaultSkillResolve pins a skill's git source by resolving its ref (an
-// explicit commit, else the branch, else the repo/HEAD default) to a concrete
-// commit SHA via ls-remote. It is intentionally lighter than the Plugin
-// resolver: a skill has no manifest/inventory to scan, so the controller only
-// needs the pin. Materialization (the actual checkout) happens at deploy time.
-func defaultSkillResolve(ctx context.Context, repo *v1alpha1.Repository) (string, error) {
+// defaultResolve pins a skill's ref (explicit commit, else branch, else HEAD) to
+// a commit SHA via ls-remote. Materialization happens at deploy time.
+func (c *SkillController) defaultResolve(ctx context.Context, namespace string, repo *v1alpha1.Repository) (string, error) {
 	ref := repo.Commit
 	if ref == "" {
 		ref = repo.Branch
 	}
+	var auth *url.Userinfo
+	if c.GitCredentials != nil {
+		var err error
+		// Retryable: a credential created after the Skill recovers on resync.
+		if auth, err = c.GitCredentials(ctx, namespace, repo); err != nil {
+			return "", fmt.Errorf("resolve git credentials: %w", err)
+		}
+	}
 	ctx, cancel := context.WithTimeout(ctx, skillResolveTimeout)
 	defer cancel()
-	return gitutil.ResolveRefContext(ctx, repo.URL, ref)
+	return gitutil.ResolveRefContext(ctx, repo.URL, ref, auth)
 }
 
 const skillResolveTimeout = 2 * time.Minute
@@ -74,9 +82,10 @@ type skillQueueKey struct {
 // updates), so the controller does not wake itself. Each controller opens its
 // OWN control-plane LISTEN subscription.
 type SkillController struct {
-	Store   skillStore
-	Resolve SkillResolveFunc
-	Wakeups <-chan struct{}
+	Store          skillStore
+	Resolve        SkillResolveFunc
+	GitCredentials types.GitCredentialFunc
+	Wakeups        <-chan struct{}
 
 	pool   *pgxpool.Pool
 	resync time.Duration
@@ -103,16 +112,17 @@ func NewSkillController(
 	if store == nil {
 		return nil, errors.New("skill controller: Skill store is required")
 	}
-	resolve := deps.Resolve
-	if resolve == nil {
-		resolve = defaultSkillResolve
+	c := &SkillController{
+		Store:          store,
+		Resolve:        deps.Resolve,
+		GitCredentials: deps.GitCredentials,
+		pool:           pool,
+		resync:         defaultControllerResyncInterval,
 	}
-	return &SkillController{
-		Store:   store,
-		Resolve: resolve,
-		pool:    pool,
-		resync:  defaultControllerResyncInterval,
-	}, nil
+	if c.Resolve == nil {
+		c.Resolve = c.defaultResolve
+	}
+	return c, nil
 }
 
 // Start begins the Skill controller's background reconcile loop. It owns the
@@ -122,7 +132,7 @@ func (c *SkillController) Start(ctx context.Context) error {
 		return errors.New("skill controller: Skill store is required")
 	}
 	if c.Resolve == nil {
-		c.Resolve = defaultSkillResolve
+		c.Resolve = c.defaultResolve
 	}
 	c.lifecycleMu.Lock()
 	defer c.lifecycleMu.Unlock()
@@ -186,7 +196,7 @@ func (c *SkillController) Run(ctx context.Context, resync time.Duration) error {
 		return errors.New("skill controller: Skill store is required")
 	}
 	if c.Resolve == nil {
-		c.Resolve = defaultSkillResolve
+		c.Resolve = c.defaultResolve
 	}
 	queue := c.workQueue()
 	defer queue.ShutDown()
@@ -343,7 +353,7 @@ func (c *SkillController) reconcile(ctx context.Context, sk *v1alpha1.Skill) (st
 		}
 	}
 
-	commit, err := c.Resolve(ctx, sk.Spec.Source.Repository)
+	commit, err := c.Resolve(ctx, ns, sk.Spec.Source.Repository)
 	if err != nil {
 		reason, terminal := classifySkillResolveErr(err)
 		bump := int64(0)

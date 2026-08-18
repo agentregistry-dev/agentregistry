@@ -122,10 +122,12 @@ func parseGitLabStyleURL(u *url.URL, parts []string, marker int) (cloneURL, bran
 // commit argument explicitly. branch is passed to `git clone --branch`; commit
 // triggers a fetch + checkout after the clone.
 //
+// A non-nil auth is spliced into the clone URL for a private repository.
+//
 // Every git invocation runs under ctx, so a caller can bound
 // clone/fetch/checkout time (and disk/CPU runaway) by passing a
 // context.WithTimeout. ctx cancellation kills the git child process.
-func CloneAndCopyContext(ctx context.Context, repoURL, branch, commit, subPath, targetDir string, verbose bool) error {
+func CloneAndCopyContext(ctx context.Context, repoURL, branch, commit, subPath, targetDir string, verbose bool, auth *url.Userinfo) error {
 	cloneURL, urlBranch, urlSubPath, err := ParseGitURL(repoURL)
 	if err != nil {
 		return fmt.Errorf("parse Git URL: %w", err)
@@ -142,6 +144,11 @@ func CloneAndCopyContext(ctx context.Context, repoURL, branch, commit, subPath, 
 		return err
 	}
 	if err := safeGitRef(commit); err != nil {
+		return err
+	}
+
+	cloneURL, safeURL, err := authenticate(cloneURL, auth)
+	if err != nil {
 		return err
 	}
 
@@ -163,7 +170,7 @@ func CloneAndCopyContext(ctx context.Context, repoURL, branch, commit, subPath, 
 		gitCmd.Stderr = os.Stderr
 	}
 	if err := gitCmd.Run(); err != nil {
-		return fmt.Errorf("clone repository: %w", err)
+		return fmt.Errorf("clone repository %s: %w", safeURL, err)
 	}
 
 	if commit != "" {
@@ -187,6 +194,20 @@ func CloneAndCopyContext(ctx context.Context, repoURL, branch, commit, subPath, 
 	}
 
 	return CopyRepoContents(tempDir, subPath, targetDir)
+}
+
+// authenticate splices auth into a clone URL and returns it with a redacted
+// form; errors must use the redacted form because status persists them.
+func authenticate(cloneURL string, auth *url.Userinfo) (execURL, safeURL string, err error) {
+	if auth == nil {
+		return cloneURL, cloneURL, nil
+	}
+	u, err := url.Parse(cloneURL)
+	if err != nil {
+		return "", "", fmt.Errorf("invalid clone URL: %w", err)
+	}
+	u.User = auth
+	return u.String(), u.Redacted(), nil
 }
 
 // safeGitRef rejects a ref/branch/commit that git could mis-parse as a
@@ -219,7 +240,9 @@ func isFullCommitSHA(s string) bool {
 // (after the URL-embedded branch is considered) resolves the remote's default
 // branch (HEAD). ctx bounds the ls-remote call. A ref that resolves to no
 // commit returns ErrRefNotFound (terminal).
-func ResolveRefContext(ctx context.Context, repoURL, ref string) (string, error) {
+//
+// A non-nil auth authenticates against a private remote.
+func ResolveRefContext(ctx context.Context, repoURL, ref string, auth *url.Userinfo) (string, error) {
 	if isFullCommitSHA(ref) {
 		return strings.ToLower(ref), nil
 	}
@@ -237,13 +260,17 @@ func ResolveRefContext(ctx context.Context, repoURL, ref string) (string, error)
 	if err := safeGitRef(lsRef); err != nil {
 		return "", err
 	}
+	cloneURL, safeURL, err := authenticate(cloneURL, auth)
+	if err != nil {
+		return "", err
+	}
 	out, err := exec.CommandContext(ctx, "git", "ls-remote", cloneURL, lsRef).Output()
 	if err != nil {
-		return "", fmt.Errorf("git ls-remote %s %q: %w", cloneURL, lsRef, err)
+		return "", fmt.Errorf("git ls-remote %s %q: %w", safeURL, lsRef, err)
 	}
 	sha := firstLSRemoteSHA(string(out), lsRef)
 	if sha == "" {
-		return "", fmt.Errorf("%w: %q in %s", ErrRefNotFound, lsRef, cloneURL)
+		return "", fmt.Errorf("%w: %q in %s", ErrRefNotFound, lsRef, safeURL)
 	}
 	return sha, nil
 }

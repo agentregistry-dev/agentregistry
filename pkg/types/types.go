@@ -5,6 +5,7 @@ package types
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"reflect"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -20,6 +21,10 @@ import (
 // This allows implementors to run additional migrations and wrap the base
 // store.
 type DatabaseFactory func(ctx context.Context, databaseURL string, baseStore database.Store, authz auth.Authorizer) (database.Store, error)
+
+// GitCredentialFunc resolves git credentials for a repository reference in the
+// referring resource's namespace. A nil Userinfo means "fetch anonymously".
+type GitCredentialFunc func(ctx context.Context, namespace string, repo *v1alpha1.Repository) (*url.Userinfo, error)
 
 // AuthorizeInput is the per-call context handed to
 // Authorizer + ListFilter callbacks. Mirrors
@@ -277,6 +282,10 @@ type AppOptions struct {
 	// TODO(controller): temporary synchronous-handler bridge; remove with
 	// reconciler admission/staging.
 	DeleteAdmission DeleteAdmission
+
+	// GitCredentials resolves Repository.CredentialsRef for source resolution.
+	// Nil (the default) fetches anonymously, so private repositories stay broken.
+	GitCredentials GitCredentialFunc
 
 	// ResolverWrapper decorates the shared ResourceRef resolver before route
 	// registration. Nil preserves the default store-backed resolver.
