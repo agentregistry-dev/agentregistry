@@ -127,39 +127,41 @@ func TestResolveRefRedactsCredentialsInErrors(t *testing.T) {
 	}
 }
 
-func TestPinRefCredentialFailureIsWrapped(t *testing.T) {
+func TestSourceCredentialFailureIsWrapped(t *testing.T) {
 	repo := &v1alpha1.Repository{URL: "https://github.com/org/repo", Branch: "main"}
 	want := errors.New("boom")
-	_, err := PinRef(context.Background(), "ns", repo, func(context.Context, string, *v1alpha1.Repository) (*url.Userinfo, error) {
+	src := NewSource(func(context.Context, string, *v1alpha1.Repository) (*url.Userinfo, error) {
 		return nil, want
 	})
+	_, err := src.Pin(context.Background(), "ns", repo)
 	if !errors.Is(err, want) {
-		t.Fatalf("PinRef error = %v, want it to wrap %v", err, want)
+		t.Fatalf("Pin error = %v, want it to wrap %v", err, want)
 	}
 	if !strings.Contains(err.Error(), "resolve git credentials") {
-		t.Fatalf("PinRef error = %v, want it to name credential resolution", err)
+		t.Fatalf("Pin error = %v, want it to name credential resolution", err)
 	}
 }
 
-func TestPinRefRequiresURL(t *testing.T) {
-	if _, err := PinRef(context.Background(), "ns", &v1alpha1.Repository{}, nil); err == nil {
-		t.Fatal("expected PinRef to reject a repository with no url")
+func TestSourceRequiresURL(t *testing.T) {
+	src := NewSource(nil)
+	if _, err := src.Pin(context.Background(), "ns", &v1alpha1.Repository{}); err == nil {
+		t.Fatal("expected Pin to reject a repository with no url")
 	}
-	if _, err := PinAndCopy(context.Background(), "ns", nil, t.TempDir(), nil); err == nil {
-		t.Fatal("expected PinAndCopy to reject a nil repository")
+	if _, err := src.Fetch(context.Background(), "ns", nil, t.TempDir()); err == nil {
+		t.Fatal("expected Fetch to reject a nil repository")
 	}
 }
 
-// A pinned full SHA needs no network, so PinRef must short-circuit to it.
-func TestPinRefPrefersExplicitCommit(t *testing.T) {
+// A pinned full SHA needs no network, so Pin must short-circuit to it.
+func TestSourcePinPrefersExplicitCommit(t *testing.T) {
 	const sha = "0123456789abcdef0123456789abcdef01234567"
-	got, err := PinRef(context.Background(), "ns", &v1alpha1.Repository{
+	got, err := NewSource(nil).Pin(context.Background(), "ns", &v1alpha1.Repository{
 		URL: "https://github.com/org/repo", Branch: "main", Commit: sha,
-	}, nil)
+	})
 	if err != nil {
-		t.Fatalf("PinRef: %v", err)
+		t.Fatalf("Pin: %v", err)
 	}
 	if got != sha {
-		t.Fatalf("PinRef = %q, want %q", got, sha)
+		t.Fatalf("Pin = %q, want %q", got, sha)
 	}
 }

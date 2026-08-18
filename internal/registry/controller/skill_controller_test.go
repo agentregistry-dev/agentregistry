@@ -69,6 +69,17 @@ func skillReadyReason(s *v1alpha1.Skill) string {
 	return ""
 }
 
+// fakePinner stands in for *gitutil.Source so reconcile tests stay off the
+// network.
+type fakePinner struct {
+	commit string
+	err    error
+}
+
+func (f fakePinner) Pin(context.Context, string, *v1alpha1.Repository) (string, error) {
+	return f.commit, f.err
+}
+
 func TestClassifySkillResolveErr(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -148,16 +159,12 @@ func TestSkillReconcile(t *testing.T) {
 		}
 		return s
 	}
-	resolveTo := func(commit string) SkillResolveFunc {
-		return func(context.Context, string, *v1alpha1.Repository) (string, error) { return commit, nil }
-	}
-	resolveErr := func(err error) SkillResolveFunc {
-		return func(context.Context, string, *v1alpha1.Repository) (string, error) { return "", err }
-	}
+	pinTo := func(commit string) gitPinner { return fakePinner{commit: commit} }
+	pinErr := func(err error) gitPinner { return fakePinner{err: err} }
 
 	t.Run("success transitions Progressing then Resolved and bumps observedGeneration", func(t *testing.T) {
 		store := newFakeSkillStore()
-		c := &SkillController{Store: store, Resolve: resolveTo("deadbeef")}
+		c := &SkillController{Store: store, Git: pinTo("deadbeef")}
 		outcome, _, err := c.reconcile(context.Background(), newSkill(2))
 		if err != nil || outcome != "resolved" {
 			t.Fatalf("reconcile = (%q, %v), want (resolved, nil)", outcome, err)
@@ -179,7 +186,7 @@ func TestSkillReconcile(t *testing.T) {
 
 	t.Run("terminal unsupported host forgets and bumps observedGeneration", func(t *testing.T) {
 		store := newFakeSkillStore()
-		c := &SkillController{Store: store, Resolve: resolveErr(fmt.Errorf("x: %w", gitutil.ErrUnsupportedHost))}
+		c := &SkillController{Store: store, Git: pinErr(fmt.Errorf("x: %w", gitutil.ErrUnsupportedHost))}
 		outcome, reason, err := c.reconcile(context.Background(), newSkill(3))
 		if err != nil {
 			t.Fatalf("terminal failure must return nil error (Forget), got %v", err)
@@ -198,7 +205,7 @@ func TestSkillReconcile(t *testing.T) {
 
 	t.Run("retryable failure requeues and leaves observedGeneration behind", func(t *testing.T) {
 		store := newFakeSkillStore()
-		c := &SkillController{Store: store, Resolve: resolveErr(errors.New("dial tcp: timeout"))}
+		c := &SkillController{Store: store, Git: pinErr(errors.New("dial tcp: timeout"))}
 		_, _, err := c.reconcile(context.Background(), newSkill(4))
 		if err == nil {
 			t.Fatal("retryable failure must return a non-nil error (requeue)")
@@ -214,7 +221,7 @@ func TestSkillReconcile(t *testing.T) {
 
 	t.Run("missing source is terminal SourceMissing", func(t *testing.T) {
 		store := newFakeSkillStore()
-		c := &SkillController{Store: store, Resolve: resolveTo("never-called")}
+		c := &SkillController{Store: store, Git: pinTo("never-called")}
 		s := &v1alpha1.Skill{Metadata: v1alpha1.ObjectMeta{Namespace: ns, Name: name, Tag: tag, Generation: 6}}
 		outcome, reason, err := c.reconcile(context.Background(), s)
 		if err != nil {

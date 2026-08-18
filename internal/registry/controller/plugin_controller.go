@@ -11,31 +11,19 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"k8s.io/client-go/util/workqueue"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/common/gitutil"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/plugins/bundle"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/plugins/source"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
-	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
-// PluginResolveFunc pins a plugin's source pointer and loads its bundle at that
-// pin. It is the only I/O-bearing dependency of the Plugin controller, so tests
-// inject a fake instead of touching the network.
-type PluginResolveFunc func(ctx context.Context, p *v1alpha1.Plugin) (*v1alpha1.PluginResolvedSource, *bundle.CanonicalBundle, error)
-
-// PluginControllerDeps are the Plugin controller's dependencies. Resolve pins a
-// plugin's source pointer and loads its bundle; it defaults to a git resolver
-// when nil, which GitCredentials authenticates.
+// PluginControllerDeps are the Plugin controller's dependencies. Git pins a
+// plugin's git source and fetches the tree at that pin; it defaults to an
+// anonymous source when nil, which cannot read private repositories.
 type PluginControllerDeps struct {
-	Resolve        PluginResolveFunc
-	GitCredentials types.GitCredentialFunc
-}
-
-// defaultResolve pins the plugin's source via git and loads the bundle at that
-// pin. The registry stores nothing: the bundle stays at its origin.
-func (c *PluginController) defaultResolve(ctx context.Context, p *v1alpha1.Plugin) (*v1alpha1.PluginResolvedSource, *bundle.CanonicalBundle, error) {
-	return source.Resolve(ctx, p, c.GitCredentials)
+	Git *gitutil.Source
 }
 
 // pluginStore is the subset of *v1alpha1store.Store the controller uses,
@@ -66,10 +54,9 @@ type pluginQueueKey struct {
 // opens its OWN control-plane LISTEN subscription (the Deployment controller has
 // a separate one); there is no shared listen loop.
 type PluginController struct {
-	Store          pluginStore
-	Resolve        PluginResolveFunc
-	GitCredentials types.GitCredentialFunc
-	Wakeups        <-chan struct{}
+	Store   pluginStore
+	Git     source.Fetcher
+	Wakeups <-chan struct{}
 
 	pool   *pgxpool.Pool
 	resync time.Duration
@@ -96,17 +83,16 @@ func NewPluginController(
 	if store == nil {
 		return nil, errors.New("plugin controller: Plugin store is required")
 	}
-	c := &PluginController{
-		Store:          store,
-		Resolve:        deps.Resolve,
-		GitCredentials: deps.GitCredentials,
-		pool:           pool,
-		resync:         defaultControllerResyncInterval,
+	git := deps.Git
+	if git == nil {
+		git = gitutil.NewSource(nil)
 	}
-	if c.Resolve == nil {
-		c.Resolve = c.defaultResolve
-	}
-	return c, nil
+	return &PluginController{
+		Store:  store,
+		Git:    git,
+		pool:   pool,
+		resync: defaultControllerResyncInterval,
+	}, nil
 }
 
 // Start begins the Plugin controller's background reconcile loop. It owns the
@@ -115,8 +101,8 @@ func (c *PluginController) Start(ctx context.Context) error {
 	if c == nil || c.Store == nil {
 		return errors.New("plugin controller: Plugin store is required")
 	}
-	if c.Resolve == nil {
-		c.Resolve = c.defaultResolve
+	if c.Git == nil {
+		return errors.New("plugin controller: Git source is required")
 	}
 	c.lifecycleMu.Lock()
 	defer c.lifecycleMu.Unlock()
@@ -179,8 +165,8 @@ func (c *PluginController) Run(ctx context.Context, resync time.Duration) error 
 	if c == nil || c.Store == nil {
 		return errors.New("plugin controller: Plugin store is required")
 	}
-	if c.Resolve == nil {
-		c.Resolve = c.defaultResolve
+	if c.Git == nil {
+		return errors.New("plugin controller: Git source is required")
 	}
 	queue := c.workQueue()
 	defer queue.ShutDown()
@@ -331,7 +317,7 @@ func (c *PluginController) reconcile(ctx context.Context, p *v1alpha1.Plugin) (s
 		}
 	}
 
-	resolved, b, err := c.Resolve(ctx, p)
+	resolved, b, err := source.Resolve(ctx, p, c.Git)
 	if err != nil {
 		reason, terminal := classifyResolveErr(err)
 		bump := int64(0)

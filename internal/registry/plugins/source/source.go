@@ -15,7 +15,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common/gitutil"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/plugins/bundle"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
-	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
 // cloneTimeout bounds a single resolve (ls-remote + shallow clone) so a slow or
@@ -32,6 +31,13 @@ var (
 	ErrSourceNotFound = errors.New("source: git ref not found")
 )
 
+// Fetcher pins a repository's ref and copies the tree at that pin into
+// targetDir, returning the commit. *gitutil.Source implements it; tests fake it
+// to keep resolve off the network.
+type Fetcher interface {
+	Fetch(ctx context.Context, namespace string, repo *v1alpha1.Repository, targetDir string) (commit string, err error)
+}
+
 // Resolve pins a plugin's source and loads its bundle at that pin. Transient
 // failures (network, clone, credential lookup) are returned as plain errors
 // (retryable); permanent rejections wrap ErrUnsupportedSource, and malformed
@@ -39,15 +45,14 @@ var (
 //
 // It shells out to system git, and only github.com is supported today (matching
 // existing skill/agent source behavior). OCI sources are not yet implemented.
-// creds resolves credentials for a private repository; nil fetches anonymously.
-func Resolve(ctx context.Context, p *v1alpha1.Plugin, creds types.GitCredentialFunc) (*v1alpha1.PluginResolvedSource, *bundle.CanonicalBundle, error) {
+func Resolve(ctx context.Context, p *v1alpha1.Plugin, git Fetcher) (*v1alpha1.PluginResolvedSource, *bundle.CanonicalBundle, error) {
 	if p == nil || p.Spec.Source == nil {
 		return nil, nil, fmt.Errorf("%w: plugin has no source", ErrUnsupportedSource)
 	}
 	o := p.Spec.Source
 	switch o.Type {
 	case v1alpha1.PluginSourceTypeGit:
-		return resolveGit(ctx, p.Metadata.NamespaceOrDefault(), o.Git, creds)
+		return resolveGit(ctx, p.Metadata.NamespaceOrDefault(), o.Git, git)
 	case v1alpha1.PluginSourceTypeOCI:
 		return nil, nil, fmt.Errorf("%w: oci plugin source not yet supported (use a git source)", ErrUnsupportedSource)
 	default:
@@ -55,7 +60,7 @@ func Resolve(ctx context.Context, p *v1alpha1.Plugin, creds types.GitCredentialF
 	}
 }
 
-func resolveGit(ctx context.Context, namespace string, g *v1alpha1.PluginSourceGit, creds types.GitCredentialFunc) (*v1alpha1.PluginResolvedSource, *bundle.CanonicalBundle, error) {
+func resolveGit(ctx context.Context, namespace string, g *v1alpha1.PluginSourceGit, git Fetcher) (*v1alpha1.PluginResolvedSource, *bundle.CanonicalBundle, error) {
 	if g == nil || g.Repository == nil || g.Repository.URL == "" {
 		return nil, nil, fmt.Errorf("%w: git source missing repository url", ErrUnsupportedSource)
 	}
@@ -74,7 +79,7 @@ func resolveGit(ctx context.Context, namespace string, g *v1alpha1.PluginSourceG
 
 	// Pin the ref to a concrete SHA so status records an immutable pointer, and
 	// copy the tree at that pin for bundle loading.
-	commit, err := gitutil.PinAndCopy(ctx, namespace, repo, dir, creds)
+	commit, err := git.Fetch(ctx, namespace, repo, dir)
 	if err != nil {
 		return nil, nil, classifyGitErr(err, "resolve git source")
 	}
