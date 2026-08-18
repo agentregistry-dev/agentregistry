@@ -3,13 +3,10 @@ package controller
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"reflect"
 	"testing"
 
-	"github.com/agentregistry-dev/agentregistry/internal/registry/plugins/bundle"
-	"github.com/agentregistry-dev/agentregistry/internal/registry/plugins/source"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/common/gitutil"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
@@ -95,61 +92,36 @@ func TestEnqueueAllSkipsUndecodableRow(t *testing.T) {
 	}
 }
 
+// TestPluginReconcile drives reconcile against a real (anonymous) git source.
+// Every case is chosen to fail before any network call: an unsupported source
+// type never reaches git, a non-GitHub host is rejected at URL parse, and an
+// option-like ref is rejected as argument injection.
 func TestPluginReconcile(t *testing.T) {
 	const ns, name, tag = "default", "p", "v1"
-	newPlugin := func(gen int64) *v1alpha1.Plugin {
+	newPlugin := func(gen int64, repo *v1alpha1.Repository) *v1alpha1.Plugin {
 		p := &v1alpha1.Plugin{Metadata: v1alpha1.ObjectMeta{Namespace: ns, Name: name, Tag: tag, Generation: gen}}
 		p.Spec.Source = &v1alpha1.PluginSource{
 			Type: v1alpha1.PluginSourceTypeGit,
-			Git:  &v1alpha1.PluginSourceGit{Repository: &v1alpha1.Repository{URL: "https://github.com/o/r", Branch: "main"}},
+			Git:  &v1alpha1.PluginSourceGit{Repository: repo},
 		}
 		return p
 	}
-	goodBundle := &bundle.CanonicalBundle{Files: map[string][]byte{
-		".claude-plugin/plugin.json": []byte(`{"name":"p"}`),
-		"skills/x/SKILL.md":          []byte("---\nname: x\n---\n"),
-	}}
-	gitPin := &v1alpha1.PluginResolvedSource{Type: v1alpha1.PluginSourceTypeGit, Commit: "deadbeef"}
+	git := gitutil.NewSource(nil)
 
-	t.Run("success transitions Progressing then Resolved and bumps observedGeneration", func(t *testing.T) {
+	t.Run("terminal unsupported source announces Progressing, forgets, and bumps observedGeneration", func(t *testing.T) {
 		store := newFakePluginStore()
-		c := &PluginController{Store: store}
-		p := newPlugin(2)
-		if err := c.announceProgressing(context.Background(), p); err != nil {
-			t.Fatalf("announceProgressing: %v", err)
-		}
-		outcome, _, err := c.recordResolve(context.Background(), p, gitPin, goodBundle, nil)
-		if err != nil || outcome != "resolved" {
-			t.Fatalf("reconcile = (%q, %v), want (resolved, nil)", outcome, err)
-		}
-		if !reflect.DeepEqual(store.reasons, []string{"Progressing", "Resolved"}) {
-			t.Fatalf("reason sequence = %v, want [Progressing Resolved]", store.reasons)
-		}
-		got := store.plugin(t, ns, name, tag)
-		if !got.Status.IsConditionTrue(pluginReadyCondition) {
-			t.Error("expected Ready=True")
-		}
-		if got.Status.ObservedGeneration != 2 {
-			t.Errorf("observedGeneration = %d, want 2", got.Status.ObservedGeneration)
-		}
-		if got.Status.ResolvedSource == nil || got.Status.ResolvedSource.Commit != "deadbeef" {
-			t.Errorf("resolvedSource = %+v", got.Status.ResolvedSource)
-		}
-		if got.Status.Manifest == nil || got.Status.Inventory == nil {
-			t.Error("expected manifest + inventory populated")
-		}
-	})
-
-	t.Run("terminal unsupported source forgets and bumps observedGeneration", func(t *testing.T) {
-		store := newFakePluginStore()
-		c := &PluginController{Store: store}
-		err := fmt.Errorf("x: %w", source.ErrUnsupportedSource)
-		outcome, reason, err := c.recordResolve(context.Background(), newPlugin(3), nil, nil, err)
+		c := &PluginController{Store: store, Git: git}
+		p := newPlugin(3, &v1alpha1.Repository{URL: "https://git.example.com/o/r", Branch: "main"})
+		outcome, reason, err := c.reconcile(context.Background(), p)
 		if err != nil {
 			t.Fatalf("terminal failure must return nil error (Forget), got %v", err)
 		}
 		if outcome != "failed" || reason != "SourceUnsupported" {
 			t.Fatalf("got (%q, %q), want (failed, SourceUnsupported)", outcome, reason)
+		}
+		// Progressing is patched before the origin is touched.
+		if !reflect.DeepEqual(store.reasons, []string{"Progressing", "SourceUnsupported"}) {
+			t.Fatalf("reason sequence = %v, want [Progressing SourceUnsupported]", store.reasons)
 		}
 		got := store.plugin(t, ns, name, tag)
 		if got.Status.ObservedGeneration != 3 {
@@ -162,8 +134,9 @@ func TestPluginReconcile(t *testing.T) {
 
 	t.Run("retryable failure requeues and leaves observedGeneration behind", func(t *testing.T) {
 		store := newFakePluginStore()
-		c := &PluginController{Store: store}
-		_, _, err := c.recordResolve(context.Background(), newPlugin(4), nil, nil, errors.New("dial tcp: timeout"))
+		c := &PluginController{Store: store, Git: git}
+		p := newPlugin(4, &v1alpha1.Repository{URL: "https://github.com/o/r", Branch: "--upload-pack=touch /tmp/pwn"})
+		_, _, err := c.reconcile(context.Background(), p)
 		if err == nil {
 			t.Fatal("retryable failure must return a non-nil error (requeue)")
 		}
@@ -176,17 +149,20 @@ func TestPluginReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("malformed manifest is terminal SourceInvalid", func(t *testing.T) {
+	t.Run("oci source is terminal SourceUnsupported", func(t *testing.T) {
 		store := newFakePluginStore()
-		badBundle := &bundle.CanonicalBundle{Files: map[string][]byte{".claude-plugin/plugin.json": []byte("{bad")}}
-		c := &PluginController{Store: store}
-		pin := &v1alpha1.PluginResolvedSource{Type: v1alpha1.PluginSourceTypeGit, Commit: "c"}
-		outcome, reason, err := c.recordResolve(context.Background(), newPlugin(5), pin, badBundle, nil)
+		c := &PluginController{Store: store, Git: git}
+		p := newPlugin(5, nil)
+		p.Spec.Source = &v1alpha1.PluginSource{
+			Type: v1alpha1.PluginSourceTypeOCI,
+			OCI:  &v1alpha1.PluginSourceOCI{Reference: "ghcr.io/o/p@sha256:abc"},
+		}
+		outcome, reason, err := c.reconcile(context.Background(), p)
 		if err != nil {
 			t.Fatalf("terminal must Forget, got %v", err)
 		}
-		if outcome != "failed" || reason != "SourceInvalid" {
-			t.Fatalf("got (%q, %q), want (failed, SourceInvalid)", outcome, reason)
+		if outcome != "failed" || reason != "SourceUnsupported" {
+			t.Fatalf("got (%q, %q), want (failed, SourceUnsupported)", outcome, reason)
 		}
 		if got := store.plugin(t, ns, name, tag); got.Status.ObservedGeneration != 5 {
 			t.Errorf("observedGeneration = %d, want 5", got.Status.ObservedGeneration)

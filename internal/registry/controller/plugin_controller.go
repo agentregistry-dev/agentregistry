@@ -303,41 +303,21 @@ func (c *PluginController) reconcileKey(ctx context.Context, key pluginQueueKey)
 // (unsupported origin, malformed bundle) are surfaced as a status condition
 // with a nil error (Forget).
 func (c *PluginController) reconcile(ctx context.Context, p *v1alpha1.Plugin) (string, string, error) {
-	if err := c.announceProgressing(ctx, p); err != nil {
-		return "", "", err
-	}
-	resolved, b, err := source.Resolve(ctx, p, c.Git)
-	return c.recordResolve(ctx, p, resolved, b, err)
-}
-
-// announceProgressing marks a first-observed plugin Progressing before any I/O.
-// No observedGeneration bump, so a crash mid-reconcile re-runs. On retries the
-// condition already carries the last failure reason; don't flap it back.
-func (c *PluginController) announceProgressing(ctx context.Context, p *v1alpha1.Plugin) error {
-	if p.Status.GetCondition(pluginReadyCondition) != nil {
-		return nil
-	}
-	return c.patchStatus(ctx, p.Metadata.NamespaceOrDefault(), p.Metadata.Name, p.Metadata.Tag, 0,
-		func(st *v1alpha1.PluginStatus) {
-			setReady(st, v1alpha1.ConditionFalse, "Progressing", "resolving plugin source")
-		})
-}
-
-// recordResolve records a resolve outcome in status: a terminal failure bumps
-// observedGeneration and is forgotten, a retryable one is returned for backoff,
-// and success stores the pin plus the scanned manifest/inventory. It is the
-// controller's whole status machine, so tests drive it with fabricated resolve
-// results instead of touching the network.
-func (c *PluginController) recordResolve(
-	ctx context.Context,
-	p *v1alpha1.Plugin,
-	resolved *v1alpha1.PluginResolvedSource,
-	b *bundle.CanonicalBundle,
-	err error,
-) (string, string, error) {
 	gen := p.Metadata.Generation
 	ns, name, tag := p.Metadata.NamespaceOrDefault(), p.Metadata.Name, p.Metadata.Tag
 
+	// First observe: announce Progressing (no observedGeneration bump, so a
+	// crash mid-reconcile re-runs). On retries the condition already carries the
+	// last failure reason; don't flap it back to Progressing.
+	if p.Status.GetCondition(pluginReadyCondition) == nil {
+		if err := c.patchStatus(ctx, ns, name, tag, 0, func(st *v1alpha1.PluginStatus) {
+			setReady(st, v1alpha1.ConditionFalse, "Progressing", "resolving plugin source")
+		}); err != nil {
+			return "", "", err
+		}
+	}
+
+	resolved, b, err := source.Resolve(ctx, p, c.Git)
 	if err != nil {
 		reason, terminal := classifyResolveErr(err)
 		bump := int64(0)
