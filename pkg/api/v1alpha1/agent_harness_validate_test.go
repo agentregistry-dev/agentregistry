@@ -99,6 +99,30 @@ func TestAgentHarnessValidate(t *testing.T) {
 			},
 			wantErr: "skills/instructions require compatibleHarnesses or source image",
 		},
+		{
+			name: "whitespace image does not count as a source image",
+			spec: AgentSpec{
+				Skills: []ResourceRef{{Kind: KindSkill, Name: "x"}},
+				Source: &AgentSource{Image: "   "},
+			},
+			wantErr: "skills/instructions require compatibleHarnesses or source image",
+		},
+		{
+			name: "repository source does not count for skills: nothing delivers composed files into a repository-built artifact",
+			spec: AgentSpec{
+				Skills: []ResourceRef{{Kind: KindSkill, Name: "x"}},
+				Source: &AgentSource{Repository: &Repository{URL: "https://github.com/org/agent"}},
+			},
+			wantErr: "skills/instructions require compatibleHarnesses or source image",
+		},
+		{
+			name: "repository source does not count for plugins",
+			spec: AgentSpec{
+				Plugins: []ResourceRef{{Kind: KindPlugin, Name: "x"}},
+				Source:  &AgentSource{Repository: &Repository{URL: "https://github.com/org/agent"}},
+			},
+			wantErr: "plugins require compatibleHarnesses or source image",
+		},
 	}
 
 	for _, tt := range tests {
