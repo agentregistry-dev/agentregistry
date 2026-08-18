@@ -63,14 +63,11 @@ func (f *fakePluginStore) plugin(t *testing.T, ns, name, tag string) *v1alpha1.P
 	return p
 }
 
-type fakeResolver struct {
-	resolved *v1alpha1.PluginResolvedSource
-	bundle   *bundle.CanonicalBundle
-	err      error
-}
-
-func (r fakeResolver) Resolve(context.Context, *v1alpha1.Plugin) (*v1alpha1.PluginResolvedSource, *bundle.CanonicalBundle, error) {
-	return r.resolved, r.bundle, r.err
+// fakeResolve builds a PluginResolveFunc returning fixed results.
+func fakeResolve(resolved *v1alpha1.PluginResolvedSource, b *bundle.CanonicalBundle, err error) PluginResolveFunc {
+	return func(context.Context, *v1alpha1.Plugin) (*v1alpha1.PluginResolvedSource, *bundle.CanonicalBundle, error) {
+		return resolved, b, err
+	}
 }
 
 func readyReason(p *v1alpha1.Plugin) string {
@@ -95,7 +92,7 @@ func TestEnqueueAllSkipsUndecodableRow(t *testing.T) {
 		rawOf("bad", `not json`),                   // EnvelopeFromRaw fails -> skip
 		rawOf("good", `{"source":{"type":"git"}}`), // valid, needs reconcile -> enqueue
 	}
-	c := &PluginController{Store: store, Resolver: fakeResolver{}}
+	c := &PluginController{Store: store, Resolve: fakeResolve(nil, nil, nil)}
 
 	if err := c.enqueueAll(context.Background()); err != nil {
 		t.Fatalf("enqueueAll must not error on an undecodable row, got %v", err)
@@ -122,10 +119,8 @@ func TestPluginReconcile(t *testing.T) {
 
 	t.Run("success transitions Progressing then Resolved and bumps observedGeneration", func(t *testing.T) {
 		store := newFakePluginStore()
-		c := &PluginController{Store: store, Resolver: fakeResolver{
-			resolved: &v1alpha1.PluginResolvedSource{Type: v1alpha1.PluginSourceTypeGit, Commit: "deadbeef"},
-			bundle:   goodBundle,
-		}}
+		c := &PluginController{Store: store, Resolve: fakeResolve(
+			&v1alpha1.PluginResolvedSource{Type: v1alpha1.PluginSourceTypeGit, Commit: "deadbeef"}, goodBundle, nil)}
 		outcome, _, err := c.reconcile(context.Background(), newPlugin(2))
 		if err != nil || outcome != "resolved" {
 			t.Fatalf("reconcile = (%q, %v), want (resolved, nil)", outcome, err)
@@ -150,7 +145,7 @@ func TestPluginReconcile(t *testing.T) {
 
 	t.Run("terminal unsupported source forgets and bumps observedGeneration", func(t *testing.T) {
 		store := newFakePluginStore()
-		c := &PluginController{Store: store, Resolver: fakeResolver{err: fmt.Errorf("x: %w", source.ErrUnsupportedSource)}}
+		c := &PluginController{Store: store, Resolve: fakeResolve(nil, nil, fmt.Errorf("x: %w", source.ErrUnsupportedSource))}
 		outcome, reason, err := c.reconcile(context.Background(), newPlugin(3))
 		if err != nil {
 			t.Fatalf("terminal failure must return nil error (Forget), got %v", err)
@@ -169,7 +164,7 @@ func TestPluginReconcile(t *testing.T) {
 
 	t.Run("retryable failure requeues and leaves observedGeneration behind", func(t *testing.T) {
 		store := newFakePluginStore()
-		c := &PluginController{Store: store, Resolver: fakeResolver{err: errors.New("dial tcp: timeout")}}
+		c := &PluginController{Store: store, Resolve: fakeResolve(nil, nil, errors.New("dial tcp: timeout"))}
 		_, _, err := c.reconcile(context.Background(), newPlugin(4))
 		if err == nil {
 			t.Fatal("retryable failure must return a non-nil error (requeue)")
@@ -186,10 +181,8 @@ func TestPluginReconcile(t *testing.T) {
 	t.Run("malformed manifest is terminal SourceInvalid", func(t *testing.T) {
 		store := newFakePluginStore()
 		badBundle := &bundle.CanonicalBundle{Files: map[string][]byte{".claude-plugin/plugin.json": []byte("{bad")}}
-		c := &PluginController{Store: store, Resolver: fakeResolver{
-			resolved: &v1alpha1.PluginResolvedSource{Type: v1alpha1.PluginSourceTypeGit, Commit: "c"},
-			bundle:   badBundle,
-		}}
+		c := &PluginController{Store: store, Resolve: fakeResolve(
+			&v1alpha1.PluginResolvedSource{Type: v1alpha1.PluginSourceTypeGit, Commit: "c"}, badBundle, nil)}
 		outcome, reason, err := c.reconcile(context.Background(), newPlugin(5))
 		if err != nil {
 			t.Fatalf("terminal must Forget, got %v", err)

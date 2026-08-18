@@ -9,7 +9,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"time"
 
@@ -33,35 +32,22 @@ var (
 	ErrSourceNotFound = errors.New("source: git ref not found")
 )
 
-// Resolver pins a plugin's source and loads its bundle. Transient failures
-// (network, clone) are returned as plain errors (retryable); permanent
-// rejections wrap ErrUnsupportedSource, and malformed bundle content wraps
-// bundle.ErrInvalidBundle — both terminal.
-type Resolver interface {
-	Resolve(ctx context.Context, p *v1alpha1.Plugin) (*v1alpha1.PluginResolvedSource, *bundle.CanonicalBundle, error)
-}
-
-// GitResolver resolves git sources: it resolves the ref to a commit SHA via
-// `git ls-remote` (no clone) and then shallow-clones that exact commit. It
-// shells out to system git, and only github.com is supported today (matching
+// Resolve pins a plugin's source and loads its bundle at that pin. Transient
+// failures (network, clone, credential lookup) are returned as plain errors
+// (retryable); permanent rejections wrap ErrUnsupportedSource, and malformed
+// bundle content wraps bundle.ErrInvalidBundle — both terminal.
+//
+// It shells out to system git, and only github.com is supported today (matching
 // existing skill/agent source behavior). OCI sources are not yet implemented.
-type GitResolver struct {
-	credentials types.GitCredentialFunc
-}
-
-// NewGitResolver returns a git-backed Resolver; nil credentials fetch anonymously.
-func NewGitResolver(credentials types.GitCredentialFunc) *GitResolver {
-	return &GitResolver{credentials: credentials}
-}
-
-func (r *GitResolver) Resolve(ctx context.Context, p *v1alpha1.Plugin) (*v1alpha1.PluginResolvedSource, *bundle.CanonicalBundle, error) {
+// creds resolves credentials for a private repository; nil fetches anonymously.
+func Resolve(ctx context.Context, p *v1alpha1.Plugin, creds types.GitCredentialFunc) (*v1alpha1.PluginResolvedSource, *bundle.CanonicalBundle, error) {
 	if p == nil || p.Spec.Source == nil {
 		return nil, nil, fmt.Errorf("%w: plugin has no source", ErrUnsupportedSource)
 	}
 	o := p.Spec.Source
 	switch o.Type {
 	case v1alpha1.PluginSourceTypeGit:
-		return r.resolveGit(ctx, p.Metadata.NamespaceOrDefault(), o.Git)
+		return resolveGit(ctx, p.Metadata.NamespaceOrDefault(), o.Git, creds)
 	case v1alpha1.PluginSourceTypeOCI:
 		return nil, nil, fmt.Errorf("%w: oci plugin source not yet supported (use a git source)", ErrUnsupportedSource)
 	default:
@@ -69,7 +55,7 @@ func (r *GitResolver) Resolve(ctx context.Context, p *v1alpha1.Plugin) (*v1alpha
 	}
 }
 
-func (r *GitResolver) resolveGit(ctx context.Context, namespace string, g *v1alpha1.PluginSourceGit) (*v1alpha1.PluginResolvedSource, *bundle.CanonicalBundle, error) {
+func resolveGit(ctx context.Context, namespace string, g *v1alpha1.PluginSourceGit, creds types.GitCredentialFunc) (*v1alpha1.PluginResolvedSource, *bundle.CanonicalBundle, error) {
 	if g == nil || g.Repository == nil || g.Repository.URL == "" {
 		return nil, nil, fmt.Errorf("%w: git source missing repository url", ErrUnsupportedSource)
 	}
@@ -80,36 +66,17 @@ func (r *GitResolver) resolveGit(ctx context.Context, namespace string, g *v1alp
 	ctx, cancel := context.WithTimeout(ctx, cloneTimeout)
 	defer cancel()
 
-	var auth *url.Userinfo
-	if r.credentials != nil {
-		var err error
-		// Retryable: a credential created after the Plugin recovers on resync.
-		if auth, err = r.credentials(ctx, namespace, repo); err != nil {
-			return nil, nil, fmt.Errorf("resolve git credentials: %w", err)
-		}
-	}
-
-	// Prefer an explicit commit; otherwise resolve the branch/tag (or the
-	// remote default HEAD) to a concrete SHA so status records an immutable pin.
-	ref := repo.Commit
-	if ref == "" {
-		ref = repo.Branch
-	}
-	commit, err := gitutil.ResolveRefContext(ctx, repo.URL, ref, auth)
-	if err != nil {
-		return nil, nil, classifyGitErr(err, "resolve git ref "+ref)
-	}
-
 	dir, err := os.MkdirTemp("", "arctl-plugin-src-*")
 	if err != nil {
 		return nil, nil, err
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 
-	// branch="" + commit=resolved => clone the default branch shallow, then
-	// fetch+checkout the exact pinned commit (gitutil does the fetch-by-SHA).
-	if err := gitutil.CloneAndCopyContext(ctx, repo.URL, "", commit, repo.Subfolder, dir, false, auth); err != nil {
-		return nil, nil, classifyGitErr(err, "clone git source")
+	// Pin the ref to a concrete SHA so status records an immutable pointer, and
+	// copy the tree at that pin for bundle loading.
+	commit, err := gitutil.PinAndCopy(ctx, namespace, repo, dir, creds)
+	if err != nil {
+		return nil, nil, classifyGitErr(err, "resolve git source")
 	}
 
 	b, err := bundle.FromDir(dir)

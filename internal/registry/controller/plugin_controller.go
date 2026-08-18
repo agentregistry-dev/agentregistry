@@ -16,12 +16,26 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
-// PluginControllerDeps are the Plugin controller's dependencies. Resolver pins
-// a plugin's source pointer and loads its bundle; it is required.
+// PluginResolveFunc pins a plugin's source pointer and loads its bundle at that
+// pin. It is the only I/O-bearing dependency of the Plugin controller, so tests
+// inject a fake instead of touching the network.
+type PluginResolveFunc func(ctx context.Context, p *v1alpha1.Plugin) (*v1alpha1.PluginResolvedSource, *bundle.CanonicalBundle, error)
+
+// PluginControllerDeps are the Plugin controller's dependencies. Resolve pins a
+// plugin's source pointer and loads its bundle; it defaults to a git resolver
+// when nil, which GitCredentials authenticates.
 type PluginControllerDeps struct {
-	Resolver source.Resolver
+	Resolve        PluginResolveFunc
+	GitCredentials types.GitCredentialFunc
+}
+
+// defaultResolve pins the plugin's source via git and loads the bundle at that
+// pin. The registry stores nothing: the bundle stays at its origin.
+func (c *PluginController) defaultResolve(ctx context.Context, p *v1alpha1.Plugin) (*v1alpha1.PluginResolvedSource, *bundle.CanonicalBundle, error) {
+	return source.Resolve(ctx, p, c.GitCredentials)
 }
 
 // pluginStore is the subset of *v1alpha1store.Store the controller uses,
@@ -52,9 +66,10 @@ type pluginQueueKey struct {
 // opens its OWN control-plane LISTEN subscription (the Deployment controller has
 // a separate one); there is no shared listen loop.
 type PluginController struct {
-	Store    pluginStore
-	Resolver source.Resolver
-	Wakeups  <-chan struct{}
+	Store          pluginStore
+	Resolve        PluginResolveFunc
+	GitCredentials types.GitCredentialFunc
+	Wakeups        <-chan struct{}
 
 	pool   *pgxpool.Pool
 	resync time.Duration
@@ -81,15 +96,17 @@ func NewPluginController(
 	if store == nil {
 		return nil, errors.New("plugin controller: Plugin store is required")
 	}
-	if deps.Resolver == nil {
-		return nil, errors.New("plugin controller: Resolver is required")
+	c := &PluginController{
+		Store:          store,
+		Resolve:        deps.Resolve,
+		GitCredentials: deps.GitCredentials,
+		pool:           pool,
+		resync:         defaultControllerResyncInterval,
 	}
-	return &PluginController{
-		Store:    store,
-		Resolver: deps.Resolver,
-		pool:     pool,
-		resync:   defaultControllerResyncInterval,
-	}, nil
+	if c.Resolve == nil {
+		c.Resolve = c.defaultResolve
+	}
+	return c, nil
 }
 
 // Start begins the Plugin controller's background reconcile loop. It owns the
@@ -98,8 +115,8 @@ func (c *PluginController) Start(ctx context.Context) error {
 	if c == nil || c.Store == nil {
 		return errors.New("plugin controller: Plugin store is required")
 	}
-	if c.Resolver == nil {
-		return errors.New("plugin controller: Resolver is required")
+	if c.Resolve == nil {
+		c.Resolve = c.defaultResolve
 	}
 	c.lifecycleMu.Lock()
 	defer c.lifecycleMu.Unlock()
@@ -162,8 +179,8 @@ func (c *PluginController) Run(ctx context.Context, resync time.Duration) error 
 	if c == nil || c.Store == nil {
 		return errors.New("plugin controller: Plugin store is required")
 	}
-	if c.Resolver == nil {
-		return errors.New("plugin controller: Resolver is required")
+	if c.Resolve == nil {
+		c.Resolve = c.defaultResolve
 	}
 	queue := c.workQueue()
 	defer queue.ShutDown()
@@ -314,7 +331,7 @@ func (c *PluginController) reconcile(ctx context.Context, p *v1alpha1.Plugin) (s
 		}
 	}
 
-	resolved, b, err := c.Resolver.Resolve(ctx, p)
+	resolved, b, err := c.Resolve(ctx, p)
 	if err != nil {
 		reason, terminal := classifyResolveErr(err)
 		bump := int64(0)

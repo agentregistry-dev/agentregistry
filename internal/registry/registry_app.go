@@ -27,7 +27,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	controller "github.com/agentregistry-dev/agentregistry/internal/registry/controller"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
-	pluginsource "github.com/agentregistry-dev/agentregistry/internal/registry/plugins/source"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
@@ -105,7 +104,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	// The Plugin controller resolves each plugin's pinned source pointer to a
 	// concrete commit/digest and records the manifest/inventory in PluginStatus
 	// out of band of the API write — same pattern as the Deployment controller.
-	pluginController, err := controller.NewPluginController(pool, stores, controller.PluginControllerDeps{Resolver: pluginsource.NewGitResolver(options.GitCredentials)})
+	pluginController, err := controller.NewPluginController(pool, stores, controller.PluginControllerDeps{GitCredentials: options.GitCredentials})
 	if err != nil {
 		return fmt.Errorf("create plugin controller: %w", err)
 	}

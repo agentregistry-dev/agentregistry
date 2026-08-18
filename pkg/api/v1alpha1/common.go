@@ -12,14 +12,7 @@ type Repository struct {
 	Commit    string `json:"commit,omitempty" yaml:"commit,omitempty"`
 	Subfolder string `json:"subfolder,omitempty" yaml:"subfolder,omitempty"`
 
-	// CredentialsRef names credentials for a private repository.
-	CredentialsRef *CredentialsRef `json:"credentialsRef,omitempty" yaml:"credentialsRef,omitempty"`
-}
-
-// CredentialsRef names a credential source. It carries no key: git needs two
-// values, so resolvers read a username/password pair.
-type CredentialsRef struct {
-	// Namespace defaults to the referring resource's namespace.
-	Namespace string `json:"namespace,omitempty" yaml:"namespace,omitempty"`
-	Name      string `json:"name" yaml:"name"`
+	// SecretRef names credentials for a private repository. Key is ignored: git
+	// needs two values, so resolvers read a username/password pair.
+	SecretRef *SecretKeyRef `json:"secretRef,omitempty" yaml:"secretRef,omitempty"`
 }

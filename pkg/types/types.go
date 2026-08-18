@@ -283,7 +283,7 @@ type AppOptions struct {
 	// reconciler admission/staging.
 	DeleteAdmission DeleteAdmission
 
-	// GitCredentials resolves Repository.CredentialsRef for source resolution.
+	// GitCredentials resolves Repository.SecretRef for source resolution.
 	// Nil (the default) fetches anonymously, so private repositories stay broken.
 	GitCredentials GitCredentialFunc
 

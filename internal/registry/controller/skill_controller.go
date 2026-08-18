@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
 	"sync"
 	"time"
 
@@ -35,21 +34,9 @@ type SkillControllerDeps struct {
 // defaultResolve pins a skill's ref (explicit commit, else branch, else HEAD) to
 // a commit SHA via ls-remote. Materialization happens at deploy time.
 func (c *SkillController) defaultResolve(ctx context.Context, namespace string, repo *v1alpha1.Repository) (string, error) {
-	ref := repo.Commit
-	if ref == "" {
-		ref = repo.Branch
-	}
-	var auth *url.Userinfo
-	if c.GitCredentials != nil {
-		var err error
-		// Retryable: a credential created after the Skill recovers on resync.
-		if auth, err = c.GitCredentials(ctx, namespace, repo); err != nil {
-			return "", fmt.Errorf("resolve git credentials: %w", err)
-		}
-	}
 	ctx, cancel := context.WithTimeout(ctx, skillResolveTimeout)
 	defer cancel()
-	return gitutil.ResolveRefContext(ctx, repo.URL, ref, auth)
+	return gitutil.PinRef(ctx, namespace, repo, c.GitCredentials)
 }
 
 const skillResolveTimeout = 2 * time.Minute
