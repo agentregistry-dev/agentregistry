@@ -108,6 +108,14 @@ func TestAgentHarnessValidate(t *testing.T) {
 			wantErr: "skills/instructions require compatibleHarnesses or source image",
 		},
 		{
+			name: "image with surrounding whitespace is rejected",
+			spec: AgentSpec{
+				Skills: []ResourceRef{{Kind: KindSkill, Name: "x"}},
+				Source: &AgentSource{Image: " ghcr.io/org/agent:1.0.0 "},
+			},
+			wantErr: "spec.source.image",
+		},
+		{
 			name: "repository source does not count for skills: nothing delivers composed files into a repository-built artifact",
 			spec: AgentSpec{
 				Skills: []ResourceRef{{Kind: KindSkill, Name: "x"}},

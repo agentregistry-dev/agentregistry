@@ -67,6 +67,12 @@ func validateAgentSpec(s *AgentSpec) FieldErrors {
 	errs.Append("spec.title", validateTitle(s.Title))
 	errs.Append("spec.iconUrl", validateIconURL(s.IconURL))
 	if s.Source != nil {
+		if s.Source.Image != strings.TrimSpace(s.Source.Image) {
+			errs.Append(
+				"spec.source.image",
+				fmt.Errorf("%w: must not contain leading or trailing whitespace", ErrInvalidFormat),
+			)
+		}
 		for _, e := range validateRepository(s.Source.Repository) {
 			errs.Append("spec.source."+e.Path, e.Cause)
 		}
