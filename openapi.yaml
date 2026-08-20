@@ -565,6 +565,14 @@ components:
       required:
       - items
       type: object
+    LocalSecretReference:
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+      required:
+      - name
+      type: object
     MCPArgument:
       additionalProperties: false
       properties:
@@ -1365,8 +1373,8 @@ components:
           type: string
         commit:
           type: string
-        secretRef:
-          $ref: '#/components/schemas/SecretKeyRef'
+        credentialsRef:
+          $ref: '#/components/schemas/LocalSecretReference'
         subfolder:
           type: string
         url:

@@ -272,6 +272,10 @@ export type ListOutputSkillBody = {
     nextCursor?: string;
 };
 
+export type LocalSecretReference = {
+    name: string;
+};
+
 export type McpArgument = {
     name?: string;
     type: string;
@@ -637,7 +641,7 @@ export type PromptSpec = {
 export type Repository = {
     branch?: string;
     commit?: string;
-    secretRef?: SecretKeyRef;
+    credentialsRef?: LocalSecretReference;
     subfolder?: string;
     url?: string;
 };

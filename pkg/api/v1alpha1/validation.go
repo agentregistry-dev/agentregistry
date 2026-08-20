@@ -245,8 +245,10 @@ func validateRepository(r *Repository) FieldErrors {
 	if r == nil {
 		return errs
 	}
-	if r.SecretRef != nil {
-		errs = append(errs, validateSecretKeyRef(*r.SecretRef, "repository.secretRef")...)
+	if r.CredentialsRef != nil {
+		if err := validateNameField(r.CredentialsRef.Name); err != nil {
+			errs.Append("repository.credentialsRef.name", err)
+		}
 	}
 	if r.URL != "" {
 		if err := validateWebsiteURL(r.URL); err != nil {
