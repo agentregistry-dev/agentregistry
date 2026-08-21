@@ -244,8 +244,12 @@ func TestDefaultApplyFingerprintIncludesAgentHarnessCompositionDependencies(t *t
 	}
 }
 
-func TestDefaultApplyFingerprintIgnoresHarnessCompositionWhenDeploymentDoesNotSelectHarness(t *testing.T) {
+func TestDefaultApplyFingerprintIncludesImageAgentCompositionDependencies(t *testing.T) {
 	in := testApplyInput()
+	in.Deployment.Spec.TargetRef = v1alpha1.ResourceRef{
+		Kind: v1alpha1.KindAgent,
+		Name: "assistant",
+	}
 	in.Target = &v1alpha1.Agent{
 		TypeMeta: v1alpha1.TypeMeta{Kind: v1alpha1.KindAgent},
 		Metadata: v1alpha1.ObjectMeta{
@@ -253,24 +257,80 @@ func TestDefaultApplyFingerprintIgnoresHarnessCompositionWhenDeploymentDoesNotSe
 			Name:      "assistant",
 		},
 		Spec: v1alpha1.AgentSpec{
-			CompatibleHarnesses: []v1alpha1.HarnessCompatibility{{Type: "claude-code"}},
-			Plugins:             []v1alpha1.ResourceRef{{Name: "deploy-tools"}},
-			Skills:              []v1alpha1.ResourceRef{{Name: "weather"}},
-			Instructions:        &v1alpha1.ResourceRef{Name: "writer-instructions"},
+			Source:       &v1alpha1.AgentSource{Image: "ghcr.io/example/assistant:1.0.0"},
+			Plugins:      []v1alpha1.ResourceRef{{Name: "deploy-tools"}},
+			Skills:       []v1alpha1.ResourceRef{{Name: "weather"}},
+			Instructions: &v1alpha1.ResourceRef{Name: "writer-instructions"},
 		},
 	}
 
+	pluginCommit := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	skillCommit := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	promptText := "Write concise rollout notes."
 	in.Getter = func(_ context.Context, ref v1alpha1.ResourceRef) (v1alpha1.Object, error) {
-		t.Fatalf("unexpected dependency resolution without deployment harness selection: %+v", ref)
-		return nil, nil
+		switch ref.Kind {
+		case v1alpha1.KindPlugin:
+			return testPlugin(ref.Namespace, ref.Name, pluginCommit), nil
+		case v1alpha1.KindSkill:
+			return testSkill(ref.Namespace, ref.Name, skillCommit), nil
+		case v1alpha1.KindPrompt:
+			return testPrompt(ref.Namespace, ref.Name, promptText), nil
+		default:
+			t.Fatalf("unexpected dependency ref: %+v", ref)
+			return nil, nil
+		}
 	}
 
 	result, err := DefaultApplyFingerprintResult(context.Background(), in, ApplyFingerprintOptions{AdapterType: "test"})
 	if err != nil {
 		t.Fatalf("DefaultApplyFingerprintResult: %v", err)
 	}
-	if len(result.Dependencies) != 0 {
-		t.Fatalf("dependencies = %+v, want none without deployment harness selection", result.Dependencies)
+	if len(result.Dependencies) != 3 {
+		t.Fatalf("dependencies = %+v, want Plugin, Skill, and Prompt", result.Dependencies)
+	}
+
+	tests := []struct {
+		name   string
+		update func()
+	}{
+		{
+			name: "Plugin",
+			update: func() {
+				pluginCommit = "cccccccccccccccccccccccccccccccccccccccc"
+			},
+		},
+		{
+			name: "Skill",
+			update: func() {
+				skillCommit = "dddddddddddddddddddddddddddddddddddddddd"
+			},
+		},
+		{
+			name: "Prompt",
+			update: func() {
+				promptText = "Write detailed rollout notes."
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			pluginCommit = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+			skillCommit = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+			promptText = "Write concise rollout notes."
+			test.update()
+
+			changed, err := DefaultApplyFingerprintResult(
+				context.Background(),
+				in,
+				ApplyFingerprintOptions{AdapterType: "test"},
+			)
+			if err != nil {
+				t.Fatalf("DefaultApplyFingerprintResult after %s change: %v", test.name, err)
+			}
+			if changed.Fingerprint == result.Fingerprint {
+				t.Fatalf("fingerprint did not change after resolved %s changed", test.name)
+			}
+		})
 	}
 }
 
