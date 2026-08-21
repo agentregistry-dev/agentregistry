@@ -65,12 +65,71 @@ func TestAgentHarnessValidate(t *testing.T) {
 			wantErr: "must be \"Prompt\"",
 		},
 		{
-			name: "composition requires harness compatibility",
+			name: "image agent with plugins does not require a harness",
 			spec: AgentSpec{
 				Plugins: []ResourceRef{{Kind: KindPlugin, Name: "x"}},
 				Source:  &AgentSource{Image: "ghcr.io/org/agent:1.0.0"},
 			},
-			wantErr: "require compatibleHarnesses",
+		},
+		{
+			name: "image agent with skills does not require a harness",
+			spec: AgentSpec{
+				Skills: []ResourceRef{{Kind: KindSkill, Name: "x"}},
+				Source: &AgentSource{Image: "ghcr.io/org/agent:1.0.0"},
+			},
+		},
+		{
+			name: "image agent with instructions does not require a harness",
+			spec: AgentSpec{
+				Instructions: &ResourceRef{Kind: KindPrompt, Name: "x"},
+				Source:       &AgentSource{Image: "ghcr.io/org/agent:1.0.0"},
+			},
+		},
+		{
+			name: "plugins without image or harness remain rejected",
+			spec: AgentSpec{
+				Plugins: []ResourceRef{{Kind: KindPlugin, Name: "x"}},
+			},
+			wantErr: "plugins require compatibleHarnesses or source image",
+		},
+		{
+			name: "skills without image or harness remain rejected",
+			spec: AgentSpec{
+				Skills: []ResourceRef{{Kind: KindSkill, Name: "x"}},
+			},
+			wantErr: "skills/instructions require compatibleHarnesses or source image",
+		},
+		{
+			name: "whitespace image does not count as a source image",
+			spec: AgentSpec{
+				Skills: []ResourceRef{{Kind: KindSkill, Name: "x"}},
+				Source: &AgentSource{Image: "   "},
+			},
+			wantErr: "skills/instructions require compatibleHarnesses or source image",
+		},
+		{
+			name: "image with surrounding whitespace is rejected",
+			spec: AgentSpec{
+				Skills: []ResourceRef{{Kind: KindSkill, Name: "x"}},
+				Source: &AgentSource{Image: " ghcr.io/org/agent:1.0.0 "},
+			},
+			wantErr: "spec.source.image",
+		},
+		{
+			name: "repository source does not count for skills: nothing delivers composed files into a repository-built artifact",
+			spec: AgentSpec{
+				Skills: []ResourceRef{{Kind: KindSkill, Name: "x"}},
+				Source: &AgentSource{Repository: &Repository{URL: "https://github.com/org/agent"}},
+			},
+			wantErr: "skills/instructions require compatibleHarnesses or source image",
+		},
+		{
+			name: "repository source does not count for plugins",
+			spec: AgentSpec{
+				Plugins: []ResourceRef{{Kind: KindPlugin, Name: "x"}},
+				Source:  &AgentSource{Repository: &Repository{URL: "https://github.com/org/agent"}},
+			},
+			wantErr: "plugins require compatibleHarnesses or source image",
 		},
 	}
 

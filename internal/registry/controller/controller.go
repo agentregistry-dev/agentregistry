@@ -121,7 +121,7 @@ func (c *DeploymentController) FullReconcile(ctx context.Context) (int, error) {
 
 // HandleEvent maps a source invalidation to Deployment work. Dependency changes
 // intentionally use a full Deployment scan for this first controller foundation.
-// Agent harness composition refs (Plugins, Skills, and Prompt instructions) and
+// Agent composition refs (Plugins, Skills, and Prompt instructions) and
 // Model selection are dependency events so changes requeue Deployments that may
 // depend on their resolved state.
 func (c *DeploymentController) HandleEvent(ctx context.Context, event v1alpha1store.ControlPlaneEvent) (int, error) {

@@ -241,7 +241,7 @@ func defaultApplyDependencies(ctx context.Context, in ApplyInput) ([]v1alpha1.Ob
 	}
 	hasModelRef := modelRef != nil
 	hasAgentRefs := ok && agent != nil &&
-		(len(agent.Spec.MCPServers) > 0 || hasHarnessCompositionRefs(in.Deployment, agent))
+		(len(agent.Spec.MCPServers) > 0 || hasAgentCompositionRefs(agent))
 	if in.Getter == nil {
 		if hasModelRef || hasAgentRefs {
 			return nil, fmt.Errorf("fingerprint: getter required to resolve dependency refs")
@@ -268,9 +268,6 @@ func defaultApplyDependencies(ctx context.Context, in ApplyInput) ([]v1alpha1.Ob
 	if err != nil {
 		return nil, err
 	}
-	if !deploymentSelectsHarness(in.Deployment) {
-		return deps, nil
-	}
 	deps, err = appendResolvedRefs(ctx, deps, in.Getter, agent.Metadata.NamespaceOrDefault(), agent.Spec.Plugins, v1alpha1.KindPlugin, "target spec.plugins")
 	if err != nil {
 		return nil, err
@@ -288,13 +285,9 @@ func defaultApplyDependencies(ctx context.Context, in ApplyInput) ([]v1alpha1.Ob
 	return deps, nil
 }
 
-func hasHarnessCompositionRefs(deployment *v1alpha1.Deployment, agent *v1alpha1.Agent) bool {
-	return deploymentSelectsHarness(deployment) && agent != nil &&
+func hasAgentCompositionRefs(agent *v1alpha1.Agent) bool {
+	return agent != nil &&
 		(len(agent.Spec.Plugins) > 0 || len(agent.Spec.Skills) > 0 || agent.Spec.Instructions != nil)
-}
-
-func deploymentSelectsHarness(deployment *v1alpha1.Deployment) bool {
-	return deployment != nil && deployment.Spec.Harness != nil
 }
 
 func appendResolvedRefs(
