@@ -1892,13 +1892,13 @@ paths:
         schema:
           description: 'Label selector: key=value,key2=value2.'
           type: string
-      - description: Restrict the result set to one tag value (tagged artifact kinds
+      - description: Restrict the result set to one tag value (tagged resource kinds
           only).
         explode: false
         in: query
         name: tag
         schema:
-          description: Restrict the result set to one tag value (tagged artifact kinds
+          description: Restrict the result set to one tag value (tagged resource kinds
             only).
           type: string
       - description: Only return the literal latest tag per (namespace, name). Equivalent
@@ -2155,13 +2155,13 @@ paths:
         schema:
           description: 'Label selector: key=value,key2=value2.'
           type: string
-      - description: Restrict the result set to one tag value (tagged artifact kinds
+      - description: Restrict the result set to one tag value (tagged resource kinds
           only).
         explode: false
         in: query
         name: tag
         schema:
-          description: Restrict the result set to one tag value (tagged artifact kinds
+          description: Restrict the result set to one tag value (tagged resource kinds
             only).
           type: string
       - description: Only return the literal latest tag per (namespace, name). Equivalent
@@ -2344,13 +2344,13 @@ paths:
         schema:
           description: 'Label selector: key=value,key2=value2.'
           type: string
-      - description: Restrict the result set to one tag value (tagged artifact kinds
+      - description: Restrict the result set to one tag value (tagged resource kinds
           only).
         explode: false
         in: query
         name: tag
         schema:
-          description: Restrict the result set to one tag value (tagged artifact kinds
+          description: Restrict the result set to one tag value (tagged resource kinds
             only).
           type: string
       - description: Only return the literal latest tag per (namespace, name). Equivalent
@@ -2542,13 +2542,13 @@ paths:
         schema:
           description: 'Label selector: key=value,key2=value2.'
           type: string
-      - description: Restrict the result set to one tag value (tagged artifact kinds
+      - description: Restrict the result set to one tag value (tagged resource kinds
           only).
         explode: false
         in: query
         name: tag
         schema:
-          description: Restrict the result set to one tag value (tagged artifact kinds
+          description: Restrict the result set to one tag value (tagged resource kinds
             only).
           type: string
       - description: Only return the literal latest tag per (namespace, name). Equivalent
@@ -2760,13 +2760,13 @@ paths:
         schema:
           description: 'Label selector: key=value,key2=value2.'
           type: string
-      - description: Restrict the result set to one tag value (tagged artifact kinds
+      - description: Restrict the result set to one tag value (tagged resource kinds
           only).
         explode: false
         in: query
         name: tag
         schema:
-          description: Restrict the result set to one tag value (tagged artifact kinds
+          description: Restrict the result set to one tag value (tagged resource kinds
             only).
           type: string
       - description: Only return the literal latest tag per (namespace, name). Equivalent
@@ -2958,13 +2958,13 @@ paths:
         schema:
           description: 'Label selector: key=value,key2=value2.'
           type: string
-      - description: Restrict the result set to one tag value (tagged artifact kinds
+      - description: Restrict the result set to one tag value (tagged resource kinds
           only).
         explode: false
         in: query
         name: tag
         schema:
-          description: Restrict the result set to one tag value (tagged artifact kinds
+          description: Restrict the result set to one tag value (tagged resource kinds
             only).
           type: string
       - description: Only return the literal latest tag per (namespace, name). Equivalent
@@ -3156,13 +3156,13 @@ paths:
         schema:
           description: 'Label selector: key=value,key2=value2.'
           type: string
-      - description: Restrict the result set to one tag value (tagged artifact kinds
+      - description: Restrict the result set to one tag value (tagged resource kinds
           only).
         explode: false
         in: query
         name: tag
         schema:
-          description: Restrict the result set to one tag value (tagged artifact kinds
+          description: Restrict the result set to one tag value (tagged resource kinds
             only).
           type: string
       - description: Only return the literal latest tag per (namespace, name). Equivalent
@@ -3318,13 +3318,13 @@ paths:
         schema:
           description: 'Label selector: key=value,key2=value2.'
           type: string
-      - description: Restrict the result set to one tag value (tagged artifact kinds
+      - description: Restrict the result set to one tag value (tagged resource kinds
           only).
         explode: false
         in: query
         name: tag
         schema:
-          description: Restrict the result set to one tag value (tagged artifact kinds
+          description: Restrict the result set to one tag value (tagged resource kinds
             only).
           type: string
       - description: Only return the literal latest tag per (namespace, name). Equivalent

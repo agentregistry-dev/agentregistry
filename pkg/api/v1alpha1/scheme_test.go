@@ -37,14 +37,14 @@ func TestKindDescriptorsDriveKindMetadata(t *testing.T) {
 	if !ok {
 		t.Fatalf("missing %s descriptor", KindAgent)
 	}
-	if agent.Storage != KindStorageTaggedArtifact {
-		t.Fatalf("agent storage = %s, want %s", agent.Storage, KindStorageTaggedArtifact)
+	if agent.Storage != KindStorageTagged {
+		t.Fatalf("agent storage = %s, want %s", agent.Storage, KindStorageTagged)
 	}
 	if agent.Plural != "agents" || agent.Table != "v1alpha1.agents" {
 		t.Fatalf("agent routing/storage = %s/%s", agent.Plural, agent.Table)
 	}
-	if !IsTaggedArtifactKind(KindAgent) {
-		t.Fatalf("agent should be tagged artifact kind")
+	if !IsTaggedKind(KindAgent) {
+		t.Fatalf("agent should be tagged resource kind")
 	}
 	mcp, ok := KindDescriptorFor(KindMCPServer)
 	if !ok {
@@ -57,28 +57,28 @@ func TestKindDescriptorsDriveKindMetadata(t *testing.T) {
 	if !ok {
 		t.Fatalf("missing %s descriptor", KindModel)
 	}
-	if model.Storage != KindStorageTaggedArtifact {
-		t.Fatalf("model storage = %s, want %s", model.Storage, KindStorageTaggedArtifact)
+	if model.Storage != KindStorageTagged {
+		t.Fatalf("model storage = %s, want %s", model.Storage, KindStorageTagged)
 	}
 	if model.Plural != "models" || model.Table != "v1alpha1.models" {
 		t.Fatalf("model routing/storage = %s/%s", model.Plural, model.Table)
 	}
-	if !IsTaggedArtifactKind(KindModel) {
-		t.Fatalf("model should be tagged artifact kind")
+	if !IsTaggedKind(KindModel) {
+		t.Fatalf("model should be tagged resource kind")
 	}
 
 	deployment, ok := KindDescriptorFor(KindDeployment)
 	if !ok {
 		t.Fatalf("missing %s descriptor", KindDeployment)
 	}
-	if deployment.Storage != KindStorageMutableObject {
-		t.Fatalf("deployment storage = %s, want %s", deployment.Storage, KindStorageMutableObject)
+	if deployment.Storage != KindStorageUntagged {
+		t.Fatalf("deployment storage = %s, want %s", deployment.Storage, KindStorageUntagged)
 	}
 	if deployment.Plural != "deployments" || deployment.Table != "v1alpha1.deployments" {
 		t.Fatalf("deployment routing/storage = %s/%s", deployment.Plural, deployment.Table)
 	}
-	if IsTaggedArtifactKind(KindDeployment) {
-		t.Fatalf("deployment should not be tagged artifact kind")
+	if IsTaggedKind(KindDeployment) {
+		t.Fatalf("deployment should not be tagged resource kind")
 	}
 }
 

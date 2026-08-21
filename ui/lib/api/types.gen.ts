@@ -952,7 +952,7 @@ export type ListAgentsData = {
          */
         labels?: string;
         /**
-         * Restrict the result set to one tag value (tagged artifact kinds only).
+         * Restrict the result set to one tag value (tagged resource kinds only).
          */
         tag?: string;
         /**
@@ -1196,7 +1196,7 @@ export type ListDeploymentsData = {
          */
         labels?: string;
         /**
-         * Restrict the result set to one tag value (tagged artifact kinds only).
+         * Restrict the result set to one tag value (tagged resource kinds only).
          */
         tag?: string;
         /**
@@ -1375,7 +1375,7 @@ export type ListMcpserversData = {
          */
         labels?: string;
         /**
-         * Restrict the result set to one tag value (tagged artifact kinds only).
+         * Restrict the result set to one tag value (tagged resource kinds only).
          */
         tag?: string;
         /**
@@ -1559,7 +1559,7 @@ export type ListModelsData = {
          */
         labels?: string;
         /**
-         * Restrict the result set to one tag value (tagged artifact kinds only).
+         * Restrict the result set to one tag value (tagged resource kinds only).
          */
         tag?: string;
         /**
@@ -1768,7 +1768,7 @@ export type ListPluginsData = {
          */
         labels?: string;
         /**
-         * Restrict the result set to one tag value (tagged artifact kinds only).
+         * Restrict the result set to one tag value (tagged resource kinds only).
          */
         tag?: string;
         /**
@@ -1952,7 +1952,7 @@ export type ListPromptsData = {
          */
         labels?: string;
         /**
-         * Restrict the result set to one tag value (tagged artifact kinds only).
+         * Restrict the result set to one tag value (tagged resource kinds only).
          */
         tag?: string;
         /**
@@ -2136,7 +2136,7 @@ export type ListRuntimesData = {
          */
         labels?: string;
         /**
-         * Restrict the result set to one tag value (tagged artifact kinds only).
+         * Restrict the result set to one tag value (tagged resource kinds only).
          */
         tag?: string;
         /**
@@ -2286,7 +2286,7 @@ export type ListSkillsData = {
          */
         labels?: string;
         /**
-         * Restrict the result set to one tag value (tagged artifact kinds only).
+         * Restrict the result set to one tag value (tagged resource kinds only).
          */
         tag?: string;
         /**

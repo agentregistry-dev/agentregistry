@@ -27,12 +27,12 @@ import (
 type StoreBehavior string
 
 const (
-	// TaggedArtifactStore keys immutable-ish registry artifacts by
-	// namespace/name/tag.
-	TaggedArtifactStore StoreBehavior = "TaggedArtifactStore"
-	// MutableObjectStore keys normal Kubernetes-like objects by namespace/name
-	// in the public API and storage.
-	MutableObjectStore StoreBehavior = "MutableObjectStore"
+	// TaggedStore keys rows by namespace/name/tag. Reapplying a tag may
+	// replace its row; a tag is not an immutability guarantee.
+	TaggedStore StoreBehavior = "TaggedStore"
+	// UntaggedStore keys rows by namespace/name and rejects tag-bearing
+	// references.
+	UntaggedStore StoreBehavior = "UntaggedStore"
 )
 
 // Store is the single generic persistence layer for every v1alpha1 kind.
@@ -41,25 +41,24 @@ const (
 //
 // Store has two private behaviors, picked at construction time:
 //
-//   - TaggedArtifactStore (the default; produced by NewStore).
+//   - TaggedStore (the default; produced by NewTaggedStore).
 //     Storage key is (namespace, name, tag). Users may supply the tag
 //     declaratively; missing tags are filled with the literal "latest".
 //     Re-applying the same tag replaces the prior row atomically when the
-//     content changes. Used for agents, mcp_servers, skills, and prompts.
+//     content changes. Tags provide addressability, not immutable versions.
 //
-//   - MutableObjectStore (produced by NewMutableObjectStore). Storage key is
-//     (namespace, name). Used for Runtime/Deployment and additional
-//     downstream mutable control-plane/config kinds.
+//   - UntaggedStore (produced by NewUntaggedStore). Storage key is
+//     (namespace, name). Tag-bearing references are rejected.
 //
 // PatchStatus is disjoint from Upsert: it touches only status and
 // updated_at, never spec. Reconcilers use PatchStatus exclusively; apply
 // handlers use Upsert exclusively.
 //
-// Delete hard-deletes tagged-artifact rows and mutable rows without finalizers.
-// Mutable rows with finalizers are marked terminating via deletion_timestamp;
+// Delete hard-deletes tagged rows and untagged rows without finalizers.
+// Untagged rows with finalizers are marked terminating via deletion_timestamp;
 // exact Get can still load them, while GetLatest/List hide them unless the
 // caller explicitly includes terminating rows. PurgeFinalized removes
-// terminating mutable rows after finalizers are empty.
+// terminating untagged rows after finalizers are empty.
 type Store struct {
 	pool *pgxpool.Pool
 	// table is the unqualified table name (e.g. "agents") — the identity
@@ -113,24 +112,24 @@ func WithKind(kind string) StoreOption {
 	return func(s *Store) { s.kind = kind }
 }
 
-// NewStore constructs a tagged-artifact Store bound to a single table
-// (e.g. "agents") in schema. The table must exist; NewStore does not
+// NewTaggedStore constructs a tagged Store bound to a single table
+// (e.g. "agents") in schema. The table must exist; NewTaggedStore does not
 // validate it. Queries qualify the table with schema explicitly, so the
 // Store does not depend on the connection's search_path.
 //
-// For mutable object tables, use NewMutableObjectStore.
-func NewStore(pool *pgxpool.Pool, schema pkgdb.Schema, table string, opts ...StoreOption) *Store {
-	s := &Store{pool: pool, table: table, qualified: schema.Qualify(table), behavior: TaggedArtifactStore, auditor: types.NoopAuditor}
+// For untagged resource tables, use NewUntaggedStore.
+func NewTaggedStore(pool *pgxpool.Pool, schema pkgdb.Schema, table string, opts ...StoreOption) *Store {
+	s := &Store{pool: pool, table: table, qualified: schema.Qualify(table), behavior: TaggedStore, auditor: types.NoopAuditor}
 	for _, opt := range opts {
 		opt(s)
 	}
 	return s
 }
 
-// NewMutableObjectStore constructs a mutable-object Store for tables keyed by
+// NewUntaggedStore constructs an untagged Store for tables keyed by
 // namespace/name in schema.
-func NewMutableObjectStore(pool *pgxpool.Pool, schema pkgdb.Schema, table string, opts ...StoreOption) *Store {
-	s := &Store{pool: pool, table: table, qualified: schema.Qualify(table), behavior: MutableObjectStore, auditor: types.NoopAuditor}
+func NewUntaggedStore(pool *pgxpool.Pool, schema pkgdb.Schema, table string, opts ...StoreOption) *Store {
+	s := &Store{pool: pool, table: table, qualified: schema.Qualify(table), behavior: UntaggedStore, auditor: types.NoopAuditor}
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -153,7 +152,7 @@ const (
 
 // UpsertResult is the outcome of Upsert.
 type UpsertResult struct {
-	// Tag is the content tag after the call for tagged-artifact tables.
+	// Tag is the content tag after the call for tagged tables.
 	Tag string
 	// UID is the server-managed row identity after the write.
 	UID string
@@ -165,7 +164,7 @@ type UpsertResult struct {
 
 // UpsertOpts customizes create-time behavior for Store.Upsert.
 type UpsertOpts struct {
-	// InitialFinalizers is applied only on the create path for mutable-object
+	// InitialFinalizers is applied only on the create path for untagged
 	// stores. Updates preserve existing finalizers.
 	InitialFinalizers []string
 }
@@ -198,17 +197,17 @@ type ListOpts struct {
 	Limit int
 	// Cursor is an opaque pagination token. Empty starts from the beginning.
 	Cursor string
-	// Tag restricts the result set to a single tag value on tagged-artifact
+	// Tag restricts the result set to a single tag value on tagged
 	// stores. Empty means "no tag filter" — every tag of every name is
-	// returned. Ignored on mutable-object stores (they have no tag column).
+	// returned. Ignored on untagged stores (they have no tag column).
 	// Mutually exclusive with LatestOnly (validated at the caller level;
 	// the store treats LatestOnly as the literal `Tag = "latest"` filter
 	// when both are set, but new callers should pick one).
 	Tag string
 	// LatestOnly restricts to the literal "latest" tag per (namespace, name),
-	// or the private latest row for mutable-object stores. Equivalent to
+	// or the private latest row for untagged stores. Equivalent to
 	// `Tag = "latest"` on tagged stores; kept as a separate field because
-	// it also covers the mutable-object latest-row case (where there's no
+	// it also covers the untagged latest-row case (where there's no
 	// user-facing tag column).
 	LatestOnly bool
 	// IncludeTerminating includes rows with deletion_timestamp set. Default
@@ -238,9 +237,9 @@ type ListOpts struct {
 	ExtraArgs []any
 }
 
-// listCursor is the opaque pagination position for List. Tagged-artifact
+// listCursor is the opaque pagination position for List. Tagged
 // stores include Tag because their sort key is (namespace, name, tag,
-// updated_at); mutable-object stores sort by (namespace, name, updated_at).
+// updated_at); untagged stores sort by (namespace, name, updated_at).
 type listCursor struct {
 	Namespace string    `json:"namespace"`
 	Name      string    `json:"name"`
@@ -251,13 +250,13 @@ type listCursor struct {
 // Upsert applies obj into the Store. Behaviour depends on the table's
 // persistence behavior:
 //
-//   - Tagged-artifact tables (agents, mcp_servers, etc.) follow
+//   - Tagged tables (agents, mcp_servers, etc.) follow
 //     declarative tag semantics:
 //   - missing metadata.tag → default to the literal "latest" tag
 //   - new (namespace, name, tag) → insert the row
 //   - same tag and same canonical content hash → no-op
 //   - same tag and different content hash → replace the row in place
-//   - Mutable-object tables follow Kubernetes-like update-in-place
+//   - Untagged tables follow Kubernetes-like update-in-place
 //     semantics behind namespace/name key.
 //
 // Status is never touched by Upsert — use PatchStatus for that.
@@ -282,7 +281,7 @@ func (s *Store) Upsert(ctx context.Context, obj v1alpha1.Object, opts ...UpsertO
 		opt = opts[0]
 	}
 
-	if s.behavior == TaggedArtifactStore {
+	if s.behavior == TaggedStore {
 		res, err := s.upsertTagged(ctx, meta, specJSON)
 		if err != nil {
 			return res, err
@@ -296,7 +295,7 @@ func (s *Store) Upsert(ctx context.Context, obj v1alpha1.Object, opts ...UpsertO
 		}
 		return res, nil
 	}
-	return s.upsertMutable(ctx, meta, specJSON, opt)
+	return s.upsertUntagged(ctx, meta, specJSON, opt)
 }
 
 // kindFor returns the canonical Kind name to attach to audit events.
@@ -310,7 +309,7 @@ func (s *Store) kindFor(obj v1alpha1.Object) string {
 	return obj.GetKind()
 }
 
-// upsertTagged implements the tag apply semantics for tagged artifact tables.
+// upsertTagged implements the tag apply semantics for tagged resource tables.
 // See Upsert for the full state machine.
 func (s *Store) upsertTagged(ctx context.Context, meta *v1alpha1.ObjectMeta, specJSON json.RawMessage) (UpsertResult, error) {
 	if meta.Tag == "" {
@@ -411,8 +410,8 @@ func (s *Store) upsertTagged(ctx context.Context, meta *v1alpha1.ObjectMeta, spe
 	return result, nil
 }
 
-// upsertMutable implements in-place semantics for mutable-object tables.
-func (s *Store) upsertMutable(ctx context.Context, meta *v1alpha1.ObjectMeta, specJSON json.RawMessage, opts UpsertOpts) (UpsertResult, error) {
+// upsertUntagged implements in-place semantics for untagged tables.
+func (s *Store) upsertUntagged(ctx context.Context, meta *v1alpha1.ObjectMeta, specJSON json.RawMessage, opts UpsertOpts) (UpsertResult, error) {
 	labelsJSON, err := canonicalJSONMap(meta.Labels)
 	if err != nil {
 		return UpsertResult{}, fmt.Errorf("v1alpha1 store: marshal labels: %w", err)
@@ -526,23 +525,23 @@ type PatchOpts struct {
 	Finalizers  func([]string) []string
 }
 
-// ApplyPatch atomically applies PatchOpts to one row. Tagged-artifact stores
-// require tag=metadata.tag; mutable-object stores ignore tag and use
+// ApplyPatch atomically applies PatchOpts to one row. Tagged stores
+// require tag=metadata.tag; untagged stores ignore tag and use
 // namespace/name. Columns whose mutator is nil are left untouched. Returns
 // pkgdb.ErrNotFound if the row doesn't exist.
 //
 // Finalizers patching is supported only on the deployments table; the
-// tagged-artifact tables don't carry a finalizers column. Calling
-// PatchFinalizers on a tagged-artifact Store returns an error to
+// tagged tables don't carry a finalizers column. Calling
+// PatchFinalizers on a tagged Store returns an error to
 // surface the misconfiguration loudly rather than silently no-op.
 func (s *Store) ApplyPatch(ctx context.Context, namespace, name, tag string, patch PatchOpts) error {
 	if patch.Status == nil && patch.Annotations == nil && patch.Finalizers == nil {
 		return nil
 	}
-	if patch.Finalizers != nil && s.behavior == TaggedArtifactStore {
-		return errors.New("v1alpha1 store: finalizers patching not supported on tagged-artifact tables")
+	if patch.Finalizers != nil && s.behavior == TaggedStore {
+		return errors.New("v1alpha1 store: finalizers patching not supported on tagged tables")
 	}
-	if tag == "" && s.behavior == TaggedArtifactStore {
+	if tag == "" && s.behavior == TaggedStore {
 		return errors.New("v1alpha1 store: tag is required")
 	}
 	return runInTx(ctx, s.pool, func(tx pgx.Tx) error {
@@ -554,7 +553,7 @@ func (s *Store) ApplyPatch(ctx context.Context, namespace, name, tag string, pat
 		setClauses := make([]string, 0, 3)
 		args := []any{namespace, name}
 		where := "namespace=$1 AND name=$2"
-		if s.behavior == TaggedArtifactStore {
+		if s.behavior == TaggedStore {
 			args = append(args, tag)
 			where += " AND tag=$3"
 		}
@@ -608,11 +607,11 @@ func (s *Store) ApplyPatch(ctx context.Context, namespace, name, tag string, pat
 }
 
 // loadPatchRow loads the columns ApplyPatch may mutate
-// (status, annotations, and on mutable-object stores finalizers) and returns
+// (status, annotations, and on untagged stores finalizers) and returns
 // pkgdb.ErrNotFound if no row matches. The finalizers payload is empty
-// for tagged-artifact stores.
+// for tagged stores.
 func (s *Store) loadPatchRow(ctx context.Context, tx pgx.Tx, namespace, name, tag string) (statusJSON, annotationsJSON, finalizersJSON []byte, err error) {
-	if s.behavior == MutableObjectStore {
+	if s.behavior == UntaggedStore {
 		err = tx.QueryRow(ctx,
 			fmt.Sprintf(`
 				SELECT status, annotations, finalizers FROM %s
@@ -712,11 +711,11 @@ func (s *Store) PatchAnnotations(ctx context.Context, namespace, name, tag strin
 	return s.ApplyPatch(ctx, namespace, name, tag, PatchOpts{Annotations: mutate})
 }
 
-// Get returns a single row, including terminating rows. For tagged-artifact
-// stores, tag is metadata.tag. Mutable-object stores ignore tag and
+// Get returns a single row, including terminating rows. For tagged
+// stores, tag is metadata.tag. Untagged stores ignore tag and
 // load by namespace/name. Returns pkgdb.ErrNotFound if missing.
 func (s *Store) Get(ctx context.Context, namespace, name, tag string) (*v1alpha1.RawObject, error) {
-	if s.behavior == TaggedArtifactStore {
+	if s.behavior == TaggedStore {
 		if tag == "" {
 			return nil, errors.New("v1alpha1 store: tag is required")
 		}
@@ -738,26 +737,26 @@ func (s *Store) Get(ctx context.Context, namespace, name, tag string) (*v1alpha1
 }
 
 // GetByRef resolves the public reference shape shared by v1alpha1 resources.
-// Blank tag means the current live row: literal "latest" for tagged artifacts,
-// namespace/name for mutable objects. Non-empty tag selects a tagged artifact
-// row and is invalid for mutable-object stores.
+// Blank tag means the current live row: literal "latest" for tagged resources,
+// namespace/name for untagged resources. Non-empty tag selects a tagged resource
+// row and is invalid for untagged stores.
 func (s *Store) GetByRef(ctx context.Context, namespace, name, tag string) (*v1alpha1.RawObject, error) {
 	if tag == "" {
 		return s.GetLatest(ctx, namespace, name)
 	}
-	if s.behavior == MutableObjectStore {
-		return nil, errors.New("v1alpha1 store: tag pinning is not supported on mutable-object stores")
+	if s.behavior == UntaggedStore {
+		return nil, errors.New("v1alpha1 store: tag pinning is not supported on untagged stores")
 	}
 	return s.Get(ctx, namespace, name, tag)
 }
 
 // GetLatest returns the literal "latest" live tag for (namespace, name) on
-// tagged-artifact tables, or the current live row for mutable-object stores.
+// tagged tables, or the current live row for untagged stores.
 // Returns pkgdb.ErrNotFound if no live row exists.
 // Terminating rows are excluded.
 func (s *Store) GetLatest(ctx context.Context, namespace, name string) (*v1alpha1.RawObject, error) {
 	var query string
-	if s.behavior == TaggedArtifactStore {
+	if s.behavior == TaggedStore {
 		query = fmt.Sprintf(`
 			SELECT %s
 			FROM %s
@@ -782,7 +781,7 @@ func (s *Store) GetLatest(ctx context.Context, namespace, name string) (*v1alpha
 // Returns pkgdb.ErrNotFound only when no row exists at all.
 func (s *Store) GetLatestIncludingTerminating(ctx context.Context, namespace, name string) (*v1alpha1.RawObject, error) {
 	var query string
-	if s.behavior == TaggedArtifactStore {
+	if s.behavior == TaggedStore {
 		query = fmt.Sprintf(`
 			SELECT %s
 			FROM %s
@@ -798,12 +797,12 @@ func (s *Store) GetLatestIncludingTerminating(ctx context.Context, namespace, na
 	return scanRow(row, false)
 }
 
-// Delete removes a single row. Mutable-object stores may use soft-delete plus
-// finalizer drain. Tagged-artifact rows have no finalizers and are hard-deleted
+// Delete removes a single row. Untagged stores may use soft-delete plus
+// finalizer drain. Tagged rows have no finalizers and are hard-deleted
 // immediately so name/tag can be reapplied without waiting for GC. Returns
 // pkgdb.ErrNotFound if the row doesn't exist.
 func (s *Store) Delete(ctx context.Context, namespace, name, tag string) error {
-	if s.behavior == TaggedArtifactStore {
+	if s.behavior == TaggedStore {
 		if tag == "" {
 			return errors.New("v1alpha1 store: tag is required")
 		}
@@ -814,33 +813,33 @@ func (s *Store) Delete(ctx context.Context, namespace, name, tag string) error {
 }
 
 // DeleteByRef applies the public reference/delete shape shared by v1alpha1
-// resources. For tagged artifacts, blank tag deletes every tag for
+// resources. For tagged resources, blank tag deletes every tag for
 // (namespace, name), while a non-empty tag deletes that exact tag. Mutable
 // objects delete by namespace/name and reject explicit tag pins.
 func (s *Store) DeleteByRef(ctx context.Context, namespace, name, tag string) error {
-	if s.behavior == TaggedArtifactStore {
+	if s.behavior == TaggedStore {
 		if tag == "" {
 			return s.DeleteAllTags(ctx, namespace, name)
 		}
 		return s.Delete(ctx, namespace, name, tag)
 	}
 	if tag != "" {
-		return errors.New("v1alpha1 store: tag pinning is not supported on mutable-object stores")
+		return errors.New("v1alpha1 store: tag pinning is not supported on untagged stores")
 	}
 	return s.Delete(ctx, namespace, name, "")
 }
 
 // ListTags returns every non-deleted tag row for (namespace,
-// name), ordered by most recently applied first. Tagged-artifact mode
-// only — mutable-object stores do not model "list every tag of a logical
+// name), ordered by most recently applied first. Tagged mode
+// only — untagged stores do not model "list every tag of a logical
 // resource" and report an error.
 //
 // Returns an empty slice (no error) when no rows exist for the
 // tag: list semantics differ from the single-row Get path. The
 // HTTP layer surfaces empty results as 200 with `{"items": []}`.
 func (s *Store) ListTags(ctx context.Context, namespace, name string) ([]*v1alpha1.RawObject, error) {
-	if s.behavior == MutableObjectStore {
-		return nil, errors.New("v1alpha1 store: ListTags is not supported on mutable-object stores")
+	if s.behavior == UntaggedStore {
+		return nil, errors.New("v1alpha1 store: ListTags is not supported on untagged stores")
 	}
 	if namespace == "" || name == "" {
 		return nil, errors.New("v1alpha1 store: namespace and name are required")
@@ -859,7 +858,7 @@ func (s *Store) ListTags(ctx context.Context, namespace, name string) ([]*v1alph
 
 	out := make([]*v1alpha1.RawObject, 0, 4)
 	for rows.Next() {
-		obj, err := scanRow(rows, s.behavior == TaggedArtifactStore)
+		obj, err := scanRow(rows, s.behavior == TaggedStore)
 		if err != nil {
 			return nil, err
 		}
@@ -872,17 +871,17 @@ func (s *Store) ListTags(ctx context.Context, namespace, name string) ([]*v1alph
 }
 
 // DeleteAllTags hard-deletes every tag row for (namespace, name)
-// on a tagged-artifact table. This is the contract of the
+// on a tagged table. This is the contract of the
 // batch DELETE endpoint when metadata.tag is omitted; callers delete a
 // single tag by including metadata.tag. Returns pkgdb.ErrNotFound
 // when no row exists for (namespace, name).
 //
-// Calling on a mutable-object Store is a programming error; the per-kind Store
-// hands mutable objects to the single-row Delete path
+// Calling on a untagged Store is a programming error; the per-kind Store
+// hands untagged resources to the single-row Delete path
 // instead.
 func (s *Store) DeleteAllTags(ctx context.Context, namespace, name string) error {
-	if s.behavior == MutableObjectStore {
-		return errors.New("v1alpha1 store: DeleteAllTags is not supported on mutable-object stores")
+	if s.behavior == UntaggedStore {
+		return errors.New("v1alpha1 store: DeleteAllTags is not supported on untagged stores")
 	}
 	if namespace == "" || name == "" {
 		return errors.New("v1alpha1 store: namespace and name are required")
@@ -918,7 +917,7 @@ func (s *Store) deleteTagged(ctx context.Context, args []any) error {
 			return fmt.Errorf("load row: %w", err)
 		}
 
-		// Tagged-artifact tables have no finalizers — hard-delete
+		// Tagged tables have no finalizers — hard-delete
 		// immediately. This matches the OSS fast-path for finalizer-free
 		// rows: `arctl delete X` then `arctl apply X` works without any
 		// background GC.
@@ -992,12 +991,12 @@ func jsonArrayNonEmpty(raw []byte) (bool, error) {
 }
 
 // PurgeFinalized hard-deletes terminating rows. For deployments this
-// requires finalizers to be empty; for tagged-artifact tables there is
+// requires finalizers to be empty; for tagged tables there is
 // no finalizers column, so any row past deletion_timestamp is purged.
 // Returns the number of rows purged.
 func (s *Store) PurgeFinalized(ctx context.Context) (int64, error) {
 	var query string
-	if s.behavior == TaggedArtifactStore {
+	if s.behavior == TaggedStore {
 		query = fmt.Sprintf(`DELETE FROM %s WHERE deletion_timestamp IS NOT NULL`, s.qualified)
 	} else {
 		query = fmt.Sprintf(`
@@ -1030,7 +1029,7 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 		args = append(args, opts.Namespace)
 		where = append(where, fmt.Sprintf("namespace = $%d", len(args)))
 	}
-	if s.behavior == TaggedArtifactStore {
+	if s.behavior == TaggedStore {
 		// Tag wins when set; otherwise LatestOnly falls back to the literal
 		// "latest" filter for callers that pre-date the Tag field.
 		switch {
@@ -1058,7 +1057,7 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 		if err != nil {
 			return nil, "", err
 		}
-		if s.behavior == TaggedArtifactStore {
+		if s.behavior == TaggedStore {
 			// Order by stable tag before updated_at so status patches do not
 			// let a row skip across pages.
 			args = append(args, cursor.Namespace, cursor.Name, cursor.Tag, cursor.UpdatedAt)
@@ -1105,7 +1104,7 @@ func (s *Store) List(ctx context.Context, opts ListOpts) ([]*v1alpha1.RawObject,
 
 	out := make([]*v1alpha1.RawObject, 0, limit)
 	for rows.Next() {
-		obj, err := scanRow(rows, s.behavior == TaggedArtifactStore)
+		obj, err := scanRow(rows, s.behavior == TaggedStore)
 		if err != nil {
 			return nil, "", err
 		}
@@ -1174,7 +1173,7 @@ func (s *Store) decodeListCursor(token string) (listCursor, error) {
 	if cursor.UpdatedAt.IsZero() || cursor.Namespace == "" || cursor.Name == "" {
 		return listCursor{}, fmt.Errorf("%w: missing position fields", ErrInvalidCursor)
 	}
-	if s.behavior == TaggedArtifactStore && cursor.Tag == "" {
+	if s.behavior == TaggedStore && cursor.Tag == "" {
 		return listCursor{}, fmt.Errorf("%w: missing position fields", ErrInvalidCursor)
 	}
 	return cursor, nil
@@ -1189,13 +1188,13 @@ func (s *Store) encodeListCursor(obj *v1alpha1.RawObject) (string, error) {
 		Namespace: obj.Metadata.Namespace,
 		Name:      obj.Metadata.Name,
 	}
-	if s.behavior == TaggedArtifactStore {
+	if s.behavior == TaggedStore {
 		cursor.Tag = obj.Metadata.Tag
 	}
 	if cursor.UpdatedAt.IsZero() || cursor.Namespace == "" || cursor.Name == "" {
 		return "", errors.New("missing row position")
 	}
-	if s.behavior == TaggedArtifactStore && cursor.Tag == "" {
+	if s.behavior == TaggedStore && cursor.Tag == "" {
 		return "", errors.New("missing row position")
 	}
 	payload, err := json.Marshal(cursor)
@@ -1206,7 +1205,7 @@ func (s *Store) encodeListCursor(obj *v1alpha1.RawObject) (string, error) {
 }
 
 func (s *Store) listOrderBy() string {
-	if s.behavior == TaggedArtifactStore {
+	if s.behavior == TaggedStore {
 		return "namespace, name, tag, updated_at"
 	}
 	return "namespace, name, updated_at"
@@ -1217,7 +1216,7 @@ type FindReferrersOpts struct {
 	// Namespace, when non-empty, restricts results to a single namespace.
 	Namespace string
 	// LatestOnly, when true, restricts to the literal "latest" tag per
-	// (namespace, name), or the private latest row for mutable-object stores.
+	// (namespace, name), or the private latest row for untagged stores.
 	LatestOnly bool
 	// IncludeTerminating, when true, keeps rows whose deletion_timestamp
 	// is set. Default (false) excludes them.
@@ -1240,7 +1239,7 @@ func (s *Store) FindReferrers(ctx context.Context, pathJSON json.RawMessage, opt
 		query += fmt.Sprintf(" AND namespace = $%d", len(args))
 	}
 	if opts.LatestOnly {
-		if s.behavior == TaggedArtifactStore {
+		if s.behavior == TaggedStore {
 			args = append(args, DefaultTag())
 			query += fmt.Sprintf(" AND tag = $%d", len(args))
 		}
@@ -1255,7 +1254,7 @@ func (s *Store) FindReferrers(ctx context.Context, pathJSON json.RawMessage, opt
 
 	out := make([]*v1alpha1.RawObject, 0, 8)
 	for rows.Next() {
-		obj, err := scanRow(rows, s.behavior == TaggedArtifactStore)
+		obj, err := scanRow(rows, s.behavior == TaggedStore)
 		if err != nil {
 			return nil, err
 		}
@@ -1265,11 +1264,11 @@ func (s *Store) FindReferrers(ctx context.Context, pathJSON json.RawMessage, opt
 }
 
 // selectColumns returns the column list emitted by Get/List/FindReferrers
-// queries. Mutable-object tables include generation/finalizers columns;
-// tagged-artifact tables emit synthetic placeholders for them so scanRow's
+// queries. Untagged tables include generation/finalizers columns;
+// tagged tables emit synthetic placeholders for them so scanRow's
 // column layout stays uniform.
 func (s *Store) selectColumns() string {
-	if s.behavior == TaggedArtifactStore {
+	if s.behavior == TaggedStore {
 		return `namespace, name, tag, uid::text, generation, labels, annotations, spec, status,
 		       deletion_timestamp, '[]'::jsonb AS finalizers, created_at, updated_at`
 	}
@@ -1310,7 +1309,7 @@ func equalJSONMap(existing, incoming []byte) bool {
 }
 
 // equalSpecJSON reports whether two JSON byte slices represent the same
-// canonical spec content. Used by the mutable-object path to
+// canonical spec content. Used by the untagged path to
 // detect spec-no-op apply.
 func equalSpecJSON(existing []byte, incoming json.RawMessage) bool {
 	return SpecHash(existing) == SpecHash(incoming)

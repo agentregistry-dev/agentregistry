@@ -34,7 +34,7 @@ func TestRemoveLocalRuntimeSeedMigrationUpgradeAndRollback(t *testing.T) {
 
 	require.NoError(t, migrator.Up())
 
-	runtimes := NewMutableObjectStore(pool, TestSchema(), "runtimes")
+	runtimes := NewUntaggedStore(pool, TestSchema(), "runtimes")
 	_, err = runtimes.GetLatest(ctx, "default", "local")
 	require.ErrorIs(t, err, pkgdb.ErrNotFound)
 
@@ -73,7 +73,7 @@ func TestRemoveKubernetesRuntimeSeedMigrationUpgradeAndRollback(t *testing.T) {
 	})
 	require.NoError(t, migrator.Migrate(13))
 
-	runtimes := NewMutableObjectStore(pool, TestSchema(), "runtimes")
+	runtimes := NewUntaggedStore(pool, TestSchema(), "runtimes")
 	_, err = runtimes.GetLatest(ctx, "default", "kubernetes-default")
 	require.NoError(t, err)
 
@@ -109,7 +109,7 @@ func TestRemoveKubernetesRuntimeSeedMigrationPreservesModifiedOrReferencedSeed(t
 		require.NoError(t, err)
 		require.NoError(t, migrator.Up())
 
-		runtimes := NewMutableObjectStore(pool, TestSchema(), "runtimes")
+		runtimes := NewUntaggedStore(pool, TestSchema(), "runtimes")
 		modified, err := runtimes.GetLatest(ctx, "default", "kubernetes-default")
 		require.NoError(t, err)
 		require.Equal(t, "value", modified.Metadata.Annotations["keep"])
@@ -137,7 +137,7 @@ func TestRemoveKubernetesRuntimeSeedMigrationPreservesModifiedOrReferencedSeed(t
 		require.NoError(t, err)
 		require.NoError(t, migrator.Up())
 
-		runtimes := NewMutableObjectStore(pool, TestSchema(), "runtimes")
+		runtimes := NewUntaggedStore(pool, TestSchema(), "runtimes")
 		_, err = runtimes.GetLatest(ctx, "default", "kubernetes-default")
 		require.NoError(t, err)
 	})
@@ -163,7 +163,7 @@ func TestRemoveLocalRuntimeSeedMigrationPreservesModifiedSeed(t *testing.T) {
 
 	require.NoError(t, migrator.Up())
 
-	runtimes := NewMutableObjectStore(pool, TestSchema(), "runtimes")
+	runtimes := NewUntaggedStore(pool, TestSchema(), "runtimes")
 	modifiedLocal, err := runtimes.GetLatest(ctx, "default", "local")
 	require.NoError(t, err)
 	require.Equal(t, "value", modifiedLocal.Metadata.Annotations["keep"])

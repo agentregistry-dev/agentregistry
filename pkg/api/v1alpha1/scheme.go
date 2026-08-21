@@ -127,17 +127,11 @@ func (s *Scheme) Decode(data []byte) (any, error) {
 	return obj, nil
 }
 
-// IsContentRegistryKind reports whether a kind belongs to the tagged
-// content-registry bucket.
-func IsContentRegistryKind(kind string) bool {
-	return IsTaggedArtifactKind(kind)
-}
-
-// IsTaggedArtifactKind reports whether refs to kind may use tag pinning and
+// IsTaggedKind reports whether refs to kind may use tag pinning and
 // whether the private store behavior keys rows by namespace/name/tag.
-func IsTaggedArtifactKind(kind string) bool {
+func IsTaggedKind(kind string) bool {
 	descriptor, ok := KindDescriptorFor(kind)
-	return ok && descriptor.Storage == KindStorageTaggedArtifact
+	return ok && descriptor.Storage == KindStorageTagged
 }
 
 // DecodeMulti parses a YAML stream (possibly containing multiple `---`-

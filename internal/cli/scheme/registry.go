@@ -31,7 +31,7 @@ type ListOpts struct {
 	// (tagged content kinds only). Mutually exclusive with LatestOnly.
 	Tag string
 	// LatestOnly restricts the list to the literal "latest" tag (tagged
-	// content kinds) or the latest mutable-object row.
+	// content kinds) or the latest untagged row.
 	LatestOnly bool
 	// Origin filters Deployment rows by provenance. Recognized values:
 	// "managed", "discovered", "all" (both), and "" (unset — the Deployment

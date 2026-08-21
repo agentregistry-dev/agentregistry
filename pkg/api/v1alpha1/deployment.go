@@ -17,7 +17,7 @@ type Deployment struct {
 func init() {
 	MustRegisterKind[*Deployment, DeploymentSpec](
 		KindDeployment,
-		WithMutableObjectStorage(),
+		WithUntaggedStorage(),
 	)
 }
 

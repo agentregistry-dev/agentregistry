@@ -10,13 +10,13 @@ import (
 	"unicode"
 )
 
-// KindStorage describes the private persistence semantics attached to a
-// v1alpha1 kind.
+// KindStorage describes whether metadata.tag participates in a kind's storage
+// identity. Tags are replaceable identity slots, not immutable versions.
 type KindStorage string
 
 const (
-	KindStorageTaggedArtifact KindStorage = "TaggedArtifact"
-	KindStorageMutableObject  KindStorage = "MutableObject"
+	KindStorageTagged   KindStorage = "Tagged"
+	KindStorageUntagged KindStorage = "Untagged"
 )
 
 // KindDescriptor is the single registration record for a v1alpha1 kind. Scheme
@@ -56,10 +56,11 @@ func WithPlural(plural string) KindOption {
 	}
 }
 
-// WithMutableObjectStorage marks the kind as namespace/name mutable state.
-func WithMutableObjectStorage() KindOption {
+// WithUntaggedStorage keys the kind by namespace/name and rejects tag-bearing
+// references.
+func WithUntaggedStorage() KindOption {
 	return func(d *KindDescriptor) {
-		d.Storage = KindStorageMutableObject
+		d.Storage = KindStorageUntagged
 	}
 }
 
@@ -81,7 +82,7 @@ func RegisterKind[T Object, S any](kind string, opts ...KindOption) error {
 		NewObject:  newObject,
 		Plural:     defaultRoutePlural(kind),
 		Table:      defaultTableForKind(kind),
-		Storage:    KindStorageTaggedArtifact,
+		Storage:    KindStorageTagged,
 	}
 	for _, opt := range opts {
 		if opt != nil {
@@ -136,7 +137,7 @@ func (r *KindRegistry) Register(descriptor KindDescriptor) error {
 		descriptor.Table = defaultTableForKind(descriptor.Kind)
 	}
 	if descriptor.Storage == "" {
-		descriptor.Storage = KindStorageTaggedArtifact
+		descriptor.Storage = KindStorageTagged
 	}
 
 	key := strings.ToLower(descriptor.Kind)

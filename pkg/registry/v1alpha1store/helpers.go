@@ -25,7 +25,7 @@ type rowScanner interface {
 // wire-form representations so callers can unmarshal into typed structs.
 //
 // tagged reflects the Store's private behavior and decides whether the scanned
-// tag column should populate public metadata.tag. Mutable-object queries
+// tag column should populate public metadata.tag. Untagged queries
 // emit an empty synthetic value to keep the column layout uniform.
 // Tagged content queries emit a synthetic 0::bigint generation and '[]'::jsonb
 // finalizers so the column layout stays uniform across modes.

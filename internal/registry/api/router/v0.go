@@ -40,8 +40,8 @@ type Stores = map[string]*v1alpha1store.Store
 // than silently no-op'ing — a misconfigured boot fails loud.
 type RouteOptions struct {
 	// Stores is the per-kind v1alpha1store map that drives the
-	// generic CRUD handlers. Tagged artifacts expose
-	// `/v0/{plural}/{name}/{tag}?namespace={ns}`; mutable objects expose
+	// generic CRUD handlers. Tagged resources expose
+	// `/v0/{plural}/{name}/{tag}?namespace={ns}`; untagged resources expose
 	// `/v0/{plural}/{name}?namespace={ns}`. Namespace defaults to
 	// "default"; `?namespace=all` widens list scope across every
 	// namespace.
@@ -193,8 +193,8 @@ func RegisterRoutes(
 }
 
 // registerKindRoutes wires the generic resource handler for every
-// built-in kind. Tagged artifacts use
-// `{basePrefix}/{plural}/{name}/{tag}`; mutable objects use
+// built-in kind. Tagged resources use
+// `{basePrefix}/{plural}/{name}/{tag}`; untagged resources use
 // `{basePrefix}/{plural}/{name}`. Namespace is a `?namespace={ns}`
 // query param defaulting to "default"; `?namespace=all` on list
 // widens scope across every namespace. The multi-doc apply endpoint

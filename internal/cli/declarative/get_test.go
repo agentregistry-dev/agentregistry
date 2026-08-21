@@ -71,8 +71,8 @@ func TestGetCmd_RegistryDrivenColumnLookup(t *testing.T) {
 func TestProvider_NoAllTagsSupport(t *testing.T) {
 	k, err := scheme.Lookup("runtime")
 	require.NoError(t, err)
-	require.Nil(t, k.ListTags, "Runtime should not expose ListTags (mutable object kind)")
-	require.Nil(t, k.DeleteAllTags, "Runtime should not expose DeleteAllTags (mutable object kind)")
+	require.Nil(t, k.ListTags, "Runtime should not expose ListTags (untagged resource kind)")
+	require.Nil(t, k.DeleteAllTags, "Runtime should not expose DeleteAllTags (untagged resource kind)")
 }
 
 func TestModel_AllTagsSupport(t *testing.T) {
@@ -84,7 +84,7 @@ func TestModel_AllTagsSupport(t *testing.T) {
 	require.Equal(t, "models", k.Plural)
 }
 
-// TestPlugin_AllTagsSupport pins that Plugin — a tag-versioned artifact kind —
+// TestPlugin_AllTagsSupport pins that Plugin — a tagged resource kind —
 // resolves via every alias and keeps its tagged-kind wiring (ListTags /
 // DeleteAllTags), so it never silently loses registration or --all-tags support.
 func TestPlugin_AllTagsSupport(t *testing.T) {
@@ -100,15 +100,15 @@ func TestPlugin_AllTagsSupport(t *testing.T) {
 }
 
 // TestDeployment_NoAllTagsSupport is the symmetric assertion for
-// Deployment — also a mutable namespace/name object. Already
+// Deployment — also a untagged namespace/name object. Already
 // covered by TestGet_AllTags_DeploymentRejected at the CLI surface
 // but pinning it at the registry shape level guards against an
 // accidental ListTags wiring regression.
 func TestDeployment_NoAllTagsSupport(t *testing.T) {
 	k, err := scheme.Lookup("deployment")
 	require.NoError(t, err)
-	require.Nil(t, k.ListTags, "Deployment should not expose ListTags (mutable object kind)")
-	require.Nil(t, k.DeleteAllTags, "Deployment should not expose DeleteAllTags (mutable object kind)")
+	require.Nil(t, k.ListTags, "Deployment should not expose ListTags (untagged resource kind)")
+	require.Nil(t, k.DeleteAllTags, "Deployment should not expose DeleteAllTags (untagged resource kind)")
 }
 
 // tagGetServer serves GET /v0/agents/{name}/{tag} (specific tag)
@@ -235,7 +235,7 @@ func TestGet_Tag_MutuallyExclusiveWithAllTags(t *testing.T) {
 }
 
 // TestGet_Tag_NotSupportedForProvider pins that --tag is rejected
-// for mutable namespace/name kinds (Runtime, Deployment) before any client
+// for untagged namespace/name kinds (Runtime, Deployment) before any client
 // dispatch happens.
 func TestGet_Tag_NotSupportedForProvider(t *testing.T) {
 	setDeclarativeTestClient(t, client.NewClient("http://127.0.0.1:1", ""))
@@ -365,7 +365,7 @@ func TestGet_TagAndLatest_MutuallyExclusive(t *testing.T) {
 }
 
 // TestGet_Latest_NotSupportedForProvider mirrors the --tag guard: --latest
-// is also a tag-shaped filter and should be rejected for mutable kinds
+// is also a tag-shaped filter and should be rejected for untagged kinds
 // before any dispatch.
 func TestGet_Latest_NotSupportedForProvider(t *testing.T) {
 	setDeclarativeTestClient(t, client.NewClient("http://127.0.0.1:1", ""))

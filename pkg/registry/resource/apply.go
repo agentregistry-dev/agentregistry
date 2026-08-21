@@ -34,7 +34,7 @@ type ApplyConfig struct {
 	Scheme *v1alpha1.Scheme
 	// Authorizers, when non-empty, gates each decoded document on apply
 	// against the same per-kind hook the generic resource handler
-	// consults on direct mutable-object PUT. Without this,
+	// consults on direct untagged PUT. Without this,
 	// /v0/apply (the multi-doc batch endpoint arctl uses) bypasses the
 	// per-kind authz wired through crud.PerKindHooks. Missing keys
 	// authorize-allow (matches resource.Config.Authorize == nil).
@@ -102,7 +102,7 @@ type applyOutput struct {
 //
 // DELETE: for each document, calls Store.Delete on the named resource. Tagged
 // artifacts use metadata.tag when supplied; omitted tag deletes all tags for
-// that namespace/name. Mutable objects delete by namespace/name. Validation
+// that namespace/name. Untagged resources delete by namespace/name. Validation
 // still runs so clients get the same error surface as apply.
 //
 // Both endpoints always return 200 with a per-document Results slice;
@@ -220,9 +220,9 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 // decoded body verbatim — batch callers expecting hook input matching
 // the persisted row should re-apply before deleting.
 //
-// Tagged-artifact batch delete uses the logical tag selector: omitting metadata.tag
+// Tagged batch delete uses the logical tag selector: omitting metadata.tag
 // deletes every tag for (namespace, name); setting metadata.tag deletes that
-// exact tag. Mutable-object rows keep their single-row delete since those rows
+// exact tag. Untagged rows keep their single-row delete since those rows
 // are control-plane state rather than append-only tags.
 func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun bool) arv0.ApplyResult {
 	store, meta, ae := resolveBatchTarget(cfg, obj, "delete")

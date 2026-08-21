@@ -256,7 +256,7 @@ func TestMCPCatalogTools(t *testing.T) {
 		listTool    string
 		getTool     string
 		name        string
-		expectedTag string // DefaultTag for tagged artifacts; "" for mutable-object kinds.
+		expectedTag string // DefaultTag for tagged resources; "" for untagged kinds.
 		seed        func(t *testing.T, name string)
 	}{
 		{

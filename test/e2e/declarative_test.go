@@ -1800,9 +1800,9 @@ spec:
 	}
 }
 
-// TestSkill_DeleteTaggedArtifactKeepsLatest asserts that deleting an explicit
+// TestSkill_DeleteTaggedKeepsLatest asserts that deleting an explicit
 // non-latest tag does not disturb the literal latest tag.
-func TestSkill_DeleteTaggedArtifactKeepsLatest(t *testing.T) {
+func TestSkill_DeleteTaggedKeepsLatest(t *testing.T) {
 	regURL := RegistryURL(t)
 	tmpDir := t.TempDir()
 	skillName := UniqueNameWithPrefix("e2epromoteskill")

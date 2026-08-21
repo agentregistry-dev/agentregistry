@@ -92,7 +92,7 @@ spec:
 
 // TestBuildStores_PropagatesAuditor verifies the auditor passed
 // through buildStores (the AppOptions.Auditor field)
-// reaches every constructed Store. We drive a tagged-artifact Upsert
+// reaches every constructed Store. We drive a tagged Upsert
 // and assert the auditor saw the expected ResourceTagCreated event,
 // proving the option survived the
 // NewStores -> NewStore option chain.

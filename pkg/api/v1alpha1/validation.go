@@ -144,10 +144,10 @@ var UpstreamMCPPackageNameRegex = regexp.MustCompile(UpstreamMCPPackageNamePatte
 
 // ValidateObjectMeta checks the namespace/name format and label shape.
 // Server-managed fields (CreatedAt, UpdatedAt, DeletionTimestamp) are ignored.
-// Content resources use metadata.tag for identity; mutable object kinds expose
+// Content resources use metadata.tag for identity; untagged resource kinds expose
 // only namespace/name.
 //
-// Taggable artifact kinds and mutable object kinds call this same validator
+// Taggable artifact kinds and untagged resource kinds call this same validator
 // because ObjectMeta exposes one public shape for both identities.
 func ValidateObjectMeta(m ObjectMeta) FieldErrors {
 	var errs FieldErrors
@@ -285,7 +285,7 @@ func validateRef(r ResourceRef, allowedKinds ...string) FieldErrors {
 	}
 	// Tag is optional on content refs — blank means "resolve to latest".
 	if r.Tag != "" {
-		if !IsTaggedArtifactKind(r.Kind) {
+		if !IsTaggedKind(r.Kind) {
 			errs.Append("tag", fmt.Errorf("%w: kind %q does not support tag pinning", ErrInvalidRef, r.Kind))
 		} else if err := validateTag(r.Tag); err != nil {
 			errs.Append("tag", err)
