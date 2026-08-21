@@ -156,7 +156,7 @@ type ResourceRouteContext struct {
 
 // Auditor receives audit events for state changes that the OSS layer
 // considers significant. The default OSS implementation is a no-op;
-// downstream builds plug in a real audit sink via NewStore options.
+// downstream builds plug in a real audit sink via Store options.
 //
 // Audit completeness is enforced at the source: every code path that
 // produces a recordable state change calls into Auditor directly,
@@ -164,7 +164,7 @@ type ResourceRouteContext struct {
 // to log.
 type Auditor interface {
 	// ResourceTagCreated is invoked when Store.Upsert creates a new tag row
-	// for a content-registry kind. Mutable-object kinds do not produce this
+	// for a content-registry kind. Untagged kinds do not produce this
 	// event.
 	ResourceTagCreated(ctx context.Context, kind, namespace, name, tag string)
 }
@@ -304,11 +304,9 @@ type AppOptions struct {
 	// or server startup panics.
 	V1Alpha1StoreTables map[string]string
 
-	// V1Alpha1MutableStoreKinds marks extra v1alpha1 kinds that use mutable
-	// namespace/name object behavior instead of tagged artifact semantics.
-	// Downstream control-plane/config kinds are v1alpha1-shaped but are not
-	// content artifacts.
-	V1Alpha1MutableStoreKinds map[string]bool
+	// V1Alpha1UntaggedStoreKinds marks extra kinds whose identity omits
+	// metadata.tag. Their storage key is namespace/name.
+	V1Alpha1UntaggedStoreKinds map[string]bool
 
 	// RegistryValidator overrides the per-package registry
 	// validator (the dispatcher consulted on apply to confirm

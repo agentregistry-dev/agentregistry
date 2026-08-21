@@ -2,12 +2,12 @@ package v1alpha1
 
 // ResourceRef is a typed reference to another resource in the registry.
 // Public references use one shape across v1alpha1: {Kind, Namespace, Name,
-// Tag}. Tag is meaningful only for taggable registry artifacts.
+// Tag}. Tag is meaningful only for tagged resources.
 //
 // Namespace is optional: blank means "same namespace as the referencing
 // object" (the common case). Tag is optional: blank means "resolve to the
-// literal latest tag" for taggable artifacts or "resolve by namespace/name"
-// for mutable object kinds.
+// literal latest tag" for tagged resources or "resolve by namespace/name"
+// for untagged resource kinds.
 type ResourceRef struct {
 	Kind      string `json:"kind" yaml:"kind"`
 	Namespace string `json:"namespace,omitempty" yaml:"namespace,omitempty"`
@@ -17,7 +17,7 @@ type ResourceRef struct {
 
 // DeploymentRef is a typed reference to another Deployment resource. Kind
 // is implicit (always Deployment) and Tag is omitted because Deployment is
-// a mutable-object kind keyed by namespace/name.
+// an untagged kind keyed by namespace/name.
 //
 // Namespace is optional: blank means "same namespace as the referencing
 // Deployment".

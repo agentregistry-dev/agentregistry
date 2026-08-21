@@ -22,8 +22,8 @@ import (
 
 func TestRegisterApply_MultiDocRoundTrip(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	agents := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
-	mcps := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "mcp_servers")
+	agents := v1alpha1store.NewTaggedStore(pool, v1alpha1store.TestSchema(), "agents")
+	mcps := v1alpha1store.NewTaggedStore(pool, v1alpha1store.TestSchema(), "mcp_servers")
 
 	_, api := humatest.New(t)
 	resource.RegisterApply(api, resource.ApplyConfig{
@@ -80,7 +80,7 @@ spec:
 
 func TestRegisterApply_PerDocFailureDoesntAbortBatch(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	agents := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
+	agents := v1alpha1store.NewTaggedStore(pool, v1alpha1store.TestSchema(), "agents")
 
 	_, api := humatest.New(t)
 	resource.RegisterApply(api, resource.ApplyConfig{
@@ -122,7 +122,7 @@ spec:
 
 func TestRegisterApply_AdmissionCanStageInsteadOfProductionUpsert(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	agents := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
+	agents := v1alpha1store.NewTaggedStore(pool, v1alpha1store.TestSchema(), "agents")
 
 	var admitted types.AdmissionInput
 	postUpsertCalled := false
@@ -177,7 +177,7 @@ spec:
 
 func TestRegisterApply_DeleteAdmissionCanStageInsteadOfProductionDelete(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	agents := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
+	agents := v1alpha1store.NewTaggedStore(pool, v1alpha1store.TestSchema(), "agents")
 	_, err := agents.Upsert(t.Context(), &v1alpha1.Agent{
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "staged-delete", Tag: "stable"},
 		Spec:     v1alpha1.AgentSpec{Title: "Staged Delete"},
@@ -239,7 +239,7 @@ metadata:
 
 func TestApplyObject_ReusesProductionApplyPath(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	agents := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
+	agents := v1alpha1store.NewTaggedStore(pool, v1alpha1store.TestSchema(), "agents")
 
 	obj := &v1alpha1.Agent{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
@@ -263,10 +263,10 @@ func TestApplyObject_ReusesProductionApplyPath(t *testing.T) {
 	require.Equal(t, "stable", row.Metadata.Tag)
 }
 
-func TestRegisterApply_MutableObjectResultsDoNotExposeVersion(t *testing.T) {
+func TestRegisterApply_UntaggedResultsDoNotExposeVersion(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	runtimes := v1alpha1store.NewMutableObjectStore(pool, v1alpha1store.TestSchema(), "runtimes")
-	deployments := v1alpha1store.NewMutableObjectStore(pool, v1alpha1store.TestSchema(), "deployments")
+	runtimes := v1alpha1store.NewUntaggedStore(pool, v1alpha1store.TestSchema(), "runtimes")
+	deployments := v1alpha1store.NewUntaggedStore(pool, v1alpha1store.TestSchema(), "deployments")
 
 	_, api := humatest.New(t)
 	resource.RegisterApply(api, resource.ApplyConfig{
@@ -314,7 +314,7 @@ spec:
 	require.Equal(t, arv0.ApplyStatusCreated, out.Results[1].Status)
 	require.Empty(t, out.Results[1].Tag)
 
-	// Mutable objects are keyed by namespace/name, so applying the same
+	// Untagged resources are keyed by namespace/name, so applying the same
 	// Deployment again must update neither the row nor its generation.
 	resp = api.Post("/v0/apply", "Content-Type: application/yaml", strings.NewReader(string(yaml)))
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
@@ -335,7 +335,7 @@ spec:
 
 func TestRegisterDeleteApply_OmittedTagDeletesAllTags(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	agents := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
+	agents := v1alpha1store.NewTaggedStore(pool, v1alpha1store.TestSchema(), "agents")
 
 	_, api := humatest.New(t)
 	resource.RegisterApply(api, resource.ApplyConfig{
@@ -380,7 +380,7 @@ metadata:
 
 func TestRegisterDeleteApply_TagDeletesOnlyExactTag(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	agents := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
+	agents := v1alpha1store.NewTaggedStore(pool, v1alpha1store.TestSchema(), "agents")
 
 	_, api := humatest.New(t)
 	resource.RegisterApply(api, resource.ApplyConfig{
@@ -426,7 +426,7 @@ metadata:
 
 func TestRegisterApply_DefaultsRemoteMCPServerTagBeforeAuthorize(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	mcpServers := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "mcp_servers")
+	mcpServers := v1alpha1store.NewTaggedStore(pool, v1alpha1store.TestSchema(), "mcp_servers")
 
 	_, err := mcpServers.Upsert(t.Context(), &v1alpha1.MCPServer{
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "test-mcp-server"},
@@ -492,8 +492,8 @@ spec:
 // /v0/apply path for the missing kinds.
 func TestRegisterApply_DeniesKindWithNoAuthorizer(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	agents := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
-	mcps := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "mcp_servers")
+	agents := v1alpha1store.NewTaggedStore(pool, v1alpha1store.TestSchema(), "agents")
+	mcps := v1alpha1store.NewTaggedStore(pool, v1alpha1store.TestSchema(), "mcp_servers")
 
 	_, api := humatest.New(t)
 	resource.RegisterApply(api, resource.ApplyConfig{

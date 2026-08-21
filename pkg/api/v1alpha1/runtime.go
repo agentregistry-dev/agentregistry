@@ -12,7 +12,7 @@ type Runtime struct {
 }
 
 func init() {
-	MustRegisterKind[*Runtime, RuntimeSpec](KindRuntime, WithMutableObjectStorage())
+	MustRegisterKind[*Runtime, RuntimeSpec](KindRuntime, WithUntaggedStorage())
 }
 
 // TypeKubernetes is the canonical discriminator for Kubernetes runtime

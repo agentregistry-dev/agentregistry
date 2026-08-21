@@ -9,11 +9,11 @@
 //	GET    {basePrefix}/{pluralKind}/{name}?namespace={ns}            get latest
 //	GET    {basePrefix}/{pluralKind}/{name}/tags?namespace={ns}      list tags of one (tagged content kinds only)
 //	GET    {basePrefix}/{pluralKind}/{name}/{tag}?namespace={ns}     get exact tag (tagged content kinds only)
-//	PUT    {basePrefix}/{pluralKind}/{name}?namespace={ns}           apply mutable object (Provider/Deployment/config)
-//	DELETE {basePrefix}/{pluralKind}/{name}?namespace={ns}           delete mutable object
+//	PUT    {basePrefix}/{pluralKind}/{name}?namespace={ns}           apply untagged resource (Provider/Deployment/config)
+//	DELETE {basePrefix}/{pluralKind}/{name}?namespace={ns}           delete untagged resource
 //	DELETE {basePrefix}/{pluralKind}/{name}/{tag}?namespace={ns}     delete exact tag (tagged content kinds only)
 //
-// Direct PUT is registered only for mutable object stores. Content-registry
+// Direct PUT is registered only for untagged resource stores. Content-registry
 // artifact kinds (Agent, MCPServer, Model, Plugin, Skill, Prompt) use
 // metadata.tag and are
 // written through POST /v0/apply.
@@ -60,7 +60,7 @@ type Config struct {
 	// "mcpservers"). If empty, defaults to strings.ToLower(Kind) + "s".
 	PluralKind string
 	// BasePrefix is the HTTP route prefix shared across kinds (e.g. "/v0").
-	// Routes extend it with `/{plural}/{name}` and, for tagged artifacts,
+	// Routes extend it with `/{plural}/{name}` and, for tagged resources,
 	// `/{plural}/{name}/{tag}`; namespace is
 	// carried as a query param (`?namespace={ns}`, default "default").
 	BasePrefix string
@@ -274,7 +274,7 @@ type ListInput struct {
 	Limit      int    `query:"limit" doc:"Max items to return (default 50)." default:"50"`
 	Cursor     string `query:"cursor" doc:"Opaque pagination cursor."`
 	Labels     string `query:"labels" doc:"Label selector: key=value,key2=value2."`
-	Tag        string `query:"tag" doc:"Restrict the result set to one tag value (tagged artifact kinds only)."`
+	Tag        string `query:"tag" doc:"Restrict the result set to one tag value (tagged resource kinds only)."`
 	LatestOnly bool   `query:"latestOnly" doc:"Only return the literal latest tag per (namespace, name). Equivalent to tag=latest for tagged kinds."`
 	// IncludeTerminating surfaces soft-deleted rows (deletionTimestamp != nil)
 	// which are hidden by default.
@@ -378,21 +378,21 @@ func Register[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T) {
 		return &bodyOutput[T]{Body: obj}, nil
 	})
 
-	// List tags (name only; namespace via query). Tagged-artifact
-	// kinds only — mutable object stores have no concept of
+	// List tags (name only; namespace via query). Tagged
+	// kinds only — untagged resource stores have no concept of
 	// "every tag of a logical resource". Registered before the
 	// get-exact route below so the literal "tags" path segment
 	// wins over the `{tag}` capture in the underlying flow router
 	// (routes match in registration order).
-	if v1alpha1.IsTaggedArtifactKind(kind) {
+	if v1alpha1.IsTaggedKind(kind) {
 		registerListTags(api, cfg, newObj, kind, itemPath)
 	}
 
-	if v1alpha1.IsTaggedArtifactKind(kind) {
+	if v1alpha1.IsTaggedKind(kind) {
 		registerGetTagged(api, cfg, newObj, kind, itemTagPath)
 		registerDeleteTagged(api, cfg, newObj, kind, itemTagPath)
 	} else {
-		registerApplyMutable(api, cfg, newObj, kind, itemPath)
+		registerApplyUntagged(api, cfg, newObj, kind, itemPath)
 		registerDeleteMutable(api, cfg, newObj, kind, itemPath)
 	}
 }
@@ -431,7 +431,7 @@ func registerGetTagged[T v1alpha1.Object](api huma.API, cfg Config, newObj func(
 }
 
 // registerListTags wires the GET /{name}/tags endpoint for a
-// tagged-artifact kind. Extracted from Register to keep the per-kind
+// tagged kind. Extracted from Register to keep the per-kind
 // route registration sequence readable.
 func registerListTags[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T, kind, itemPath string) {
 	huma.Register(api, huma.Operation{
@@ -468,8 +468,8 @@ func registerListTags[T v1alpha1.Object](api huma.API, cfg Config, newObj func()
 	})
 }
 
-// registerApplyMutable wires name-only PUT for mutable object stores.
-func registerApplyMutable[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T, kind, itemPath string) {
+// registerApplyUntagged wires name-only PUT for untagged resource stores.
+func registerApplyUntagged[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T, kind, itemPath string) {
 	huma.Register(api, huma.Operation{
 		OperationID:   "apply-" + strings.ToLower(kind),
 		Method:        http.MethodPut,
@@ -500,7 +500,7 @@ func registerApplyMutable[T v1alpha1.Object](api huma.API, cfg Config, newObj fu
 		}
 
 		// Stamp resolved public identity into metadata so applyCore sees the
-		// resolved namespace/name. The store owns any private mutable-object
+		// resolved namespace/name. The store owns any private untagged
 		// backing-row identity.
 		meta.Namespace = ns
 		meta.Name = name

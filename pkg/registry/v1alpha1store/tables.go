@@ -28,9 +28,9 @@ var builtInKinds = map[string]struct{}{
 // "MCPServer") and is the single input the router/apply layers take. They
 // never look up tables by string literal themselves.
 //
-// Kinds whose descriptors use KindStorageMutableObject are bound through
-// NewMutableObjectStore. Every other built-in kind uses NewStore
-// (tagged-artifact behavior). Extension kinds are intentionally not built here;
+// Kinds whose descriptors use KindStorageUntagged are bound through
+// NewUntaggedStore. Every other built-in kind uses NewTaggedStore.
+// Extension kinds are intentionally not built here;
 // the composition root wires them from V1Alpha1StoreTables after this function
 // returns.
 //
@@ -58,11 +58,11 @@ func NewStores(pool *pgxpool.Pool, schemas *pkgdb.SchemaRegistry, opts ...StoreO
 		// Caller-supplied opts win (they appear after WithKind in the
 		// option chain).
 		kindOpts := append([]StoreOption{WithKind(kind)}, opts...)
-		if descriptor.Storage == v1alpha1.KindStorageMutableObject {
-			out[kind] = NewMutableObjectStore(pool, ossSchema, table, kindOpts...)
+		if descriptor.Storage == v1alpha1.KindStorageUntagged {
+			out[kind] = NewUntaggedStore(pool, ossSchema, table, kindOpts...)
 			continue
 		}
-		out[kind] = NewStore(pool, ossSchema, table, kindOpts...)
+		out[kind] = NewTaggedStore(pool, ossSchema, table, kindOpts...)
 	}
 	for kind := range builtInKinds {
 		if _, ok := out[kind]; !ok {

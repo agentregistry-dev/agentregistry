@@ -12,11 +12,11 @@ arctl apply -f summarizer/agent.yaml
 
 `arctl init agent NAME` and `arctl init mcp NAME` pick a framework + language interactively unless `--framework` and `--language` are provided. Run `arctl init agent NAME` (or `arctl init mcp NAME`) on its own to see the available choices. All resource `metadata.name` values (Agent, Skill, Prompt, Deployment, MCPServer) must be DNS-1123 subdomain: lowercase alphanumeric, hyphens, and dots; max 253 chars; each dot-separated segment must start and end with alphanumeric (max 63 chars per segment). Examples: `my-server`, `io.example.mcp`. Agent names additionally cannot contain hyphens or dots and cannot collide with Python keywords (`class`, `import`, `return`, …) because they become Python identifiers in generated code.
 
-## Tags And Mutable Objects
+## Tagged And Untagged Resources
 
-Agents, Models, MCP servers, remote MCP servers, skills, and prompts are taggable artifacts. Set `metadata.tag` to publish a deterministic name you can reference from other manifests; if you omit it, the registry uses the literal `latest` tag.
+Agents, Models, MCP servers, remote MCP servers, skills, and prompts are tagged resources. Set `metadata.tag` to create an independently addressable slot; if you omit it, the registry uses the literal `latest` tag. Tags are not immutable versions: applying changed content to an existing tag replaces that tag's row.
 
-Runtimes and Deployments are mutable control-plane objects. They use public namespace/name identity, not tags or versions.
+Runtimes and Deployments are untagged resources. Their identity is namespace/name.
 
 ```bash
 arctl init agent summarizer --framework adk --language python --model-provider gemini --model-name gemini-2.5-flash

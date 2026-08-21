@@ -91,7 +91,7 @@ func init() {
 		pluginRow,
 	))
 
-	// Runtime is registered manually because it is a mutable namespace/name
+	// Runtime is registered manually because it is a untagged namespace/name
 	// object: the server's runtime store does not expose /tags or
 	// DeleteAllTags endpoints. Routing it through
 	// typedKind would advertise --all-tags on its CLI surface and call
@@ -99,7 +99,7 @@ func init() {
 	// what typedKind would otherwise produce; ListTags / DeleteAllTags are
 	// intentionally omitted so the dispatch layer rejects --all-tags cleanly.
 	scheme.Register(
-		mutableTypedKind(
+		untaggedTypedKind(
 			"runtime", "runtimes", []string{"Runtime"},
 			[]scheme.Column{{Header: "NAME"}, {Header: "TYPE"}},
 			v1alpha1.KindRuntime,
@@ -119,13 +119,13 @@ func init() {
 		modelRow,
 	))
 
-	// Deployment is registered manually because it is a mutable namespace/name
+	// Deployment is registered manually because it is a untagged namespace/name
 	// object: the server's deployment store does not expose /tags or
 	// DeleteAllTags endpoints. Explicit get/delete accept either NAME or
 	// NAMESPACE/NAME; ListTags / DeleteAllTags are intentionally omitted so
 	// the dispatch layer rejects --all-tags cleanly.
 	scheme.Register(
-		mutableTypedKind(
+		untaggedTypedKind(
 			"deployment", "deployments", []string{"Deployment"},
 			[]scheme.Column{
 				{Header: "NAME"}, {Header: "TARGET"}, {Header: "VERSION"},
@@ -136,7 +136,7 @@ func init() {
 			func(deployment *v1alpha1.Deployment) []string {
 				return deploymentRow(cliCommon.DeploymentRecordFromObject(deployment))
 			},
-			withMutableListFunc(listDeploymentResources),
+			withUntaggedListFunc(listDeploymentResources),
 		),
 	)
 }
@@ -191,29 +191,29 @@ func typedKind[T v1alpha1.Object](
 	}
 }
 
-// mutableTypedKind is typedKind for namespace/name resources such as Runtime
+// untaggedTypedKind is typedKind for namespace/name resources such as Runtime
 // and Deployment. These kinds use the generic v1alpha1 CRUD surface but do not
 // expose /tags, so the tag-specific callbacks are intentionally nil.
-type mutableTypedKindOption func(*scheme.Kind)
+type untaggedTypedKindOption func(*scheme.Kind)
 
-// withMutableListFunc is an option to override the default ListFunc for a
-// mutableTypedKind.
-func withMutableListFunc(fn scheme.ListFunc) mutableTypedKindOption {
+// withUntaggedListFunc overrides the default ListFunc for an
+// untaggedTypedKind.
+func withUntaggedListFunc(fn scheme.ListFunc) untaggedTypedKindOption {
 	return func(k *scheme.Kind) {
 		k.ListFunc = fn
 	}
 }
 
-// mutableTypedKind builds a scheme.Kind for mutable namespace/name resources which
-// do not support tagging.
-func mutableTypedKind[T v1alpha1.Object](
+// untaggedTypedKind builds a scheme.Kind for namespace/name resources that do
+// not support tagging.
+func untaggedTypedKind[T v1alpha1.Object](
 	cliName, plural string,
 	aliases []string,
 	columns []scheme.Column,
 	canonicalKind string,
 	newObj func() T,
 	row func(T) []string,
-	opts ...mutableTypedKindOption,
+	opts ...untaggedTypedKindOption,
 ) *scheme.Kind {
 	k := &scheme.Kind{
 		Kind:         cliName,

@@ -2,7 +2,7 @@ package v1alpha1
 
 // Plugin is the typed envelope for kind=Plugin resources.
 //
-// A Plugin is a self-contained, versioned bundle of harness extensions —
+// A Plugin is a self-contained, tagged bundle of harness extensions —
 // skills, MCP servers, hooks, and sub-agents — modeled on the Claude Code
 // plugin format. The Spec is USER INTENT ONLY: a pinned pointer to an external
 // source (a git commit or — later — an OCI digest), the same source-based model

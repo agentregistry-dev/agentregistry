@@ -87,7 +87,7 @@ func applyCore(
 		obj.SetMetadata(*meta)
 	}
 
-	if v1alpha1.IsTaggedArtifactKind(kind) && meta.Tag == "" {
+	if v1alpha1.IsTaggedKind(kind) && meta.Tag == "" {
 		meta.Tag = v1alpha1store.DefaultTag()
 		obj.SetMetadata(*meta)
 	}

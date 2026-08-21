@@ -1,5 +1,5 @@
 -- Models: admin-owned model definitions (provider-scoped identity
--- plus platform-owned auth/endpoint posture). A mutable-object kind keyed by
+-- plus platform-owned auth/endpoint posture). A untagged kind keyed by
 -- (namespace, name): auth/endpoint edits are routine config mutations, not new
 -- versions. Wires the standard updated-at, status-notify, and control-plane
 -- event triggers used by mutable resources.

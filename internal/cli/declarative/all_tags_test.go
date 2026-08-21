@@ -175,7 +175,7 @@ func TestGet_AllTags_Agent_JSONOutput(t *testing.T) {
 }
 
 // (3) `arctl get deployment NAME --all-tags` errors cleanly because
-// deployments are mutable namespace/name objects, not taggable artifacts.
+// deployments are untagged namespace/name objects, not taggable artifacts.
 func TestGet_AllTags_DeploymentRejected(t *testing.T) {
 	setDeclarativeTestClient(t, client.NewClient("http://127.0.0.1:1", ""))
 
@@ -188,7 +188,7 @@ func TestGet_AllTags_DeploymentRejected(t *testing.T) {
 }
 
 // (3b) `arctl get runtime NAME --all-tags` errors cleanly — Runtime
-// is a mutable namespace/name object whose store has no /tags endpoint.
+// is a untagged namespace/name object whose store has no /tags endpoint.
 // Pin the CLI surface so a future typedKind change can't
 // silently re-expose --all-tags for Runtime.
 func TestGet_AllTags_ProviderRejected(t *testing.T) {

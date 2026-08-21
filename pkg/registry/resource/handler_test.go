@@ -81,7 +81,7 @@ func TestResourceRegister_AgentCRUD(t *testing.T) {
 	t.Helper()
 
 	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
+	store := v1alpha1store.NewTaggedStore(pool, v1alpha1store.TestSchema(), "agents")
 
 	_, api := humatest.New(t)
 	registerAgent(api, store)
@@ -173,7 +173,7 @@ spec:
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &gotAgent))
 	require.Equal(t, "Alice v2", gotAgent.Spec.Title)
 
-	// DELETE — tagged-artifact rows have no finalizers, so DELETE
+	// DELETE — tagged rows have no finalizers, so DELETE
 	// hard-deletes the targeted tag immediately.
 	resp = api.Delete("/v0/agents/alice/latest")
 	require.Equal(t, http.StatusNoContent, resp.Code)
@@ -201,7 +201,7 @@ spec:
 
 func TestResourceRegister_DeleteTaggedPassesTagToAuthorizer(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
+	store := v1alpha1store.NewTaggedStore(pool, v1alpha1store.TestSchema(), "agents")
 	_, err := store.Upsert(t.Context(), &v1alpha1.Agent{
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "alice", Tag: "stable"},
 		Spec:     v1alpha1.AgentSpec{Title: "Stable Alice"},
@@ -233,7 +233,7 @@ func TestResourceRegister_DeleteTaggedPassesTagToAuthorizer(t *testing.T) {
 
 func TestResourceRegister_DeleteAdmissionCanStageTaggedDelete(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
+	store := v1alpha1store.NewTaggedStore(pool, v1alpha1store.TestSchema(), "agents")
 	_, err := store.Upsert(t.Context(), &v1alpha1.Agent{
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "alice", Tag: "stable"},
 		Spec:     v1alpha1.AgentSpec{Title: "Stable Alice"},
@@ -277,7 +277,7 @@ func TestResourceRegister_DeleteAdmissionCanStageTaggedDelete(t *testing.T) {
 
 func TestResourceRegister_AgentNamespaceIsolation(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
+	store := v1alpha1store.NewTaggedStore(pool, v1alpha1store.TestSchema(), "agents")
 
 	_, api := humatest.New(t)
 	registerAgent(api, store)
@@ -336,7 +336,7 @@ spec:
 
 func TestResourceRegister_AgentListCursorPagination(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
+	store := v1alpha1store.NewTaggedStore(pool, v1alpha1store.TestSchema(), "agents")
 
 	_, api := humatest.New(t)
 	registerAgent(api, store)
@@ -387,7 +387,7 @@ spec:
 // contract: every non-deleted tag row for (namespace, name) is returned.
 func TestResourceRegister_AgentListTags(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
+	store := v1alpha1store.NewTaggedStore(pool, v1alpha1store.TestSchema(), "agents")
 
 	_, api := humatest.New(t)
 	registerAgent(api, store)
@@ -431,7 +431,7 @@ func TestResourceRegister_AgentListTags(t *testing.T) {
 
 func TestResourceRegister_AgentListRejectsInvalidCursor(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
+	store := v1alpha1store.NewTaggedStore(pool, v1alpha1store.TestSchema(), "agents")
 
 	_, api := humatest.New(t)
 	registerAgent(api, store)
@@ -443,8 +443,8 @@ func TestResourceRegister_AgentListRejectsInvalidCursor(t *testing.T) {
 
 func TestResourceRegister_OriginFilterIsOptIn(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	agents := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
-	deployments := v1alpha1store.NewMutableObjectStore(pool, v1alpha1store.TestSchema(), "deployments")
+	agents := v1alpha1store.NewTaggedStore(pool, v1alpha1store.TestSchema(), "agents")
+	deployments := v1alpha1store.NewUntaggedStore(pool, v1alpha1store.TestSchema(), "deployments")
 
 	_, plainAPI := humatest.New(t)
 	resource.Register[*v1alpha1.Agent](plainAPI, resource.Config{
@@ -491,7 +491,7 @@ func requireListQueryParam(t *testing.T, api humatest.TestAPI, path, name string
 // the filtered list returns just the two matches.
 func TestResourceRegister_ListFilter(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
+	store := v1alpha1store.NewTaggedStore(pool, v1alpha1store.TestSchema(), "agents")
 
 	for _, name := range []string{"ok-one", "ok-two", "blocked-three"} {
 		_, err := store.Upsert(t.Context(), &v1alpha1.Agent{
@@ -541,7 +541,7 @@ func TestResourceRegister_ListFilter(t *testing.T) {
 // longer registered for content-registry kinds (Agent, MCPServer,
 // Skill, Prompt). POST /v0/apply is the single
 // create/update entry point — user-controlled tags live in metadata.tag rather
-// than the URL segment of a direct PUT. Runtime/Deployment mutable-object
+// than the URL segment of a direct PUT. Runtime/Deployment untagged
 // stores still expose direct namespace/name PUT.
 //
 // The test issues a PUT against the agents handler and expects 405
@@ -550,7 +550,7 @@ func TestResourceRegister_ListFilter(t *testing.T) {
 // confirms PUT is excluded.
 func TestResourceRegister_PutNotRegisteredForContentKinds(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
+	store := v1alpha1store.NewTaggedStore(pool, v1alpha1store.TestSchema(), "agents")
 
 	_, api := humatest.New(t)
 	registerAgent(api, store)
@@ -579,9 +579,9 @@ func TestResourceRegister_PutNotRegisteredForContentKinds(t *testing.T) {
 		rec.Code, rec.Body.String())
 }
 
-func TestResourceRegister_MutableObjectUsesNameOnlyRoute(t *testing.T) {
+func TestResourceRegister_UntaggedUsesNameOnlyRoute(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewMutableObjectStore(pool, v1alpha1store.TestSchema(), "runtimes")
+	store := v1alpha1store.NewUntaggedStore(pool, v1alpha1store.TestSchema(), "runtimes")
 
 	_, api := humatest.New(t)
 	registerProvider(api, store)
@@ -602,7 +602,7 @@ func TestResourceRegister_MutableObjectUsesNameOnlyRoute(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 
 	resp = api.Put("/v0/runtimes/test-runtime/1", runtime)
-	require.Equal(t, http.StatusNotFound, resp.Code, "mutable object route must be name-only")
+	require.Equal(t, http.StatusNotFound, resp.Code, "untagged resource route must be name-only")
 
 	resp = api.Delete("/v0/runtimes/test-runtime")
 	require.Equal(t, http.StatusNoContent, resp.Code, resp.Body.String())
@@ -610,8 +610,8 @@ func TestResourceRegister_MutableObjectUsesNameOnlyRoute(t *testing.T) {
 
 func TestResourceRegister_ResolverDetectsDanglingRef(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	agentStore := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
-	mcpStore := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "mcp_servers")
+	agentStore := v1alpha1store.NewTaggedStore(pool, v1alpha1store.TestSchema(), "agents")
+	mcpStore := v1alpha1store.NewTaggedStore(pool, v1alpha1store.TestSchema(), "mcp_servers")
 
 	// Resolver: only MCPServer "tools" in namespace "default" exists.
 	resolver := func(ctx context.Context, ref v1alpha1.ResourceRef) error {
@@ -677,7 +677,7 @@ spec:
 // for every v1alpha1 kind"); fixed at the Store layer.
 func TestResourceRegister_DeleteHardDeletesFinalizerFree(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
+	store := v1alpha1store.NewTaggedStore(pool, v1alpha1store.TestSchema(), "agents")
 
 	_, api := humatest.New(t)
 	registerAgent(api, store)
@@ -732,7 +732,7 @@ spec:
 // reviewer awareness.
 func TestResourceRegister_PostUpsertFailureLeavesPersistedRow(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
+	store := v1alpha1store.NewTaggedStore(pool, v1alpha1store.TestSchema(), "agents")
 
 	hookCalls := 0
 	hookErr := fmt.Errorf("simulated type-adapter failure")
@@ -807,11 +807,11 @@ spec:
 // TestResourceRegister_IncludeTerminatingByDefault pins the opt-in
 // behavior: a kind registered with IncludeTerminatingByDefault=true
 // surfaces terminating rows on plain LIST (no ?includeTerminating=true
-// needed), and ?latestOnly=true remains a no-op for mutable objects because
+// needed), and ?latestOnly=true remains a no-op for untagged resources because
 // namespace/name is already unique.
 func TestResourceRegister_IncludeTerminatingByDefault(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewMutableObjectStore(pool, v1alpha1store.TestSchema(), "runtimes")
+	store := v1alpha1store.NewUntaggedStore(pool, v1alpha1store.TestSchema(), "runtimes")
 	const testNamespace = "terminating-test"
 
 	_, api := humatest.New(t)
@@ -850,7 +850,7 @@ func TestResourceRegister_IncludeTerminatingByDefault(t *testing.T) {
 	require.NotNil(t, list.Items[0].Metadata.DeletionTimestamp,
 		"opt-in default must surface the deletionTimestamp so operators see in-flight teardown")
 
-	// LatestOnly is a no-op for mutable objects, so the terminating row remains
+	// LatestOnly is a no-op for untagged resources, so the terminating row remains
 	// visible because the kind opted into IncludeTerminatingByDefault.
 	resp = api.Get("/v0/runtimes?namespace=" + testNamespace + "&latestOnly=true")
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
@@ -879,13 +879,13 @@ func TestResourceRegister_IncludeTerminatingByDefault(t *testing.T) {
 }
 
 // TestResourceRegister_DeleteIdempotentOnTerminating pins the
-// idempotent-DELETE contract for mutable-object kinds: even without
+// idempotent-DELETE contract for untagged kinds: even without
 // IncludeTerminatingByDefault, a DELETE on an already-terminating row
 // returns 204 rather than 404. The handler uses the terminating-aware
 // lookup so retry scripts get a coherent response shape.
 func TestResourceRegister_DeleteIdempotentOnTerminating(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
-	store := v1alpha1store.NewMutableObjectStore(pool, v1alpha1store.TestSchema(), "runtimes")
+	store := v1alpha1store.NewUntaggedStore(pool, v1alpha1store.TestSchema(), "runtimes")
 	const testNamespace = "delete-idempotent"
 
 	_, api := humatest.New(t)

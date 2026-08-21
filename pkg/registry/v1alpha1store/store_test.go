@@ -34,7 +34,7 @@ func upsertAgent(t *testing.T, store *Store, name string, spec v1alpha1.AgentSpe
 
 func TestStore_UpsertCreatesRow(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, TestSchema(), testTable)
+	store := NewTaggedStore(pool, TestSchema(), testTable)
 	ctx := context.Background()
 
 	res, err := store.Upsert(ctx, &v1alpha1.Agent{
@@ -57,7 +57,7 @@ func TestStore_UpsertCreatesRow(t *testing.T) {
 // semantics: same spec_hash + same labels/annotations is a no-op.
 func TestStore_UpsertNoOpOnIdenticalSpec(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, TestSchema(), testTable)
+	store := NewTaggedStore(pool, TestSchema(), testTable)
 
 	upsertAgent(t, store, "foo", v1alpha1.AgentSpec{Title: "alpha"}, nil)
 	res := upsertAgent(t, store, "foo", v1alpha1.AgentSpec{Title: "alpha"}, nil)
@@ -69,7 +69,7 @@ func TestStore_UpsertNoOpOnIdenticalSpec(t *testing.T) {
 // for the same default tag atomically replaces the previous latest row.
 func TestStore_UpsertReplacesLatestOnSpecChange(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, TestSchema(), testTable)
+	store := NewTaggedStore(pool, TestSchema(), testTable)
 
 	upsertAgent(t, store, "foo", v1alpha1.AgentSpec{Title: "first"}, nil)
 	res := upsertAgent(t, store, "foo", v1alpha1.AgentSpec{Title: "second"}, nil)
@@ -85,7 +85,7 @@ func TestStore_UpsertReplacesLatestOnSpecChange(t *testing.T) {
 // row tagged "latest", not the newest or lexicographically highest tag.
 func TestStore_GetLatestReadsLiteralLatestTag(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, TestSchema(), testTable)
+	store := NewTaggedStore(pool, TestSchema(), testTable)
 
 	for _, tag := range []string{"stable", "candidate"} {
 		_, err := store.Upsert(context.Background(), &v1alpha1.Agent{
@@ -103,7 +103,7 @@ func TestStore_GetLatestReadsLiteralLatestTag(t *testing.T) {
 
 func TestStore_GetByRefResolvesBlankTagToLatest(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, TestSchema(), testTable)
+	store := NewTaggedStore(pool, TestSchema(), testTable)
 	ctx := context.Background()
 
 	_, err := store.Upsert(ctx, &v1alpha1.Agent{
@@ -124,7 +124,7 @@ func TestStore_GetByRefResolvesBlankTagToLatest(t *testing.T) {
 
 func TestStore_GetByRefMutableRejectsTag(t *testing.T) {
 	pool := NewTestPool(t)
-	runtimes := NewMutableObjectStore(pool, TestSchema(), "runtimes")
+	runtimes := NewUntaggedStore(pool, TestSchema(), "runtimes")
 	ctx := context.Background()
 
 	_, err := runtimes.Upsert(ctx, &v1alpha1.Runtime{
@@ -143,7 +143,7 @@ func TestStore_GetByRefMutableRejectsTag(t *testing.T) {
 
 func TestStore_DeleteByRefTaggedBlankDeletesAllTags(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, TestSchema(), testTable)
+	store := NewTaggedStore(pool, TestSchema(), testTable)
 	ctx := context.Background()
 
 	_, err := store.Upsert(ctx, &v1alpha1.Agent{
@@ -162,7 +162,7 @@ func TestStore_DeleteByRefTaggedBlankDeletesAllTags(t *testing.T) {
 
 func TestStore_DeleteByRefMutableDeletesByName(t *testing.T) {
 	pool := NewTestPool(t)
-	runtimes := NewMutableObjectStore(pool, TestSchema(), "runtimes")
+	runtimes := NewUntaggedStore(pool, TestSchema(), "runtimes")
 	ctx := context.Background()
 
 	_, err := runtimes.Upsert(ctx, &v1alpha1.Runtime{
@@ -181,7 +181,7 @@ func TestStore_DeleteByRefMutableDeletesByName(t *testing.T) {
 
 func TestStore_PatchStatusDisjointFromSpec(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, TestSchema(), testTable)
+	store := NewTaggedStore(pool, TestSchema(), testTable)
 	ctx := context.Background()
 
 	upsertAgent(t, store, "foo", v1alpha1.AgentSpec{Title: "alpha"}, nil)
@@ -204,7 +204,7 @@ func TestStore_PatchStatusDisjointFromSpec(t *testing.T) {
 
 func TestStore_PatchStatusNotFound(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, TestSchema(), testTable)
+	store := NewTaggedStore(pool, TestSchema(), testTable)
 	ctx := context.Background()
 
 	err := store.PatchStatus(ctx, testNS, "nope", "1", v1alpha1.StatusPatcher(func(*v1alpha1.Status) {}))
@@ -217,7 +217,7 @@ func TestStore_PatchStatusNotFound(t *testing.T) {
 // would churn updated_at and WAL with no content change.
 func TestStore_ApplyPatchSkipsUnchangedWrites(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, TestSchema(), testTable)
+	store := NewTaggedStore(pool, TestSchema(), testTable)
 	ctx := context.Background()
 
 	upsertAgent(t, store, "steady", v1alpha1.AgentSpec{Title: "alpha"}, nil)
@@ -247,7 +247,7 @@ func TestStore_ApplyPatchSkipsUnchangedWrites(t *testing.T) {
 
 func TestStore_GetNotFound(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, TestSchema(), testTable)
+	store := NewTaggedStore(pool, TestSchema(), testTable)
 	ctx := context.Background()
 
 	_, err := store.Get(ctx, testNS, "nope", "1")
@@ -257,13 +257,13 @@ func TestStore_GetNotFound(t *testing.T) {
 	require.True(t, errors.Is(err, pkgdb.ErrNotFound))
 }
 
-// TestStore_DeleteHardDeletesTaggedRow guards the tagged-artifact fast path:
+// TestStore_DeleteHardDeletesTaggedRow guards the tagged fast path:
 // rows have no finalizers and Delete
 // hard-deletes immediately. arctl delete + arctl apply works without any
 // background GC pass.
 func TestStore_DeleteHardDeletesTaggedRow(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, TestSchema(), testTable)
+	store := NewTaggedStore(pool, TestSchema(), testTable)
 	ctx := context.Background()
 
 	_, err := store.Upsert(ctx, &v1alpha1.Agent{
@@ -299,7 +299,7 @@ func TestStore_DeleteHardDeletesTaggedRow(t *testing.T) {
 
 func TestStore_List(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, TestSchema(), testTable)
+	store := NewTaggedStore(pool, TestSchema(), testTable)
 	ctx := context.Background()
 
 	_, err := store.Upsert(ctx, &v1alpha1.Agent{
@@ -343,7 +343,7 @@ func TestStore_List(t *testing.T) {
 
 func TestStore_ListExtraWhereRebasesPlaceholders(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, TestSchema(), testTable)
+	store := NewTaggedStore(pool, TestSchema(), testTable)
 	ctx := context.Background()
 
 	for _, name := range []string{"a", "b", "c"} {
@@ -385,7 +385,7 @@ func TestStore_ListExtraWhereRebasesPlaceholders(t *testing.T) {
 // wrong query.
 func TestStore_ListExtraWhereRejectsMismatch(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, TestSchema(), testTable)
+	store := NewTaggedStore(pool, TestSchema(), testTable)
 	ctx := context.Background()
 
 	cases := []struct {
@@ -419,7 +419,7 @@ func TestStore_ListExtraWhereRejectsMismatch(t *testing.T) {
 
 func TestStore_ListCursorPagination(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, TestSchema(), testTable)
+	store := NewTaggedStore(pool, TestSchema(), testTable)
 	ctx := context.Background()
 
 	for _, name := range []string{"first", "second", "third"} {
@@ -446,7 +446,7 @@ func TestStore_ListCursorPagination(t *testing.T) {
 
 func TestStore_ListRejectsInvalidCursor(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, TestSchema(), testTable)
+	store := NewTaggedStore(pool, TestSchema(), testTable)
 
 	_, _, err := store.List(context.Background(), ListOpts{Cursor: "not-a-valid-cursor"})
 	require.ErrorIs(t, err, ErrInvalidCursor)
@@ -458,7 +458,7 @@ func TestStore_ListRejectsInvalidCursor(t *testing.T) {
 // concurrent PatchStatus must not jump pages or get returned twice.
 func TestStore_ListCursorStableUnderStatusChurn(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, TestSchema(), testTable)
+	store := NewTaggedStore(pool, TestSchema(), testTable)
 	ctx := context.Background()
 
 	names := []string{"alpha", "beta", "gamma", "delta"} // lexical order: alpha, beta, delta, gamma
@@ -494,7 +494,7 @@ func TestStore_ListCursorStableUnderStatusChurn(t *testing.T) {
 
 func TestStore_PatchAnnotationsPreservesExistingKeys(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, TestSchema(), testTable)
+	store := NewTaggedStore(pool, TestSchema(), testTable)
 	ctx := context.Background()
 
 	_, err := store.Upsert(ctx, &v1alpha1.Agent{
@@ -519,7 +519,7 @@ func TestStore_PatchAnnotationsPreservesExistingKeys(t *testing.T) {
 
 func TestStore_FindReferrers(t *testing.T) {
 	pool := NewTestPool(t)
-	agents := NewStore(pool, TestSchema(), "agents")
+	agents := NewTaggedStore(pool, TestSchema(), "agents")
 	ctx := context.Background()
 
 	_, err := agents.Upsert(ctx, &v1alpha1.Agent{
@@ -551,8 +551,8 @@ func TestStore_FindReferrers(t *testing.T) {
 
 func TestStore_NoSeededRuntimes(t *testing.T) {
 	pool := NewTestPool(t)
-	// Runtime is a mutable object keyed by namespace/name.
-	runtimes := NewMutableObjectStore(pool, TestSchema(), "runtimes")
+	// Runtime is a untagged resource keyed by namespace/name.
+	runtimes := NewUntaggedStore(pool, TestSchema(), "runtimes")
 	ctx := context.Background()
 
 	_, err := runtimes.GetLatest(ctx, "default", "kubernetes-default")
@@ -567,7 +567,7 @@ func TestStore_NoSeededRuntimes(t *testing.T) {
 // discrete JSON fields instead of a concatenated "ns/name/tag" string.
 func TestStore_NotifyPayloadDiscreteFields(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, TestSchema(), testTable)
+	store := NewTaggedStore(pool, TestSchema(), testTable)
 	ctx := context.Background()
 
 	conn, err := pool.Acquire(ctx)
@@ -607,7 +607,7 @@ func TestStore_NotifyPayloadDiscreteFields(t *testing.T) {
 
 func TestStore_ControlPlaneEventsTrackSourceWritesOnly(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, TestSchema(), testTable)
+	store := NewTaggedStore(pool, TestSchema(), testTable)
 	events := NewControlPlaneEventStore(pool, TestSchema())
 	ctx := context.Background()
 
@@ -671,7 +671,7 @@ func TestStore_ControlPlaneEventTracksResolvedSourceStatusChanges(t *testing.T) 
 			name:    "plugin",
 			kind:    v1alpha1.KindPlugin,
 			rowName: "plugin",
-			store:   NewStore(pool, TestSchema(), "plugins"),
+			store:   NewTaggedStore(pool, TestSchema(), "plugins"),
 			upsert: func(t *testing.T, store *Store) {
 				t.Helper()
 				_, err := store.Upsert(ctx, &v1alpha1.Plugin{
@@ -719,7 +719,7 @@ func TestStore_ControlPlaneEventTracksResolvedSourceStatusChanges(t *testing.T) 
 			name:    "skill",
 			kind:    v1alpha1.KindSkill,
 			rowName: "skill",
-			store:   NewStore(pool, TestSchema(), "skills"),
+			store:   NewTaggedStore(pool, TestSchema(), "skills"),
 			upsert: func(t *testing.T, store *Store) {
 				t.Helper()
 				_, err := store.Upsert(ctx, &v1alpha1.Skill{
@@ -800,7 +800,7 @@ func TestStore_ControlPlaneEventTracksResolvedSourceStatusChanges(t *testing.T) 
 
 func TestControlPlaneEventStore_PruneBeforeHonorsKeepAfterRevision(t *testing.T) {
 	pool := NewTestPool(t)
-	store := NewStore(pool, TestSchema(), testTable)
+	store := NewTaggedStore(pool, TestSchema(), testTable)
 	events := NewControlPlaneEventStore(pool, TestSchema())
 	ctx := context.Background()
 
@@ -828,11 +828,11 @@ func TestControlPlaneEventStore_PruneBeforeHonorsKeepAfterRevision(t *testing.T)
 	require.Equal(t, keep, remaining[0].Revision)
 }
 
-// TestStore_ModelTaggedArtifactCRUD covers Model's tagged storage: distinct
+// TestStore_ModelTaggedCRUD covers Model's tagged storage: distinct
 // configuration tags coexist and each write records a control-plane event.
-func TestStore_ModelTaggedArtifactCRUD(t *testing.T) {
+func TestStore_ModelTaggedCRUD(t *testing.T) {
 	pool := NewTestPool(t)
-	models := NewStore(pool, TestSchema(), "models")
+	models := NewTaggedStore(pool, TestSchema(), "models")
 	events := NewControlPlaneEventStore(pool, TestSchema())
 	ctx := context.Background()
 

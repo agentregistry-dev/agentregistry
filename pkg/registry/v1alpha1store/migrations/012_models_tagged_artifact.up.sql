@@ -1,5 +1,5 @@
--- Convert Models from mutable namespace/name objects to tagged catalog
--- artifacts. Existing rows become the literal "latest" tag so references
+-- Convert Models from untagged namespace/name rows to tagged rows. Existing
+-- rows become the literal "latest" tag so references
 -- that omit tag preserve their pre-migration behavior.
 
 ALTER TABLE models
@@ -31,7 +31,7 @@ ALTER TABLE models
 ALTER TABLE models
     ADD PRIMARY KEY (namespace, name, tag);
 
--- Finalizers are mutable-object lifecycle state. Tagged artifacts are deleted
+-- Finalizers are untagged lifecycle state. Tagged rows are deleted
 -- by exact tag (or all tags through the batch endpoint) and do not use them.
 ALTER TABLE models
     DROP COLUMN IF EXISTS finalizers;

@@ -32,7 +32,7 @@ const (
 // provider-scoped identity, and platform-owned connection posture.
 //
 // Model is a tagged catalog artifact. Provider identity and platform-owned
-// auth/endpoint posture are versioned together so Deployments can pin the
+// auth/endpoint posture are stored under one tag so Deployments can pin the
 // complete model configuration they consume.
 type ModelSpec struct {
 	// Catalog display metadata.

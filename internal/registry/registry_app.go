@@ -96,7 +96,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	deploymentAdapters := map[string]types.DeploymentAdapter{}
 	maps.Copy(deploymentAdapters, options.DeploymentAdapters)
 	pool := db.Pool()
-	stores := buildStores(pool, options.V1Alpha1StoreTables, options.V1Alpha1MutableStoreKinds, options.Auditor)
+	stores := buildStores(pool, options.V1Alpha1StoreTables, options.V1Alpha1UntaggedStoreKinds, options.Auditor)
 	controllerConfig := deploymentControllerConfig(cfg)
 	controllerConfig.DependencyKinds = maps.Clone(options.DeploymentDependencyKinds)
 	if _, err := controller.StartDeploymentController(ctx, pool, stores, deploymentAdapters, controllerConfig); err != nil {
@@ -226,7 +226,7 @@ func resolveExtraStoreSchema(table string, ossSchema pkgdb.Schema) (pkgdb.Schema
 	return ossSchema, table
 }
 
-func buildStores(pool *pgxpool.Pool, extraStoreTables map[string]string, mutableExtraKinds map[string]bool, auditor types.Auditor) map[string]*v1alpha1store.Store {
+func buildStores(pool *pgxpool.Pool, extraStoreTables map[string]string, untaggedExtraKinds map[string]bool, auditor types.Auditor) map[string]*v1alpha1store.Store {
 	if auditor == nil {
 		auditor = types.NoopAuditor
 	}
@@ -250,11 +250,11 @@ func buildStores(pool *pgxpool.Pool, extraStoreTables map[string]string, mutable
 			continue
 		}
 		opts := []v1alpha1store.StoreOption{v1alpha1store.WithKind(kind), v1alpha1store.WithAuditor(auditor)}
-		if mutableExtraKinds[kind] {
-			stores[kind] = v1alpha1store.NewMutableObjectStore(pool, sch, tbl, opts...)
+		if untaggedExtraKinds[kind] {
+			stores[kind] = v1alpha1store.NewUntaggedStore(pool, sch, tbl, opts...)
 			continue
 		}
-		stores[kind] = v1alpha1store.NewStore(pool, sch, tbl, opts...)
+		stores[kind] = v1alpha1store.NewTaggedStore(pool, sch, tbl, opts...)
 	}
 
 	// pool == nil is the noop/DatabaseFactory path used by gen-openapi

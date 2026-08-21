@@ -5,8 +5,8 @@
 // handles every per-kind quirk internally (per-kind authz / list
 // filtering / post-upsert / post-delete threaded through PerKindHooks).
 //
-// Scope: only the per-kind CRUD surface. Tagged artifacts use
-// `/v0/{plural}/{name}/{tag}`; mutable objects use `/v0/{plural}/{name}`.
+// Scope: only the per-kind CRUD surface. Tagged resources use
+// `/v0/{plural}/{name}/{tag}`; untagged resources use `/v0/{plural}/{name}`.
 // Other v1alpha1 HTTP endpoints live in sibling packages, for example
 // `/v0/deployments/{name}/logs` in deploymentlogs.
 //

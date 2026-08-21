@@ -189,11 +189,11 @@ type ListOpts struct {
 	// Origin, when set, forwards the Deployment origin filter
 	// ("managed" or "discovered"). Empty leaves the server default intact.
 	Origin string
-	// Tag, when set, restricts results to one tag value on tagged-artifact
+	// Tag, when set, restricts results to one tag value on tagged
 	// kinds. Empty means "every tag of every name".
 	Tag string
 	// LatestOnly is equivalent to Tag = "latest" for tagged kinds and also
-	// covers the mutable-object latest-row case.
+	// covers the untagged latest-row case.
 	LatestOnly         bool
 	IncludeTerminating bool
 }
@@ -215,8 +215,8 @@ func namespaceQuery(namespace string) string {
 	return "?namespace=" + url.QueryEscape(namespace)
 }
 
-// Get returns the tagged-artifact resource at (kind, namespace, name, tag).
-// Mutable objects should use GetLatest/name-only semantics.
+// Get returns the tagged resource at (kind, namespace, name, tag).
+// Untagged resources should use GetLatest/name-only semantics.
 func (c *Client) Get(ctx context.Context, kind, namespace, name, tag string) (*v1alpha1.RawObject, error) {
 	path := fmt.Sprintf("/%s/%s/%s%s",
 		v1alpha1.PluralFor(kind),
@@ -227,7 +227,7 @@ func (c *Client) Get(ctx context.Context, kind, namespace, name, tag string) (*v
 }
 
 // GetLatest returns the literal latest tag for taggable resources and the
-// current live row for mutable objects.
+// current live row for untagged resources.
 func (c *Client) GetLatest(ctx context.Context, kind, namespace, name string) (*v1alpha1.RawObject, error) {
 	path := fmt.Sprintf("/%s/%s%s",
 		v1alpha1.PluralFor(kind),
@@ -250,7 +250,7 @@ func (c *Client) getRaw(ctx context.Context, path string) (*v1alpha1.RawObject, 
 }
 
 // ListTags returns every non-deleted tag row for (kind, namespace, name) by
-// GET'ing /v0/{plural}/{name}/tags. Mutable-object kinds do not expose this
+// GET'ing /v0/{plural}/{name}/tags. Untagged kinds do not expose this
 // endpoint; callers should branch on that. The endpoint is unpaginated
 // server-side and returns rows with the latest tag first.
 func (c *Client) ListTags(ctx context.Context, kind, namespace, name string) ([]v1alpha1.RawObject, error) {
@@ -317,7 +317,7 @@ func (c *Client) List(ctx context.Context, kind string, opts ListOpts) ([]v1alph
 }
 
 // Delete soft-deletes a row. When tag is empty it uses the name-only
-// mutable-object route; otherwise it deletes the exact tag route. Returns
+// untagged route; otherwise it deletes the exact tag route. Returns
 // ErrNotFound when the row doesn't exist. See Store.Delete for the
 // soft-delete semantics (the row stays visible with DeletionTimestamp
 // set until the GC pass purges it).
