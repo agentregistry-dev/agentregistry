@@ -359,9 +359,9 @@ create-kind-cluster: local-registry ## Create a local Kind cluster with MetalLB 
 		KIND_IMAGE_VERSION=$(KIND_IMAGE_VERSION) \
 		REG_NAME=kind-registry \
 		REG_PORT=5001 \
-		bash ./scripts/kind/setup-kind.sh; \
+		bash ./hack/kind/setup-kind.sh; \
 	fi
-	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) bash ./scripts/kind/setup-metallb.sh
+	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) bash ./hack/kind/setup-metallb.sh
 
 .PHONY: delete-kind-cluster
 delete-kind-cluster: ## Delete the local Kind cluster (no-op if it does not exist)
@@ -611,4 +611,4 @@ helm-unittest-install: ## Install the helm-unittest plugin if needed
 	HELM_PLUGIN_UNITTEST_URL=$(HELM_PLUGIN_UNITTEST_URL) \
 	HELM_PLUGIN_UNITTEST_VERSION=$(HELM_PLUGIN_UNITTEST_VERSION) \
 	HELM_PLUGIN_INSTALL_FLAGS="$(HELM_PLUGIN_INSTALL_FLAGS)" \
-	bash ./scripts/install-helm-unittest.sh
+	bash ./hack/install-helm-unittest.sh
