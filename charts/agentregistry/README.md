@@ -129,7 +129,6 @@ This creates a `Role`/`RoleBinding` in each listed namespace (plus the installat
 | commonAnnotations | object | `{}` | Annotations to add to all deployed resources |
 | commonLabels | object | `{}` | Labels to add to all deployed resources |
 | config.agentRegistryMcpPort | string | `"31313"` | Agent Registry MCP server port |
-| config.enableRegistryValidation | string | `"false"` | Enable input validation on the registry API |
 | config.serverAddress | string | `":8080"` | Listen address for the HTTP server |
 | containerSecurityContext.allowPrivilegeEscalation | bool | `false` | Allow privilege escalation |
 | containerSecurityContext.capabilities.drop | list | `["ALL"]` | Linux capabilities to drop |
