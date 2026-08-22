@@ -11,6 +11,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
+	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
@@ -28,7 +29,7 @@ func RegisterHealthEndpoint(api huma.API, pathPrefix string, cfg *config.Config,
 		Description: "Check the health status of the API",
 		Tags:        []string{"health"},
 	}, func(ctx context.Context, _ *struct{}) (*types.Response[HealthBody], error) {
-		recordHealthMetrics(ctx, metrics, pathPrefix+"/health", cfg.Version)
+		recordHealthMetrics(ctx, metrics, pathPrefix+"/health", version.Version)
 
 		return &types.Response[HealthBody]{
 			Body: HealthBody{
