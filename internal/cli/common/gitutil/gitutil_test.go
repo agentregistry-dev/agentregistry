@@ -218,9 +218,12 @@ func TestParseGitURL(t *testing.T) {
 // it: the Skill controller and the plugin source treat ErrUnsupportedHost as
 // terminal and stop retrying.
 func TestParseGitURLUnsupportedHost(t *testing.T) {
-	_, _, _, err := ParseGitURL("https://bitbucket.example.com/projects/PROJ/repos/repo/browse")
+	gotURL, gotRef, gotPath, err := ParseGitURL("https://bitbucket.example.com/projects/PROJ/repos/repo/browse")
 	if !errors.Is(err, ErrUnsupportedHost) {
 		t.Fatalf("error = %v, want ErrUnsupportedHost", err)
+	}
+	if gotURL != "" || gotRef != "" || gotPath != "" {
+		t.Errorf("got (%q, %q, %q), want zero values on error", gotURL, gotRef, gotPath)
 	}
 }
 
