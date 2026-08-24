@@ -51,6 +51,7 @@ func StartDeploymentController(
 	pool *pgxpool.Pool,
 	stores map[string]*v1alpha1store.Store,
 	adapters map[string]types.DeploymentAdapter,
+	discoverySources map[string]types.DeploymentDiscoverySource,
 	config ControllerConfig,
 ) (*ControllerHandle, error) {
 	if pool == nil {
@@ -74,7 +75,7 @@ func StartDeploymentController(
 	controller.Wakeups = controlPlaneWakeups(ctx, pool)
 	discovery := &DeploymentDiscoveryController{
 		Stores:            stores,
-		Adapters:          adapters,
+		Sources:           discoverySources,
 		StaleAfterMisses:  config.DiscoveryStaleAfterMisses,
 		DeleteAfterMisses: config.DiscoveryDeleteAfterMisses,
 	}

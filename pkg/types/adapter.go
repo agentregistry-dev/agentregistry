@@ -132,6 +132,9 @@ type ApplyResult struct {
 	Details map[string]json.RawMessage
 }
 
+// RuntimeMetadataRemoteIDKey is the stable provider identity used to correlate discoveries.
+const RuntimeMetadataRemoteIDKey = "remoteId"
+
 // RemoveInput carries the Deployment being torn down plus its resolved
 // Runtime (the Target has already been dereferenced and is not
 // included; teardown operates on the recorded runtime state).

@@ -95,11 +95,13 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	// user-supplied case at admission so adapter lookup can use exact-match.
 	deploymentAdapters := map[string]types.DeploymentAdapter{}
 	maps.Copy(deploymentAdapters, options.DeploymentAdapters)
+	discoverySources := map[string]types.DeploymentDiscoverySource{}
+	maps.Copy(discoverySources, options.DeploymentDiscoverySources)
 	pool := db.Pool()
 	stores := buildStores(pool, options.V1Alpha1StoreTables, options.V1Alpha1MutableStoreKinds, options.Auditor)
 	controllerConfig := deploymentControllerConfig(cfg)
 	controllerConfig.DependencyKinds = maps.Clone(options.DeploymentDependencyKinds)
-	if _, err := controller.StartDeploymentController(ctx, pool, stores, deploymentAdapters, controllerConfig); err != nil {
+	if _, err := controller.StartDeploymentController(ctx, pool, stores, deploymentAdapters, discoverySources, controllerConfig); err != nil {
 		return fmt.Errorf("start deployment controller: %w", err)
 	}
 	// The Plugin controller resolves each plugin's pinned source pointer to a

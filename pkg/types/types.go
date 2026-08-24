@@ -227,6 +227,10 @@ type AppOptions struct {
 	// adapters here.
 	DeploymentAdapters map[string]DeploymentAdapter
 
+	// DeploymentDiscoverySources registers discovery by Runtime.Spec.Type,
+	// independently of managed deployment support.
+	DeploymentDiscoverySources map[string]DeploymentDiscoverySource
+
 	// DeploymentDependencyKinds registers additional resource kinds whose
 	// durable control-plane events may change a Deployment's desired inputs.
 	// The Deployment controller requeues current Deployments for these events;

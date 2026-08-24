@@ -34,12 +34,12 @@ const (
 	defaultDeploymentDiscoveryDeleteAfterMisses = 5
 )
 
-// DeploymentDiscoveryController materializes adapter discovery snapshots into
+// DeploymentDiscoveryController materializes provider discovery snapshots into
 // persisted Deployment rows. It owns provider-observed state; the normal
 // DeploymentController skips these rows so they do not become desired state.
 type DeploymentDiscoveryController struct {
 	Stores            map[string]*v1alpha1store.Store
-	Adapters          map[string]types.DeploymentAdapter
+	Sources           map[string]types.DeploymentDiscoverySource
 	StaleAfterMisses  int
 	DeleteAfterMisses int
 }
@@ -106,12 +106,8 @@ func (c *DeploymentDiscoveryController) Sync(ctx context.Context) (DeploymentDis
 			continue
 		}
 		knownRuntimes[runtimeDiscoveryKey(runtime.Metadata.NamespaceOrDefault(), runtime.Metadata.Name)] = struct{}{}
-		adapter := c.Adapters[strings.TrimSpace(runtime.Spec.Type)]
-		if adapter == nil {
-			continue
-		}
-		source, ok := adapter.(types.DeploymentDiscoverySource)
-		if !ok {
+		source := c.Sources[strings.TrimSpace(runtime.Spec.Type)]
+		if source == nil {
 			continue
 		}
 		discovered, err := source.Discover(ctx, types.DiscoverInput{Runtime: runtime})
@@ -198,9 +194,11 @@ func (c *DeploymentDiscoveryController) Sync(ctx context.Context) (DeploymentDis
 }
 
 type deploymentDiscoveryIndex struct {
-	discovered     map[string]*v1alpha1.Deployment
-	managedNames   map[string]struct{}
-	managedTargets map[string]struct{}
+	discovered          map[string]*v1alpha1.Deployment
+	discoveredRemoteIDs map[string]*v1alpha1.Deployment
+	managedNames        map[string]struct{}
+	managedTargets      map[string]struct{}
+	managedRemoteIDs    map[string]struct{}
 }
 
 func (c *DeploymentDiscoveryController) listRuntimes(ctx context.Context) ([]*v1alpha1.Runtime, error) {
@@ -237,9 +235,11 @@ func (c *DeploymentDiscoveryController) loadDiscoveryIndex(ctx context.Context) 
 		return deploymentDiscoveryIndex{}, fmt.Errorf("deployment discovery controller: no Deployment store registered")
 	}
 	index := deploymentDiscoveryIndex{
-		discovered:     map[string]*v1alpha1.Deployment{},
-		managedNames:   map[string]struct{}{},
-		managedTargets: map[string]struct{}{},
+		discovered:          map[string]*v1alpha1.Deployment{},
+		discoveredRemoteIDs: map[string]*v1alpha1.Deployment{},
+		managedNames:        map[string]struct{}{},
+		managedTargets:      map[string]struct{}{},
+		managedRemoteIDs:    map[string]struct{}{},
 	}
 	opts := v1alpha1store.ListOpts{Limit: defaultControllerListPageSize}
 	for {
@@ -257,6 +257,9 @@ func (c *DeploymentDiscoveryController) loadDiscoveryIndex(ctx context.Context) 
 			key := deploymentKey(deployment.Metadata.NamespaceOrDefault(), deployment.Metadata.Name)
 			if v1alpha1.IsDiscoveredDeployment(deployment) {
 				index.discovered[key] = deployment
+				if remoteID := deploymentDiscoveryRemoteID(deployment); remoteID != "" {
+					index.discoveredRemoteIDs[deploymentRemoteIDKey(deployment, remoteID)] = deployment
+				}
 				continue
 			}
 			index.managedNames[key] = struct{}{}
@@ -267,6 +270,9 @@ func (c *DeploymentDiscoveryController) loadDiscoveryIndex(ctx context.Context) 
 					deployment.Spec.TargetRef.Kind,
 					targetName,
 				)] = struct{}{}
+			}
+			if remoteID := deploymentDiscoveryRemoteID(deployment); remoteID != "" {
+				index.managedRemoteIDs[deploymentRemoteIDKey(deployment, remoteID)] = struct{}{}
 			}
 		}
 		if cursor == "" {
@@ -307,8 +313,18 @@ func discoveredDeploymentFromResult(
 	if _, ok := index.managedTargets[managedDeploymentTargetKey(ns, runtimeName, targetKind, targetName)]; ok {
 		return nil, false
 	}
+	remoteID := strings.TrimSpace(result.RuntimeMetadata[types.RuntimeMetadataRemoteIDKey])
+	remoteKey := discoveryRemoteIDKey(ns, runtimeName, targetKind, remoteID)
+	if remoteID != "" {
+		if _, ok := index.managedRemoteIDs[remoteKey]; ok {
+			return nil, false
+		}
+	}
 
 	name := discoveredDeploymentName(runtimeName, targetKind, targetName, tag, ns)
+	if existing := index.discoveredRemoteIDs[remoteKey]; remoteID != "" && existing != nil {
+		name = existing.Metadata.Name
+	}
 	if _, ok := index.managedNames[deploymentKey(ns, name)]; ok {
 		return nil, false
 	}
@@ -342,6 +358,55 @@ func discoveredDeploymentFromResult(
 			DesiredState: v1alpha1.DesiredStateDeployed,
 		},
 	}, true
+}
+
+// deploymentDiscoveryRemoteID reads the provider identity from the storage
+// location owned by the deployment's controller. Discovery persists runtime
+// metadata in status details, while managed adapters persist it in namespaced
+// annotations.
+func deploymentDiscoveryRemoteID(deployment *v1alpha1.Deployment) string {
+	if deployment == nil {
+		return ""
+	}
+	if !v1alpha1.IsDiscoveredDeployment(deployment) {
+		for key, value := range deployment.Metadata.Annotations {
+			if strings.HasSuffix(strings.TrimSpace(key), "/"+types.RuntimeMetadataRemoteIDKey) {
+				if remoteID := strings.TrimSpace(value); remoteID != "" {
+					return remoteID
+				}
+			}
+		}
+		return ""
+	}
+	var metadata map[string]string
+	found, err := deployment.Status.GetDetailsKey(deploymentRuntimeDetailsKey, &metadata)
+	if err != nil || !found {
+		return ""
+	}
+	return strings.TrimSpace(metadata[types.RuntimeMetadataRemoteIDKey])
+}
+
+// deploymentRemoteIDKey scopes a provider identity to its deployment runtime.
+func deploymentRemoteIDKey(deployment *v1alpha1.Deployment, remoteID string) string {
+	if deployment == nil {
+		return ""
+	}
+	return discoveryRemoteIDKey(
+		deployment.Metadata.NamespaceOrDefault(),
+		deployment.Spec.RuntimeRef.Name,
+		deployment.Spec.TargetRef.Kind,
+		remoteID,
+	)
+}
+
+// discoveryRemoteIDKey prevents unrelated runtimes and target kinds from colliding.
+func discoveryRemoteIDKey(namespace, runtimeName, targetKind, remoteID string) string {
+	return strings.Join([]string{
+		strings.TrimSpace(namespace),
+		strings.TrimSpace(runtimeName),
+		strings.TrimSpace(targetKind),
+		strings.TrimSpace(remoteID),
+	}, "\x00")
 }
 
 func (c *DeploymentDiscoveryController) patchDiscoveredStatus(
@@ -477,7 +542,7 @@ func discoveredTargetName(result types.DiscoveryResult) string {
 	if name := strings.TrimSpace(result.Name); name != "" {
 		return name
 	}
-	for _, key := range []string{"remoteName", "remoteId"} {
+	for _, key := range []string{"remoteName", types.RuntimeMetadataRemoteIDKey} {
 		if value := strings.TrimSpace(result.RuntimeMetadata[key]); value != "" {
 			return value
 		}
@@ -492,7 +557,7 @@ func managedDeploymentTargetNames(deployment *v1alpha1.Deployment) []string {
 	names := []string{deployment.Spec.TargetRef.Name}
 	for key, value := range deployment.Metadata.Annotations {
 		key = strings.TrimSpace(key)
-		if strings.HasSuffix(key, "/remoteName") || strings.HasSuffix(key, "/remoteId") {
+		if strings.HasSuffix(key, "/remoteName") || strings.HasSuffix(key, "/"+types.RuntimeMetadataRemoteIDKey) {
 			if value = strings.TrimSpace(value); value != "" {
 				names = append(names, value)
 			}
