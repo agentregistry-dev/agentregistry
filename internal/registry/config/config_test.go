@@ -36,6 +36,26 @@ func TestNewConfig_ControllerEnv(t *testing.T) {
 	}
 }
 
+func TestNewConfig_SecretStoreEnv(t *testing.T) {
+	t.Setenv("AGENT_REGISTRY_SECRET_STORE", "Kubernetes")
+	t.Setenv("AGENT_REGISTRY_SECRET_STORE_KUBERNETES_NAMESPACE", "custom-system")
+
+	cfg := NewConfig()
+
+	if cfg.SecretStore != "Kubernetes" {
+		t.Fatalf("SecretStore = %q, want Kubernetes", cfg.SecretStore)
+	}
+	if cfg.SecretStoreNamespace != "custom-system" {
+		t.Fatalf("SecretStoreNamespace = %q, want custom-system", cfg.SecretStoreNamespace)
+	}
+}
+
+func TestNewConfig_SecretStoreNamespaceDefault(t *testing.T) {
+	if got := NewConfig().SecretStoreNamespace; got != "agentregistry-system" {
+		t.Fatalf("SecretStoreNamespace = %q, want agentregistry-system", got)
+	}
+}
+
 func TestNewConfig_SkipMigrationsEnv(t *testing.T) {
 	cases := []struct {
 		name string

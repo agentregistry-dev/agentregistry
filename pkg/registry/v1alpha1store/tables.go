@@ -21,6 +21,7 @@ var builtInKinds = map[string]struct{}{
 	v1alpha1.KindRuntime:    {},
 	v1alpha1.KindModel:      {},
 	v1alpha1.KindDeployment: {},
+	v1alpha1.KindSecret:     {},
 }
 
 // NewStores builds one *Store per OSS built-in v1alpha1 Kind, bound to its

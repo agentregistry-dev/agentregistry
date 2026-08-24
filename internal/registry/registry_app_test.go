@@ -19,8 +19,80 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
+	"github.com/agentregistry-dev/agentregistry/pkg/secret"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
+
+type testSecretStore struct{ data map[string][]byte }
+
+func (*testSecretStore) Type() secret.StoreType { return secret.StoreTypeDatabase }
+func (s *testSecretStore) Put(_ context.Context, _, _ string, data map[string][]byte) error {
+	s.data = data
+	return nil
+}
+func (s *testSecretStore) Get(context.Context, string, string) (map[string][]byte, error) {
+	if s.data == nil {
+		return nil, secret.ErrPayloadNotFound
+	}
+	return s.data, nil
+}
+func (s *testSecretStore) Delete(context.Context, string, string) error {
+	s.data = nil
+	return nil
+}
+
+type testSecretMetadataStore struct {
+	existing *v1alpha1.RawObject
+	status   json.RawMessage
+}
+
+func (s *testSecretMetadataStore) GetLatest(context.Context, string, string) (*v1alpha1.RawObject, error) {
+	if s.existing == nil {
+		return nil, pkgdb.ErrNotFound
+	}
+	return s.existing, nil
+}
+
+func (s *testSecretMetadataStore) PatchStatus(_ context.Context, _, _, _ string, mutate func(json.RawMessage) (json.RawMessage, error)) error {
+	status, err := mutate(s.status)
+	s.status = status
+	return err
+}
+
+func TestBuildSecretStore(t *testing.T) {
+	supplied := &testSecretStore{}
+	got, err := buildSecretStore(&config.Config{SecretStore: "invalid"}, nil, supplied)
+	require.NoError(t, err)
+	require.Same(t, supplied, got)
+
+	got, err = buildSecretStore(&config.Config{}, nil, nil)
+	require.NoError(t, err)
+	require.Nil(t, got)
+
+	_, err = buildSecretStore(&config.Config{SecretStore: string(secret.StoreTypeDatabase), SecretStoreEncryptionKey: "bad"}, nil, nil)
+	require.ErrorContains(t, err, "SECRET_STORE_ENCRYPTION_KEY")
+}
+
+func TestSecretLifecycleHooks(t *testing.T) {
+	payload := &testSecretStore{}
+	service := secret.NewService(payload)
+	metadata := &testSecretMetadataStore{}
+	value := &v1alpha1.Secret{
+		Metadata: v1alpha1.ObjectMeta{Name: "credentials"},
+		Spec:     v1alpha1.SecretSpec{StringData: map[string]string{"token": "plaintext"}},
+	}
+
+	require.NoError(t, secretPrepare(service, metadata)(t.Context(), value))
+	require.Equal(t, []byte("plaintext"), payload.data["token"])
+	require.Empty(t, value.Spec.StringData)
+	require.Equal(t, []string{"token"}, value.Status.DataKeys)
+
+	require.NoError(t, secretStatusPostUpsert(metadata)(t.Context(), value))
+	require.JSONEq(t, `{"dataKeys":["token"]}`, string(metadata.status))
+
+	require.NoError(t, secretPostDelete(service)(t.Context(), value))
+	require.Nil(t, payload.data)
+}
 
 func TestDeploymentControllerConfigMapsRetentionSettings(t *testing.T) {
 	cfg := &config.Config{

@@ -12,11 +12,14 @@ import (
 // Config holds the application configuration
 // See .env.example for more documentation
 type Config struct {
-	ServerAddress string `env:"SERVER_ADDRESS" envDefault:":8080"`
-	MCPPort       uint16 `env:"MCP_PORT" envDefault:"0"`
-	DatabaseURL   string `env:"DATABASE_URL" envDefault:"postgres://agentregistry:agentregistry@localhost:5432/agentregistry?sslmode=disable"`
-	Version       string `env:"VERSION" envDefault:"dev"`
-	LogLevel      string `env:"LOG_LEVEL" envDefault:"info"`
+	ServerAddress            string `env:"SERVER_ADDRESS" envDefault:":8080"`
+	MCPPort                  uint16 `env:"MCP_PORT" envDefault:"0"`
+	DatabaseURL              string `env:"DATABASE_URL" envDefault:"postgres://agentregistry:agentregistry@localhost:5432/agentregistry?sslmode=disable"`
+	Version                  string `env:"VERSION" envDefault:"dev"`
+	LogLevel                 string `env:"LOG_LEVEL" envDefault:"info"`
+	SecretStore              string `env:"SECRET_STORE" envDefault:""`
+	SecretStoreEncryptionKey string `env:"SECRET_STORE_ENCRYPTION_KEY" envDefault:""`
+	SecretStoreNamespace     string `env:"SECRET_STORE_KUBERNETES_NAMESPACE" envDefault:"agentregistry-system"`
 
 	// MCP Registry compatibility (read-only)
 	//
