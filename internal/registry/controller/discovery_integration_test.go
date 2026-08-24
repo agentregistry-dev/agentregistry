@@ -24,7 +24,7 @@ func TestDeploymentDiscoveryController_MaterializesDiscoveredDeployment(t *testi
 		TargetKind: v1alpha1.KindAgent,
 		Name:       "external-agent",
 		RuntimeMetadata: map[string]string{
-			"remoteId": "agent-123",
+			types.RuntimeMetadataRemoteIDKey: "agent-123",
 		},
 	}}}
 	discovery := newDeploymentDiscoveryTestController(stores, adapter)
@@ -50,7 +50,7 @@ func TestDeploymentDiscoveryController_MaterializesDiscoveredDeployment(t *testi
 	ok, err := deployment.Status.GetDetailsKey(deploymentRuntimeDetailsKey, &runtimeMetadata)
 	require.NoError(t, err)
 	require.True(t, ok)
-	require.Equal(t, "agent-123", runtimeMetadata["remoteId"])
+	require.Equal(t, "agent-123", runtimeMetadata[types.RuntimeMetadataRemoteIDKey])
 }
 
 func TestDeploymentDiscoveryController_MarksRowsStaleAfterConsecutiveMisses(t *testing.T) {
@@ -238,10 +238,10 @@ func TestDeploymentDiscoveryController_ErrorDoesNotMarkRowsStale(t *testing.T) {
 	require.Zero(t, discoveredMissCount(deployment), "errored polls must not count as misses")
 }
 
-func TestDeploymentDiscoveryController_SkipsAdaptersWithoutDiscoverySource(t *testing.T) {
+func TestDeploymentDiscoveryController_SkipsRuntimeWithoutDiscoverySource(t *testing.T) {
 	ctx := context.Background()
 	stores := newControllerTestStores(t)
-	discovery := newDeploymentDiscoveryTestController(stores, &lifecycleOnlyDiscoveryTestAdapter{})
+	discovery := &DeploymentDiscoveryController{Stores: stores}
 
 	result, err := discovery.Sync(ctx)
 	require.NoError(t, err)
@@ -263,6 +263,56 @@ func TestDeploymentDiscoveryController_DedupesManagedDeploymentTargets(t *testin
 		Name:       "weather",
 	}}}
 	discovery := newDeploymentDiscoveryTestController(stores, adapter)
+
+	result, err := discovery.Sync(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Runtimes)
+	require.Zero(t, result.Discovered)
+}
+
+func TestDeploymentDiscoveryController_PreservesNameForRemoteID(t *testing.T) {
+	ctx := context.Background()
+	stores := newControllerTestStores(t)
+	source := &discoveryTestAdapter{results: []types.DiscoveryResult{{
+		TargetKind:      v1alpha1.KindAgent,
+		Name:            "original-name",
+		RuntimeMetadata: map[string]string{types.RuntimeMetadataRemoteIDKey: "agent-123"},
+	}}}
+	discovery := newDeploymentDiscoveryTestController(stores, source)
+	_, err := discovery.Sync(ctx)
+	require.NoError(t, err)
+
+	originalName := discoveredDeploymentName(discoveryTestRuntimeName, v1alpha1.KindAgent, "original-name", "unknown", "default")
+	original := loadDeployment(t, stores, originalName)
+	source.results[0].Name = "renamed-agent"
+	_, err = discovery.Sync(ctx)
+	require.NoError(t, err)
+
+	adopted := loadDeployment(t, stores, originalName)
+	require.Equal(t, original.Metadata.UID, adopted.Metadata.UID)
+	require.Equal(t, "renamed-agent", adopted.Spec.TargetRef.Name)
+	renamed := discoveredDeploymentName(discoveryTestRuntimeName, v1alpha1.KindAgent, "renamed-agent", "unknown", "default")
+	requireDeploymentMissing(t, stores, renamed)
+}
+
+func TestDeploymentDiscoveryController_DedupesManagedDeploymentRemoteID(t *testing.T) {
+	ctx := context.Background()
+	stores := newControllerTestStores(t)
+	seedAgentDeployment(t, stores, "managed-agent", "managed-agent", v1alpha1.DesiredStateDeployed)
+	managed := loadDeployment(t, stores, "managed-agent")
+	require.NoError(t, stores[v1alpha1.KindDeployment].PatchAnnotations(ctx, "default", managed.Metadata.Name, "", func(annotations map[string]string) map[string]string {
+		if annotations == nil {
+			annotations = map[string]string{}
+		}
+		annotations["runtimes.agentregistry.solo.io/test/"+types.RuntimeMetadataRemoteIDKey] = "agent-123"
+		return annotations
+	}))
+	source := &discoveryTestAdapter{results: []types.DiscoveryResult{{
+		TargetKind:      v1alpha1.KindAgent,
+		Name:            "provider-name",
+		RuntimeMetadata: map[string]string{types.RuntimeMetadataRemoteIDKey: "agent-123"},
+	}}}
+	discovery := newDeploymentDiscoveryTestController(stores, source)
 
 	result, err := discovery.Sync(ctx)
 	require.NoError(t, err)
@@ -300,11 +350,11 @@ func TestDeploymentController_SkipsDiscoveredRows(t *testing.T) {
 
 func newDeploymentDiscoveryTestController(
 	stores map[string]*v1alpha1store.Store,
-	adapter types.DeploymentAdapter,
+	source types.DeploymentDiscoverySource,
 ) *DeploymentDiscoveryController {
 	return &DeploymentDiscoveryController{
-		Stores:   stores,
-		Adapters: map[string]types.DeploymentAdapter{"Test": adapter},
+		Stores:  stores,
+		Sources: map[string]types.DeploymentDiscoverySource{"Test": source},
 	}
 }
 
@@ -313,51 +363,9 @@ type discoveryTestAdapter struct {
 	err     error
 }
 
-func (a *discoveryTestAdapter) Type() string { return "Test" }
-
-func (a *discoveryTestAdapter) SupportedTargetKinds() []string {
-	return []string{v1alpha1.KindMCPServer, v1alpha1.KindAgent}
-}
-
-func (a *discoveryTestAdapter) Apply(context.Context, types.ApplyInput) (*types.ApplyResult, error) {
-	return &types.ApplyResult{}, nil
-}
-
-func (a *discoveryTestAdapter) Remove(context.Context, types.RemoveInput) (*types.RemoveResult, error) {
-	return &types.RemoveResult{}, nil
-}
-
-func (a *discoveryTestAdapter) Logs(context.Context, types.LogsInput) (<-chan types.LogLine, error) {
-	ch := make(chan types.LogLine)
-	close(ch)
-	return ch, nil
-}
-
 func (a *discoveryTestAdapter) Discover(context.Context, types.DiscoverInput) ([]types.DiscoveryResult, error) {
 	if a.err != nil {
 		return nil, a.err
 	}
 	return a.results, nil
-}
-
-type lifecycleOnlyDiscoveryTestAdapter struct{}
-
-func (a *lifecycleOnlyDiscoveryTestAdapter) Type() string { return "Test" }
-
-func (a *lifecycleOnlyDiscoveryTestAdapter) SupportedTargetKinds() []string {
-	return []string{v1alpha1.KindMCPServer, v1alpha1.KindAgent}
-}
-
-func (a *lifecycleOnlyDiscoveryTestAdapter) Apply(context.Context, types.ApplyInput) (*types.ApplyResult, error) {
-	return &types.ApplyResult{}, nil
-}
-
-func (a *lifecycleOnlyDiscoveryTestAdapter) Remove(context.Context, types.RemoveInput) (*types.RemoveResult, error) {
-	return &types.RemoveResult{}, nil
-}
-
-func (a *lifecycleOnlyDiscoveryTestAdapter) Logs(context.Context, types.LogsInput) (<-chan types.LogLine, error) {
-	ch := make(chan types.LogLine)
-	close(ch)
-	return ch, nil
 }
