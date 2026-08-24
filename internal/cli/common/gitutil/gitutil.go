@@ -16,9 +16,11 @@ import (
 )
 
 var (
-	// ErrUnsupportedHost is returned for a non-GitHub/non-GitLab host. It is a
-	// permanent condition: callers can errors.Is it to avoid retrying hosts that
-	// are not supported.
+	// ErrUnsupportedHost is returned for a web URL on a host whose layout is not
+	// understood — every host but github.com and GitLab. Such a host is still
+	// usable through its plain clone URL (see ParseGitURL). It is a permanent
+	// condition: callers can errors.Is it to avoid retrying a URL that cannot
+	// be parsed.
 	ErrUnsupportedHost = errors.New("unsupported git host")
 	// ErrRefNotFound is returned when a ref resolves to no commit on the remote
 	// (deleted branch/tag, typo, or a short/non-existent SHA). Terminal:
@@ -32,6 +34,13 @@ var (
 // Branch names containing slashes (e.g. feature/my-branch) are supported when
 // encoded as %2F in the URL. The raw (escaped) path is used for splitting so
 // the encoded branch segment is preserved, then unescaped for the return value.
+//
+// Any other host — Bitbucket Server, Gitea, GitHub Enterprise on a company
+// domain — is accepted through its plain clone URL, the path ending in ".git".
+// There is no web-URL layout to infer a branch or subdirectory from in that
+// case, so both come back empty and the caller supplies them explicitly
+// (Repository.Branch and Repository.Subfolder). A non-clone URL on such a host
+// returns ErrUnsupportedHost.
 func ParseGitURL(rawURL string) (cloneURL, branch, subPath string, err error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
@@ -60,13 +69,19 @@ func ParseGitURL(rawURL string) (cloneURL, branch, subPath string, err error) {
 		return parseGitLabStyleURL(u, parts, gitLabMarker)
 	}
 	if strings.Contains(strings.ToLower(u.Host), "gitlab") {
-		return parseGitLabRootURL(u, parts)
+		return parseRepoRootURL(u, parts)
 	}
-	if u.Host != "github.com" {
-		return "", "", "", fmt.Errorf("%w: %q", ErrUnsupportedHost, u.Host)
+	if u.Host == "github.com" {
+		return parseGitHubStyleURL(u, parts)
+	}
+	// Unknown host: accept it only as a plain clone URL, which is unambiguous
+	// on every git server. Guessing a web layout instead would silently
+	// mis-parse namespaces (Bitbucket Server's /scm/ prefix, Gitea's /raw/).
+	if strings.HasSuffix(parts[len(parts)-1], ".git") {
+		return parseRepoRootURL(u, parts)
 	}
 
-	return parseGitHubStyleURL(u, parts)
+	return "", "", "", fmt.Errorf("%w: %q (pass the repository clone URL, ending in .git)", ErrUnsupportedHost, u.Host)
 }
 
 func parseGitHubStyleURL(u *url.URL, parts []string) (cloneURL, branch, subPath string, err error) {
@@ -88,7 +103,10 @@ func parseGitHubStyleURL(u *url.URL, parts []string) (cloneURL, branch, subPath 
 	return cloneURL, branch, subPath, nil
 }
 
-func parseGitLabRootURL(u *url.URL, parts []string) (cloneURL, branch, subPath string, err error) {
+// parseRepoRootURL treats the whole path as the repository, so it carries no
+// branch or subdirectory. It is host-agnostic: a GitLab project root and a
+// plain clone URL on any other host reduce to the same shape.
+func parseRepoRootURL(u *url.URL, parts []string) (cloneURL, branch, subPath string, err error) {
 	repoParts := append([]string(nil), parts...)
 	repoParts[len(repoParts)-1] = strings.TrimSuffix(repoParts[len(repoParts)-1], ".git")
 	cloneURL = fmt.Sprintf("%s://%s/%s.git", u.Scheme, u.Host, strings.Join(repoParts, "/"))

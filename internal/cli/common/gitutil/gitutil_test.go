@@ -1,6 +1,7 @@
 package gitutil
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -135,6 +136,41 @@ func TestParseGitURL(t *testing.T) {
 			wantPath: "cursor/skill",
 		},
 		{
+			name:    "bitbucket server clone URL",
+			rawURL:  "https://bitbucket.example.com/scm/proj/repo.git",
+			wantURL: "https://bitbucket.example.com/scm/proj/repo.git",
+		},
+		{
+			name:    "bitbucket server clone URL with trailing slash",
+			rawURL:  "https://bitbucket.example.com/scm/proj/repo.git/",
+			wantURL: "https://bitbucket.example.com/scm/proj/repo.git",
+		},
+		{
+			name:    "bitbucket cloud clone URL",
+			rawURL:  "https://bitbucket.org/workspace/repo.git",
+			wantURL: "https://bitbucket.org/workspace/repo.git",
+		},
+		{
+			name:    "gitea clone URL",
+			rawURL:  "https://git.example.com/org/repo.git",
+			wantURL: "https://git.example.com/org/repo.git",
+		},
+		{
+			name:    "github enterprise clone URL on company domain",
+			rawURL:  "https://github.corp.example.com/org/repo.git",
+			wantURL: "https://github.corp.example.com/org/repo.git",
+		},
+		{
+			name:    "bitbucket server web URL is not a clone URL",
+			rawURL:  "https://bitbucket.example.com/projects/PROJ/repos/repo/browse",
+			wantErr: true,
+		},
+		{
+			name:    "unknown host repo root without .git",
+			rawURL:  "https://git.example.com/org/repo",
+			wantErr: true,
+		},
+		{
 			name:    "missing repo in path",
 			rawURL:  "https://github.com/owner",
 			wantErr: true,
@@ -175,6 +211,16 @@ func TestParseGitURL(t *testing.T) {
 				t.Errorf("subPath = %q, want %q", gotPath, tt.wantPath)
 			}
 		})
+	}
+}
+
+// TestParseGitURLUnsupportedHost pins the sentinel, since callers classify on
+// it: the Skill controller and the plugin source treat ErrUnsupportedHost as
+// terminal and stop retrying.
+func TestParseGitURLUnsupportedHost(t *testing.T) {
+	_, _, _, err := ParseGitURL("https://bitbucket.example.com/projects/PROJ/repos/repo/browse")
+	if !errors.Is(err, ErrUnsupportedHost) {
+		t.Fatalf("error = %v, want ErrUnsupportedHost", err)
 	}
 }
 
