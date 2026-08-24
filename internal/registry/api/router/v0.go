@@ -258,6 +258,7 @@ func registerKindRoutes(
 		RegistryValidator: registryValidator,
 		Authorizers:       perKind.Authorizers,
 		PostUpserts:       perKind.PostUpserts,
+		OnUpsertErrors:    perKind.OnUpsertErrors,
 		PostDeletes:       perKind.PostDeletes,
 		InitialFinalizers: perKind.InitialFinalizers,
 		Admission:         admission,

@@ -3,7 +3,6 @@ package database
 import (
 	"bytes"
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -57,6 +56,6 @@ func TestStoreDoesNotLeakPlaintextOnDecryptFailure(t *testing.T) {
 	badKey[0] = 1
 	_, err := New(persistence, secret.NewStaticKeyProvider(badKey)).Get(t.Context(), "default", "creds")
 	require.Error(t, err)
-	require.False(t, errors.Is(err, secret.ErrPayloadNotFound))
+	require.NotErrorIs(t, err, secret.ErrPayloadNotFound)
 	require.NotContains(t, err.Error(), "plaintext")
 }

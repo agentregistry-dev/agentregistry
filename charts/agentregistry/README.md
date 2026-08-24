@@ -200,6 +200,11 @@ This creates a `Role`/`RoleBinding` in each listed namespace (plus the installat
 | resources | object | `{"limits":{"cpu":"1","memory":"1Gi"},"requests":{"cpu":"250m","memory":"256Mi"}}` | Resource requests and limits for the Agent Registry container |
 | revisionHistoryLimit | int | `10` | Number of old ReplicaSets to retain |
 | schedulerName | string | `""` | Name of the scheduler to use |
+| secretStore | object | `{"encryptionKeySecretRef":{"key":"SECRET_STORE_ENCRYPTION_KEY","name":""},"type":"Kubernetes"}` | Backend used to persist Secret resource payloads. |
+| secretStore.encryptionKeySecretRef | object | `{"key":"SECRET_STORE_ENCRYPTION_KEY","name":""}` | Existing Secret containing the hex-encoded 32-byte AES-256 key for Database. |
+| secretStore.encryptionKeySecretRef.key | string | `"SECRET_STORE_ENCRYPTION_KEY"` | Key containing the encryption key. |
+| secretStore.encryptionKeySecretRef.name | string | `""` | Name of the Secret in the install namespace. |
+| secretStore.type | string | `"Kubernetes"` | "Kubernetes" stores core/v1.Secrets; "Database" encrypts payloads in Postgres. |
 | service.annotations | object | `{}` | Service annotations |
 | service.clusterIP | string | `""` | Specific cluster IP (set to None for headless) |
 | service.externalTrafficPolicy | string | `"Cluster"` | External traffic policy |

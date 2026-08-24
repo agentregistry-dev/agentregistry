@@ -48,6 +48,19 @@ config:
   # -- Enable input validation on the registry API
   enableRegistryValidation: "false"
 
+# @section Secret store
+
+# -- Backend used to persist Secret resource payloads.
+secretStore:
+  # -- "Kubernetes" stores core/v1.Secrets; "Database" encrypts payloads in Postgres.
+  type: Kubernetes
+  # -- Existing Secret containing the hex-encoded 32-byte AES-256 key for Database.
+  encryptionKeySecretRef:
+    # -- Name of the Secret in the install namespace.
+    name: ""
+    # -- Key containing the encryption key.
+    key: SECRET_STORE_ENCRYPTION_KEY
+
 # @section Deployment parameters
 
 # -- Override default container command (evaluated as a template)

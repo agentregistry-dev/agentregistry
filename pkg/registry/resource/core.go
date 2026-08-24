@@ -3,6 +3,7 @@ package resource
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
@@ -22,6 +23,7 @@ type applyOpts struct {
 	Resolver          v1alpha1.ResolverFunc
 	RegistryValidator v1alpha1.RegistryValidatorFunc
 	PostUpsert        func(ctx context.Context, obj v1alpha1.Object) error
+	OnUpsertError     func(ctx context.Context, obj v1alpha1.Object, cause error) error
 	InitialFinalizers func(obj v1alpha1.Object) []string
 	Admission         types.Admission
 	Source            string
@@ -149,12 +151,33 @@ func applyCore(
 		InitialFinalizers: opts.InitialFinalizers,
 	})
 	if err != nil {
-		if ae, ok := err.(*applyError); ok {
-			return types.AdmissionResult{}, ae
+		return types.AdmissionResult{}, compensateAdmissionError(ctx, obj, opts.OnUpsertError, err)
+	}
+	if dryRun && opts.OnUpsertError != nil {
+		if rollbackErr := opts.OnUpsertError(context.WithoutCancel(ctx), obj, errors.New("dry-run completed without persistence")); rollbackErr != nil {
+			return types.AdmissionResult{}, &applyError{Stage: stageAdmission, Err: fmt.Errorf("compensate dry-run prepare: %w", rollbackErr)}
 		}
-		return types.AdmissionResult{}, &applyError{Stage: stageAdmission, Err: err}
 	}
 	return result, nil
+}
+
+func compensateAdmissionError(
+	ctx context.Context,
+	obj v1alpha1.Object,
+	onUpsertError func(context.Context, v1alpha1.Object, error) error,
+	err error,
+) *applyError {
+	ae, ok := err.(*applyError)
+	if !ok {
+		ae = &applyError{Stage: stageAdmission, Err: err}
+	}
+	if onUpsertError == nil || ae.Stage == stagePostUpsert {
+		return ae
+	}
+	if rollbackErr := onUpsertError(context.WithoutCancel(ctx), obj, err); rollbackErr != nil {
+		ae.Err = errors.Join(ae.Err, rollbackErr)
+	}
+	return ae
 }
 
 // ProductionAdmission is the OSS admission implementation: dry-runs stop after

@@ -52,6 +52,8 @@ type PerKindHooks struct {
 	// mutate the decoded object before persistence (e.g. strip
 	// sensitive spec fields). Missing keys = no prepare hook for that kind.
 	Prepares map[string]func(ctx context.Context, obj v1alpha1.Object) error
+	// OnUpsertErrors compensate Prepare side effects when metadata persistence fails.
+	OnUpsertErrors map[string]func(ctx context.Context, obj v1alpha1.Object, cause error) error
 	// InitialFinalizers seeds create-time finalizers per kind; see
 	// resource.Config.InitialFinalizers.
 	InitialFinalizers map[string]func(obj v1alpha1.Object) []string
@@ -93,6 +95,7 @@ func Register(
 			PostUpsert:         perKind.PostUpserts[kind],
 			PostDelete:         perKind.PostDeletes[kind],
 			Prepare:            perKind.Prepares[kind],
+			OnUpsertError:      perKind.OnUpsertErrors[kind],
 			DeleteAdmission:    deleteAdmission,
 			InitialFinalizers:  perKind.InitialFinalizers[kind],
 		}, true

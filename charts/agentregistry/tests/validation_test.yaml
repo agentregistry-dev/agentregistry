@@ -93,3 +93,36 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "external.\\* is set but ignored"
+
+  # ── Secret store ───────────────────────────────────────────────────────────
+
+  - it: fails when secretStore.type is invalid
+    set:
+      secretStore.type: invalid
+    asserts:
+      - failedTemplate:
+          errorPattern: 'secretStore.type must be "Kubernetes" or "Database"'
+
+  - it: fails when Database has no encryption key Secret
+    set:
+      secretStore.type: Database
+    asserts:
+      - failedTemplate:
+          errorPattern: "secretStore.encryptionKeySecretRef.name must be set"
+
+  - it: passes when Database references an encryption key Secret
+    set:
+      secretStore.type: Database
+      secretStore.encryptionKeySecretRef.name: payload-key
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: fails when the Database encryption key field is empty
+    set:
+      secretStore.type: Database
+      secretStore.encryptionKeySecretRef.name: payload-key
+      secretStore.encryptionKeySecretRef.key: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "secretStore.encryptionKeySecretRef.key must be set"

@@ -78,6 +78,10 @@ type PostDelete func(ctx context.Context, obj v1alpha1.Object) error
 // before persistence (e.g. strip sensitive spec fields).
 type Prepare func(ctx context.Context, obj v1alpha1.Object) error
 
+// UpsertError runs when the production metadata upsert fails after Prepare.
+// It allows Prepare hooks with external side effects to compensate them.
+type UpsertError func(ctx context.Context, obj v1alpha1.Object, cause error) error
+
 const (
 	AdmissionSourceApply  = "apply"
 	AdmissionSourceDelete = "delete"

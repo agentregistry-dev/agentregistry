@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -316,22 +317,131 @@ func buildSecretStore(cfg *config.Config, pool *pgxpool.Pool, supplied secret.St
 }
 
 func wireSecretService(hooks *crud.PerKindHooks, stores map[string]*v1alpha1store.Store, payload secret.Store) {
-	if payload == nil || stores[v1alpha1.KindSecret] == nil {
+	metadata := stores[v1alpha1.KindSecret]
+	if metadata == nil {
 		return
 	}
-	service := secret.NewService(payload)
 	if hooks.Prepares == nil {
 		hooks.Prepares = map[string]func(context.Context, v1alpha1.Object) error{}
 	}
+	if payload == nil {
+		hooks.Prepares[v1alpha1.KindSecret] = chainObjectHooks(hooks.Prepares[v1alpha1.KindSecret], secretStoreUnavailable)
+		return
+	}
+	service := secret.NewService(payload)
+	tx := &secretPayloadTransactions{store: payload}
 	if hooks.PostUpserts == nil {
 		hooks.PostUpserts = map[string]func(context.Context, v1alpha1.Object) error{}
 	}
 	if hooks.PostDeletes == nil {
 		hooks.PostDeletes = map[string]func(context.Context, v1alpha1.Object) error{}
 	}
-	hooks.Prepares[v1alpha1.KindSecret] = chainObjectHooks(hooks.Prepares[v1alpha1.KindSecret], secretPrepare(service, stores[v1alpha1.KindSecret]))
-	hooks.PostUpserts[v1alpha1.KindSecret] = chainObjectHooks(secretStatusPostUpsert(stores[v1alpha1.KindSecret]), hooks.PostUpserts[v1alpha1.KindSecret])
+	if hooks.OnUpsertErrors == nil {
+		hooks.OnUpsertErrors = map[string]func(context.Context, v1alpha1.Object, error) error{}
+	}
+	hooks.Prepares[v1alpha1.KindSecret] = chainObjectHooks(hooks.Prepares[v1alpha1.KindSecret], secretPrepare(service, metadata, tx))
+	hooks.PostUpserts[v1alpha1.KindSecret] = chainObjectHooks(tx.commit, chainObjectHooks(secretStatusPostUpsert(metadata), hooks.PostUpserts[v1alpha1.KindSecret]))
+	hooks.OnUpsertErrors[v1alpha1.KindSecret] = chainUpsertErrorHooks(tx.rollback, hooks.OnUpsertErrors[v1alpha1.KindSecret])
 	hooks.PostDeletes[v1alpha1.KindSecret] = chainObjectHooks(hooks.PostDeletes[v1alpha1.KindSecret], secretPostDelete(service))
+}
+
+func secretStoreUnavailable(context.Context, v1alpha1.Object) error {
+	return huma.Error503ServiceUnavailable("secret payload store is not configured")
+}
+
+type secretPayloadSnapshot struct {
+	data    map[string][]byte
+	existed bool
+	lockKey string
+	lock    *secretPayloadLock
+}
+
+type secretPayloadTransactions struct {
+	store secret.Store
+	state sync.Map // map[*v1alpha1.Secret]secretPayloadSnapshot
+	mu    sync.Mutex
+	locks map[string]*secretPayloadLock
+}
+
+type secretPayloadLock struct {
+	sync.Mutex
+	refs int
+}
+
+func (t *secretPayloadTransactions) acquire(namespace, name string) (string, *secretPayloadLock) {
+	key := namespace + "/" + name
+	t.mu.Lock()
+	if t.locks == nil {
+		t.locks = map[string]*secretPayloadLock{}
+	}
+	lock := t.locks[key]
+	if lock == nil {
+		lock = &secretPayloadLock{}
+		t.locks[key] = lock
+	}
+	lock.refs++
+	t.mu.Unlock()
+	lock.Lock()
+	return key, lock
+}
+
+func (t *secretPayloadTransactions) release(key string, lock *secretPayloadLock) {
+	lock.Unlock()
+	t.mu.Lock()
+	lock.refs--
+	if lock.refs == 0 {
+		delete(t.locks, key)
+	}
+	t.mu.Unlock()
+}
+
+func (t *secretPayloadTransactions) snapshot(ctx context.Context, value *v1alpha1.Secret, namespace string) error {
+	lockKey, lock := t.acquire(namespace, value.Metadata.Name)
+	data, err := t.store.Get(ctx, namespace, value.Metadata.Name)
+	snapshot := secretPayloadSnapshot{data: data, existed: err == nil, lockKey: lockKey, lock: lock}
+	if err != nil && !errors.Is(err, secret.ErrPayloadNotFound) {
+		t.release(lockKey, lock)
+		return fmt.Errorf("load prior secret payload: %w", err)
+	}
+	t.state.Store(value, snapshot)
+	return nil
+}
+
+func (t *secretPayloadTransactions) commit(_ context.Context, obj v1alpha1.Object) error {
+	if value, ok := obj.(*v1alpha1.Secret); ok {
+		if stored, loaded := t.state.LoadAndDelete(value); loaded {
+			snapshot := stored.(secretPayloadSnapshot)
+			t.release(snapshot.lockKey, snapshot.lock)
+		}
+	}
+	return nil
+}
+
+func (t *secretPayloadTransactions) rollback(ctx context.Context, obj v1alpha1.Object, _ error) error {
+	value, ok := obj.(*v1alpha1.Secret)
+	if !ok {
+		return nil
+	}
+	stored, ok := t.state.LoadAndDelete(value)
+	if !ok {
+		return nil
+	}
+	snapshot := stored.(secretPayloadSnapshot)
+	defer t.release(snapshot.lockKey, snapshot.lock)
+	namespace := value.Metadata.Namespace
+	if namespace == "" {
+		namespace = v1alpha1.DefaultNamespace
+	}
+	if snapshot.existed {
+		if err := t.store.Put(ctx, namespace, value.Metadata.Name, snapshot.data); err != nil {
+			return fmt.Errorf("restore prior secret payload: %w", err)
+		}
+		return nil
+	}
+	if err := t.store.Delete(ctx, namespace, value.Metadata.Name); err != nil {
+		return fmt.Errorf("delete orphaned secret payload: %w", err)
+	}
+	return nil
 }
 
 type secretMetadataStore interface {
@@ -339,7 +449,7 @@ type secretMetadataStore interface {
 	PatchStatus(ctx context.Context, namespace, name, tag string, mutate func(json.RawMessage) (json.RawMessage, error)) error
 }
 
-func secretPrepare(service *secret.Service, metadata secretMetadataStore) func(context.Context, v1alpha1.Object) error {
+func secretPrepare(service *secret.Service, metadata secretMetadataStore, tx *secretPayloadTransactions) func(context.Context, v1alpha1.Object) error {
 	return func(ctx context.Context, obj v1alpha1.Object) error {
 		value, ok := obj.(*v1alpha1.Secret)
 		if !ok {
@@ -368,8 +478,12 @@ func secretPrepare(service *secret.Service, metadata secretMetadataStore) func(c
 		if len(data) == 0 {
 			return huma.Error400BadRequest("secret data must not be empty")
 		}
+		if err := tx.snapshot(ctx, value, namespace); err != nil {
+			return huma.Error500InternalServerError("snapshot secret payload", err)
+		}
 		if err := service.PutPayload(ctx, namespace, value.Metadata.Name, data); err != nil {
-			return huma.Error500InternalServerError("persist secret payload", err)
+			rollbackErr := tx.rollback(context.WithoutCancel(ctx), value, err)
+			return huma.Error500InternalServerError("persist secret payload", errors.Join(err, rollbackErr))
 		}
 		value.StripValues(data)
 		return nil
@@ -425,6 +539,19 @@ func chainObjectHooks(first, second func(context.Context, v1alpha1.Object) error
 			return second(ctx, obj)
 		}
 		return nil
+	}
+}
+
+func chainUpsertErrorHooks(first, second func(context.Context, v1alpha1.Object, error) error) func(context.Context, v1alpha1.Object, error) error {
+	return func(ctx context.Context, obj v1alpha1.Object, cause error) error {
+		var firstErr, secondErr error
+		if first != nil {
+			firstErr = first(ctx, obj, cause)
+		}
+		if second != nil {
+			secondErr = second(ctx, obj, cause)
+		}
+		return errors.Join(firstErr, secondErr)
 	}
 }
 
