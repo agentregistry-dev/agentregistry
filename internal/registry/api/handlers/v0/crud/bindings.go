@@ -41,4 +41,5 @@ func init() {
 	register(v1alpha1.KindRuntime, func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} })
 	register(v1alpha1.KindModel, func() *v1alpha1.Model { return &v1alpha1.Model{} })
 	register(v1alpha1.KindDeployment, func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} })
+	register(v1alpha1.KindSecret, func() *v1alpha1.Secret { return &v1alpha1.Secret{} })
 }

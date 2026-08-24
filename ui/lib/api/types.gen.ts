@@ -267,6 +267,11 @@ export type ListOutputRuntimeBody = {
     nextCursor?: string;
 };
 
+export type ListOutputSecretBody = {
+    items: Array<Secret> | null;
+    nextCursor?: string;
+};
+
 export type ListOutputSkillBody = {
     items: Array<Skill> | null;
     nextCursor?: string;
@@ -673,10 +678,33 @@ export type RuntimeSpec = {
     type: string;
 };
 
+export type Secret = {
+    apiVersion: string;
+    kind: string;
+    metadata: ObjectMeta;
+    spec: SecretSpec;
+    status?: SecretStatus;
+};
+
 export type SecretKeyRef = {
     key?: string;
     name: string;
     namespace?: string;
+};
+
+export type SecretSpec = {
+    data?: {
+        [key: string]: string;
+    };
+    immutable?: boolean;
+    stringData?: {
+        [key: string]: string;
+    };
+    type?: string;
+};
+
+export type SecretStatus = {
+    dataKeys?: Array<string> | null;
 };
 
 export type ServerArgument = {
@@ -2264,6 +2292,156 @@ export type ApplyRuntimeResponses = {
 };
 
 export type ApplyRuntimeResponse = ApplyRuntimeResponses[keyof ApplyRuntimeResponses];
+
+export type ListSecretsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Namespace (defaults to 'default'; 'all' lists across all namespaces).
+         */
+        namespace?: string;
+        /**
+         * Max items to return (default 50).
+         */
+        limit?: number;
+        /**
+         * Opaque pagination cursor.
+         */
+        cursor?: string;
+        /**
+         * Label selector: key=value,key2=value2.
+         */
+        labels?: string;
+        /**
+         * Restrict the result set to one tag value (tagged artifact kinds only).
+         */
+        tag?: string;
+        /**
+         * Only return the literal latest tag per (namespace, name). Equivalent to tag=latest for tagged kinds.
+         */
+        latestOnly?: boolean;
+        /**
+         * Include rows with a deletionTimestamp.
+         */
+        includeTerminating?: boolean;
+    };
+    url: '/v0/secrets';
+};
+
+export type ListSecretsErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type ListSecretsError = ListSecretsErrors[keyof ListSecretsErrors];
+
+export type ListSecretsResponses = {
+    /**
+     * OK
+     */
+    200: ListOutputSecretBody;
+};
+
+export type ListSecretsResponse = ListSecretsResponses[keyof ListSecretsResponses];
+
+export type DeleteSecretData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/secrets/{name}';
+};
+
+export type DeleteSecretErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type DeleteSecretError = DeleteSecretErrors[keyof DeleteSecretErrors];
+
+export type DeleteSecretResponses = {
+    /**
+     * No Content
+     */
+    204: void;
+};
+
+export type DeleteSecretResponse = DeleteSecretResponses[keyof DeleteSecretResponses];
+
+export type GetLatestSecretData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/secrets/{name}';
+};
+
+export type GetLatestSecretErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetLatestSecretError = GetLatestSecretErrors[keyof GetLatestSecretErrors];
+
+export type GetLatestSecretResponses = {
+    /**
+     * OK
+     */
+    200: Secret;
+};
+
+export type GetLatestSecretResponse = GetLatestSecretResponses[keyof GetLatestSecretResponses];
+
+export type ApplySecretData = {
+    body?: Secret;
+    path: {
+        name: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/secrets/{name}';
+};
+
+export type ApplySecretErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type ApplySecretError = ApplySecretErrors[keyof ApplySecretErrors];
+
+export type ApplySecretResponses = {
+    /**
+     * OK
+     */
+    200: Secret;
+};
+
+export type ApplySecretResponse = ApplySecretResponses[keyof ApplySecretResponses];
 
 export type ListSkillsData = {
     body?: never;
