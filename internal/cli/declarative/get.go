@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -18,6 +19,7 @@ import (
 
 // NewGetCmd returns a new "get" cobra command.
 func NewGetCmd(deps cliruntime.Deps) *cobra.Command {
+	var labels string
 	cmd := &cobra.Command{
 		Use:   "get TYPE [NAME]",
 		Short: "List or retrieve registry resources",
@@ -29,6 +31,8 @@ Supported types: agents, mcps, skills, prompts, runtimes, deployments
 Examples:
   arctl get all
   arctl get agents
+  arctl get agents -l team=platform,tier=production
+  arctl get agents --show-labels         # list rows with a LABELS column
   arctl get agents --tag stable          # list rows with a specific tag
   arctl get agents --latest              # list rows pinned to the "latest" tag
   arctl get mcps
@@ -47,6 +51,8 @@ Examples:
 		},
 	}
 	cmd.Flags().StringP("output", "o", "table", "Output format: table, yaml, json")
+	cmd.Flags().StringVarP(&labels, "labels", "l", "", "Content kinds only: filter list rows by comma-separated key=value labels.")
+	cmd.Flags().Bool("show-labels", false, "Table output only: print an additional LABELS column with each resource's labels.")
 	cmd.Flags().String("tag", "", "Tagged kinds only. With NAME: fetch one tag (defaults to latest). Without NAME: filter the list to this tag.")
 	cmd.Flags().Bool("latest", false, "List mode only: restrict to rows pinned to the literal 'latest' tag (equivalent to --tag latest).")
 	cmd.Flags().Bool("all-tags", false, "List every tag of NAME (tagged content kinds only)")
@@ -59,6 +65,7 @@ func runGet(cmd *cobra.Command, deps cliruntime.Deps, args []string) error {
 	outputFormat, _ := cmd.Flags().GetString("output")
 	allTags, _ := cmd.Flags().GetBool("all-tags")
 	latest, _ := cmd.Flags().GetBool("latest")
+	labels, _ := cmd.Flags().GetString("labels")
 	tag, _ := cmd.Flags().GetString("tag")
 	origin, _ := cmd.Flags().GetString("origin")
 	allTagsFlag := "--all-tags"
@@ -70,6 +77,9 @@ func runGet(cmd *cobra.Command, deps cliruntime.Deps, args []string) error {
 	}
 	if allTags && latest {
 		return fmt.Errorf("%s and %s are mutually exclusive", latestFlag, allTagsFlag)
+	}
+	if allTags && labels != "" {
+		return fmt.Errorf("--labels and %s are mutually exclusive", allTagsFlag)
 	}
 	if latest && tag != "" {
 		return fmt.Errorf("%s and %s are mutually exclusive", tagFlag, latestFlag)
@@ -86,6 +96,7 @@ func runGet(cmd *cobra.Command, deps cliruntime.Deps, args []string) error {
 		}
 		return runGetAllArg(cmd, deps, kinds, outputFormat, getFlags{
 			allTags: allTags,
+			labels:  labels,
 			latest:  latest,
 			tag:     tag,
 		})
@@ -110,6 +121,12 @@ func runGet(cmd *cobra.Command, deps cliruntime.Deps, args []string) error {
 	}
 	if latest && k.ListTags == nil {
 		return fmt.Errorf("%s not supported for kind %q (resource is not tagged)", latestFlag, k.Kind)
+	}
+	if labels != "" && k.ListTags == nil {
+		return fmt.Errorf("--labels not supported for kind %q (resource is not a content kind)", k.Kind)
+	}
+	if labels != "" && len(args) == 2 {
+		return fmt.Errorf("--labels is a list filter and cannot be combined with a resource NAME")
 	}
 
 	// --origin filters Deployment provenance and is meaningless elsewhere.
@@ -141,7 +158,7 @@ func runGet(cmd *cobra.Command, deps cliruntime.Deps, args []string) error {
 		return printItem(cmd, k, item, outputFormat)
 	}
 
-	listOpts := scheme.ListOpts{Tag: tag, LatestOnly: latest, Origin: originOpt}
+	listOpts := scheme.ListOpts{Labels: labels, Tag: tag, LatestOnly: latest, Origin: originOpt}
 	items, err := listItems(cmd.Context(), c, k, listOpts)
 	if err != nil {
 		return fmt.Errorf("listing %s: %w", kindPlural(k), err)
@@ -155,6 +172,7 @@ func runGet(cmd *cobra.Command, deps cliruntime.Deps, args []string) error {
 
 type getFlags struct {
 	allTags bool
+	labels  string
 	latest  bool
 	tag     string
 }
@@ -187,6 +205,9 @@ func runGetAllArg(cmd *cobra.Command, deps cliruntime.Deps, kinds *scheme.Regist
 	}
 	if flags.latest {
 		return fmt.Errorf("--latest cannot be used with `get all`")
+	}
+	if flags.labels != "" {
+		return fmt.Errorf("--labels cannot be used with `get all`")
 	}
 	c, err := registryClient(cmd, deps)
 	if err != nil {
@@ -275,9 +296,10 @@ func printItem(cmd *cobra.Command, k *scheme.Kind, item any, outputFormat string
 	case "json":
 		return marshalJSON(cmd, item)
 	default:
+		showLabels, _ := cmd.Flags().GetBool("show-labels")
 		t := printer.NewTablePrinter(cmd.OutOrStdout())
-		t.SetHeaders(tableColumns(k)...)
-		t.AddRow(stringsToAny(tableRow(k, item))...)
+		t.SetHeaders(tableHeaders(k, showLabels)...)
+		t.AddRow(stringsToAny(tableRowWithLabels(k, item, showLabels))...)
 		return t.Render()
 	}
 }
@@ -302,13 +324,57 @@ func printItems(cmd *cobra.Command, k *scheme.Kind, items []any, outputFormat st
 	case "json":
 		return marshalJSON(cmd, items)
 	default:
+		showLabels, _ := cmd.Flags().GetBool("show-labels")
 		t := printer.NewTablePrinter(cmd.OutOrStdout())
-		t.SetHeaders(tableColumns(k)...)
+		t.SetHeaders(tableHeaders(k, showLabels)...)
 		for _, item := range items {
-			t.AddRow(stringsToAny(tableRow(k, item))...)
+			t.AddRow(stringsToAny(tableRowWithLabels(k, item, showLabels))...)
 		}
 		return t.Render()
 	}
+}
+
+// tableHeaders returns the kind's table columns, with a trailing LABELS
+// column appended when --show-labels is set.
+func tableHeaders(k *scheme.Kind, showLabels bool) []string {
+	headers := tableColumns(k)
+	if showLabels {
+		headers = append(headers, "LABELS")
+	}
+	return headers
+}
+
+// tableRowWithLabels returns the kind's row, with the item's labels appended
+// as a trailing column when --show-labels is set.
+func tableRowWithLabels(k *scheme.Kind, item any, showLabels bool) []string {
+	row := tableRow(k, item)
+	if showLabels {
+		row = append(row, formatLabels(item))
+	}
+	return row
+}
+
+// formatLabels renders an item's metadata labels as a sorted,
+// comma-separated "key=value" list, matching kubectl's --show-labels output.
+func formatLabels(item any) string {
+	obj, ok := item.(v1alpha1.Object)
+	if !ok {
+		return "<none>"
+	}
+	meta := obj.GetMetadata()
+	if meta == nil || len(meta.Labels) == 0 {
+		return "<none>"
+	}
+	keys := make([]string, 0, len(meta.Labels))
+	for key := range meta.Labels {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	pairs := make([]string, len(keys))
+	for i, key := range keys {
+		pairs[i] = key + "=" + meta.Labels[key]
+	}
+	return strings.Join(pairs, ",")
 }
 
 func stringsToAny(ss []string) []any {

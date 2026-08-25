@@ -29,6 +29,7 @@ func listAny[T v1alpha1.Object](ctx context.Context, c *client.Client, kind stri
 		kind,
 		client.ListOpts{
 			Namespace:  v1alpha1.DefaultNamespace,
+			Labels:     opts.Labels,
 			Tag:        opts.Tag,
 			LatestOnly: opts.LatestOnly,
 			Limit:      200,

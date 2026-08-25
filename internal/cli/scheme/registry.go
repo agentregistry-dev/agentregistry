@@ -27,6 +27,8 @@ type Column struct {
 // Empty fields mean "no filter" — the default `arctl get <plural>` lists
 // every row of the kind.
 type ListOpts struct {
+	// Labels is an equality selector forwarded to the registry API.
+	Labels string
 	// Tag, when set, restricts the list to rows with this tag value
 	// (tagged content kinds only). Mutually exclusive with LatestOnly.
 	Tag string

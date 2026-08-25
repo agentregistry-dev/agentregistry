@@ -42,6 +42,97 @@ func TestGetCmd_NoAPIClientErrors(t *testing.T) {
 	assert.ErrorContains(t, err, "registry runtime not configured")
 }
 
+func TestGet_Labels_ListModeForwardsSelector(t *testing.T) {
+	for _, flag := range []string{"--labels", "-l"} {
+		t.Run(flag, func(t *testing.T) {
+			var got string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				got = r.URL.Query().Get("labels")
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"items":[]}`))
+			}))
+			t.Cleanup(srv.Close)
+			setupClientForServer(t, srv)
+
+			cmd := declarative.NewGetCmd(declarativeTestDeps(nil))
+			cmd.SetArgs([]string{"agents", flag, "team=platform,tier=production"})
+			require.NoError(t, cmd.Execute())
+			assert.Equal(t, "team=platform,tier=production", got)
+		})
+	}
+}
+
+func TestGet_Labels_RejectsNonListUses(t *testing.T) {
+	setDeclarativeTestClient(t, client.NewClient("http://127.0.0.1:1", ""))
+
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "named resource", args: []string{"agent", "acme-bot", "-l", "team=platform"}, want: "cannot be combined with a resource NAME"},
+		{name: "all tags", args: []string{"agent", "acme-bot", "--all-tags", "-l", "team=platform"}, want: "mutually exclusive"},
+		{name: "get all", args: []string{"all", "-l", "team=platform"}, want: "cannot be used with `get all`"},
+		{name: "non-content kind", args: []string{"runtime", "-l", "team=platform"}, want: "not supported for kind \"runtime\""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd := declarative.NewGetCmd(declarativeTestDeps(nil))
+			cmd.SetArgs(tc.args)
+			err := cmd.Execute()
+			require.Error(t, err)
+			assert.ErrorContains(t, err, tc.want)
+		})
+	}
+}
+
+func TestGet_ShowLabels(t *testing.T) {
+	rows := []v1alpha1.Agent{
+		func() v1alpha1.Agent {
+			a := agentTagFixture("acme-bot", "latest")
+			a.Metadata.Labels = map[string]string{"tier": "production", "team": "platform"}
+			return a
+		}(),
+		agentTagFixture("beta-bot", "latest"),
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"items": rows})
+	}))
+	t.Cleanup(srv.Close)
+	setupClientForServer(t, srv)
+
+	out := &bytes.Buffer{}
+	cmd := declarative.NewGetCmd(declarativeTestDeps(nil))
+	cmd.SetOut(out)
+	cmd.SetErr(out)
+	cmd.SetArgs([]string{"agents", "--show-labels"})
+	require.NoError(t, cmd.Execute())
+
+	got := out.String()
+	assert.Contains(t, got, "LABELS")
+	assert.Contains(t, got, "team=platform,tier=production")
+	assert.Contains(t, got, "<none>")
+}
+
+func TestGet_ShowLabels_OmittedByDefault(t *testing.T) {
+	rows := []v1alpha1.Agent{agentTagFixture("acme-bot", "latest")}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"items": rows})
+	}))
+	t.Cleanup(srv.Close)
+	setupClientForServer(t, srv)
+
+	out := &bytes.Buffer{}
+	cmd := declarative.NewGetCmd(declarativeTestDeps(nil))
+	cmd.SetOut(out)
+	cmd.SetErr(out)
+	cmd.SetArgs([]string{"agents"})
+	require.NoError(t, cmd.Execute())
+
+	assert.NotContains(t, out.String(), "LABELS")
+}
+
 // TestGetCmd_RegistryDrivenColumnLookup verifies the package-level scheme
 // registry resolves declarative-known kinds (declarative's init() registered
 // them at process start), so `arctl get agents` gets past kind validation
