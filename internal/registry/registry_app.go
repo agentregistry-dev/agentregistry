@@ -33,6 +33,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	controller "github.com/agentregistry-dev/agentregistry/internal/registry/controller"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	microsoftruntime "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/microsoft"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
@@ -110,6 +111,13 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	secretStore, err := buildSecretStore(cfg, pool, options.SecretStore)
 	if err != nil {
 		return fmt.Errorf("initialize secret store: %w", err)
+	}
+	secretResolver := secret.NewService(secretStore)
+	if _, ok := discoverySources[v1alpha1.TypeMicrosoftFoundry]; !ok {
+		discoverySources[v1alpha1.TypeMicrosoftFoundry] = microsoftruntime.NewFoundrySource(secretResolver)
+	}
+	if _, ok := discoverySources[v1alpha1.TypeMicrosoftCopilotStudio]; !ok {
+		discoverySources[v1alpha1.TypeMicrosoftCopilotStudio] = microsoftruntime.NewCopilotStudioSource(secretResolver)
 	}
 	controllerConfig := deploymentControllerConfig(cfg)
 	controllerConfig.DependencyKinds = maps.Clone(options.DeploymentDependencyKinds)

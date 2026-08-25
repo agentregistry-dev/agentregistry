@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/status"
 )
 
 // DeploymentAdapter is the v1alpha1 runtime surface for deploying
@@ -133,7 +134,7 @@ type ApplyResult struct {
 }
 
 // RuntimeMetadataRemoteIDKey is the stable provider identity used to correlate discoveries.
-const RuntimeMetadataRemoteIDKey = "remoteId"
+const RuntimeMetadataRemoteIDKey = status.RuntimeMetadataRemoteIDKey
 
 // RemoveInput carries the Deployment being torn down plus its resolved
 // Runtime (the Target has already been dereferenced and is not

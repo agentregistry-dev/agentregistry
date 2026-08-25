@@ -36,6 +36,7 @@ func (r *Runtime) Validate() error {
 		errs.Append("spec.type", fmt.Errorf("%w", ErrRequiredField))
 	} else if canonical, ok := canonicalRuntimeType(r.Spec.Type); ok {
 		r.Spec.Type = canonical
+		errs = append(errs, validateMicrosoftRuntime(r.Spec)...)
 	} else {
 		errs.Append("spec.type",
 			fmt.Errorf("%w: %q (known: %v)", ErrUnknownRuntimeType, r.Spec.Type, knownRuntimeTypeNames()))
