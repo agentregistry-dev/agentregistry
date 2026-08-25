@@ -52,7 +52,7 @@ Examples:
 	}
 	cmd.Flags().StringP("output", "o", "table", "Output format: table, yaml, json")
 	cmd.Flags().StringVarP(&labels, "labels", "l", "", "Content kinds only: filter list rows by comma-separated key=value labels.")
-	cmd.Flags().Bool("show-labels", false, "Table output only: print an additional LABELS column with each resource's labels.")
+	cmd.Flags().Bool("show-labels", false, "Print an additional LABELS column with each resource's labels; ignored for -o yaml/json, which already include labels.")
 	cmd.Flags().String("tag", "", "Tagged kinds only. With NAME: fetch one tag (defaults to latest). Without NAME: filter the list to this tag.")
 	cmd.Flags().Bool("latest", false, "List mode only: restrict to rows pinned to the literal 'latest' tag (equivalent to --tag latest).")
 	cmd.Flags().Bool("all-tags", false, "List every tag of NAME (tagged content kinds only)")
