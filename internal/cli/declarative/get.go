@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -369,7 +369,7 @@ func formatLabels(item any) string {
 	for key := range meta.Labels {
 		keys = append(keys, key)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	pairs := make([]string, len(keys))
 	for i, key := range keys {
 		pairs[i] = key + "=" + meta.Labels[key]
