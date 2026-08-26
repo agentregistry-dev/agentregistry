@@ -9,9 +9,15 @@ package v1alpha1
 // spec.targetRef.tag.
 type Deployment struct {
 	TypeMeta `json:",inline" yaml:",inline"`
-	Metadata ObjectMeta     `json:"metadata" yaml:"metadata"`
-	Spec     DeploymentSpec `json:"spec" yaml:"spec"`
-	Status   Status         `json:"status,omitzero" yaml:"status,omitempty"`
+	// metadata is part of Deployment.
+	// +required
+	Metadata ObjectMeta `json:"metadata" yaml:"metadata"`
+	// spec is part of Deployment.
+	// +required
+	Spec DeploymentSpec `json:"spec" yaml:"spec"`
+	// status is part of Deployment.
+	// +optional
+	Status Status `json:"status,omitzero" yaml:"status,omitempty"`
 }
 
 func init() {
@@ -58,29 +64,43 @@ const (
 // application registers the adapters that resolve how and where the target is
 // executed.
 type DeploymentSpec struct {
-	TargetRef  ResourceRef `json:"targetRef" yaml:"targetRef"`
+	// targetRef is part of DeploymentSpec.
+	// +required
+	// +kubebuilder:validation:MinProperties=1
+	TargetRef ResourceRef `json:"targetRef" yaml:"targetRef"`
+	// runtimeRef is part of DeploymentSpec.
+	// +required
+	// +kubebuilder:validation:MinProperties=1
 	RuntimeRef ResourceRef `json:"runtimeRef" yaml:"runtimeRef"`
-	// ModelRef selects the tagged Model for this Deployment. When omitted from
+	// modelRef selects the tagged Model for this Deployment. When omitted from
 	// a harness Agent Deployment, it defaults to Model/default@latest in the
 	// Deployment namespace. It remains optional with no implicit selection for
 	// non-harness Agent and MCPServer Deployments. Provider, endpoint, and auth
 	// configuration remain on the referenced Model.
-	ModelRef     *ModelRef `json:"modelRef,omitempty" yaml:"modelRef,omitempty"`
-	DesiredState string    `json:"desiredState,omitempty" yaml:"desiredState,omitempty"`
-	// DeploymentRefs declaratively binds this Deployment to other
+	// +optional
+	ModelRef *ModelRef `json:"modelRef,omitempty" yaml:"modelRef,omitempty"`
+	// desiredState is part of DeploymentSpec.
+	// +optional
+	DesiredState string `json:"desiredState,omitempty" yaml:"desiredState,omitempty"`
+	// deploymentRefs declaratively binds this Deployment to other
 	// Deployments — e.g. an Agent Deployment binding to the MCPServer
 	// Deployments whose status should feed its runtime config. Stored
 	// and structurally validated; binding semantics are owned by the
 	// kind's reconciler.
-	DeploymentRefs []DeploymentRef   `json:"deploymentRefs,omitempty" yaml:"deploymentRefs,omitempty"`
-	Env            map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
-	// RuntimeConfig carries adapter-specific per-Deployment configuration.
+	// +optional
+	DeploymentRefs []DeploymentRef `json:"deploymentRefs,omitempty" yaml:"deploymentRefs,omitempty"`
+	// env is part of DeploymentSpec.
+	// +optional
+	Env map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
+	// runtimeConfig carries adapter-specific per-Deployment configuration.
 	// Its schema is selected by the resolved Runtime type and validated by that
 	// runtime's DeploymentAdapter.
+	// +optional
 	RuntimeConfig map[string]any `json:"runtimeConfig,omitempty" yaml:"runtimeConfig,omitempty"`
-	// Harness selects a compatible harness for Agent deployments and configures
+	// harness selects a compatible harness for Agent deployments and configures
 	// rollout-specific harness policy. Omitted for BYO image/source Agent
 	// deployments and MCPServer deployments.
+	// +optional
 	Harness *DeploymentHarness `json:"harness,omitempty" yaml:"harness,omitempty"`
 }
 
@@ -104,12 +124,15 @@ func (s *DeploymentSpec) EffectiveModelRef() *ModelRef {
 // The target Agent declares compatibility; the Runtime supplies concrete
 // runner support such as container images.
 type DeploymentHarness struct {
-	// Type is the selected harness family, e.g. "claude-code", "codex".
+	// type is the selected harness family, e.g. "claude-code", "codex".
+	// +required
+	// +kubebuilder:validation:MinLength=1
 	Type string `json:"type" yaml:"type"`
 
-	// PermissionMode controls the harness tool-permission posture, e.g.
+	// permissionMode controls the harness tool-permission posture, e.g.
 	// "default", "acceptEdits", "bypassPermissions". Empty defaults to
 	// "bypassPermissions" for headless harness runtimes (no interactive
 	// approval is possible); subject to security review.
+	// +optional
 	PermissionMode string `json:"permissionMode,omitempty" yaml:"permissionMode,omitempty"`
 }

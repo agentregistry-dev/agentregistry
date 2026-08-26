@@ -13,9 +13,15 @@ package v1alpha1
 // harness layout at deploy time.
 type Plugin struct {
 	TypeMeta `json:",inline" yaml:",inline"`
-	Metadata ObjectMeta   `json:"metadata" yaml:"metadata"`
-	Spec     PluginSpec   `json:"spec" yaml:"spec"`
-	Status   PluginStatus `json:"status,omitzero" yaml:"status,omitempty"`
+	// metadata is part of Plugin.
+	// +required
+	Metadata ObjectMeta `json:"metadata" yaml:"metadata"`
+	// spec is part of Plugin.
+	// +required
+	Spec PluginSpec `json:"spec" yaml:"spec"`
+	// status is part of Plugin.
+	// +optional
+	Status PluginStatus `json:"status,omitzero" yaml:"status,omitempty"`
 }
 
 func init() {
@@ -28,20 +34,27 @@ func init() {
 // controller. Keeping it out of the spec means a status write never changes the
 // spec content hash, so re-applying identical intent is an UpsertNoOp.
 type PluginSpec struct {
-	Title       string `json:"title,omitempty" yaml:"title,omitempty"`
+	// title is part of PluginSpec.
+	// +optional
+	Title string `json:"title,omitempty" yaml:"title,omitempty"`
+	// description is part of PluginSpec.
+	// +optional
 	Description string `json:"description,omitempty" yaml:"description,omitempty"`
 
-	// IconURL is the image a catalog UI shows for this plugin. Either an
+	// iconUrl is the image a catalog UI shows for this plugin. Either an
 	// absolute https:// URL or a root-relative path served by the UI.
+	// +optional
 	IconURL string `json:"iconUrl,omitempty" yaml:"iconUrl,omitempty"`
 
-	// Harnesses lists the harness formats this bundle carries native manifests
+	// harnesses lists the harness formats this bundle carries native manifests
 	// for (e.g. "claude-code", "codex"). It is informational in this phase;
 	// deploy-time adapters decide which harnesses they can consume.
+	// +optional
 	Harnesses []string `json:"harnesses,omitempty" yaml:"harnesses,omitempty"`
 
-	// Source is where the bundle is ingested from, pinned (git commit / OCI
+	// source is where the bundle is ingested from, pinned (git commit / OCI
 	// digest) so a published tag is reproducible.
+	// +optional
 	Source *PluginSource `json:"source,omitempty" yaml:"source,omitempty"`
 }
 
@@ -59,12 +72,15 @@ type PluginSpec struct {
 type PluginStatus struct {
 	Status `json:",inline" yaml:",inline"`
 
-	// ResolvedSource is the controller's immutable pin of the user's source
+	// resolvedSource is the controller's immutable pin of the user's source
 	// pointer (the concrete commit/digest the source resolved to).
+	// +optional
 	ResolvedSource *PluginResolvedSource `json:"resolvedSource,omitempty" yaml:"resolvedSource,omitempty"`
-	// Manifest is the canonical typed plugin.json parsed from the source.
+	// manifest is the canonical typed plugin.json parsed from the source.
+	// +optional
 	Manifest *PluginManifest `json:"manifest,omitempty" yaml:"manifest,omitempty"`
-	// Inventory is the server-derived risk surface / search index.
+	// inventory is the server-derived risk surface / search index.
+	// +optional
 	Inventory *PluginInventory `json:"inventory,omitempty" yaml:"inventory,omitempty"`
 }
 
@@ -73,10 +89,14 @@ type PluginStatus struct {
 // matching Type. It is the reproducibility anchor: deploys materialize from this
 // pin, not from the (possibly moving) ref the user supplied.
 type PluginResolvedSource struct {
+	// type is part of PluginResolvedSource.
+	// +required
 	Type PluginSourceType `json:"type" yaml:"type"`
-	// Commit is the resolved full git commit SHA (Type=git).
+	// commit is the resolved full git commit SHA (Type=git).
+	// +optional
 	Commit string `json:"commit,omitempty" yaml:"commit,omitempty"`
-	// Digest is the resolved OCI digest, e.g. "sha256:…" (Type=oci; future).
+	// digest is the resolved OCI digest, e.g. "sha256:…" (Type=oci; future).
+	// +optional
 	Digest string `json:"digest,omitempty" yaml:"digest,omitempty"`
 }
 
@@ -92,9 +112,15 @@ const (
 // is set, matching Type. The reference must be pinned (git commit / OCI digest)
 // so the published tag is reproducible.
 type PluginSource struct {
+	// type is part of PluginSource.
+	// +required
 	Type PluginSourceType `json:"type" yaml:"type"`
-	Git  *PluginSourceGit `json:"git,omitempty" yaml:"git,omitempty"`
-	OCI  *PluginSourceOCI `json:"oci,omitempty" yaml:"oci,omitempty"`
+	// git is part of PluginSource.
+	// +optional
+	Git *PluginSourceGit `json:"git,omitempty" yaml:"git,omitempty"`
+	// oci is part of PluginSource.
+	// +optional
+	OCI *PluginSourceOCI `json:"oci,omitempty" yaml:"oci,omitempty"`
 }
 
 // PluginSourceGit is a git source. Repository may pin a Commit, a Branch, or a
@@ -103,12 +129,17 @@ type PluginSource struct {
 // pin in status.ResolvedSource. Repository.Subfolder selects a plugin inside a
 // monorepo.
 type PluginSourceGit struct {
+	// repository is part of PluginSourceGit.
+	// +required
 	Repository *Repository `json:"repository" yaml:"repository"`
 }
 
 // PluginSourceOCI is a digest-pinned OCI artifact reference, e.g.
 // "ghcr.io/org/plugin@sha256:...". Bare/tag-only refs are rejected.
 type PluginSourceOCI struct {
+	// reference is part of PluginSourceOCI.
+	// +required
+	// +kubebuilder:validation:MinLength=1
 	Reference string `json:"reference" yaml:"reference"`
 }
 
@@ -116,29 +147,46 @@ type PluginSourceOCI struct {
 // computed by scanning the bundle files (not the author-supplied manifest). It
 // is the legible governance risk surface and the search index.
 type PluginInventory struct {
-	Skills   []PluginSkill `json:"skills,omitempty" yaml:"skills,omitempty"`
-	Commands []string      `json:"commands,omitempty" yaml:"commands,omitempty"`
-	// Agents are sub-agent names; sub-agents are markdown prompt files in the
+	// skills is part of PluginInventory.
+	// +optional
+	Skills []PluginSkill `json:"skills,omitempty" yaml:"skills,omitempty"`
+	// commands is part of PluginInventory.
+	// +optional
+	Commands []string `json:"commands,omitempty" yaml:"commands,omitempty"`
+	// agents are sub-agent names; sub-agents are markdown prompt files in the
 	// bundle, not manifest entries.
+	// +optional
 	Agents []string `json:"agents,omitempty" yaml:"agents,omitempty"`
-	// Hooks are lifecycle hooks the bundle registers (arbitrary code).
-	Hooks      []PluginHook `json:"hooks,omitempty" yaml:"hooks,omitempty"`
-	MCPServers []string     `json:"mcpServers,omitempty" yaml:"mcpServers,omitempty"`
-	// Executables are bin/ entries the bundle ships (arbitrary code).
+	// hooks are lifecycle hooks the bundle registers (arbitrary code).
+	// +optional
+	Hooks []PluginHook `json:"hooks,omitempty" yaml:"hooks,omitempty"`
+	// mcpServers is part of PluginInventory.
+	// +optional
+	MCPServers []string `json:"mcpServers,omitempty" yaml:"mcpServers,omitempty"`
+	// executables are bin/ entries the bundle ships (arbitrary code).
+	// +optional
 	Executables []string `json:"executables,omitempty" yaml:"executables,omitempty"`
 }
 
 // PluginSkill is one skill shipped in the bundle (from its SKILL.md frontmatter).
 type PluginSkill struct {
-	Name        string `json:"name" yaml:"name"`
+	// name is part of PluginSkill.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name" yaml:"name"`
+	// description is part of PluginSkill.
+	// +optional
 	Description string `json:"description,omitempty" yaml:"description,omitempty"`
 }
 
 // PluginHook is one lifecycle hook the bundle registers.
 type PluginHook struct {
-	// Event is the lifecycle event, e.g. "PreToolUse", "PostToolUse",
+	// event is the lifecycle event, e.g. "PreToolUse", "PostToolUse",
 	// "SessionStart".
+	// +required
+	// +kubebuilder:validation:MinLength=1
 	Event string `json:"event" yaml:"event"`
-	// Type is the handler kind: command|http|mcp_tool|prompt|agent.
+	// type is the handler kind: command|http|mcp_tool|prompt|agent.
+	// +optional
 	Type string `json:"type,omitempty" yaml:"type,omitempty"`
 }

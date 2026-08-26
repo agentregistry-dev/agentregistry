@@ -23,17 +23,25 @@ const (
 // decoding, store construction, plural routing, and source projection all share
 // this metadata.
 type KindDescriptor struct {
-	Kind       string
+	// +optional
+	Kind string
+	// +optional
 	SpecSample any
-	NewObject  func() any
-	Plural     string
-	Table      string
-	Storage    KindStorage
+	// +optional
+	NewObject func() any
+	// +optional
+	Plural string
+	// +optional
+	Table string
+	// +optional
+	Storage KindStorage
 }
 
 // KindRegistry owns registered v1alpha1 kind metadata.
 type KindRegistry struct {
-	mu          sync.RWMutex
+	// +optional
+	mu sync.RWMutex
+	// +optional
 	descriptors map[string]KindDescriptor
 }
 

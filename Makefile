@@ -75,6 +75,7 @@ GOTESTSUM     ?= $(GO_TOOL) gotestsum
 HELM          ?= $(GO_TOOL) helm
 HELM_DOCS     ?= $(GO_TOOL) helm-docs --log-level=fatal
 KIND          ?= $(GO_TOOL) kind
+KUBE_API_LINTER ?= $(CURDIR)/bin/golangci-lint
 
 ## Helm / Chart settings
 # CHART_VERSION strips the leading 'v' from VERSION for use in Chart.yaml (Helm requires semver without the prefix).
@@ -506,8 +507,12 @@ release-cli: bin/arctl-darwin-arm64.sha256
 release-cli: bin/arctl-windows-amd64.exe.sha256
 
 .PHONY: lint
-lint: ## Run the linter (set GOLANGCI_LINT_ARGS=--fix for local auto-fix)
-	$(GOLANGCI_LINT) run $(GOLANGCI_LINT_ARGS)
+lint: $(KUBE_API_LINTER) ## Run the linter (set GOLANGCI_LINT_ARGS=--fix for local auto-fix)
+	$(KUBE_API_LINTER) run $(GOLANGCI_LINT_ARGS)
+
+$(KUBE_API_LINTER): .custom-gcl.yml tools/go.mod tools/go.sum
+	mkdir -p $(dir $@)
+	$(GOLANGCI_LINT) custom
 
 .PHONY: lint-ui
 lint-ui: install-ui ## Run eslint on UI code

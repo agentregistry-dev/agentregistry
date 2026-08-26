@@ -20,7 +20,11 @@ var (
 
 // PyPIPackageResponse represents the structure returned by the PyPI JSON API
 type PyPIPackageResponse struct {
+	// info is part of PyPIPackageResponse.
+	// +required
 	Info struct {
+		// description is the package description returned by PyPI.
+		// +optional
 		Description string `json:"description"`
 	} `json:"info"`
 }

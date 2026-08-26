@@ -31,7 +31,9 @@ var (
 // Examples: "metadata.name", "spec.packages[0].identifier",
 // "spec.mcpServers[2]".
 type FieldError struct {
-	Path  string
+	// +optional
+	Path string
+	// +optional
 	Cause error
 }
 

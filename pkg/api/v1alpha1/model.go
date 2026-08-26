@@ -6,9 +6,15 @@ package v1alpha1
 // to it (endpoint, auth posture, secret refs).
 type Model struct {
 	TypeMeta `json:",inline" yaml:",inline"`
+	// metadata is part of Model.
+	// +required
 	Metadata ObjectMeta `json:"metadata" yaml:"metadata"`
-	Spec     ModelSpec  `json:"spec" yaml:"spec"`
-	Status   Status     `json:"status,omitzero" yaml:"status,omitempty"`
+	// spec is part of Model.
+	// +required
+	Spec ModelSpec `json:"spec" yaml:"spec"`
+	// status is part of Model.
+	// +optional
+	Status Status `json:"status,omitzero" yaml:"status,omitempty"`
 }
 
 func init() {
@@ -35,27 +41,37 @@ const (
 // auth/endpoint posture are versioned together so Deployments can pin the
 // complete model configuration they consume.
 type ModelSpec struct {
-	// Catalog display metadata.
-	Title       string `json:"title,omitempty" yaml:"title,omitempty"`
+	// title is the model's catalog display name.
+	// +optional
+	Title string `json:"title,omitempty" yaml:"title,omitempty"`
+	// description is part of ModelSpec.
+	// +optional
 	Description string `json:"description,omitempty" yaml:"description,omitempty"`
 
-	// IconURL is the image a catalog UI shows for this model. Either an
+	// iconUrl is the image a catalog UI shows for this model. Either an
 	// absolute https:// URL or a root-relative path served by the UI.
+	// +optional
 	IconURL string `json:"iconUrl,omitempty" yaml:"iconUrl,omitempty"`
 
-	// Provider family. Currently only "bedrock" is supported.
+	// provider family. Currently only "bedrock" is supported.
+	// +required
+	// +kubebuilder:validation:MinLength=1
 	Provider string `json:"provider" yaml:"provider" enum:"bedrock"`
 
-	// Model is the provider-scoped model identifier, e.g.
+	// model is the provider-scoped model identifier, e.g.
 	// "us.anthropic.claude-opus-4-8".
+	// +required
+	// +kubebuilder:validation:MinLength=1
 	Model string `json:"model" yaml:"model"`
 
-	// Auth is how the platform authenticates to the provider. Omitted means
+	// auth is how the platform authenticates to the provider. Omitted means
 	// the provider default: ambient runtime identity for Bedrock.
+	// +optional
 	Auth *ModelAuthConfig `json:"auth,omitempty" yaml:"auth,omitempty"`
 
-	// Endpoint overrides how the provider is reached. Omitted means
+	// endpoint overrides how the provider is reached. Omitted means
 	// provider defaults.
+	// +optional
 	Endpoint *ModelEndpointConfig `json:"endpoint,omitempty" yaml:"endpoint,omitempty"`
 }
 
@@ -63,28 +79,38 @@ type ModelSpec struct {
 // stores SecretRef opaquely and never resolves it; resolution is owned by
 // distributions with a secret store.
 type ModelAuthConfig struct {
-	// Strategy is "runtime" (ambient cloud identity), "secretRef" (key
+	// strategy is "runtime" (ambient cloud identity), "secretRef" (key
 	// material from a registry Secret), or "passthrough" (inbound bearer
 	// token forwarded as the provider key).
+	// +required
+	// +kubebuilder:validation:MinLength=1
 	Strategy string `json:"strategy" yaml:"strategy" enum:"runtime,secretRef,passthrough"`
-	// SecretRef is required iff Strategy == "secretRef".
+	// secretRef is required iff Strategy == "secretRef".
+	// +optional
 	SecretRef *SecretKeyRef `json:"secretRef,omitempty" yaml:"secretRef,omitempty"`
 }
 
 // ModelEndpointConfig overrides how the provider is reached.
 type ModelEndpointConfig struct {
+	// baseUrl is part of ModelEndpointConfig.
+	// +optional
 	BaseURL string `json:"baseUrl,omitempty" yaml:"baseUrl,omitempty"`
-	// Region overrides the model-endpoint region (bedrock); empty means the
+	// region overrides the model-endpoint region (bedrock); empty means the
 	// provider default.
-	Region string          `json:"region,omitempty" yaml:"region,omitempty"`
-	TLS    *ModelTLSConfig `json:"tls,omitempty" yaml:"tls,omitempty"`
+	// +optional
+	Region string `json:"region,omitempty" yaml:"region,omitempty"`
+	// tls is part of ModelEndpointConfig.
+	// +optional
+	TLS *ModelTLSConfig `json:"tls,omitempty" yaml:"tls,omitempty"`
 }
 
 // ModelTLSConfig carries TLS settings for private gateway endpoints.
 type ModelTLSConfig struct {
-	// CACertSecretRef names CA material for private gateways.
+	// caCertSecretRef names CA material for private gateways.
+	// +optional
 	CACertSecretRef *SecretKeyRef `json:"caCertSecretRef,omitempty" yaml:"caCertSecretRef,omitempty"`
-	// DisableVerify is for dev/test only.
+	// disableVerify is for dev/test only.
+	// +optional
 	DisableVerify bool `json:"disableVerify,omitempty" yaml:"disableVerify,omitempty"`
 }
 
@@ -92,7 +118,14 @@ type ModelTLSConfig struct {
 // validates it but never resolves it. Secret values are not stored on Model
 // resources.
 type SecretKeyRef struct {
+	// namespace is part of SecretKeyRef.
+	// +optional
 	Namespace string `json:"namespace,omitempty" yaml:"namespace,omitempty"`
-	Name      string `json:"name" yaml:"name"`
-	Key       string `json:"key,omitempty" yaml:"key,omitempty"`
+	// name is part of SecretKeyRef.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name" yaml:"name"`
+	// key is part of SecretKeyRef.
+	// +optional
+	Key string `json:"key,omitempty" yaml:"key,omitempty"`
 }

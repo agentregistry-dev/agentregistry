@@ -32,46 +32,93 @@ import (
 // This type is NOT a registry kind; it is parsed from a plugin bundle and
 // embedded in Plugin status (see plugin.go).
 type PluginManifest struct {
-	Schema      string   `json:"$schema,omitempty" yaml:"$schema,omitempty"`
-	Name        string   `json:"name" yaml:"name"`
-	Version     string   `json:"version,omitempty" yaml:"version,omitempty"`
-	Description string   `json:"description,omitempty" yaml:"description,omitempty"`
-	Homepage    string   `json:"homepage,omitempty" yaml:"homepage,omitempty"`
-	Repository  string   `json:"repository,omitempty" yaml:"repository,omitempty"`
-	License     string   `json:"license,omitempty" yaml:"license,omitempty"`
-	Keywords    []string `json:"keywords,omitempty" yaml:"keywords,omitempty"`
+	// $schema is part of PluginManifest.
+	// +optional
+	Schema string `json:"$schema,omitempty" yaml:"$schema,omitempty"`
+	// name is part of PluginManifest.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name" yaml:"name"`
+	// version is part of PluginManifest.
+	// +optional
+	Version string `json:"version,omitempty" yaml:"version,omitempty"`
+	// description is part of PluginManifest.
+	// +optional
+	Description string `json:"description,omitempty" yaml:"description,omitempty"`
+	// homepage is part of PluginManifest.
+	// +optional
+	Homepage string `json:"homepage,omitempty" yaml:"homepage,omitempty"`
+	// repository is part of PluginManifest.
+	// +optional
+	Repository string `json:"repository,omitempty" yaml:"repository,omitempty"`
+	// license is part of PluginManifest.
+	// +optional
+	License string `json:"license,omitempty" yaml:"license,omitempty"`
+	// keywords is part of PluginManifest.
+	// +optional
+	Keywords []string `json:"keywords,omitempty" yaml:"keywords,omitempty"`
 
+	// author is part of PluginManifest.
+	// +optional
 	Author *PluginAuthor `json:"author,omitempty" yaml:"author,omitempty"`
 
-	// Settings is an opaque allowlisted settings-merge object (schema models it
+	// settings is an opaque allowlisted settings-merge object (schema models it
 	// as open additionalProperties), held raw to round-trip losslessly.
+	// +optional
 	Settings json.RawMessage `json:"settings,omitempty" yaml:"settings,omitempty"`
 
+	// dependencies is part of PluginManifest.
+	// +optional
 	Dependencies []PluginDependency `json:"dependencies,omitempty" yaml:"dependencies,omitempty"`
 
-	// Component path overrides — string|array|object unions (see types below).
-	Commands     *CommandsField   `json:"commands,omitempty" yaml:"commands,omitempty"`
-	Agents       *PathOrPaths     `json:"agents,omitempty" yaml:"agents,omitempty"`
-	Skills       *PathOrPaths     `json:"skills,omitempty" yaml:"skills,omitempty"`
-	OutputStyles *PathOrPaths     `json:"outputStyles,omitempty" yaml:"outputStyles,omitempty"`
-	Hooks        *HooksField      `json:"hooks,omitempty" yaml:"hooks,omitempty"`
-	MCPServers   *MCPServersField `json:"mcpServers,omitempty" yaml:"mcpServers,omitempty"`
-	LSPServers   *LSPServersField `json:"lspServers,omitempty" yaml:"lspServers,omitempty"`
+	// commands configures component path overrides as a string, array, or object.
+	// +optional
+	Commands *CommandsField `json:"commands,omitempty" yaml:"commands,omitempty"`
+	// agents is part of PluginManifest.
+	// +optional
+	Agents *PathOrPaths `json:"agents,omitempty" yaml:"agents,omitempty"`
+	// skills is part of PluginManifest.
+	// +optional
+	Skills *PathOrPaths `json:"skills,omitempty" yaml:"skills,omitempty"`
+	// outputStyles is part of PluginManifest.
+	// +optional
+	OutputStyles *PathOrPaths `json:"outputStyles,omitempty" yaml:"outputStyles,omitempty"`
+	// hooks is part of PluginManifest.
+	// +optional
+	Hooks *HooksField `json:"hooks,omitempty" yaml:"hooks,omitempty"`
+	// mcpServers is part of PluginManifest.
+	// +optional
+	MCPServers *MCPServersField `json:"mcpServers,omitempty" yaml:"mcpServers,omitempty"`
+	// lspServers is part of PluginManifest.
+	// +optional
+	LSPServers *LSPServersField `json:"lspServers,omitempty" yaml:"lspServers,omitempty"`
 
+	// userConfig is part of PluginManifest.
+	// +optional
 	UserConfig map[string]PluginUserConfigField `json:"userConfig,omitempty" yaml:"userConfig,omitempty"`
-	Channels   []PluginChannel                  `json:"channels,omitempty" yaml:"channels,omitempty"`
+	// channels is part of PluginManifest.
+	// +optional
+	Channels []PluginChannel `json:"channels,omitempty" yaml:"channels,omitempty"`
 
-	// Themes/Monitors are the schemastore top-level placement; Experimental is
+	// themes use the schemastore top-level placement; experimental is
 	// the docs-preferred nesting. Both are modeled so we re-emit whichever the
 	// source used.
-	Themes       *PathOrPaths        `json:"themes,omitempty" yaml:"themes,omitempty"`
-	Monitors     *MonitorsField      `json:"monitors,omitempty" yaml:"monitors,omitempty"`
+	// +optional
+	Themes *PathOrPaths `json:"themes,omitempty" yaml:"themes,omitempty"`
+	// monitors is part of PluginManifest.
+	// +optional
+	Monitors *MonitorsField `json:"monitors,omitempty" yaml:"monitors,omitempty"`
+	// experimental is part of PluginManifest.
+	// +optional
 	Experimental *PluginExperimental `json:"experimental,omitempty" yaml:"experimental,omitempty"`
 
-	// DisplayName / DefaultEnabled are docs-only (not in the schemastore schema)
+	// displayName / DefaultEnabled are docs-only (not in the schemastore schema)
 	// but Claude loads them; modeled so real data isn't dropped.
-	DisplayName    string `json:"displayName,omitempty" yaml:"displayName,omitempty"`
-	DefaultEnabled *bool  `json:"defaultEnabled,omitempty" yaml:"defaultEnabled,omitempty"`
+	// +optional
+	DisplayName string `json:"displayName,omitempty" yaml:"displayName,omitempty"`
+	// defaultEnabled is part of PluginManifest.
+	// +optional
+	DefaultEnabled *bool `json:"defaultEnabled,omitempty" yaml:"defaultEnabled,omitempty"`
 
 	// Extras captures any top-level key not modeled above (Codex interface/apps,
 	// forward-compat keys) so the manifest is a true cross-harness superset.
@@ -139,19 +186,32 @@ func (m PluginManifest) MarshalJSON() ([]byte, error) {
 
 // PluginAuthor is the `author` block; Name is required when the block exists.
 type PluginAuthor struct {
-	Name  string `json:"name" yaml:"name"`
+	// name is part of PluginAuthor.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name" yaml:"name"`
+	// email is part of PluginAuthor.
+	// +optional
 	Email string `json:"email,omitempty" yaml:"email,omitempty"`
-	URL   string `json:"url,omitempty" yaml:"url,omitempty"`
+	// url is part of PluginAuthor.
+	// +optional
+	URL string `json:"url,omitempty" yaml:"url,omitempty"`
 }
 
 // PluginDependency is one `dependencies[]` entry: a string spec ("name",
 // "name@marketplace", "name@^1.2.3") OR an object {name, marketplace, version}.
 // Exactly one form is populated and preserved by (Un)MarshalJSON.
 type PluginDependency struct {
-	Ref         string `json:"-" yaml:"-"`
-	Name        string `json:"name,omitempty" yaml:"name,omitempty"`
+	Ref string `json:"-" yaml:"-"`
+	// name is part of PluginDependency.
+	// +optional
+	Name string `json:"name,omitempty" yaml:"name,omitempty"`
+	// marketplace is part of PluginDependency.
+	// +optional
 	Marketplace string `json:"marketplace,omitempty" yaml:"marketplace,omitempty"`
-	Version     string `json:"version,omitempty" yaml:"version,omitempty"`
+	// version is part of PluginDependency.
+	// +optional
+	Version string `json:"version,omitempty" yaml:"version,omitempty"`
 }
 
 func (d PluginDependency) MarshalJSON() ([]byte, error) {
@@ -180,7 +240,9 @@ func (d *PluginDependency) UnmarshalJSON(data []byte) error {
 // normalizes to []string but remembers whether the source was a scalar so it
 // re-emits the original form.
 type PathOrPaths struct {
-	Values   []string
+	// +optional
+	Values []string
+	// +optional
 	WasArray bool
 }
 
@@ -211,17 +273,31 @@ func (p *PathOrPaths) UnmarshalJSON(data []byte) error {
 // CommandsField models `commands`: paths (string|array) and/or an object map of
 // named command entries.
 type CommandsField struct {
+	// +optional
 	Paths *PathOrPaths
-	Map   map[string]CommandEntry
+	// +optional
+	Map map[string]CommandEntry
 }
 
 // CommandEntry is one named command in the object form.
 type CommandEntry struct {
-	Source       string   `json:"source,omitempty" yaml:"source,omitempty"`
-	Content      string   `json:"content,omitempty" yaml:"content,omitempty"`
-	Description  string   `json:"description,omitempty" yaml:"description,omitempty"`
-	ArgumentHint string   `json:"argumentHint,omitempty" yaml:"argumentHint,omitempty"`
-	Model        string   `json:"model,omitempty" yaml:"model,omitempty"`
+	// source is part of CommandEntry.
+	// +optional
+	Source string `json:"source,omitempty" yaml:"source,omitempty"`
+	// content is part of CommandEntry.
+	// +optional
+	Content string `json:"content,omitempty" yaml:"content,omitempty"`
+	// description is part of CommandEntry.
+	// +optional
+	Description string `json:"description,omitempty" yaml:"description,omitempty"`
+	// argumentHint is part of CommandEntry.
+	// +optional
+	ArgumentHint string `json:"argumentHint,omitempty" yaml:"argumentHint,omitempty"`
+	// model is part of CommandEntry.
+	// +optional
+	Model string `json:"model,omitempty" yaml:"model,omitempty"`
+	// allowedTools is part of CommandEntry.
+	// +optional
 	AllowedTools []string `json:"allowedTools,omitempty" yaml:"allowedTools,omitempty"`
 }
 
@@ -255,9 +331,12 @@ func (c *CommandsField) UnmarshalJSON(data []byte) error {
 // object (Events), or an array form (kept Raw for lossless round-trip; read the
 // derived PluginInventory for the array form's risk surface).
 type HooksField struct {
-	Path   string
+	// +optional
+	Path string
+	// +optional
 	Events map[string][]HookMatcherGroup
-	Raw    json.RawMessage
+	// +optional
+	Raw json.RawMessage
 }
 
 func (h HooksField) MarshalJSON() ([]byte, error) {
@@ -293,46 +372,87 @@ func (h *HooksField) UnmarshalJSON(data []byte) error {
 
 // HookMatcherGroup is one matcher group under an event.
 type HookMatcherGroup struct {
-	Matcher string      `json:"matcher,omitempty" yaml:"matcher,omitempty"`
-	Hooks   []HookEntry `json:"hooks" yaml:"hooks"`
+	// matcher is part of HookMatcherGroup.
+	// +optional
+	Matcher string `json:"matcher,omitempty" yaml:"matcher,omitempty"`
+	// hooks is part of HookMatcherGroup.
+	// +required
+	Hooks []HookEntry `json:"hooks" yaml:"hooks"`
 }
 
 // HookEntry is one hook action discriminated by Type (command|prompt|agent|
 // http|mcp_tool). Variant fields are flattened with omitempty; per-type
 // required/forbidden sets are enforced in plugin_validate.go.
 type HookEntry struct {
+	// type is part of HookEntry.
+	// +required
+	// +kubebuilder:validation:MinLength=1
 	Type string `json:"type" yaml:"type"`
 
+	// command is part of HookEntry.
+	// +optional
 	Command string `json:"command,omitempty" yaml:"command,omitempty"`
-	Shell   string `json:"shell,omitempty" yaml:"shell,omitempty"`
+	// shell is part of HookEntry.
+	// +optional
+	Shell string `json:"shell,omitempty" yaml:"shell,omitempty"`
 
+	// prompt is part of HookEntry.
+	// +optional
 	Prompt string `json:"prompt,omitempty" yaml:"prompt,omitempty"`
-	Model  string `json:"model,omitempty" yaml:"model,omitempty"`
+	// model is part of HookEntry.
+	// +optional
+	Model string `json:"model,omitempty" yaml:"model,omitempty"`
 
-	URL            string            `json:"url,omitempty" yaml:"url,omitempty"`
-	Headers        map[string]string `json:"headers,omitempty" yaml:"headers,omitempty"`
-	AllowedEnvVars []string          `json:"allowedEnvVars,omitempty" yaml:"allowedEnvVars,omitempty"`
+	// url is part of HookEntry.
+	// +optional
+	URL string `json:"url,omitempty" yaml:"url,omitempty"`
+	// headers is part of HookEntry.
+	// +optional
+	Headers map[string]string `json:"headers,omitempty" yaml:"headers,omitempty"`
+	// allowedEnvVars is part of HookEntry.
+	// +optional
+	AllowedEnvVars []string `json:"allowedEnvVars,omitempty" yaml:"allowedEnvVars,omitempty"`
 
-	Server string          `json:"server,omitempty" yaml:"server,omitempty"`
-	Tool   string          `json:"tool,omitempty" yaml:"tool,omitempty"`
-	Input  json.RawMessage `json:"input,omitempty" yaml:"input,omitempty"`
+	// server is part of HookEntry.
+	// +optional
+	Server string `json:"server,omitempty" yaml:"server,omitempty"`
+	// tool is part of HookEntry.
+	// +optional
+	Tool string `json:"tool,omitempty" yaml:"tool,omitempty"`
+	// input is part of HookEntry.
+	// +optional
+	Input json.RawMessage `json:"input,omitempty" yaml:"input,omitempty"`
 
+	// if is part of HookEntry.
+	// +optional
 	If string `json:"if,omitempty" yaml:"if,omitempty"`
-	// Timeout is a pointer so an explicit "timeout": 0 (disable) round-trips
+	// timeout is a pointer so an explicit "timeout": 0 (disable) round-trips
 	// losslessly — a float64 with omitempty would silently drop the zero.
-	Timeout       *float64 `json:"timeout,omitempty" yaml:"timeout,omitempty"`
-	StatusMessage string   `json:"statusMessage,omitempty" yaml:"statusMessage,omitempty"`
-	Once          *bool    `json:"once,omitempty" yaml:"once,omitempty"`
-	Async         *bool    `json:"async,omitempty" yaml:"async,omitempty"`
-	AsyncRewake   *bool    `json:"asyncRewake,omitempty" yaml:"asyncRewake,omitempty"`
+	// +optional
+	Timeout *float64 `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	// statusMessage is part of HookEntry.
+	// +optional
+	StatusMessage string `json:"statusMessage,omitempty" yaml:"statusMessage,omitempty"`
+	// once is part of HookEntry.
+	// +optional
+	Once *bool `json:"once,omitempty" yaml:"once,omitempty"`
+	// async is part of HookEntry.
+	// +optional
+	Async *bool `json:"async,omitempty" yaml:"async,omitempty"`
+	// asyncRewake is part of HookEntry.
+	// +optional
+	AsyncRewake *bool `json:"asyncRewake,omitempty" yaml:"asyncRewake,omitempty"`
 }
 
 // MCPServersField models `mcpServers`: a path/MCPB string (Path), an inline
 // name->config object (Servers), or an array form (Raw).
 type MCPServersField struct {
-	Path    string
+	// +optional
+	Path string
+	// +optional
 	Servers map[string]MCPServerEntry
-	Raw     json.RawMessage
+	// +optional
+	Raw json.RawMessage
 }
 
 func (f MCPServersField) MarshalJSON() ([]byte, error) {
@@ -368,32 +488,58 @@ func (f *MCPServersField) UnmarshalJSON(data []byte) error {
 
 // MCPServerEntry is one inline MCP server config (stdio|sse|http|ws).
 type MCPServerEntry struct {
-	Type    string            `json:"type,omitempty" yaml:"type,omitempty"`
-	Command string            `json:"command,omitempty" yaml:"command,omitempty"`
-	Args    []string          `json:"args,omitempty" yaml:"args,omitempty"`
-	Env     map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
+	// type is part of MCPServerEntry.
+	// +optional
+	Type string `json:"type,omitempty" yaml:"type,omitempty"`
+	// command is part of MCPServerEntry.
+	// +optional
+	Command string `json:"command,omitempty" yaml:"command,omitempty"`
+	// args is part of MCPServerEntry.
+	// +optional
+	Args []string `json:"args,omitempty" yaml:"args,omitempty"`
+	// env is part of MCPServerEntry.
+	// +optional
+	Env map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
 
-	URL           string            `json:"url,omitempty" yaml:"url,omitempty"`
-	Headers       map[string]string `json:"headers,omitempty" yaml:"headers,omitempty"`
-	HeadersHelper string            `json:"headersHelper,omitempty" yaml:"headersHelper,omitempty"`
-	OAuth         *MCPServerOAuth   `json:"oauth,omitempty" yaml:"oauth,omitempty"`
+	// url is part of MCPServerEntry.
+	// +optional
+	URL string `json:"url,omitempty" yaml:"url,omitempty"`
+	// headers is part of MCPServerEntry.
+	// +optional
+	Headers map[string]string `json:"headers,omitempty" yaml:"headers,omitempty"`
+	// headersHelper is part of MCPServerEntry.
+	// +optional
+	HeadersHelper string `json:"headersHelper,omitempty" yaml:"headersHelper,omitempty"`
+	// oauth is part of MCPServerEntry.
+	// +optional
+	OAuth *MCPServerOAuth `json:"oauth,omitempty" yaml:"oauth,omitempty"`
 }
 
 // MCPServerOAuth is the sse/http oauth sub-block.
 type MCPServerOAuth struct {
+	// clientId is part of MCPServerOAuth.
+	// +optional
 	ClientID string `json:"clientId,omitempty" yaml:"clientId,omitempty"`
-	// Pointer so an explicit callbackPort:0 round-trips (omitempty would drop it).
-	CallbackPort          *int     `json:"callbackPort,omitempty" yaml:"callbackPort,omitempty"`
-	AuthServerMetadataURL string   `json:"authServerMetadataUrl,omitempty" yaml:"authServerMetadataUrl,omitempty"`
-	Scopes                []string `json:"scopes,omitempty" yaml:"scopes,omitempty"`
+	// callbackPort preserves an explicit zero value when it round-trips.
+	// +optional
+	CallbackPort *int `json:"callbackPort,omitempty" yaml:"callbackPort,omitempty"`
+	// authServerMetadataUrl is part of MCPServerOAuth.
+	// +optional
+	AuthServerMetadataURL string `json:"authServerMetadataUrl,omitempty" yaml:"authServerMetadataUrl,omitempty"`
+	// scopes is part of MCPServerOAuth.
+	// +optional
+	Scopes []string `json:"scopes,omitempty" yaml:"scopes,omitempty"`
 }
 
 // LSPServersField models `lspServers`: a path string, an inline name->config
 // object, or an array form (Raw).
 type LSPServersField struct {
-	Path    string
+	// +optional
+	Path string
+	// +optional
 	Servers map[string]LSPServerEntry
-	Raw     json.RawMessage
+	// +optional
+	Raw json.RawMessage
 }
 
 func (f LSPServersField) MarshalJSON() ([]byte, error) {
@@ -429,42 +575,93 @@ func (f *LSPServersField) UnmarshalJSON(data []byte) error {
 
 // LSPServerEntry is one inline LSP server config.
 type LSPServerEntry struct {
-	Command               string            `json:"command" yaml:"command"`
-	Args                  []string          `json:"args,omitempty" yaml:"args,omitempty"`
-	ExtensionToLanguage   map[string]string `json:"extensionToLanguage" yaml:"extensionToLanguage"`
-	Transport             string            `json:"transport,omitempty" yaml:"transport,omitempty"`
-	Env                   map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
-	InitializationOptions json.RawMessage   `json:"initializationOptions,omitempty" yaml:"initializationOptions,omitempty"`
-	Settings              json.RawMessage   `json:"settings,omitempty" yaml:"settings,omitempty"`
-	WorkspaceFolder       string            `json:"workspaceFolder,omitempty" yaml:"workspaceFolder,omitempty"`
-	StartupTimeout        *int              `json:"startupTimeout,omitempty" yaml:"startupTimeout,omitempty"`
-	MaxRestarts           *int              `json:"maxRestarts,omitempty" yaml:"maxRestarts,omitempty"`
+	// command is part of LSPServerEntry.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Command string `json:"command" yaml:"command"`
+	// args is part of LSPServerEntry.
+	// +optional
+	Args []string `json:"args,omitempty" yaml:"args,omitempty"`
+	// extensionToLanguage is part of LSPServerEntry.
+	// +required
+	ExtensionToLanguage map[string]string `json:"extensionToLanguage" yaml:"extensionToLanguage"`
+	// transport is part of LSPServerEntry.
+	// +optional
+	Transport string `json:"transport,omitempty" yaml:"transport,omitempty"`
+	// env is part of LSPServerEntry.
+	// +optional
+	Env map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
+	// initializationOptions is part of LSPServerEntry.
+	// +optional
+	InitializationOptions json.RawMessage `json:"initializationOptions,omitempty" yaml:"initializationOptions,omitempty"`
+	// settings is part of LSPServerEntry.
+	// +optional
+	Settings json.RawMessage `json:"settings,omitempty" yaml:"settings,omitempty"`
+	// workspaceFolder is part of LSPServerEntry.
+	// +optional
+	WorkspaceFolder string `json:"workspaceFolder,omitempty" yaml:"workspaceFolder,omitempty"`
+	// startupTimeout is part of LSPServerEntry.
+	// +optional
+	StartupTimeout *int `json:"startupTimeout,omitempty" yaml:"startupTimeout,omitempty"`
+	// maxRestarts is part of LSPServerEntry.
+	// +optional
+	MaxRestarts *int `json:"maxRestarts,omitempty" yaml:"maxRestarts,omitempty"`
 }
 
 // PluginUserConfigField is one typed enable-time prompt. Default is a
 // string|number|boolean|string[] union held raw.
 type PluginUserConfigField struct {
-	Type        string          `json:"type" yaml:"type"`
-	Title       string          `json:"title" yaml:"title"`
-	Description string          `json:"description" yaml:"description"`
-	Required    *bool           `json:"required,omitempty" yaml:"required,omitempty"`
-	Default     json.RawMessage `json:"default,omitempty" yaml:"default,omitempty"`
-	Multiple    *bool           `json:"multiple,omitempty" yaml:"multiple,omitempty"`
-	Sensitive   *bool           `json:"sensitive,omitempty" yaml:"sensitive,omitempty"`
-	Min         *float64        `json:"min,omitempty" yaml:"min,omitempty"`
-	Max         *float64        `json:"max,omitempty" yaml:"max,omitempty"`
+	// type is part of PluginUserConfigField.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Type string `json:"type" yaml:"type"`
+	// title is part of PluginUserConfigField.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Title string `json:"title" yaml:"title"`
+	// description is part of PluginUserConfigField.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Description string `json:"description" yaml:"description"`
+	// required is part of PluginUserConfigField.
+	// +optional
+	Required *bool `json:"required,omitempty" yaml:"required,omitempty"`
+	// default is part of PluginUserConfigField.
+	// +optional
+	Default json.RawMessage `json:"default,omitempty" yaml:"default,omitempty"`
+	// multiple is part of PluginUserConfigField.
+	// +optional
+	Multiple *bool `json:"multiple,omitempty" yaml:"multiple,omitempty"`
+	// sensitive is part of PluginUserConfigField.
+	// +optional
+	Sensitive *bool `json:"sensitive,omitempty" yaml:"sensitive,omitempty"`
+	// min is part of PluginUserConfigField.
+	// +optional
+	Min *float64 `json:"min,omitempty" yaml:"min,omitempty"`
+	// max is part of PluginUserConfigField.
+	// +optional
+	Max *float64 `json:"max,omitempty" yaml:"max,omitempty"`
 }
 
 // PluginChannel declares an MCP-server-backed message channel.
 type PluginChannel struct {
-	Server      string                           `json:"server" yaml:"server"`
-	DisplayName string                           `json:"displayName,omitempty" yaml:"displayName,omitempty"`
-	UserConfig  map[string]PluginUserConfigField `json:"userConfig,omitempty" yaml:"userConfig,omitempty"`
+	// server is part of PluginChannel.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Server string `json:"server" yaml:"server"`
+	// displayName is part of PluginChannel.
+	// +optional
+	DisplayName string `json:"displayName,omitempty" yaml:"displayName,omitempty"`
+	// userConfig is part of PluginChannel.
+	// +optional
+	UserConfig map[string]PluginUserConfigField `json:"userConfig,omitempty" yaml:"userConfig,omitempty"`
 }
 
 // MonitorsField models `monitors`: a `./*.json` path or an array of monitors.
 type MonitorsField struct {
-	Path    string
+	// +optional
+	Path string
+	// +optional
 	Entries []MonitorEntry
 }
 
@@ -491,16 +688,31 @@ func (f *MonitorsField) UnmarshalJSON(data []byte) error {
 
 // MonitorEntry is one inline monitor.
 type MonitorEntry struct {
-	Name        string `json:"name" yaml:"name"`
-	Command     string `json:"command" yaml:"command"`
+	// name is part of MonitorEntry.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name" yaml:"name"`
+	// command is part of MonitorEntry.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Command string `json:"command" yaml:"command"`
+	// description is part of MonitorEntry.
+	// +required
+	// +kubebuilder:validation:MinLength=1
 	Description string `json:"description" yaml:"description"`
-	When        string `json:"when,omitempty" yaml:"when,omitempty"`
+	// when is part of MonitorEntry.
+	// +optional
+	When string `json:"when,omitempty" yaml:"when,omitempty"`
 }
 
 // PluginExperimental is the docs-preferred nesting for themes/monitors. Typed
 // (not raw) so the derived inventory/governance can read it; unknown
 // experimental keys are not separately preserved.
 type PluginExperimental struct {
-	Themes   *PathOrPaths   `json:"themes,omitempty" yaml:"themes,omitempty"`
+	// themes is part of PluginExperimental.
+	// +optional
+	Themes *PathOrPaths `json:"themes,omitempty" yaml:"themes,omitempty"`
+	// monitors is part of PluginExperimental.
+	// +optional
 	Monitors *MonitorsField `json:"monitors,omitempty" yaml:"monitors,omitempty"`
 }

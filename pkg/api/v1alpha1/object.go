@@ -8,8 +8,14 @@ import (
 // TypeMeta carries apiVersion + kind. Every typed object embeds this inline so
 // that marshaled output matches the Kubernetes-style envelope.
 type TypeMeta struct {
+	// apiVersion is part of TypeMeta.
+	// +required
+	// +kubebuilder:validation:MinLength=1
 	APIVersion string `json:"apiVersion" yaml:"apiVersion"`
-	Kind       string `json:"kind" yaml:"kind"`
+	// kind is part of TypeMeta.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Kind string `json:"kind" yaml:"kind"`
 }
 
 // DefaultNamespace is the namespace used when a caller doesn't supply one
@@ -63,27 +69,44 @@ const DefaultNamespace = "default"
 // API; controllers may seed internal finalizers for async teardown
 // (for example Deployment adapter removal) before GC purges the row.
 type ObjectMeta struct {
-	Namespace   string            `json:"namespace,omitempty" yaml:"namespace,omitempty"`
-	Name        string            `json:"name" yaml:"name"`
-	UID         string            `json:"uid,omitempty" yaml:"uid,omitempty"`
-	Labels      map[string]string `json:"labels,omitempty" yaml:"labels,omitempty"`
+	// namespace is part of ObjectMeta.
+	// +optional
+	Namespace string `json:"namespace,omitempty" yaml:"namespace,omitempty"`
+	// name is part of ObjectMeta.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name" yaml:"name"`
+	// uid is part of ObjectMeta.
+	// +optional
+	UID string `json:"uid,omitempty" yaml:"uid,omitempty"`
+	// labels is part of ObjectMeta.
+	// +optional
+	Labels map[string]string `json:"labels,omitempty" yaml:"labels,omitempty"`
+	// annotations is part of ObjectMeta.
+	// +optional
 	Annotations map[string]string `json:"annotations,omitempty" yaml:"annotations,omitempty"`
 
-	// Tag is the user-visible identity for content-registry kinds
+	// tag is the user-visible identity for content-registry kinds
 	// (Agent, MCPServer, Model, Plugin, Skill, Prompt).
+	// +optional
 	Tag string `json:"tag,omitempty" yaml:"tag,omitempty"`
 
 	// Generation is server-managed and internal. Populated from the DB row for
 	// internal Go consumers (coordinators, status reconcilers); hidden from the
 	// wire.
-	Generation int64     `json:"-" yaml:"-"`
-	CreatedAt  time.Time `json:"createdAt,omitzero" yaml:"createdAt,omitempty"`
-	UpdatedAt  time.Time `json:"updatedAt,omitzero" yaml:"updatedAt,omitempty"`
+	Generation int64 `json:"-" yaml:"-"`
+	// createdAt is part of ObjectMeta.
+	// +optional
+	CreatedAt time.Time `json:"createdAt,omitzero" yaml:"createdAt,omitempty"`
+	// updatedAt is part of ObjectMeta.
+	// +optional
+	UpdatedAt time.Time `json:"updatedAt,omitzero" yaml:"updatedAt,omitempty"`
 
-	// DeletionTimestamp is set by the Store when Delete is called. A non-nil
+	// deletionTimestamp is set by the Store when Delete is called. A non-nil
 	// DeletionTimestamp means the object is terminating; the row stays
 	// observable via Get until the GC pass purges it. Clients MUST NOT
 	// set this on apply.
+	// +optional
 	DeletionTimestamp *time.Time `json:"deletionTimestamp,omitempty" yaml:"deletionTimestamp,omitempty"`
 }
 
@@ -131,7 +154,13 @@ func (m ObjectMeta) NamespaceOrDefault() string {
 // per-kind MarshalStatus and decides how to decode the bytes.
 type RawObject struct {
 	TypeMeta `json:",inline" yaml:",inline"`
-	Metadata ObjectMeta      `json:"metadata" yaml:"metadata"`
-	Spec     json.RawMessage `json:"spec,omitempty" yaml:"spec,omitempty"`
-	Status   json.RawMessage `json:"status,omitempty" yaml:"status,omitempty"`
+	// metadata is part of RawObject.
+	// +required
+	Metadata ObjectMeta `json:"metadata" yaml:"metadata"`
+	// spec is part of RawObject.
+	// +optional
+	Spec json.RawMessage `json:"spec,omitempty" yaml:"spec,omitempty"`
+	// status is part of RawObject.
+	// +optional
+	Status json.RawMessage `json:"status,omitempty" yaml:"status,omitempty"`
 }

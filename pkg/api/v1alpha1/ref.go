@@ -9,10 +9,20 @@ package v1alpha1
 // literal latest tag" for taggable artifacts or "resolve by namespace/name"
 // for mutable object kinds.
 type ResourceRef struct {
-	Kind      string `json:"kind" yaml:"kind"`
+	// kind is part of ResourceRef.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Kind string `json:"kind" yaml:"kind"`
+	// namespace is part of ResourceRef.
+	// +optional
 	Namespace string `json:"namespace,omitempty" yaml:"namespace,omitempty"`
-	Name      string `json:"name" yaml:"name"`
-	Tag       string `json:"tag,omitempty" yaml:"tag,omitempty"`
+	// name is part of ResourceRef.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name" yaml:"name"`
+	// tag is part of ResourceRef.
+	// +optional
+	Tag string `json:"tag,omitempty" yaml:"tag,omitempty"`
 }
 
 // DeploymentRef is a typed reference to another Deployment resource. Kind
@@ -22,8 +32,13 @@ type ResourceRef struct {
 // Namespace is optional: blank means "same namespace as the referencing
 // Deployment".
 type DeploymentRef struct {
+	// namespace is part of DeploymentRef.
+	// +optional
 	Namespace string `json:"namespace,omitempty" yaml:"namespace,omitempty"`
-	Name      string `json:"name" yaml:"name"`
+	// name is part of DeploymentRef.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name" yaml:"name"`
 }
 
 // DefaultModelName is the conventional namespace-scoped Model selected by a
@@ -39,7 +54,14 @@ const DefaultModelName = "default"
 // a harness Agent Deployment omits ModelRef entirely, it defaults to
 // {name: "default"} in the Deployment namespace.
 type ModelRef struct {
+	// namespace is part of ModelRef.
+	// +optional
 	Namespace string `json:"namespace,omitempty" yaml:"namespace,omitempty"`
-	Name      string `json:"name" yaml:"name"`
-	Tag       string `json:"tag,omitempty" yaml:"tag,omitempty"`
+	// name is part of ModelRef.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name" yaml:"name"`
+	// tag is part of ModelRef.
+	// +optional
+	Tag string `json:"tag,omitempty" yaml:"tag,omitempty"`
 }

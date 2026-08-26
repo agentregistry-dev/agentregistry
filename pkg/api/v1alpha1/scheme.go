@@ -20,14 +20,18 @@ import (
 // A zero-value Scheme is not usable — construct via NewScheme or use the
 // package-level Default.
 type Scheme struct {
-	mu    sync.RWMutex
+	// +optional
+	mu sync.RWMutex
+	// +optional
 	kinds map[string]kindEntry
 }
 
 type kindEntry struct {
 	// specType is the concrete spec struct's reflect.Type (e.g. AgentSpec).
+	// +optional
 	specType reflect.Type
 	// newObject constructs an empty typed envelope value (e.g. *Agent).
+	// +optional
 	newObject func() any
 }
 

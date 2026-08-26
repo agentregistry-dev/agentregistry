@@ -17,29 +17,52 @@ const SecretTypeOpaque SecretType = "Opaque"
 // on apply but must be removed by a Prepare hook before metadata persistence.
 type Secret struct {
 	TypeMeta `json:",inline" yaml:",inline"`
-	Metadata ObjectMeta   `json:"metadata" yaml:"metadata"`
-	Spec     SecretSpec   `json:"spec" yaml:"spec"`
-	Status   SecretStatus `json:"status,omitzero" yaml:"status,omitempty"`
+	// metadata is part of Secret.
+	// +required
+	Metadata ObjectMeta `json:"metadata" yaml:"metadata"`
+	// spec is part of Secret.
+	// +required
+	Spec SecretSpec `json:"spec" yaml:"spec"`
+	// status is part of Secret.
+	// +optional
+	Status SecretStatus `json:"status,omitzero" yaml:"status,omitempty"`
 }
 
 // SecretSpec is the desired metadata and write-only payload.
 type SecretSpec struct {
-	Type       SecretType        `json:"type,omitempty" yaml:"type,omitempty"`
-	Immutable  bool              `json:"immutable,omitempty" yaml:"immutable,omitempty"`
-	Data       map[string]string `json:"data,omitempty" yaml:"data,omitempty"`
+	// type is part of SecretSpec.
+	// +optional
+	Type SecretType `json:"type,omitempty" yaml:"type,omitempty"`
+	// immutable is part of SecretSpec.
+	// +optional
+	Immutable bool `json:"immutable,omitempty" yaml:"immutable,omitempty"`
+	// data is part of SecretSpec.
+	// +optional
+	Data map[string]string `json:"data,omitempty" yaml:"data,omitempty"`
+	// stringData is part of SecretSpec.
+	// +optional
 	StringData map[string]string `json:"stringData,omitempty" yaml:"stringData,omitempty"`
 }
 
 // SecretStatus exposes payload keys without exposing their values.
 type SecretStatus struct {
+	// dataKeys is part of SecretStatus.
+	// +optional
 	DataKeys []string `json:"dataKeys,omitempty" yaml:"dataKeys,omitempty"`
 }
 
 // SecretRef identifies a Secret and optionally one payload key.
 type SecretRef struct {
+	// namespace is part of SecretRef.
+	// +optional
 	Namespace string `json:"namespace,omitempty" yaml:"namespace,omitempty"`
-	Name      string `json:"name" yaml:"name"`
-	Key       string `json:"key,omitempty" yaml:"key,omitempty"`
+	// name is part of SecretRef.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name" yaml:"name"`
+	// key is part of SecretRef.
+	// +optional
+	Key string `json:"key,omitempty" yaml:"key,omitempty"`
 }
 
 var secretNameRegexp = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)

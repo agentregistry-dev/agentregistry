@@ -19,6 +19,9 @@ var (
 
 // NPMPackageResponse represents the structure returned by the NPM registry API
 type NPMPackageResponse struct {
+	// mcpName is part of NPMPackageResponse.
+	// +required
+	// +kubebuilder:validation:MinLength=1
 	MCPName string `json:"mcpName"`
 }
 

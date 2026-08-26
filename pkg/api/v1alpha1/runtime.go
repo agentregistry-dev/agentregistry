@@ -6,9 +6,15 @@ package v1alpha1
 // applications embedding the registry.
 type Runtime struct {
 	TypeMeta `json:",inline" yaml:",inline"`
-	Metadata ObjectMeta  `json:"metadata" yaml:"metadata"`
-	Spec     RuntimeSpec `json:"spec" yaml:"spec"`
-	Status   Status      `json:"status,omitzero" yaml:"status,omitempty"`
+	// metadata is part of Runtime.
+	// +required
+	Metadata ObjectMeta `json:"metadata" yaml:"metadata"`
+	// spec is part of Runtime.
+	// +required
+	Spec RuntimeSpec `json:"spec" yaml:"spec"`
+	// status is part of Runtime.
+	// +optional
+	Status Status `json:"status,omitzero" yaml:"status,omitempty"`
 }
 
 func init() {
@@ -29,7 +35,14 @@ const TypeKubernetes = "Kubernetes"
 // OTEL_EXPORTER_OTLP_ENDPOINT on the workload — telemetry is a property
 // of where things run, not of an individual Deployment.
 type RuntimeSpec struct {
-	Type              string         `json:"type" yaml:"type"`
-	Config            map[string]any `json:"config,omitempty" yaml:"config,omitempty"`
-	TelemetryEndpoint string         `json:"telemetryEndpoint,omitempty" yaml:"telemetryEndpoint,omitempty"`
+	// type is part of RuntimeSpec.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Type string `json:"type" yaml:"type"`
+	// config is part of RuntimeSpec.
+	// +optional
+	Config map[string]any `json:"config,omitempty" yaml:"config,omitempty"`
+	// telemetryEndpoint is part of RuntimeSpec.
+	// +optional
+	TelemetryEndpoint string `json:"telemetryEndpoint,omitempty" yaml:"telemetryEndpoint,omitempty"`
 }

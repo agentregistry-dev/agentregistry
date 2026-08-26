@@ -27,7 +27,19 @@ linters:
     - staticcheck
     - unused
     - whitespace
+    - kubeapilinter
   settings:
+    custom:
+      kubeapilinter:
+        type: module
+        description: Kubernetes API convention linter
+        settings:
+          linters:
+            disable:
+              - "*"
+            enable:
+              - commentstart
+              - optionalorrequired
     depguard:
       rules:
         forbid-pkg-errors:
@@ -93,6 +105,10 @@ linters:
       # Vendored npm deps checked into the UI workspace carry bundled Go
       # source (flatted); not our code, not linted.
       - ui/node_modules/.*
+    rules:
+      - path-except: pkg/api/v1alpha1/.*\.go$
+        linters:
+          - kubeapilinter
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0

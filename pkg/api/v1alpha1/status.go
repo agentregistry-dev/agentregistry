@@ -28,12 +28,24 @@ const (
 // kept on the struct for controllers to read, persisted in storage, but hidden
 // from the wire so the user-facing metadata surface stays minimal.
 type Condition struct {
-	Type               string          `json:"type" yaml:"type"`
-	Status             ConditionStatus `json:"status" yaml:"status"`
-	Reason             string          `json:"reason,omitempty" yaml:"reason,omitempty"`
-	Message            string          `json:"message,omitempty" yaml:"message,omitempty"`
-	LastTransitionTime time.Time       `json:"lastTransitionTime,omitzero" yaml:"lastTransitionTime,omitempty"`
-	ObservedGeneration int64           `json:"-" yaml:"-"`
+	// type is part of Condition.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Type string `json:"type" yaml:"type"`
+	// status is part of Condition.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Status ConditionStatus `json:"status" yaml:"status"`
+	// reason is part of Condition.
+	// +optional
+	Reason string `json:"reason,omitempty" yaml:"reason,omitempty"`
+	// message is part of Condition.
+	// +optional
+	Message string `json:"message,omitempty" yaml:"message,omitempty"`
+	// lastTransitionTime is part of Condition.
+	// +optional
+	LastTransitionTime time.Time `json:"lastTransitionTime,omitzero" yaml:"lastTransitionTime,omitempty"`
+	ObservedGeneration int64     `json:"-" yaml:"-"`
 }
 
 // Status is the observed-state subresource. ObservedGeneration is the highest
@@ -44,10 +56,12 @@ type Condition struct {
 //
 // ObservedGeneration is internal-only (matches ObjectMeta.Generation).
 type Status struct {
-	ObservedGeneration int64       `json:"-" yaml:"-"`
-	Conditions         []Condition `json:"conditions,omitempty" yaml:"conditions,omitempty"`
+	ObservedGeneration int64 `json:"-" yaml:"-"`
+	// conditions is part of Status.
+	// +optional
+	Conditions []Condition `json:"conditions,omitempty" yaml:"conditions,omitempty"`
 
-	// Details is an opaque JSON object populated by controllers and runtime
+	// details is an opaque JSON object populated by controllers and runtime
 	// adapters that need to surface structured state beyond what Conditions can
 	// express. Each writer owns its own top-level key inside Details; consumers
 	// parse only the keys they care about. Empty when no writer has stored
@@ -55,6 +69,7 @@ type Status struct {
 	//
 	// Use SetDetailsKey / GetDetailsKey to merge or read keys without clobbering
 	// other adapters' state.
+	// +optional
 	Details json.RawMessage `json:"details,omitempty" yaml:"details,omitempty"`
 }
 
@@ -197,21 +212,41 @@ func (s *Status) IsConditionTrue(conditionType string) bool {
 // ObservedGeneration for controller state while the public wire shape keeps
 // that field hidden.
 type conditionStore struct {
-	Type               string          `json:"type"`
-	Status             ConditionStatus `json:"status"`
-	Reason             string          `json:"reason,omitempty"`
-	Message            string          `json:"message,omitempty"`
-	LastTransitionTime time.Time       `json:"lastTransitionTime,omitzero"`
-	ObservedGeneration int64           `json:"observedGeneration,omitempty"`
+	// type is part of conditionStore.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Type string `json:"type"`
+	// status is part of conditionStore.
+	// +required
+	// +kubebuilder:validation:MinLength=1
+	Status ConditionStatus `json:"status"`
+	// reason is part of conditionStore.
+	// +optional
+	Reason string `json:"reason,omitempty"`
+	// message is part of conditionStore.
+	// +optional
+	Message string `json:"message,omitempty"`
+	// lastTransitionTime is part of conditionStore.
+	// +optional
+	LastTransitionTime time.Time `json:"lastTransitionTime,omitzero"`
+	// observedGeneration is part of conditionStore.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
 // statusStore is the on-disk shape of Status. Mirrors Status, but with
 // ObservedGeneration visible to the JSON encoder. See MarshalStatusForStorage /
 // UnmarshalStatusFromStorage.
 type statusStore struct {
-	ObservedGeneration int64            `json:"observedGeneration,omitempty"`
-	Conditions         []conditionStore `json:"conditions,omitempty"`
-	Details            json.RawMessage  `json:"details,omitempty"`
+	// observedGeneration is part of statusStore.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+	// conditions is part of statusStore.
+	// +optional
+	Conditions []conditionStore `json:"conditions,omitempty"`
+	// details is part of statusStore.
+	// +optional
+	Details json.RawMessage `json:"details,omitempty"`
 }
 
 // MarshalStatusForStorage serializes a Status to JSON suitable for
