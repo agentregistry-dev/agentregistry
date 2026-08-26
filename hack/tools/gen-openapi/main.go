@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
@@ -18,6 +19,7 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
+	arv1 "github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
@@ -53,21 +55,11 @@ func main() {
 	fmt.Printf("OpenAPI spec generated: %s\n", absPath)
 }
 
-var generatedSpecComponents = map[string]string{
-	"AgentSpec":      "agent.yaml",
-	"DeploymentSpec": "deployment.yaml",
-	"MCPServerSpec":  "mcpserver.yaml",
-	"ModelSpec":      "model.yaml",
-	"PluginSpec":     "plugin.yaml",
-	"PromptSpec":     "prompt.yaml",
-	"RuntimeSpec":    "runtime.yaml",
-	"SecretSpec":     "secret.yaml",
-	"SkillSpec":      "skill.yaml",
-}
-
 func applyGeneratedSpecSchemas(spec *huma.OpenAPI) error {
 	schemas := spec.Components.Schemas.Map()
-	for component, filename := range generatedSpecComponents {
+	for _, descriptor := range arv1.KindDescriptors() {
+		component := descriptor.Kind + "Spec"
+		filename := strings.ToLower(descriptor.Kind) + ".yaml"
 		data, err := os.ReadFile(filepath.Join(schemaDirectory(), filename))
 		if err != nil {
 			return err
