@@ -20,31 +20,28 @@ var clientConfigurers = map[string]ClientConfigurer{
 	"kiro":        &KiroConfigurer{},
 }
 
-func NewCommand(deps cliruntime.Deps) *cobra.Command {
+func NewCommand(_ cliruntime.Deps) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   cliruntime.CommandConfigure,
+		Short: "Configure a client",
+		Long:  `Creates the .json configuration for each client, so it can connect to arctl.`,
+	}
+
+	for name, configurer := range clientConfigurers {
+		cmd.AddCommand(newClientCommand(name, configurer))
+	}
+
+	return cmd
+}
+
+func newClientCommand(clientName string, configurer ClientConfigurer) *cobra.Command {
 	var configureURL, configurePort, configureTokenEnv string
 
 	cmd := &cobra.Command{
-		Use:   cliruntime.CommandConfigure + " [client-name]",
-		Short: "Configure a client",
-		Long:  `Creates the .json configuration for each client, so it can connect to arctl.`,
-		Args:  cobra.MaximumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) == 0 {
-				out := cmd.OutOrStdout()
-				fmt.Fprintln(out, "Supported clients:")
-				for name, configurer := range clientConfigurers {
-					fmt.Fprintf(out, "  %-15s - %s\n", name, configurer.GetClientName())
-				}
-				fmt.Fprintf(out, "\nUsage:\n  %s <client-name>\n", cmd.CommandPath())
-				return nil
-			}
-
-			clientName := args[0]
-			configurer, ok := clientConfigurers[clientName]
-			if !ok {
-				return fmt.Errorf("client %q is not supported; run 'arctl configure' to see supported clients", clientName)
-			}
-
+		Use:   clientName,
+		Short: "Configure " + configurer.GetClientName(),
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			url := fmt.Sprintf("http://localhost:%s/mcp", configurePort)
 			if configureURL != "" {
 				if cmd.Flags().Changed("port") {
