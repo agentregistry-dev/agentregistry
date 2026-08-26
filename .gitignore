@@ -33,6 +33,10 @@ internal/registry/api/ui/dist/
 # arctl specific
 .arctl/
 
+# arctl configure writes a project-local .mcp.json with the developer's
+# registry connection details; it is per-developer and should not be committed.
+.mcp.json
+
 # IDE
 .claude
 .vscode/
