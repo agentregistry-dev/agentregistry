@@ -129,7 +129,11 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	// out of band of the API write — same pattern as the Deployment controller.
 	// One git source carries the credential hook for every consumer, so private
 	// repositories are configured in exactly one place.
-	gitSource := gitutil.NewSource(options.GitCredentials)
+	gitCredentials := options.GitCredentials
+	if gitCredentials == nil && secretStore != nil {
+		gitCredentials = gitutil.NewSecretCredentialResolver(secretResolver)
+	}
+	gitSource := gitutil.NewSource(gitCredentials)
 	pluginController, err := controller.NewPluginController(pool, stores, controller.PluginControllerDeps{Git: gitSource})
 	if err != nil {
 		return fmt.Errorf("create plugin controller: %w", err)

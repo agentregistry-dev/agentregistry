@@ -18,7 +18,7 @@ type Source struct {
 }
 
 // NewSource returns a Source that authenticates through credentials. A nil hook
-// (the OSS default) fetches anonymously, so private repositories fail.
+// fetches anonymously, so private repositories fail.
 func NewSource(credentials types.GitCredentialFunc) *Source {
 	return &Source{credentials: credentials}
 }
@@ -60,9 +60,8 @@ func (s *Source) Fetch(ctx context.Context, namespace string, repo *v1alpha1.Rep
 	return commit, nil
 }
 
-// auth looks up credentials for repo. A nil hook (OSS) or a nil result means
-// fetch anonymously. A lookup failure is retryable: a credential created after
-// the resource recovers on the next resync.
+// auth looks up credentials for repo. A nil hook or result means fetch
+// anonymously. Lookup failures are retried on the next resync.
 func (s *Source) auth(ctx context.Context, namespace string, repo *v1alpha1.Repository) (*url.Userinfo, error) {
 	if s == nil || s.credentials == nil {
 		return nil, nil
