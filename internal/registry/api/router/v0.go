@@ -177,11 +177,8 @@ func RegisterRoutes(
 			// path uses, so a downstream build that gates Plugin reads gates the
 			// compat endpoint identically. nil hook = public OSS behavior.
 			//
-			// This route is registered as an authn public path (see
-			// NewHumaAPI): where an authn provider is configured, requests
-			// under it carry an auth.PublicSession instead of requiring
-			// credentials, so ListFilter still receives a session and scopes
-			// what anonymous callers may see.
+			// The normal authn middleware applies when a provider is configured.
+			// OSS remains permissive when no provider is configured.
 			pluginmarketplacecompat.Register(api, pluginmarketplacecompat.Config{
 				PathPrefix: cfg.PluginMarketplaceCompatPathPrefix,
 				Store:      store,
