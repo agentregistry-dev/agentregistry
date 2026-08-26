@@ -42,7 +42,7 @@ func validateMicrosoftAuth(auth MicrosoftRuntimeAuth) FieldErrors {
 	if strings.TrimSpace(auth.OIDC.Issuer) == "" {
 		errs.Append("spec.config.auth.oidc.issuer", fmt.Errorf("%w", ErrRequiredField))
 	} else {
-		errs = append(errs, validateHTTPSURL(auth.OIDC.Issuer, "spec.config.auth.oidc.issuer")...)
+		errs = append(errs, validateMicrosoftIssuer(auth.OIDC.Issuer)...)
 	}
 	if strings.TrimSpace(auth.OIDC.ClientID) == "" {
 		errs.Append("spec.config.auth.oidc.clientId", fmt.Errorf("%w", ErrRequiredField))
@@ -54,6 +54,19 @@ func validateMicrosoftAuth(auth MicrosoftRuntimeAuth) FieldErrors {
 		if strings.TrimSpace(auth.OIDC.ClientSecretRef.Key) == "" {
 			errs.Append("spec.config.auth.oidc.clientSecretRef.key", fmt.Errorf("%w", ErrRequiredField))
 		}
+	}
+	return errs
+}
+
+func validateMicrosoftIssuer(value string) FieldErrors {
+	const path = "spec.config.auth.oidc.issuer"
+	errs := validateHTTPSURL(value, path)
+	if len(errs) != 0 {
+		return errs
+	}
+	parsed, _ := url.Parse(value)
+	if strings.Trim(parsed.Path, "/") == "" {
+		errs.Append(path, fmt.Errorf("%w: must include a tenant path", ErrInvalidURL))
 	}
 	return errs
 }

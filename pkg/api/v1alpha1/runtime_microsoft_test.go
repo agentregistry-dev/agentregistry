@@ -9,7 +9,6 @@ import (
 
 func TestMicrosoftRuntimeConfigDecode(t *testing.T) {
 	t.Parallel()
-	insecureSkipVerify := true
 
 	tests := []struct {
 		name string
@@ -19,18 +18,16 @@ func TestMicrosoftRuntimeConfigDecode(t *testing.T) {
 	}{
 		{
 			name: "foundry",
-			raw:  `{"projectEndpoint":"https://foundry.example/projects/p1","subscriptionId":"sub-1","resourceGroup":"rg-1","auth":{"oidc":{"issuer":"https://login.microsoftonline.com/tenant/v2.0","clientId":"client-1","scope":"https://ai.azure.com/.default","clientSecretRef":{"name":"credentials","key":"clientSecret"},"insecureSkipVerify":true}}}`,
+			raw:  `{"projectEndpoint":"https://foundry.example/projects/p1","subscriptionId":"sub-1","resourceGroup":"rg-1","auth":{"oidc":{"issuer":"https://login.microsoftonline.com/tenant/v2.0","clientId":"client-1","clientSecretRef":{"name":"credentials","key":"clientSecret"}}}}`,
 			out:  &MicrosoftFoundryRuntimeConfig{},
 			want: &MicrosoftFoundryRuntimeConfig{
 				ProjectEndpoint: "https://foundry.example/projects/p1",
 				SubscriptionID:  "sub-1",
 				ResourceGroup:   "rg-1",
 				Auth: MicrosoftRuntimeAuth{OIDC: &RuntimeOIDCAuth{
-					Issuer:             "https://login.microsoftonline.com/tenant/v2.0",
-					ClientID:           "client-1",
-					Scope:              "https://ai.azure.com/.default",
-					ClientSecretRef:    &SecretKeyRef{Name: "credentials", Key: "clientSecret"},
-					InsecureSkipVerify: &insecureSkipVerify,
+					Issuer:          "https://login.microsoftonline.com/tenant/v2.0",
+					ClientID:        "client-1",
+					ClientSecretRef: &SecretKeyRef{Name: "credentials", Key: "clientSecret"},
 				}},
 			},
 		},
@@ -95,6 +92,18 @@ func TestMicrosoftRuntimeValidation(t *testing.T) {
 				}},
 			},
 			wantErr: "clientSecretRef.key",
+		},
+		{
+			name:        "rejects issuer without tenant path",
+			runtimeType: TypeMicrosoftFoundry,
+			config: map[string]any{
+				"projectEndpoint": "https://foundry.example/projects/p1",
+				"auth": map[string]any{"oidc": map[string]any{
+					"issuer": "https://login.microsoftonline.com", "clientId": "client",
+					"clientSecretRef": map[string]any{"name": "credentials", "key": "clientSecret"},
+				}},
+			},
+			wantErr: "must include a tenant path",
 		},
 	}
 

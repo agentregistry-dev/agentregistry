@@ -79,7 +79,7 @@ func (s *source) foundry(ctx context.Context, runtime *v1alpha1.Runtime) ([]type
 		status.MicrosoftFoundryProjectEndpointKey: cfg.ProjectEndpoint,
 		status.MicrosoftFoundrySubscriptionIDKey:  cfg.SubscriptionID,
 		status.MicrosoftFoundryResourceGroupKey:   cfg.ResourceGroup,
-		status.MicrosoftFoundryTenantIDKey:        tenant(cfg.Auth.OIDC),
+		status.MicrosoftDiscoveryTenantIDKey:      tenant(cfg.Auth.OIDC),
 	}), nil
 }
 
@@ -101,7 +101,7 @@ func (s *source) copilot(ctx context.Context, runtime *v1alpha1.Runtime) ([]type
 	}
 	return results(agents, "copilot_studio", map[string]string{
 		"dataEndpoint": cfg.DataEndpoint, "environmentId": cfg.EnvironmentID,
-		"tenantId": tenant(cfg.Auth.OIDC),
+		status.MicrosoftDiscoveryTenantIDKey: tenant(cfg.Auth.OIDC),
 	}), nil
 }
 
@@ -294,21 +294,21 @@ func results(agents []agent, platform string, common map[string]string) []types.
 		}
 		seen[key] = true
 		metadata := map[string]string{
-			status.MicrosoftFoundryProviderKey:   "microsoft",
-			status.MicrosoftFoundryPlatformKey:   platform,
-			status.MicrosoftFoundryLastSeenAtKey: now,
+			status.MicrosoftDiscoveryProviderKey:   "microsoft",
+			status.MicrosoftDiscoveryPlatformKey:   platform,
+			status.MicrosoftDiscoveryLastSeenAtKey: now,
 		}
 		for k, v := range common {
 			put(metadata, k, v)
 		}
 		put(metadata, status.RuntimeMetadataRemoteIDKey, a.id)
-		put(metadata, status.MicrosoftFoundryRemoteNameKey, a.name)
-		put(metadata, status.MicrosoftFoundryRemoteVersionKey, a.version)
-		put(metadata, status.MicrosoftFoundryDescriptionKey, a.description)
-		put(metadata, status.MicrosoftFoundryStateKey, a.state)
-		put(metadata, status.MicrosoftFoundryKindKey, a.kind)
-		put(metadata, status.MicrosoftFoundryModelKey, a.model)
-		put(metadata, status.MicrosoftFoundryToolsKey, tools(a.tools))
+		put(metadata, status.MicrosoftDiscoveryRemoteNameKey, a.name)
+		put(metadata, status.MicrosoftDiscoveryRemoteVersionKey, a.version)
+		put(metadata, status.MicrosoftDiscoveryDescriptionKey, a.description)
+		put(metadata, status.MicrosoftDiscoveryStateKey, a.state)
+		put(metadata, status.MicrosoftDiscoveryKindKey, a.kind)
+		put(metadata, status.MicrosoftDiscoveryModelKey, a.model)
+		put(metadata, status.MicrosoftDiscoveryToolsKey, tools(a.tools))
 		put(metadata, status.MicrosoftFoundryAgentGUIDKey, guid(a.raw))
 		out = append(out, types.DiscoveryResult{TargetKind: v1alpha1.KindAgent, Name: name, RuntimeMetadata: metadata})
 	}
@@ -326,6 +326,9 @@ func tokenURL(issuer string) (string, error) {
 	u, err := url.Parse(strings.TrimSpace(issuer))
 	if err != nil || u.Host == "" {
 		return "", fmt.Errorf("auth.oidc.issuer must be a URL")
+	}
+	if strings.Trim(u.Path, "/") == "" {
+		return "", fmt.Errorf("auth.oidc.issuer must include a tenant path")
 	}
 	u.Path = "/" + strings.TrimSuffix(strings.Trim(u.Path, "/"), "/v2.0") + "/oauth2/v2.0/token"
 	u.RawQuery, u.Fragment = "", ""

@@ -19,11 +19,9 @@ type MicrosoftRuntimeAuth struct {
 
 // RuntimeOIDCAuth configures client-credentials authentication for a runtime.
 type RuntimeOIDCAuth struct {
-	Issuer             string        `json:"issuer,omitempty" yaml:"issuer,omitempty"`
-	ClientID           string        `json:"clientId,omitempty" yaml:"clientId,omitempty"`
-	Scope              string        `json:"scope,omitempty" yaml:"scope,omitempty"`
-	ClientSecretRef    *SecretKeyRef `json:"clientSecretRef,omitempty" yaml:"clientSecretRef,omitempty"`
-	InsecureSkipVerify *bool         `json:"insecureSkipVerify,omitempty" yaml:"insecureSkipVerify,omitempty"`
+	Issuer          string        `json:"issuer,omitempty" yaml:"issuer,omitempty"`
+	ClientID        string        `json:"clientId,omitempty" yaml:"clientId,omitempty"`
+	ClientSecretRef *SecretKeyRef `json:"clientSecretRef,omitempty" yaml:"clientSecretRef,omitempty"`
 }
 
 // MicrosoftFoundryRuntimeConfig identifies a Foundry project for discovery.

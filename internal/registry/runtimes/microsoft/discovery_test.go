@@ -214,6 +214,39 @@ func TestDiscoveryResultsDeduplicate(t *testing.T) {
 	require.False(t, hasRemoteID)
 }
 
+func TestTokenURL(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		issuer  string
+		want    string
+		wantErr string
+	}{
+		{
+			name:   "tenant issuer",
+			issuer: "https://login.microsoftonline.com/tenant/v2.0",
+			want:   "https://login.microsoftonline.com/tenant/oauth2/v2.0/token",
+		},
+		{
+			name:    "missing tenant path",
+			issuer:  "https://login.microsoftonline.com",
+			wantErr: "must include a tenant path",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := tokenURL(tt.issuer)
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func authConfig(base string) map[string]any {
 	return map[string]any{"oidc": map[string]any{
 		"issuer": base + "/tenant/v2.0", "clientId": "client", "clientSecretRef": map[string]any{"name": "credentials", "key": "clientSecret"},
