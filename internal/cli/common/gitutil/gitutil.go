@@ -3,6 +3,7 @@
 package gitutil
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -14,6 +15,8 @@ import (
 	"slices"
 	"strings"
 )
+
+const maxGitDiagnosticRunes = 4096
 
 var (
 	// ErrUnsupportedHost is returned for a web URL on a host whose layout is not
@@ -183,35 +186,73 @@ func CloneAndCopyContext(ctx context.Context, repoURL, branch, commit, subPath, 
 	cloneArgs = append(cloneArgs, cloneURL, tempDir)
 
 	gitCmd := exec.CommandContext(ctx, "git", cloneArgs...)
-	if verbose {
-		gitCmd.Stdout = os.Stdout
-		gitCmd.Stderr = os.Stderr
-	}
-	if err := gitCmd.Run(); err != nil {
-		return fmt.Errorf("clone repository %s: %w", safeURL, err)
+	output, err := runGitCommand(gitCmd, verbose)
+	if err != nil {
+		return gitCommandError("clone repository "+safeURL, err, output, cloneURL, safeURL, auth)
 	}
 
 	if commit != "" {
 		fetchCmd := exec.CommandContext(ctx, "git", "-C", tempDir, "fetch", "--depth", "1", "origin", commit)
-		if verbose {
-			fetchCmd.Stdout = os.Stdout
-			fetchCmd.Stderr = os.Stderr
-		}
-		if err := fetchCmd.Run(); err != nil {
-			return fmt.Errorf("fetch commit %s: %w", commit, err)
+		output, err := runGitCommand(fetchCmd, verbose)
+		if err != nil {
+			return gitCommandError("fetch commit "+commit, err, output, cloneURL, safeURL, auth)
 		}
 
 		checkoutCmd := exec.CommandContext(ctx, "git", "-C", tempDir, "checkout", "FETCH_HEAD")
-		if verbose {
-			checkoutCmd.Stdout = os.Stdout
-			checkoutCmd.Stderr = os.Stderr
-		}
-		if err := checkoutCmd.Run(); err != nil {
-			return fmt.Errorf("checkout commit %s: %w", commit, err)
+		output, err = runGitCommand(checkoutCmd, verbose)
+		if err != nil {
+			return gitCommandError("checkout commit "+commit, err, output, cloneURL, safeURL, auth)
 		}
 	}
 
 	return CopyRepoContents(tempDir, subPath, targetDir)
+}
+
+func runGitCommand(cmd *exec.Cmd, verbose bool) ([]byte, error) {
+	if !verbose {
+		return cmd.CombinedOutput()
+	}
+	var output bytes.Buffer
+	cmd.Stdout = io.MultiWriter(os.Stdout, &output)
+	cmd.Stderr = io.MultiWriter(os.Stderr, &output)
+	err := cmd.Run()
+	return output.Bytes(), err
+}
+
+func gitCommandError(action string, err error, output []byte, execURL, safeURL string, auth *url.Userinfo) error {
+	diagnostic := sanitizeGitDiagnostic(string(output), execURL, safeURL, auth)
+	if diagnostic == "" {
+		return fmt.Errorf("%s: %w", action, err)
+	}
+	return fmt.Errorf("%s: %w: %s", action, err, diagnostic)
+}
+
+func sanitizeGitDiagnostic(diagnostic, execURL, safeURL string, auth *url.Userinfo) string {
+	diagnostic = strings.ReplaceAll(diagnostic, execURL, safeURL)
+	if auth != nil {
+		diagnostic = strings.ReplaceAll(diagnostic, auth.String(), "xxxxx")
+		if password, ok := auth.Password(); ok {
+			diagnostic = redactCredential(diagnostic, password)
+		} else {
+			diagnostic = redactCredential(diagnostic, auth.Username())
+		}
+	}
+	diagnostic = strings.TrimSpace(diagnostic)
+	runes := []rune(diagnostic)
+	if len(runes) > maxGitDiagnosticRunes {
+		diagnostic = "..." + string(runes[len(runes)-maxGitDiagnosticRunes:])
+	}
+	return diagnostic
+}
+
+func redactCredential(value, credential string) string {
+	if credential == "" {
+		return value
+	}
+	for _, encoded := range []string{credential, url.PathEscape(credential), url.QueryEscape(credential)} {
+		value = strings.ReplaceAll(value, encoded, "xxxxx")
+	}
+	return value
 }
 
 // authenticate splices auth into a clone URL and returns it with a redacted
@@ -225,7 +266,9 @@ func authenticate(cloneURL string, auth *url.Userinfo) (execURL, safeURL string,
 		return "", "", fmt.Errorf("invalid clone URL: %w", err)
 	}
 	u.User = auth
-	return u.String(), u.Redacted(), nil
+	execURL = u.String()
+	u.User = url.User("xxxxx")
+	return execURL, u.String(), nil
 }
 
 // safeGitRef rejects a ref/branch/commit that git could mis-parse as a
@@ -282,9 +325,19 @@ func ResolveRefContext(ctx context.Context, repoURL, ref string, auth *url.Useri
 	if err != nil {
 		return "", err
 	}
-	out, err := exec.CommandContext(ctx, "git", "ls-remote", cloneURL, lsRef).Output()
+	cmd := exec.CommandContext(ctx, "git", "ls-remote", cloneURL, lsRef)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("git ls-remote %s %q: %w", safeURL, lsRef, err)
+		return "", gitCommandError(
+			fmt.Sprintf("git ls-remote %s %q", safeURL, lsRef),
+			err,
+			stderr.Bytes(),
+			cloneURL,
+			safeURL,
+			auth,
+		)
 	}
 	sha := firstLSRemoteSHA(string(out), lsRef)
 	if sha == "" {

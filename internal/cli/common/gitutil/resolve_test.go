@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -110,6 +112,9 @@ func TestAuthenticate(t *testing.T) {
 	if strings.Contains(safeURL, "ghp_secret") {
 		t.Fatalf("safe URL = %q, must not carry the token", safeURL)
 	}
+	if safeURL != "https://xxxxx@github.com/org/repo.git" {
+		t.Fatalf("safe URL = %q, want all userinfo redacted", safeURL)
+	}
 }
 
 func TestResolveRefRedactsCredentialsInErrors(t *testing.T) {
@@ -125,6 +130,85 @@ func TestResolveRefRedactsCredentialsInErrors(t *testing.T) {
 	if strings.Contains(err.Error(), "ghp_secret") {
 		t.Fatalf("error leaks the token: %v", err)
 	}
+}
+
+func TestResolveRefIncludesRedactedStderr(t *testing.T) {
+	installFakeGit(t, `printf 'fatal: unable to access %s: authentication failed\n' "$2" >&2
+exit 128
+`)
+
+	_, err := ResolveRefContext(
+		context.Background(),
+		"https://github.com/org/private.git",
+		"main",
+		url.UserPassword("x-access-token", "ghp_secret"),
+	)
+	if err == nil {
+		t.Fatal("expected ls-remote to fail")
+	}
+	if !strings.Contains(err.Error(), "fatal: unable to access") || !strings.Contains(err.Error(), "authentication failed") {
+		t.Fatalf("error = %v, want Git stderr", err)
+	}
+	if strings.Contains(err.Error(), "ghp_secret") || strings.Contains(err.Error(), "x-access-token") {
+		t.Fatalf("error leaks credentials: %v", err)
+	}
+	if !strings.Contains(err.Error(), "https://xxxxx@github.com/org/private.git") {
+		t.Fatalf("error = %v, want redacted authenticated URL", err)
+	}
+}
+
+func TestCloneIncludesRedactedOutput(t *testing.T) {
+	installFakeGit(t, `printf 'fatal: clone failed for %s\n' "$*" >&2
+exit 128
+`)
+
+	err := CloneAndCopyContext(
+		context.Background(),
+		"https://github.com/org/private.git",
+		"main",
+		"",
+		"",
+		t.TempDir(),
+		false,
+		url.UserPassword("x-access-token", "ghp_secret"),
+	)
+	if err == nil {
+		t.Fatal("expected clone to fail")
+	}
+	if !strings.Contains(err.Error(), "fatal: clone failed") {
+		t.Fatalf("error = %v, want Git output", err)
+	}
+	if strings.Contains(err.Error(), "ghp_secret") || strings.Contains(err.Error(), "x-access-token") {
+		t.Fatalf("error leaks credentials: %v", err)
+	}
+	if !strings.Contains(err.Error(), "https://xxxxx@github.com/org/private.git") {
+		t.Fatalf("error = %v, want redacted authenticated URL", err)
+	}
+}
+
+func TestSanitizeGitDiagnosticBoundsOutputAndRedactsTokenOnlyAuth(t *testing.T) {
+	auth := url.User("ghp_secret")
+	diagnostic := strings.Repeat("x", maxGitDiagnosticRunes+100) + " ghp_secret"
+	got := sanitizeGitDiagnostic(diagnostic, "", "", auth)
+	if strings.Contains(got, "ghp_secret") {
+		t.Fatalf("diagnostic leaks token-only auth: %q", got)
+	}
+	if len([]rune(got)) > maxGitDiagnosticRunes+3 {
+		t.Fatalf("diagnostic length = %d, want at most %d", len([]rune(got)), maxGitDiagnosticRunes+3)
+	}
+	if !strings.HasPrefix(got, "...") {
+		t.Fatalf("diagnostic = %q, want truncation marker", got)
+	}
+}
+
+func installFakeGit(t *testing.T, body string) {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "git")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+body), 0o755); err != nil {
+		t.Fatalf("write fake git: %v", err)
+	}
+	t.Setenv("PATH", dir)
 }
 
 func TestSourceCredentialFailureIsWrapped(t *testing.T) {
