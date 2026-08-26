@@ -74,6 +74,8 @@ GOLANGCI_LINT ?= $(GO_TOOL) golangci-lint
 GOTESTSUM     ?= $(GO_TOOL) gotestsum
 HELM          ?= $(GO_TOOL) helm
 HELM_DOCS     ?= $(GO_TOOL) helm-docs --log-level=fatal
+# Extra flags appended to the local AgentRegistry Helm install.
+HELM_EXTRA_ARGS ?=
 KIND          ?= $(GO_TOOL) kind
 
 ## Helm / Chart settings
@@ -400,6 +402,7 @@ endif
 	    --set image.repository=$(DOCKER_REPO) \
 	    --set image.tag=$(VERSION) \
 	    --set service.type=LoadBalancer \
+	    $(HELM_EXTRA_ARGS) \
 	    --wait \
 	    --timeout=5m;
 
