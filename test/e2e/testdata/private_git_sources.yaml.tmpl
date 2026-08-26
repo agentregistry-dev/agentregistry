@@ -1,0 +1,91 @@
+apiVersion: ar.dev/v1alpha1
+kind: Secret
+metadata:
+  name: {{ .SecretName }}
+spec:
+  type: Opaque
+  stringData:
+    username: git
+    password: s3cret-e2e-token
+---
+apiVersion: ar.dev/v1alpha1
+kind: Secret
+metadata:
+  name: {{ .InvalidSecretName }}
+spec:
+  type: Opaque
+  stringData:
+    username: git
+    password: invalid-e2e-token
+---
+apiVersion: ar.dev/v1alpha1
+kind: Plugin
+metadata:
+  name: {{ .PluginAuthName }}
+spec:
+  title: E2E Private Plugin
+  source:
+    type: git
+    git:
+      repository:
+        url: http://git-fixture.agentregistry.svc.cluster.local/acme/private.git
+        branch: main
+        subfolder: plugin
+        credentialsRef:
+          name: {{ .SecretName }}
+---
+apiVersion: ar.dev/v1alpha1
+kind: Plugin
+metadata:
+  name: {{ .PluginInvalidAuthName }}
+spec:
+  title: E2E Private Plugin Invalid Credentials
+  source:
+    type: git
+    git:
+      repository:
+        url: http://git-fixture.agentregistry.svc.cluster.local/acme/private.git
+        branch: main
+        subfolder: plugin
+        credentialsRef:
+          name: {{ .InvalidSecretName }}
+---
+apiVersion: ar.dev/v1alpha1
+kind: Plugin
+metadata:
+  name: {{ .PluginAnonName }}
+spec:
+  title: E2E Private Plugin Anonymous Control
+  source:
+    type: git
+    git:
+      repository:
+        url: http://git-fixture.agentregistry.svc.cluster.local/acme/private.git
+        branch: main
+        subfolder: plugin
+---
+apiVersion: ar.dev/v1alpha1
+kind: Skill
+metadata:
+  name: {{ .SkillAuthName }}
+spec:
+  title: E2E Private Skill
+  source:
+    repository:
+      url: http://git-fixture.agentregistry.svc.cluster.local/acme/private.git
+      branch: main
+      subfolder: skill
+      credentialsRef:
+        name: {{ .SecretName }}
+---
+apiVersion: ar.dev/v1alpha1
+kind: Skill
+metadata:
+  name: {{ .SkillAnonName }}
+spec:
+  title: E2E Private Skill Anonymous Control
+  source:
+    repository:
+      url: http://git-fixture.agentregistry.svc.cluster.local/acme/private.git
+      branch: main
+      subfolder: skill
