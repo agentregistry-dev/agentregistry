@@ -1,0 +1,140 @@
+description: |-
+  DeploymentSpec is the deployment resource's declarative body.
+
+  TargetRef is required and must name a top-level Agent or MCPServer. The
+  referenced resource's spec is the source of truth for what to run; this
+  Deployment contributes only runtime overrides (env, runtimeConfig) and
+  lifecycle intent (desiredState).
+
+  RuntimeRef is required and must name a top-level Runtime. The embedding
+  application registers the adapters that resolve how and where the target is
+  executed.
+properties:
+  deploymentRefs:
+    description: |-
+      deploymentRefs declaratively binds this Deployment to other
+      Deployments — e.g. an Agent Deployment binding to the MCPServer
+      Deployments whose status should feed its runtime config. Stored
+      and structurally validated; binding semantics are owned by the
+      kind's reconciler.
+    items:
+      description: |-
+        DeploymentRef is a typed reference to another Deployment resource. Kind
+        is implicit (always Deployment) and Tag is omitted because Deployment is
+        a mutable-object kind keyed by namespace/name.
+
+        Namespace is optional: blank means "same namespace as the referencing
+        Deployment".
+      properties:
+        name:
+          description: name is part of DeploymentRef.
+          minLength: 1
+          type: string
+        namespace:
+          description: namespace is part of DeploymentRef.
+          type: string
+      required:
+      - name
+      type: object
+    type: array
+  desiredState:
+    description: desiredState is part of DeploymentSpec.
+    type: string
+  env:
+    additionalProperties:
+      type: string
+    description: env is part of DeploymentSpec.
+    type: object
+  harness:
+    description: |-
+      harness selects a compatible harness for Agent deployments and configures
+      rollout-specific harness policy. Omitted for BYO image/source Agent
+      deployments and MCPServer deployments.
+    properties:
+      permissionMode:
+        description: |-
+          permissionMode controls the harness tool-permission posture, e.g.
+          "default", "acceptEdits", "bypassPermissions". Empty defaults to
+          "bypassPermissions" for headless harness runtimes (no interactive
+          approval is possible); subject to security review.
+        type: string
+      type:
+        description: type is the selected harness family, e.g. "claude-code", "codex".
+        minLength: 1
+        type: string
+    required:
+    - type
+    type: object
+  modelRef:
+    description: |-
+      modelRef selects the tagged Model for this Deployment. When omitted from
+      a harness Agent Deployment, it defaults to Model/default@latest in the
+      Deployment namespace. It remains optional with no implicit selection for
+      non-harness Agent and MCPServer Deployments. Provider, endpoint, and auth
+      configuration remain on the referenced Model.
+    properties:
+      name:
+        description: name is part of ModelRef.
+        minLength: 1
+        type: string
+      namespace:
+        description: namespace is part of ModelRef.
+        type: string
+      tag:
+        description: tag is part of ModelRef.
+        type: string
+    required:
+    - name
+    type: object
+  runtimeConfig:
+    description: |-
+      runtimeConfig carries adapter-specific per-Deployment configuration.
+      Its schema is selected by the resolved Runtime type and validated by that
+      runtime's DeploymentAdapter.
+    x-kubernetes-preserve-unknown-fields: true
+  runtimeRef:
+    description: runtimeRef is part of DeploymentSpec.
+    properties:
+      kind:
+        description: kind is part of ResourceRef.
+        minLength: 1
+        type: string
+      name:
+        description: name is part of ResourceRef.
+        minLength: 1
+        type: string
+      namespace:
+        description: namespace is part of ResourceRef.
+        type: string
+      tag:
+        description: tag is part of ResourceRef.
+        type: string
+    required:
+    - kind
+    - name
+    type: object
+  targetRef:
+    description: targetRef is part of DeploymentSpec.
+    properties:
+      kind:
+        description: kind is part of ResourceRef.
+        minLength: 1
+        type: string
+      name:
+        description: name is part of ResourceRef.
+        minLength: 1
+        type: string
+      namespace:
+        description: namespace is part of ResourceRef.
+        type: string
+      tag:
+        description: tag is part of ResourceRef.
+        type: string
+    required:
+    - kind
+    - name
+    type: object
+required:
+- runtimeRef
+- targetRef
+type: object

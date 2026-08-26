@@ -33,47 +33,227 @@ components:
           $ref: '#/components/schemas/Repository'
       type: object
     AgentSpec:
-      additionalProperties: false
+      description: |-
+        AgentSpec is the agent resource's declarative body.
+
+        References to other resources (MCP servers) are pure ResourceRefs — no
+        inline runtime configuration. To deploy an agent with a specific MCP server
+        wired in, define a top-level MCPServer resource and reference it here.
       properties:
         compatibleHarnesses:
+          description: |-
+            compatibleHarnesses declares which coding harnesses this Agent can run
+            under. The Deployment selects the concrete harness type for a
+            rollout; Agent remains the portable compatibility contract.
           items:
-            $ref: '#/components/schemas/HarnessCompatibility'
-          type:
-          - array
-          - "null"
+            description: |-
+              HarnessCompatibility declares one harness family this Agent can run under.
+              Rollout policy selection lives on Deployment so the same Agent can be rolled
+              out with different compatible harnesses.
+            properties:
+              type:
+                description: type is the harness family, e.g. "claude-code", "codex",
+                  "opencode".
+                minLength: 1
+                type: string
+            required:
+            - type
+            type: object
+          type: array
         description:
+          description: description is part of AgentSpec.
           type: string
         iconUrl:
+          description: |-
+            iconUrl is the image a catalog UI shows for this agent. Either an
+            absolute https:// URL or a root-relative path served by the UI.
           type: string
         instructions:
-          $ref: '#/components/schemas/ResourceRef'
+          description: instructions is part of AgentSpec.
+          properties:
+            kind:
+              description: kind is part of ResourceRef.
+              minLength: 1
+              type: string
+            name:
+              description: name is part of ResourceRef.
+              minLength: 1
+              type: string
+            namespace:
+              description: namespace is part of ResourceRef.
+              type: string
+            tag:
+              description: tag is part of ResourceRef.
+              type: string
+          required:
+          - kind
+          - name
+          type: object
         mcpServers:
+          description: mcpServers is part of AgentSpec.
           items:
-            $ref: '#/components/schemas/ResourceRef'
-          type:
-          - array
-          - "null"
+            description: |-
+              ResourceRef is a typed reference to another resource in the registry.
+              Public references use one shape across v1alpha1: {Kind, Namespace, Name,
+              Tag}. Tag is meaningful only for taggable registry artifacts.
+
+              Namespace is optional: blank means "same namespace as the referencing
+              object" (the common case). Tag is optional: blank means "resolve to the
+              literal latest tag" for taggable artifacts or "resolve by namespace/name"
+              for mutable object kinds.
+            properties:
+              kind:
+                description: kind is part of ResourceRef.
+                minLength: 1
+                type: string
+              name:
+                description: name is part of ResourceRef.
+                minLength: 1
+                type: string
+              namespace:
+                description: namespace is part of ResourceRef.
+                type: string
+              tag:
+                description: tag is part of ResourceRef.
+                type: string
+            required:
+            - kind
+            - name
+            type: object
+          type: array
         modelName:
-          deprecated: true
+          description: modelName is part of AgentSpec.
           type: string
         modelProvider:
-          deprecated: true
+          description: |-
+            modelProvider and ModelName are retained for one release so existing
+            Agent resources continue to decode and round-trip without data loss.
+
+            Deprecated: these fields do not select or configure a runtime model.
+            New and migrated Deployments must use spec.modelRef; distributions may
+            temporarily preserve Deployment MODEL_PROVIDER / MODEL_NAME environment
+            values when modelRef is omitted.
           type: string
         plugins:
+          description: |-
+            plugins are top-level, harness-agnostic references to what the agent
+            is assembled from. The selected Deployment harness materializes what it
+            supports and drops-with-warning the rest (capability matrix). Plugins,
+            Skills, and Instructions require compatibleHarnesses because a prebuilt
+            Image cannot consume them by itself. MCPServers flow to harness runtimes
+            and remain available to any other runtime that supports MCP. Each ref's
+            Kind defaults to the field's resource kind; empty Tag means "resolve
+            latest at reference time".
           items:
-            $ref: '#/components/schemas/ResourceRef'
-          type:
-          - array
-          - "null"
+            description: |-
+              ResourceRef is a typed reference to another resource in the registry.
+              Public references use one shape across v1alpha1: {Kind, Namespace, Name,
+              Tag}. Tag is meaningful only for taggable registry artifacts.
+
+              Namespace is optional: blank means "same namespace as the referencing
+              object" (the common case). Tag is optional: blank means "resolve to the
+              literal latest tag" for taggable artifacts or "resolve by namespace/name"
+              for mutable object kinds.
+            properties:
+              kind:
+                description: kind is part of ResourceRef.
+                minLength: 1
+                type: string
+              name:
+                description: name is part of ResourceRef.
+                minLength: 1
+                type: string
+              namespace:
+                description: namespace is part of ResourceRef.
+                type: string
+              tag:
+                description: tag is part of ResourceRef.
+                type: string
+            required:
+            - kind
+            - name
+            type: object
+          type: array
         skills:
+          description: skills is part of AgentSpec.
           items:
-            $ref: '#/components/schemas/ResourceRef'
-          type:
-          - array
-          - "null"
+            description: |-
+              ResourceRef is a typed reference to another resource in the registry.
+              Public references use one shape across v1alpha1: {Kind, Namespace, Name,
+              Tag}. Tag is meaningful only for taggable registry artifacts.
+
+              Namespace is optional: blank means "same namespace as the referencing
+              object" (the common case). Tag is optional: blank means "resolve to the
+              literal latest tag" for taggable artifacts or "resolve by namespace/name"
+              for mutable object kinds.
+            properties:
+              kind:
+                description: kind is part of ResourceRef.
+                minLength: 1
+                type: string
+              name:
+                description: name is part of ResourceRef.
+                minLength: 1
+                type: string
+              namespace:
+                description: namespace is part of ResourceRef.
+                type: string
+              tag:
+                description: tag is part of ResourceRef.
+                type: string
+            required:
+            - kind
+            - name
+            type: object
+          type: array
         source:
-          $ref: '#/components/schemas/AgentSource'
+          description: |-
+            source declares where the agent comes from — Image (the runtime
+            container) and/or Repository (the source code).
+          properties:
+            image:
+              description: |-
+                image is the OCI container image reference that runs the agent.
+                Format: <registry>/<name>:<tag> (e.g. ghcr.io/owner/agent:1.0.0).
+              type: string
+            protocol:
+              description: |-
+                protocol is the application protocol spoken by every runnable form of the
+                agent, whether built from Repository or supplied as Image. When omitted,
+                A2A is inferred as the default.
+              type: string
+            repository:
+              description: repository links to the source code the image was built
+                from.
+              properties:
+                branch:
+                  description: branch is part of Repository.
+                  type: string
+                commit:
+                  description: commit is part of Repository.
+                  type: string
+                credentialsRef:
+                  description: |-
+                    credentialsRef names a Secret holding credentials for a private
+                    repository. Git needs a pair, so resolvers read username/password.
+                  properties:
+                    name:
+                      description: name is part of LocalSecretReference.
+                      minLength: 1
+                      type: string
+                  required:
+                  - name
+                  type: object
+                subfolder:
+                  description: subfolder is part of Repository.
+                  type: string
+                url:
+                  description: url is part of Repository.
+                  type: string
+              type: object
+          type: object
         title:
+          description: title is the agent's catalog display name.
           type: string
       type: object
     ApplyResult:
@@ -200,34 +380,146 @@ components:
       - name
       type: object
     DeploymentSpec:
-      additionalProperties: false
+      description: |-
+        DeploymentSpec is the deployment resource's declarative body.
+
+        TargetRef is required and must name a top-level Agent or MCPServer. The
+        referenced resource's spec is the source of truth for what to run; this
+        Deployment contributes only runtime overrides (env, runtimeConfig) and
+        lifecycle intent (desiredState).
+
+        RuntimeRef is required and must name a top-level Runtime. The embedding
+        application registers the adapters that resolve how and where the target is
+        executed.
       properties:
         deploymentRefs:
+          description: |-
+            deploymentRefs declaratively binds this Deployment to other
+            Deployments — e.g. an Agent Deployment binding to the MCPServer
+            Deployments whose status should feed its runtime config. Stored
+            and structurally validated; binding semantics are owned by the
+            kind's reconciler.
           items:
-            $ref: '#/components/schemas/DeploymentRef'
-          type:
-          - array
-          - "null"
+            description: |-
+              DeploymentRef is a typed reference to another Deployment resource. Kind
+              is implicit (always Deployment) and Tag is omitted because Deployment is
+              a mutable-object kind keyed by namespace/name.
+
+              Namespace is optional: blank means "same namespace as the referencing
+              Deployment".
+            properties:
+              name:
+                description: name is part of DeploymentRef.
+                minLength: 1
+                type: string
+              namespace:
+                description: namespace is part of DeploymentRef.
+                type: string
+            required:
+            - name
+            type: object
+          type: array
         desiredState:
+          description: desiredState is part of DeploymentSpec.
           type: string
         env:
           additionalProperties:
             type: string
+          description: env is part of DeploymentSpec.
           type: object
         harness:
-          $ref: '#/components/schemas/DeploymentHarness'
-        modelRef:
-          $ref: '#/components/schemas/ModelRef'
-        runtimeConfig:
-          additionalProperties: {}
+          description: |-
+            harness selects a compatible harness for Agent deployments and configures
+            rollout-specific harness policy. Omitted for BYO image/source Agent
+            deployments and MCPServer deployments.
+          properties:
+            permissionMode:
+              description: |-
+                permissionMode controls the harness tool-permission posture, e.g.
+                "default", "acceptEdits", "bypassPermissions". Empty defaults to
+                "bypassPermissions" for headless harness runtimes (no interactive
+                approval is possible); subject to security review.
+              type: string
+            type:
+              description: type is the selected harness family, e.g. "claude-code",
+                "codex".
+              minLength: 1
+              type: string
+          required:
+          - type
           type: object
+        modelRef:
+          description: |-
+            modelRef selects the tagged Model for this Deployment. When omitted from
+            a harness Agent Deployment, it defaults to Model/default@latest in the
+            Deployment namespace. It remains optional with no implicit selection for
+            non-harness Agent and MCPServer Deployments. Provider, endpoint, and auth
+            configuration remain on the referenced Model.
+          properties:
+            name:
+              description: name is part of ModelRef.
+              minLength: 1
+              type: string
+            namespace:
+              description: namespace is part of ModelRef.
+              type: string
+            tag:
+              description: tag is part of ModelRef.
+              type: string
+          required:
+          - name
+          type: object
+        runtimeConfig:
+          description: |-
+            runtimeConfig carries adapter-specific per-Deployment configuration.
+            Its schema is selected by the resolved Runtime type and validated by that
+            runtime's DeploymentAdapter.
+          x-kubernetes-preserve-unknown-fields: true
         runtimeRef:
-          $ref: '#/components/schemas/ResourceRef'
+          description: runtimeRef is part of DeploymentSpec.
+          properties:
+            kind:
+              description: kind is part of ResourceRef.
+              minLength: 1
+              type: string
+            name:
+              description: name is part of ResourceRef.
+              minLength: 1
+              type: string
+            namespace:
+              description: namespace is part of ResourceRef.
+              type: string
+            tag:
+              description: tag is part of ResourceRef.
+              type: string
+          required:
+          - kind
+          - name
+          type: object
         targetRef:
-          $ref: '#/components/schemas/ResourceRef'
+          description: targetRef is part of DeploymentSpec.
+          properties:
+            kind:
+              description: kind is part of ResourceRef.
+              minLength: 1
+              type: string
+            name:
+              description: name is part of ResourceRef.
+              minLength: 1
+              type: string
+            namespace:
+              description: namespace is part of ResourceRef.
+              type: string
+            tag:
+              description: tag is part of ResourceRef.
+              type: string
+          required:
+          - kind
+          - name
+          type: object
       required:
-      - targetRef
       - runtimeRef
+      - targetRef
       type: object
     ErrorDetail:
       additionalProperties: false
@@ -783,17 +1075,217 @@ components:
           $ref: '#/components/schemas/Repository'
       type: object
     MCPServerSpec:
-      additionalProperties: false
+      description: MCPServerSpec is the MCP server's declarative body.
       properties:
         description:
+          description: description is part of MCPServerSpec.
           type: string
         iconUrl:
+          description: |-
+            iconUrl is the image a catalog UI shows for this MCP server. Either an
+            absolute https:// URL or a root-relative path served by the UI.
           type: string
         remote:
-          $ref: '#/components/schemas/MCPRemote'
+          description: |-
+            remote declares a remote MCP server instead of a bundled one. These are pre-existing
+            MCP servers that the registry does not deploy but can be referenced by Agents.
+          properties:
+            headers:
+              description: headers is part of MCPRemote.
+              items:
+                description: HTTPHeader is an HTTP header sent on requests to a remote
+                  MCP server.
+                properties:
+                  name:
+                    description: name is part of HTTPHeader.
+                    minLength: 1
+                    type: string
+                  value:
+                    description: value is part of HTTPHeader.
+                    type: string
+                required:
+                - name
+                type: object
+              type: array
+            type:
+              description: type is part of MCPRemote.
+              minLength: 1
+              type: string
+            url:
+              description: url is part of MCPRemote.
+              minLength: 1
+              type: string
+          required:
+          - type
+          - url
+          type: object
         source:
-          $ref: '#/components/schemas/MCPServerSource'
+          description: |-
+            source declares where the bundled MCP server comes from — Package (the
+            runnable distribution) and/or Repository (the source code).
+          properties:
+            package:
+              description: |-
+                package is the runnable distribution (stdio binary, container image,
+                npm package, etc.) of this MCP server.
+              properties:
+                launch:
+                  description: launch is part of MCPPackage.
+                  properties:
+                    args:
+                      description: args is part of MCPPackageLaunch.
+                      items:
+                        description: MCPArgument is one command-line argument.
+                        properties:
+                          name:
+                            description: name is part of MCPArgument.
+                            type: string
+                          type:
+                            description: type is part of MCPArgument.
+                            type: string
+                          value:
+                            description: value is part of MCPArgument.
+                            type: string
+                        required:
+                        - type
+                        type: object
+                      type: array
+                    command:
+                      description: command is part of MCPPackageLaunch.
+                      type: string
+                    env:
+                      description: env is part of MCPPackageLaunch.
+                      items:
+                        description: MCPKeyValueInput is one declared environment
+                          variable.
+                        properties:
+                          isRequired:
+                            description: isRequired is part of MCPKeyValueInput.
+                            type: boolean
+                          name:
+                            description: name is part of MCPKeyValueInput.
+                            minLength: 1
+                            type: string
+                          value:
+                            description: value is part of MCPKeyValueInput.
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      type: array
+                  type: object
+                origin:
+                  description: origin is part of MCPPackage.
+                  properties:
+                    identifier:
+                      description: identifier is part of MCPPackageOrigin.
+                      minLength: 1
+                      type: string
+                    npm:
+                      description: npm is part of MCPPackageOrigin.
+                      properties:
+                        mirror:
+                          description: mirror is part of MCPPackageOriginNPM.
+                          type: string
+                        serverName:
+                          description: serverName is part of MCPPackageOriginNPM.
+                          minLength: 1
+                          type: string
+                        version:
+                          description: version is part of MCPPackageOriginNPM.
+                          minLength: 1
+                          type: string
+                      required:
+                      - serverName
+                      - version
+                      type: object
+                    oci:
+                      description: oci is part of MCPPackageOrigin.
+                      properties:
+                        serverName:
+                          description: serverName is part of MCPPackageOriginOCI.
+                          minLength: 1
+                          type: string
+                      required:
+                      - serverName
+                      type: object
+                    pypi:
+                      description: pypi is part of MCPPackageOrigin.
+                      properties:
+                        mirror:
+                          description: mirror is part of MCPPackageOriginPyPI.
+                          type: string
+                        serverName:
+                          description: serverName is part of MCPPackageOriginPyPI.
+                          minLength: 1
+                          type: string
+                        version:
+                          description: version is part of MCPPackageOriginPyPI.
+                          minLength: 1
+                          type: string
+                      required:
+                      - serverName
+                      - version
+                      type: object
+                    type:
+                      description: type is part of MCPPackageOrigin.
+                      type: string
+                  required:
+                  - identifier
+                  - type
+                  type: object
+                transport:
+                  description: transport is part of MCPPackage.
+                  properties:
+                    path:
+                      description: path is part of MCPTransport.
+                      type: string
+                    port:
+                      description: port is part of MCPTransport.
+                      type: integer
+                    type:
+                      description: type is part of MCPTransport.
+                      minLength: 1
+                      type: string
+                  required:
+                  - type
+                  type: object
+              required:
+              - origin
+              - transport
+              type: object
+            repository:
+              description: repository links to the source code the package was built
+                from.
+              properties:
+                branch:
+                  description: branch is part of Repository.
+                  type: string
+                commit:
+                  description: commit is part of Repository.
+                  type: string
+                credentialsRef:
+                  description: |-
+                    credentialsRef names a Secret holding credentials for a private
+                    repository. Git needs a pair, so resolvers read username/password.
+                  properties:
+                    name:
+                      description: name is part of LocalSecretReference.
+                      minLength: 1
+                      type: string
+                  required:
+                  - name
+                  type: object
+                subfolder:
+                  description: subfolder is part of Repository.
+                  type: string
+                url:
+                  description: url is part of Repository.
+                  type: string
+              type: object
+          type: object
         title:
+          description: title is part of MCPServerSpec.
           type: string
       type: object
     MCPServersField:
@@ -899,27 +1391,106 @@ components:
       - name
       type: object
     ModelSpec:
-      additionalProperties: false
+      description: |-
+        ModelSpec describes one model: catalog display metadata,
+        provider-scoped identity, and platform-owned connection posture.
+
+        Model is a tagged catalog artifact. Provider identity and platform-owned
+        auth/endpoint posture are versioned together so Deployments can pin the
+        complete model configuration they consume.
       properties:
         auth:
-          $ref: '#/components/schemas/ModelAuthConfig'
+          description: |-
+            auth is how the platform authenticates to the provider. Omitted means
+            the provider default: ambient runtime identity for Bedrock.
+          properties:
+            secretRef:
+              description: secretRef is required iff Strategy == "secretRef".
+              properties:
+                key:
+                  description: key is part of SecretKeyRef.
+                  type: string
+                name:
+                  description: name is part of SecretKeyRef.
+                  minLength: 1
+                  type: string
+                namespace:
+                  description: namespace is part of SecretKeyRef.
+                  type: string
+              required:
+              - name
+              type: object
+            strategy:
+              description: |-
+                strategy is "runtime" (ambient cloud identity), "secretRef" (key
+                material from a registry Secret), or "passthrough" (inbound bearer
+                token forwarded as the provider key).
+              minLength: 1
+              type: string
+          required:
+          - strategy
+          type: object
         description:
+          description: description is part of ModelSpec.
           type: string
         endpoint:
-          $ref: '#/components/schemas/ModelEndpointConfig'
+          description: |-
+            endpoint overrides how the provider is reached. Omitted means
+            provider defaults.
+          properties:
+            baseUrl:
+              description: baseUrl is part of ModelEndpointConfig.
+              type: string
+            region:
+              description: |-
+                region overrides the model-endpoint region (bedrock); empty means the
+                provider default.
+              type: string
+            tls:
+              description: tls is part of ModelEndpointConfig.
+              properties:
+                caCertSecretRef:
+                  description: caCertSecretRef names CA material for private gateways.
+                  properties:
+                    key:
+                      description: key is part of SecretKeyRef.
+                      type: string
+                    name:
+                      description: name is part of SecretKeyRef.
+                      minLength: 1
+                      type: string
+                    namespace:
+                      description: namespace is part of SecretKeyRef.
+                      type: string
+                  required:
+                  - name
+                  type: object
+                disableVerify:
+                  description: disableVerify is for dev/test only.
+                  type: boolean
+              type: object
+          type: object
         iconUrl:
+          description: |-
+            iconUrl is the image a catalog UI shows for this model. Either an
+            absolute https:// URL or a root-relative path served by the UI.
           type: string
         model:
+          description: |-
+            model is the provider-scoped model identifier, e.g.
+            "us.anthropic.claude-opus-4-8".
+          minLength: 1
           type: string
         provider:
-          enum:
-          - bedrock
+          description: provider family. Currently only "bedrock" is supported.
+          minLength: 1
           type: string
         title:
+          description: title is the model's catalog display name.
           type: string
       required:
-      - provider
       - model
+      - provider
       type: object
     ModelTLSConfig:
       additionalProperties: false
@@ -1290,21 +1861,86 @@ components:
       - reference
       type: object
     PluginSpec:
-      additionalProperties: false
+      description: |-
+        PluginSpec is the plugin resource's declarative body — USER INTENT ONLY.
+        Server-derived data (the resolved source pin, the parsed Manifest, and the
+        derived Inventory) lives in PluginStatus, populated out of band by the Plugin
+        controller. Keeping it out of the spec means a status write never changes the
+        spec content hash, so re-applying identical intent is an UpsertNoOp.
       properties:
         description:
+          description: description is part of PluginSpec.
           type: string
         harnesses:
+          description: |-
+            harnesses lists the harness formats this bundle carries native manifests
+            for (e.g. "claude-code", "codex"). It is informational in this phase;
+            deploy-time adapters decide which harnesses they can consume.
           items:
             type: string
-          type:
-          - array
-          - "null"
+          type: array
         iconUrl:
+          description: |-
+            iconUrl is the image a catalog UI shows for this plugin. Either an
+            absolute https:// URL or a root-relative path served by the UI.
           type: string
         source:
-          $ref: '#/components/schemas/PluginSource'
+          description: |-
+            source is where the bundle is ingested from, pinned (git commit / OCI
+            digest) so a published tag is reproducible.
+          properties:
+            git:
+              description: git is part of PluginSource.
+              properties:
+                repository:
+                  description: repository is part of PluginSourceGit.
+                  properties:
+                    branch:
+                      description: branch is part of Repository.
+                      type: string
+                    commit:
+                      description: commit is part of Repository.
+                      type: string
+                    credentialsRef:
+                      description: |-
+                        credentialsRef names a Secret holding credentials for a private
+                        repository. Git needs a pair, so resolvers read username/password.
+                      properties:
+                        name:
+                          description: name is part of LocalSecretReference.
+                          minLength: 1
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    subfolder:
+                      description: subfolder is part of Repository.
+                      type: string
+                    url:
+                      description: url is part of Repository.
+                      type: string
+                  type: object
+              required:
+              - repository
+              type: object
+            oci:
+              description: oci is part of PluginSource.
+              properties:
+                reference:
+                  description: reference is part of PluginSourceOCI.
+                  minLength: 1
+                  type: string
+              required:
+              - reference
+              type: object
+            type:
+              description: type is part of PluginSource.
+              type: string
+          required:
+          - type
+          type: object
         title:
+          description: title is part of PluginSpec.
           type: string
       type: object
     PluginStatus:
@@ -1371,13 +2007,21 @@ components:
       - kind
       type: object
     PromptSpec:
-      additionalProperties: false
+      description: |-
+        PromptSpec is the prompt resource's declarative body. Content holds the
+        prompt text inline; for large bodies or binary assets, use references via
+        a Skill resource instead.
       properties:
         content:
+          description: content is part of PromptSpec.
           type: string
         description:
+          description: description is part of PromptSpec.
           type: string
         iconUrl:
+          description: |-
+            iconUrl is the image a catalog UI shows for this prompt. Either an
+            absolute https:// URL or a root-relative path served by the UI.
           type: string
       type: object
     Repository:
@@ -1435,14 +2079,23 @@ components:
       - kind
       type: object
     RuntimeSpec:
-      additionalProperties: false
+      description: |-
+        RuntimeSpec describes a deployment target. Type is the discriminator;
+        Config carries type-specific configuration that registered adapters
+        interpret. TelemetryEndpoint, when
+        set, is exported to every Deployment served by this Runtime as
+        OTEL_EXPORTER_OTLP_ENDPOINT on the workload — telemetry is a property
+        of where things run, not of an individual Deployment.
       properties:
         config:
-          additionalProperties: {}
-          type: object
+          description: config is part of RuntimeSpec.
+          x-kubernetes-preserve-unknown-fields: true
         telemetryEndpoint:
+          description: telemetryEndpoint is part of RuntimeSpec.
           type: string
         type:
+          description: type is part of RuntimeSpec.
+          minLength: 1
           type: string
       required:
       - type
@@ -1479,19 +2132,23 @@ components:
       - name
       type: object
     SecretSpec:
-      additionalProperties: false
+      description: SecretSpec is the desired metadata and write-only payload.
       properties:
         data:
           additionalProperties:
             type: string
+          description: data is part of SecretSpec.
           type: object
         immutable:
+          description: immutable is part of SecretSpec.
           type: boolean
         stringData:
           additionalProperties:
             type: string
+          description: stringData is part of SecretSpec.
           type: object
         type:
+          description: type is part of SecretSpec.
           type: string
       type: object
     SecretStatus:
@@ -1690,15 +2347,50 @@ components:
           $ref: '#/components/schemas/Repository'
       type: object
     SkillSpec:
-      additionalProperties: false
+      description: SkillSpec is the skill resource's declarative body.
       properties:
         description:
+          description: description is part of SkillSpec.
           type: string
         iconUrl:
+          description: |-
+            iconUrl is the image a catalog UI shows for this skill. Either an
+            absolute https:// URL or a root-relative path served by the UI.
           type: string
         source:
-          $ref: '#/components/schemas/SkillSource'
+          description: source is part of SkillSpec.
+          properties:
+            repository:
+              description: repository is part of SkillSource.
+              properties:
+                branch:
+                  description: branch is part of Repository.
+                  type: string
+                commit:
+                  description: commit is part of Repository.
+                  type: string
+                credentialsRef:
+                  description: |-
+                    credentialsRef names a Secret holding credentials for a private
+                    repository. Git needs a pair, so resolvers read username/password.
+                  properties:
+                    name:
+                      description: name is part of LocalSecretReference.
+                      minLength: 1
+                      type: string
+                  required:
+                  - name
+                  type: object
+                subfolder:
+                  description: subfolder is part of Repository.
+                  type: string
+                url:
+                  description: url is part of Repository.
+                  type: string
+              type: object
+          type: object
         title:
+          description: title is part of SkillSpec.
           type: string
       type: object
     SkillStatus:

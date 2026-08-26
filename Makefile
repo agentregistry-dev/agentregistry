@@ -76,6 +76,7 @@ HELM          ?= $(GO_TOOL) helm
 HELM_DOCS     ?= $(GO_TOOL) helm-docs --log-level=fatal
 KIND          ?= $(GO_TOOL) kind
 KUBE_API_LINTER ?= $(CURDIR)/bin/golangci-lint
+CONTROLLER_GEN ?= go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.20.1
 
 ## Helm / Chart settings
 # CHART_VERSION strips the leading 'v' from VERSION for use in Chart.yaml (Helm requires semver without the prefix).
@@ -234,9 +235,21 @@ test-e2e: setup-kind-cluster build-cli ## Run end-to-end tests against Kubernete
 	  $(GOTESTSUM) --format testdox -- -v -tags=e2e -timeout 45m ./test/e2e/...
 
 .PHONY: gen-openapi
-gen-openapi: ## Generate the OpenAPI specification
+gen-openapi: generate-schemas ## Generate the OpenAPI specification
 	@echo "Generating OpenAPI spec..."
 	go run ./hack/tools/gen-openapi -output openapi.yaml
+
+.PHONY: generate-schemas
+generate-schemas: ## Regenerate v1alpha1 spec schemas
+	@set -e; tmpdir=$$(mktemp -d); \
+	trap 'rm -rf "$$tmpdir"' EXIT; \
+	$(CONTROLLER_GEN) crd:crdVersions=v1 paths=./hack/schemagen/types output:crd:dir=$$tmpdir; \
+	go run ./hack/schemagen -input-dir $$tmpdir -output-dir pkg/api/v1alpha1/schemas
+
+.PHONY: check-schemas
+check-schemas: generate-schemas ## Fail if generated schemas are stale
+	@git diff --exit-code -- pkg/api/v1alpha1/schemas \
+	  || (echo "schemas are stale — run 'make generate-schemas'" && exit 1)
 
 gen-client: gen-openapi install-ui ## Generate the TypeScript client
 	@echo "Generating TypeScript client..."

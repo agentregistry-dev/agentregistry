@@ -1,12 +1,14 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
@@ -31,6 +33,9 @@ func main() {
 	}
 
 	spec := generateSpec(apiVersion)
+	if err := applyGeneratedSpecSchemas(spec); err != nil {
+		log.Fatalf("Failed to apply generated spec schemas: %v", err)
+	}
 
 	yamlData, err := yaml.Marshal(spec)
 	if err != nil {
@@ -46,6 +51,92 @@ func main() {
 		absPath = *outputPath
 	}
 	fmt.Printf("OpenAPI spec generated: %s\n", absPath)
+}
+
+var generatedSpecComponents = map[string]string{
+	"AgentSpec":      "agent.yaml",
+	"DeploymentSpec": "deployment.yaml",
+	"MCPServerSpec":  "mcpserver.yaml",
+	"ModelSpec":      "model.yaml",
+	"PluginSpec":     "plugin.yaml",
+	"PromptSpec":     "prompt.yaml",
+	"RuntimeSpec":    "runtime.yaml",
+	"SecretSpec":     "secret.yaml",
+	"SkillSpec":      "skill.yaml",
+}
+
+func applyGeneratedSpecSchemas(spec *huma.OpenAPI) error {
+	schemas := spec.Components.Schemas.Map()
+	for component, filename := range generatedSpecComponents {
+		data, err := os.ReadFile(filepath.Join(schemaDirectory(), filename))
+		if err != nil {
+			return err
+		}
+		var raw map[string]any
+		if err := yaml.Unmarshal(data, &raw); err != nil {
+			return err
+		}
+		schemas[component], err = humaSchema(raw)
+		if err != nil {
+			return fmt.Errorf("%s: %w", component, err)
+		}
+	}
+	return nil
+}
+
+func schemaDirectory() string {
+	pc, source, line, ok := runtime.Caller(0)
+	if !ok || pc == 0 || line == 0 {
+		panic("locate generated schemas")
+	}
+	return filepath.Join(filepath.Dir(source), "..", "..", "..", "pkg", "api", "v1alpha1", "schemas")
+}
+
+func humaSchema(raw map[string]any) (*huma.Schema, error) {
+	extensions := make(map[string]any)
+	plain := make(map[string]any, len(raw))
+	for key, value := range raw {
+		if len(key) > 2 && key[:2] == "x-" {
+			extensions[key] = value
+			continue
+		}
+		plain[key] = value
+	}
+	data, err := json.Marshal(plain)
+	if err != nil {
+		return nil, err
+	}
+	result := &huma.Schema{Extensions: extensions}
+	if err := json.Unmarshal(data, result); err != nil {
+		return nil, err
+	}
+	for name, property := range rawMap(raw["properties"]) {
+		result.Properties[name], err = humaSchema(property)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if item, ok := raw["items"].(map[string]any); ok {
+		result.Items, err = humaSchema(item)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return result, nil
+}
+
+func rawMap(value any) map[string]map[string]any {
+	properties, ok := value.(map[string]any)
+	if !ok {
+		return nil
+	}
+	result := make(map[string]map[string]any, len(properties))
+	for name, property := range properties {
+		if property, ok := property.(map[string]any); ok {
+			result[name] = property
+		}
+	}
+	return result
 }
 
 // generateSpec creates a Huma API, registers all routes, and returns the

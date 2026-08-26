@@ -1,0 +1,21 @@
+description: |-
+  RuntimeSpec describes a deployment target. Type is the discriminator;
+  Config carries type-specific configuration that registered adapters
+  interpret. TelemetryEndpoint, when
+  set, is exported to every Deployment served by this Runtime as
+  OTEL_EXPORTER_OTLP_ENDPOINT on the workload — telemetry is a property
+  of where things run, not of an individual Deployment.
+properties:
+  config:
+    description: config is part of RuntimeSpec.
+    x-kubernetes-preserve-unknown-fields: true
+  telemetryEndpoint:
+    description: telemetryEndpoint is part of RuntimeSpec.
+    type: string
+  type:
+    description: type is part of RuntimeSpec.
+    minLength: 1
+    type: string
+required:
+- type
+type: object

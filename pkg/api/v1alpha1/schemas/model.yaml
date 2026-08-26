@@ -1,0 +1,101 @@
+description: |-
+  ModelSpec describes one model: catalog display metadata,
+  provider-scoped identity, and platform-owned connection posture.
+
+  Model is a tagged catalog artifact. Provider identity and platform-owned
+  auth/endpoint posture are versioned together so Deployments can pin the
+  complete model configuration they consume.
+properties:
+  auth:
+    description: |-
+      auth is how the platform authenticates to the provider. Omitted means
+      the provider default: ambient runtime identity for Bedrock.
+    properties:
+      secretRef:
+        description: secretRef is required iff Strategy == "secretRef".
+        properties:
+          key:
+            description: key is part of SecretKeyRef.
+            type: string
+          name:
+            description: name is part of SecretKeyRef.
+            minLength: 1
+            type: string
+          namespace:
+            description: namespace is part of SecretKeyRef.
+            type: string
+        required:
+        - name
+        type: object
+      strategy:
+        description: |-
+          strategy is "runtime" (ambient cloud identity), "secretRef" (key
+          material from a registry Secret), or "passthrough" (inbound bearer
+          token forwarded as the provider key).
+        minLength: 1
+        type: string
+    required:
+    - strategy
+    type: object
+  description:
+    description: description is part of ModelSpec.
+    type: string
+  endpoint:
+    description: |-
+      endpoint overrides how the provider is reached. Omitted means
+      provider defaults.
+    properties:
+      baseUrl:
+        description: baseUrl is part of ModelEndpointConfig.
+        type: string
+      region:
+        description: |-
+          region overrides the model-endpoint region (bedrock); empty means the
+          provider default.
+        type: string
+      tls:
+        description: tls is part of ModelEndpointConfig.
+        properties:
+          caCertSecretRef:
+            description: caCertSecretRef names CA material for private gateways.
+            properties:
+              key:
+                description: key is part of SecretKeyRef.
+                type: string
+              name:
+                description: name is part of SecretKeyRef.
+                minLength: 1
+                type: string
+              namespace:
+                description: namespace is part of SecretKeyRef.
+                type: string
+            required:
+            - name
+            type: object
+          disableVerify:
+            description: disableVerify is for dev/test only.
+            type: boolean
+        type: object
+    type: object
+  iconUrl:
+    description: |-
+      iconUrl is the image a catalog UI shows for this model. Either an
+      absolute https:// URL or a root-relative path served by the UI.
+    type: string
+  model:
+    description: |-
+      model is the provider-scoped model identifier, e.g.
+      "us.anthropic.claude-opus-4-8".
+    minLength: 1
+    type: string
+  provider:
+    description: provider family. Currently only "bedrock" is supported.
+    minLength: 1
+    type: string
+  title:
+    description: title is the model's catalog display name.
+    type: string
+required:
+- model
+- provider
+type: object

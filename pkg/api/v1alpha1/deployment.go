@@ -66,11 +66,9 @@ const (
 type DeploymentSpec struct {
 	// targetRef is part of DeploymentSpec.
 	// +required
-	// +kubebuilder:validation:MinProperties=1
 	TargetRef ResourceRef `json:"targetRef" yaml:"targetRef"`
 	// runtimeRef is part of DeploymentSpec.
 	// +required
-	// +kubebuilder:validation:MinProperties=1
 	RuntimeRef ResourceRef `json:"runtimeRef" yaml:"runtimeRef"`
 	// modelRef selects the tagged Model for this Deployment. When omitted from
 	// a harness Agent Deployment, it defaults to Model/default@latest in the
@@ -96,6 +94,8 @@ type DeploymentSpec struct {
 	// Its schema is selected by the resolved Runtime type and validated by that
 	// runtime's DeploymentAdapter.
 	// +optional
+	// +kubebuilder:validation:Schemaless
+	// +kubebuilder:pruning:PreserveUnknownFields
 	RuntimeConfig map[string]any `json:"runtimeConfig,omitempty" yaml:"runtimeConfig,omitempty"`
 	// harness selects a compatible harness for Agent deployments and configures
 	// rollout-specific harness policy. Omitted for BYO image/source Agent

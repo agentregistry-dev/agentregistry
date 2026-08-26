@@ -1,0 +1,17 @@
+description: |-
+  PromptSpec is the prompt resource's declarative body. Content holds the
+  prompt text inline; for large bodies or binary assets, use references via
+  a Skill resource instead.
+properties:
+  content:
+    description: content is part of PromptSpec.
+    type: string
+  description:
+    description: description is part of PromptSpec.
+    type: string
+  iconUrl:
+    description: |-
+      iconUrl is the image a catalog UI shows for this prompt. Either an
+      absolute https:// URL or a root-relative path served by the UI.
+    type: string
+type: object

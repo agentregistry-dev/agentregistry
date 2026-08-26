@@ -41,6 +41,8 @@ type RuntimeSpec struct {
 	Type string `json:"type" yaml:"type"`
 	// config is part of RuntimeSpec.
 	// +optional
+	// +kubebuilder:validation:Schemaless
+	// +kubebuilder:pruning:PreserveUnknownFields
 	Config map[string]any `json:"config,omitempty" yaml:"config,omitempty"`
 	// telemetryEndpoint is part of RuntimeSpec.
 	// +optional

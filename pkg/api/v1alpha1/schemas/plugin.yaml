@@ -1,0 +1,82 @@
+description: |-
+  PluginSpec is the plugin resource's declarative body — USER INTENT ONLY.
+  Server-derived data (the resolved source pin, the parsed Manifest, and the
+  derived Inventory) lives in PluginStatus, populated out of band by the Plugin
+  controller. Keeping it out of the spec means a status write never changes the
+  spec content hash, so re-applying identical intent is an UpsertNoOp.
+properties:
+  description:
+    description: description is part of PluginSpec.
+    type: string
+  harnesses:
+    description: |-
+      harnesses lists the harness formats this bundle carries native manifests
+      for (e.g. "claude-code", "codex"). It is informational in this phase;
+      deploy-time adapters decide which harnesses they can consume.
+    items:
+      type: string
+    type: array
+  iconUrl:
+    description: |-
+      iconUrl is the image a catalog UI shows for this plugin. Either an
+      absolute https:// URL or a root-relative path served by the UI.
+    type: string
+  source:
+    description: |-
+      source is where the bundle is ingested from, pinned (git commit / OCI
+      digest) so a published tag is reproducible.
+    properties:
+      git:
+        description: git is part of PluginSource.
+        properties:
+          repository:
+            description: repository is part of PluginSourceGit.
+            properties:
+              branch:
+                description: branch is part of Repository.
+                type: string
+              commit:
+                description: commit is part of Repository.
+                type: string
+              credentialsRef:
+                description: |-
+                  credentialsRef names a Secret holding credentials for a private
+                  repository. Git needs a pair, so resolvers read username/password.
+                properties:
+                  name:
+                    description: name is part of LocalSecretReference.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              subfolder:
+                description: subfolder is part of Repository.
+                type: string
+              url:
+                description: url is part of Repository.
+                type: string
+            type: object
+        required:
+        - repository
+        type: object
+      oci:
+        description: oci is part of PluginSource.
+        properties:
+          reference:
+            description: reference is part of PluginSourceOCI.
+            minLength: 1
+            type: string
+        required:
+        - reference
+        type: object
+      type:
+        description: type is part of PluginSource.
+        type: string
+    required:
+    - type
+    type: object
+  title:
+    description: title is part of PluginSpec.
+    type: string
+type: object

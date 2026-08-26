@@ -1,0 +1,211 @@
+description: MCPServerSpec is the MCP server's declarative body.
+properties:
+  description:
+    description: description is part of MCPServerSpec.
+    type: string
+  iconUrl:
+    description: |-
+      iconUrl is the image a catalog UI shows for this MCP server. Either an
+      absolute https:// URL or a root-relative path served by the UI.
+    type: string
+  remote:
+    description: |-
+      remote declares a remote MCP server instead of a bundled one. These are pre-existing
+      MCP servers that the registry does not deploy but can be referenced by Agents.
+    properties:
+      headers:
+        description: headers is part of MCPRemote.
+        items:
+          description: HTTPHeader is an HTTP header sent on requests to a remote MCP
+            server.
+          properties:
+            name:
+              description: name is part of HTTPHeader.
+              minLength: 1
+              type: string
+            value:
+              description: value is part of HTTPHeader.
+              type: string
+          required:
+          - name
+          type: object
+        type: array
+      type:
+        description: type is part of MCPRemote.
+        minLength: 1
+        type: string
+      url:
+        description: url is part of MCPRemote.
+        minLength: 1
+        type: string
+    required:
+    - type
+    - url
+    type: object
+  source:
+    description: |-
+      source declares where the bundled MCP server comes from — Package (the
+      runnable distribution) and/or Repository (the source code).
+    properties:
+      package:
+        description: |-
+          package is the runnable distribution (stdio binary, container image,
+          npm package, etc.) of this MCP server.
+        properties:
+          launch:
+            description: launch is part of MCPPackage.
+            properties:
+              args:
+                description: args is part of MCPPackageLaunch.
+                items:
+                  description: MCPArgument is one command-line argument.
+                  properties:
+                    name:
+                      description: name is part of MCPArgument.
+                      type: string
+                    type:
+                      description: type is part of MCPArgument.
+                      type: string
+                    value:
+                      description: value is part of MCPArgument.
+                      type: string
+                  required:
+                  - type
+                  type: object
+                type: array
+              command:
+                description: command is part of MCPPackageLaunch.
+                type: string
+              env:
+                description: env is part of MCPPackageLaunch.
+                items:
+                  description: MCPKeyValueInput is one declared environment variable.
+                  properties:
+                    isRequired:
+                      description: isRequired is part of MCPKeyValueInput.
+                      type: boolean
+                    name:
+                      description: name is part of MCPKeyValueInput.
+                      minLength: 1
+                      type: string
+                    value:
+                      description: value is part of MCPKeyValueInput.
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
+            type: object
+          origin:
+            description: origin is part of MCPPackage.
+            properties:
+              identifier:
+                description: identifier is part of MCPPackageOrigin.
+                minLength: 1
+                type: string
+              npm:
+                description: npm is part of MCPPackageOrigin.
+                properties:
+                  mirror:
+                    description: mirror is part of MCPPackageOriginNPM.
+                    type: string
+                  serverName:
+                    description: serverName is part of MCPPackageOriginNPM.
+                    minLength: 1
+                    type: string
+                  version:
+                    description: version is part of MCPPackageOriginNPM.
+                    minLength: 1
+                    type: string
+                required:
+                - serverName
+                - version
+                type: object
+              oci:
+                description: oci is part of MCPPackageOrigin.
+                properties:
+                  serverName:
+                    description: serverName is part of MCPPackageOriginOCI.
+                    minLength: 1
+                    type: string
+                required:
+                - serverName
+                type: object
+              pypi:
+                description: pypi is part of MCPPackageOrigin.
+                properties:
+                  mirror:
+                    description: mirror is part of MCPPackageOriginPyPI.
+                    type: string
+                  serverName:
+                    description: serverName is part of MCPPackageOriginPyPI.
+                    minLength: 1
+                    type: string
+                  version:
+                    description: version is part of MCPPackageOriginPyPI.
+                    minLength: 1
+                    type: string
+                required:
+                - serverName
+                - version
+                type: object
+              type:
+                description: type is part of MCPPackageOrigin.
+                type: string
+            required:
+            - identifier
+            - type
+            type: object
+          transport:
+            description: transport is part of MCPPackage.
+            properties:
+              path:
+                description: path is part of MCPTransport.
+                type: string
+              port:
+                description: port is part of MCPTransport.
+                type: integer
+              type:
+                description: type is part of MCPTransport.
+                minLength: 1
+                type: string
+            required:
+            - type
+            type: object
+        required:
+        - origin
+        - transport
+        type: object
+      repository:
+        description: repository links to the source code the package was built from.
+        properties:
+          branch:
+            description: branch is part of Repository.
+            type: string
+          commit:
+            description: commit is part of Repository.
+            type: string
+          credentialsRef:
+            description: |-
+              credentialsRef names a Secret holding credentials for a private
+              repository. Git needs a pair, so resolvers read username/password.
+            properties:
+              name:
+                description: name is part of LocalSecretReference.
+                minLength: 1
+                type: string
+            required:
+            - name
+            type: object
+          subfolder:
+            description: subfolder is part of Repository.
+            type: string
+          url:
+            description: url is part of Repository.
+            type: string
+        type: object
+    type: object
+  title:
+    description: title is part of MCPServerSpec.
+    type: string
+type: object

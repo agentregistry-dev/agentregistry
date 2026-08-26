@@ -1,0 +1,46 @@
+description: SkillSpec is the skill resource's declarative body.
+properties:
+  description:
+    description: description is part of SkillSpec.
+    type: string
+  iconUrl:
+    description: |-
+      iconUrl is the image a catalog UI shows for this skill. Either an
+      absolute https:// URL or a root-relative path served by the UI.
+    type: string
+  source:
+    description: source is part of SkillSpec.
+    properties:
+      repository:
+        description: repository is part of SkillSource.
+        properties:
+          branch:
+            description: branch is part of Repository.
+            type: string
+          commit:
+            description: commit is part of Repository.
+            type: string
+          credentialsRef:
+            description: |-
+              credentialsRef names a Secret holding credentials for a private
+              repository. Git needs a pair, so resolvers read username/password.
+            properties:
+              name:
+                description: name is part of LocalSecretReference.
+                minLength: 1
+                type: string
+            required:
+            - name
+            type: object
+          subfolder:
+            description: subfolder is part of Repository.
+            type: string
+          url:
+            description: url is part of Repository.
+            type: string
+        type: object
+    type: object
+  title:
+    description: title is part of SkillSpec.
+    type: string
+type: object
