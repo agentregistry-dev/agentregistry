@@ -245,6 +245,16 @@ type AppOptions struct {
 	// its apply fingerprint still suppresses unchanged adapter work.
 	DeploymentDependencyKinds map[string]bool
 
+	// DeploymentControllerLeadership supplies one context for each interval in
+	// which this replica may run Deployment reconciliation. Nil preserves the
+	// default behavior of running under the application context.
+	DeploymentControllerLeadership <-chan context.Context
+
+	// DeploymentFinalized notifies lifecycle owners after required Deployment
+	// cleanup finishes and the row is purged. It allows parent
+	// reconciliation to react immediately instead of waiting for a periodic scan.
+	DeploymentFinalized func(context.Context, *v1alpha1.Deployment)
+
 	// Authorizers gates every read + write operation on the
 	// generic v1alpha1 resource handler, keyed by canonical Kind name
 	// (v1alpha1.KindAgent, v1alpha1.KindMCPServer, etc.). Downstream
