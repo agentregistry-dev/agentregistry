@@ -8,8 +8,23 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/agentregistry-dev/agentregistry/internal/client"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
+
+func TestDeploymentStatusReportsReadyFailure(t *testing.T) {
+	deployment := &v1alpha1.Deployment{Status: v1alpha1.Status{
+		Conditions: []v1alpha1.Condition{{
+			Type:   "Ready",
+			Status: v1alpha1.ConditionFalse,
+			Reason: "Failed",
+		}},
+	}}
+
+	require.Equal(t, "failed", DeploymentStatus(deployment))
+}
 
 func TestListDeploymentsDefaultsOriginManaged(t *testing.T) {
 	var rawQuery string

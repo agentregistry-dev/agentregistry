@@ -13,6 +13,10 @@ import (
 // exact-match equality after admission.
 var KnownRuntimeTypes = map[string]struct{}{}
 
+// RuntimeConfigValidators lets runtime packages register admission checks
+// without coupling the API package to concrete adapter implementations.
+var RuntimeConfigValidators = map[string]func(map[string]any) error{}
+
 // Validate runs Runtime's structural checks and canonicalizes
 // Spec.Type to its CamelCase form.
 //
@@ -37,6 +41,7 @@ func (r *Runtime) Validate() error {
 	} else if canonical, ok := canonicalRuntimeType(r.Spec.Type); ok {
 		r.Spec.Type = canonical
 		errs = append(errs, validateMicrosoftRuntime(r.Spec)...)
+		errs = append(errs, validateRegisteredRuntimeConfig(canonical, r.Spec.Config)...)
 	} else {
 		errs.Append("spec.type",
 			fmt.Errorf("%w: %q (known: %v)", ErrUnknownRuntimeType, r.Spec.Type, knownRuntimeTypeNames()))
@@ -44,6 +49,20 @@ func (r *Runtime) Validate() error {
 	if len(errs) == 0 {
 		return nil
 	}
+	return errs
+}
+
+func validateRegisteredRuntimeConfig(runtimeType string, config map[string]any) FieldErrors {
+	validate := RuntimeConfigValidators[runtimeType]
+	if validate == nil {
+		return nil
+	}
+	err := validate(config)
+	if err == nil {
+		return nil
+	}
+	var errs FieldErrors
+	errs.Append("spec.config", err)
 	return errs
 }
 

@@ -40,7 +40,7 @@ endif
 ifndef VERSION
 VERSION := $(shell git describe --tags --always 2>/dev/null | grep v || echo "v0.0.0-g$(GIT_COMMIT)")
 endif
-KAGENT_VERSION ?= v0.8.0-beta6
+KAGENT_VERSION ?= v0.10.0-rc3
 ifndef KAGENT_HELM_VERSION
 KAGENT_HELM_VERSION := $(shell echo $(KAGENT_VERSION) | sed 's/^v//')
 endif
@@ -427,18 +427,18 @@ install-kagent-controller: ## Deploy kagent controller (minimal, no agents/tools
 	  --version $(KAGENT_HELM_VERSION) \
 	  --set ui.replicas=0 \
 	  --set kagent-tools.enabled=false \
-	  --set tools.grafana-mcp.enabled=false \
-	  --set tools.querydoc.enabled=false \
-	  --set agents.argo-rollouts-agent.enabled=false \
-	  --set agents.cilium-debug-agent.enabled=false \
-	  --set agents.cilium-manager-agent.enabled=false \
-	  --set agents.cilium-policy-agent.enabled=false \
-	  --set agents.helm-agent.enabled=false \
-	  --set agents.istio-agent.enabled=false \
-	  --set agents.k8s-agent.enabled=false \
-	  --set agents.kgateway-agent.enabled=false \
-	  --set agents.observability-agent.enabled=false \
-	  --set agents.promql-agent.enabled=false \
+	  --set grafana-mcp.enabled=false \
+	  --set querydoc.enabled=false \
+	  --set argo-rollouts-agent.enabled=false \
+	  --set cilium-debug-agent.enabled=false \
+	  --set cilium-manager-agent.enabled=false \
+	  --set cilium-policy-agent.enabled=false \
+	  --set helm-agent.enabled=false \
+	  --set istio-agent.enabled=false \
+	  --set k8s-agent.enabled=false \
+	  --set kgateway-agent.enabled=false \
+	  --set observability-agent.enabled=false \
+	  --set promql-agent.enabled=false \
 	  --wait \
 	  --timeout=5m
 

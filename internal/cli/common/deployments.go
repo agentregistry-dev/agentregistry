@@ -160,8 +160,13 @@ func DeploymentStatus(dep *v1alpha1.Deployment) string {
 	if dep.Metadata.DeletionTimestamp != nil {
 		return "terminating"
 	}
-	if dep.Status.IsConditionTrue("Ready") {
-		return "deployed"
+	if ready := dep.Status.GetCondition("Ready"); ready != nil {
+		if ready.Status == v1alpha1.ConditionTrue {
+			return "deployed"
+		}
+		if ready.Status == v1alpha1.ConditionFalse && ready.Reason == "Failed" {
+			return "failed"
+		}
 	}
 	if c := dep.Status.GetCondition("Degraded"); c != nil && c.Status == v1alpha1.ConditionTrue {
 		return "failed"

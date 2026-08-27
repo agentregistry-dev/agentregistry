@@ -44,6 +44,7 @@ import (
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
+	"github.com/agentregistry-dev/agentregistry/pkg/runtimes/kagent"
 	"github.com/agentregistry-dev/agentregistry/pkg/secret"
 	secretdatabase "github.com/agentregistry-dev/agentregistry/pkg/secret/database"
 	secretkubernetes "github.com/agentregistry-dev/agentregistry/pkg/secret/kubernetes"
@@ -113,6 +114,19 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 		return fmt.Errorf("initialize secret store: %w", err)
 	}
 	secretResolver := secret.NewService(secretStore)
+	kagentOptions := []kagent.Option{
+		kagent.WithDeploymentFinder(internaldb.NewKagentDeploymentFinder(stores)),
+	}
+	if secretStore != nil {
+		kagentOptions = append(kagentOptions, kagent.WithSecretResolver(secretResolver))
+	}
+	defaultKagentAdapter := kagent.New(kagentOptions...)
+	if _, ok := deploymentAdapters[kagent.RuntimeType]; !ok {
+		deploymentAdapters[kagent.RuntimeType] = defaultKagentAdapter
+	}
+	if _, ok := discoverySources[kagent.RuntimeType]; !ok {
+		discoverySources[kagent.RuntimeType] = defaultKagentAdapter.(types.DeploymentDiscoverySource)
+	}
 	if _, ok := discoverySources[v1alpha1.TypeMicrosoftFoundry]; !ok {
 		discoverySources[v1alpha1.TypeMicrosoftFoundry] = microsoftruntime.NewFoundrySource(secretResolver)
 	}
