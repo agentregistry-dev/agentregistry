@@ -103,22 +103,28 @@ func (a *adapter) DesiredFingerprint(
 ) (string, error) {
 	options := types.ApplyFingerprintOptions{AdapterType: RuntimeType}
 	agent, ok := input.Target.(*v1alpha1.Agent)
-	if ok && input.Deployment != nil &&
-		(len(agent.Spec.MCPServers) > 0 || len(input.Deployment.Spec.DeploymentRefs) > 0) {
-		config, err := resolveAgentMCPConfig(ctx, input, agent, a.findDeployment)
-		fingerprint := agentMCPFingerprint{Config: config}
-		if err != nil {
-			if errors.Is(err, errDependencyNotReady) {
-				return "", err
-			}
-			if !errors.Is(err, errInvalidDependency) &&
-				!errors.Is(err, errUnsupported) {
-				return "", err
-			}
-			fingerprint.Error = err.Error()
-		}
-		options.Extra = fingerprint
+	if !ok || input.Deployment == nil {
+		return types.DefaultApplyFingerprint(ctx, input, options)
 	}
+	hasMCPDependencies := len(agent.Spec.MCPServers) > 0 ||
+		len(input.Deployment.Spec.DeploymentRefs) > 0
+	if !hasMCPDependencies {
+		return types.DefaultApplyFingerprint(ctx, input, options)
+	}
+
+	config, err := resolveAgentMCPConfig(ctx, input, agent, a.findDeployment)
+	fingerprint := agentMCPFingerprint{Config: config}
+	if err != nil {
+		if errors.Is(err, errDependencyNotReady) {
+			return "", err
+		}
+		if !errors.Is(err, errInvalidDependency) &&
+			!errors.Is(err, errUnsupported) {
+			return "", err
+		}
+		fingerprint.Error = err.Error()
+	}
+	options.Extra = fingerprint
 	return types.DefaultApplyFingerprint(ctx, input, options)
 }
 

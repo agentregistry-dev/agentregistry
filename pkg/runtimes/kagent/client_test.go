@@ -127,7 +127,7 @@ func TestEnsureAgentPostsExpectedPayload(t *testing.T) {
 	var gotBody string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
-		require.NoError(t, err)
+		assert.NoError(t, err)
 		gotBody = string(body)
 		w.Write([]byte(`{"error":false}`))
 	}))
@@ -261,7 +261,7 @@ func TestEnsureRemoteToolServerPostsExpectedPayload(t *testing.T) {
 		gotPath = r.URL.Path
 		gotUserID = r.Header.Get("X-User-ID")
 		body, err := io.ReadAll(r.Body)
-		require.NoError(t, err)
+		assert.NoError(t, err)
 		gotBody = string(body)
 		w.WriteHeader(http.StatusCreated)
 		w.Write([]byte(`{"error":false,"data":{}}`))
@@ -303,7 +303,7 @@ func TestEnsureSourceToolServerPostsExpectedPayload(t *testing.T) {
 	var gotBody string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
-		require.NoError(t, err)
+		assert.NoError(t, err)
 		gotBody = string(body)
 		w.WriteHeader(http.StatusCreated)
 		w.Write([]byte(`{"error":false,"data":{}}`))

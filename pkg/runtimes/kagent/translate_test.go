@@ -464,7 +464,7 @@ func TestBuildBYOAgentRejectsDeclarative(t *testing.T) {
 	in := byoApplyInput()
 	in.Target.(*v1alpha1.Agent).Spec.Source = nil
 	_, err := buildTestBYOAgent(context.Background(), in, runtimeConfig{})
-	assert.ErrorIs(t, err, errUnsupported)
+	require.ErrorIs(t, err, errUnsupported)
 	assert.ErrorContains(t, err, "kagent agent requires spec.source.image")
 }
 
@@ -846,7 +846,10 @@ func TestPackageRunnerRejectsMultipleOriginConfigurations(t *testing.T) {
 		},
 	}
 
-	_, _, _, err := packageRunner(pkg)
+	image, command, args, err := packageRunner(pkg)
+	require.Empty(t, image)
+	require.Empty(t, command)
+	require.Nil(t, args)
 	require.ErrorContains(t, err, "exactly one")
 }
 
