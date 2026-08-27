@@ -168,10 +168,18 @@ func validateKagentURL(rawURL string) (string, error) {
 }
 
 func rejectRawToken(config map[string]any) error {
-	authValue, found := config["auth"]
-	if !found {
-		return nil
+	for key, authValue := range config {
+		if !strings.EqualFold(key, "auth") {
+			continue
+		}
+		if err := rejectRawAuthToken(authValue); err != nil {
+			return err
+		}
 	}
+	return nil
+}
+
+func rejectRawAuthToken(authValue any) error {
 	data, err := json.Marshal(authValue)
 	if err != nil {
 		return fmt.Errorf("encode kagent runtime auth config: %w", err)
@@ -186,6 +194,15 @@ func rejectRawToken(config map[string]any) error {
 		}
 	}
 	return nil
+}
+
+func hasKeyFold(values map[string]any, want string) bool {
+	for key := range values {
+		if strings.EqualFold(key, want) {
+			return true
+		}
+	}
+	return false
 }
 
 func validateAuthConfig(auth authConfig) error {
@@ -208,7 +225,7 @@ func validateAuthConfig(auth authConfig) error {
 }
 
 func decodeDeployConfig(m map[string]any, targetKind string) (deployConfig, error) {
-	if _, found := m["secretRefs"]; found && targetKind != v1alpha1.KindMCPServer {
+	if hasKeyFold(m, "secretRefs") && targetKind != v1alpha1.KindMCPServer {
 		return deployConfig{}, fmt.Errorf("secretRefs is only supported for MCPServer deployments")
 	}
 	var cfg deployConfig

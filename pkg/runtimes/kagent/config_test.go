@@ -57,6 +57,7 @@ func TestDecodeRuntimeConfig(t *testing.T) {
 		{name: "missing kagentUrl", in: map[string]any{"namespace": "x"}, wantErr: "kagentUrl is required"},
 		{name: "bad namespace", in: map[string]any{"kagentUrl": "http://k", "namespace": "Bad_NS"}, wantErr: "namespace"},
 		{name: "raw token rejected", in: map[string]any{"kagentUrl": "http://k", "auth": map[string]any{"token": "plaintext"}}, wantErr: "auth.token is not supported"},
+		{name: "case variant raw token rejected", in: map[string]any{"kagentUrl": "http://k", "Auth": map[string]any{"Token": "plaintext"}}, wantErr: "auth.token is not supported"},
 		{name: "secret key required", in: map[string]any{"kagentUrl": "http://k", "auth": map[string]any{"secretRef": map[string]any{"name": "kagent"}}}, wantErr: "secretRef.key is required"},
 		{name: "secret namespace rejected", in: map[string]any{"kagentUrl": "http://k", "auth": map[string]any{"secretRef": map[string]any{"namespace": "other", "name": "kagent", "key": "token"}}}, wantErr: "secretRef.namespace is not supported"},
 	}
@@ -85,6 +86,14 @@ func TestDecodeRuntimeConnectionConfigIgnoresWorkloadFields(t *testing.T) {
 		URL:       "http://kagent.kagent.svc:8083",
 		Namespace: "kagent",
 	}, got)
+}
+
+func TestDecodeRuntimeConnectionConfigRejectsCaseVariantRawToken(t *testing.T) {
+	_, err := decodeRuntimeConnectionConfig(map[string]any{
+		"kagentUrl": "http://kagent.kagent.svc:8083",
+		"Auth":      map[string]any{"Token": "plaintext"},
+	})
+	require.ErrorContains(t, err, "auth.token is not supported")
 }
 
 func TestDecodeRuntimeURL(t *testing.T) {
@@ -163,7 +172,7 @@ func TestRuntimeAdmissionRejectsCaseVariantRawKagentToken(t *testing.T) {
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "r"},
 		Spec: v1alpha1.RuntimeSpec{Type: RuntimeType, Config: map[string]any{
 			"kagentUrl": "https://kagent.example.com",
-			"auth":      map[string]any{"Token": "plaintext"},
+			"Auth":      map[string]any{"Token": "plaintext"},
 		}},
 	}
 
@@ -181,6 +190,8 @@ func TestDecodeDeployConfig(t *testing.T) {
 		{name: "mcp secretRefs", in: map[string]any{"namespace": "team-a", "secretRefs": []any{"s1"}}, kind: v1alpha1.KindMCPServer,
 			want: deployConfig{SecretRefs: []string{"s1"}}},
 		{name: "agent rejects secretRefs", in: map[string]any{"secretRefs": []any{"s1"}}, kind: v1alpha1.KindAgent,
+			wantErr: "secretRefs is only supported for MCPServer"},
+		{name: "agent rejects case variant secretRefs", in: map[string]any{"SecretRefs": []any{"s1"}}, kind: v1alpha1.KindAgent,
 			wantErr: "secretRefs is only supported for MCPServer"},
 		{name: "invalid secret name", in: map[string]any{"secretRefs": []any{"Bad_Name"}}, kind: v1alpha1.KindMCPServer,
 			wantErr: "not a valid Kubernetes Secret name"},
