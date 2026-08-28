@@ -1,6 +1,6 @@
 //go:build integration
 
-package database
+package kagent
 
 import (
 	"context"
@@ -83,7 +83,7 @@ func TestKagentDeploymentFinderMatchesManagedTargetAndRuntime(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	deployment, found, err := NewKagentDeploymentFinder(stores)(
+	deployment, found, err := NewStoreDeploymentFinder(stores[v1alpha1.KindDeployment])(
 		context.Background(),
 		v1alpha1.ResourceRef{
 			Kind:      v1alpha1.KindMCPServer,

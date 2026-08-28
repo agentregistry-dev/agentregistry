@@ -115,7 +115,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	}
 	secretResolver := secret.NewService(secretStore)
 	kagentOptions := []kagent.Option{
-		kagent.WithDeploymentFinder(internaldb.NewKagentDeploymentFinder(stores)),
+		kagent.WithDeploymentFinder(kagent.NewStoreDeploymentFinder(stores[v1alpha1.KindDeployment])),
 	}
 	if secretStore != nil {
 		kagentOptions = append(kagentOptions, kagent.WithSecretResolver(secretResolver))
