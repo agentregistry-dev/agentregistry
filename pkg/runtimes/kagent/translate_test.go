@@ -887,3 +887,9 @@ func TestPackageEnvOmitsEmptyOverrideForDeclaredVariable(t *testing.T) {
 	assert.NotContains(t, env, "OPTIONAL")
 	assert.Contains(t, env, "UNDECLARED")
 }
+
+func TestRuntimeNamespace(t *testing.T) {
+	assert.Equal(t, "kagent", RuntimeNamespace(map[string]any{"kagentUrl": "http://kagent"}))
+	assert.Equal(t, "tools", RuntimeNamespace(map[string]any{"kagentUrl": "http://kagent", "namespace": "tools"}))
+	assert.Equal(t, "kagent", RuntimeNamespace(map[string]any{"namespace": 42}))
+}

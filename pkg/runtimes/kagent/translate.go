@@ -56,6 +56,16 @@ func targetNamespace(rcfg runtimeConfig) string {
 	return defaultRuntimeNamespace
 }
 
+// RuntimeNamespace returns the namespace Kagent workloads for this runtime
+// config land in. It reads only the namespace key; Apply validates the rest.
+func RuntimeNamespace(config map[string]any) string {
+	var rcfg runtimeConfig
+	if err := decodeJSONMap(config, &rcfg); err != nil {
+		return defaultRuntimeNamespace
+	}
+	return targetNamespace(rcfg)
+}
+
 func defaultNamespace(namespace, fallback string) string {
 	if strings.TrimSpace(namespace) == "" {
 		return fallback
