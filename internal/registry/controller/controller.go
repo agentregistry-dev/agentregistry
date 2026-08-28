@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/time/rate"
 	"k8s.io/client-go/util/workqueue"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
@@ -18,6 +19,8 @@ import (
 const (
 	defaultControllerEventBatchLimit = 500
 	defaultControllerListPageSize    = 500
+	defaultControllerRetryBase       = 2 * time.Second
+	defaultControllerRetryMax        = time.Minute
 )
 
 // ErrControllerNotReady is returned until Refresh completes successfully.
@@ -47,6 +50,9 @@ type DeploymentController struct {
 	// DependencyKinds extends the built-in resource kinds whose durable events
 	// requeue Deployments. Fingerprint gating prevents unchanged adapter work.
 	DependencyKinds map[string]bool
+	// DeploymentFinalized runs after required provider cleanup, finalizer removal,
+	// and row purge. It wakes owners whose cleanup is gated on child removal.
+	DeploymentFinalized func(context.Context, *v1alpha1.Deployment)
 
 	mu         sync.RWMutex
 	checkpoint int64
@@ -402,11 +408,25 @@ func (c *DeploymentController) workQueue() workqueue.TypedRateLimitingInterface[
 	defer c.queueMu.Unlock()
 	if c.Queue == nil {
 		c.Queue = workqueue.NewTypedRateLimitingQueueWithConfig(
-			workqueue.DefaultTypedControllerRateLimiter[deploymentQueueKey](),
+			deploymentRateLimiter(),
 			workqueue.TypedRateLimitingQueueConfig[deploymentQueueKey]{Name: "deployment-controller"},
 		)
 	}
 	return c.Queue
+}
+
+// deploymentRateLimiter avoids the millisecond retries used by the client-go
+// default, which can repeatedly call slow or eventually consistent providers.
+// Each Deployment backs off from two seconds to one minute, the token bucket
+// limits aggregate bursts, and the outer limiter caps every computed delay.
+func deploymentRateLimiter() workqueue.TypedRateLimiter[deploymentQueueKey] {
+	limiter := workqueue.NewTypedMaxOfRateLimiter(
+		workqueue.NewTypedItemExponentialFailureRateLimiter[deploymentQueueKey](
+			defaultControllerRetryBase, defaultControllerRetryMax,
+		),
+		&workqueue.TypedBucketRateLimiter[deploymentQueueKey]{Limiter: rate.NewLimiter(rate.Limit(10), 100)},
+	)
+	return workqueue.NewTypedWithMaxWaitRateLimiter(limiter, defaultControllerRetryMax)
 }
 
 func (c *DeploymentController) markReady(checkpoint int64) {

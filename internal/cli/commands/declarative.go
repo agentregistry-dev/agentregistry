@@ -101,7 +101,7 @@ func init() {
 	scheme.Register(
 		mutableTypedKind(
 			"runtime", "runtimes", []string{"Runtime"},
-			[]scheme.Column{{Header: "NAME"}, {Header: "TYPE"}},
+			[]scheme.Column{{Header: "NAME"}, {Header: "TYPE"}, {Header: "STATUS"}},
 			v1alpha1.KindRuntime,
 			func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} },
 			runtimeRow,
