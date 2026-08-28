@@ -16,12 +16,12 @@ func translationFailure(
 	now time.Time,
 ) (*types.ApplyResult, error) {
 	switch {
-	case errors.Is(err, errDependencyNotReady):
+	case errors.Is(err, ErrDependencyNotReady):
 		return nil, err
 	case errors.Is(err, errInvalidDependency):
-		return failedApplyResult(target, "InvalidDependency", err.Error(), now), nil
+		return FailedApplyResult(target, "InvalidDependency", err.Error(), now), nil
 	case errors.Is(err, errUnsupported):
-		return failedApplyResult(target, "UnsupportedTarget", err.Error(), now), nil
+		return FailedApplyResult(target, "UnsupportedTarget", err.Error(), now), nil
 	default:
 		return nil, err
 	}
@@ -48,7 +48,9 @@ func successfulApplyResult(
 	return result, nil
 }
 
-func failedApplyResult(
+// FailedApplyResult builds the Ready=False/Failed result the adapter persists
+// for a rejected apply; MCPServer targets also get MCPServerURL=False.
+func FailedApplyResult(
 	target v1alpha1.Object,
 	reason, message string,
 	now time.Time,

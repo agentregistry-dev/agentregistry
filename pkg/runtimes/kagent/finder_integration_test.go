@@ -65,6 +65,45 @@ func TestKagentDeploymentFinderMatchesManagedTargetAndRuntime(t *testing.T) {
 	_, err = stores[v1alpha1.KindDeployment].Upsert(
 		context.Background(),
 		&v1alpha1.Deployment{
+			Metadata: v1alpha1.ObjectMeta{Namespace: "deployments", Name: "wrong-runtime-namespace"},
+			Spec: v1alpha1.DeploymentSpec{
+				TargetRef: v1alpha1.ResourceRef{
+					Kind:      v1alpha1.KindMCPServer,
+					Namespace: "catalog",
+					Name:      "tools",
+					Tag:       "stable",
+				},
+				RuntimeRef: v1alpha1.ResourceRef{
+					Kind:      v1alpha1.KindRuntime,
+					Namespace: "staging",
+					Name:      "kagent-prod",
+				},
+			},
+		},
+	)
+	require.NoError(t, err)
+	_, err = stores[v1alpha1.KindDeployment].Upsert(
+		context.Background(),
+		&v1alpha1.Deployment{
+			Metadata: v1alpha1.ObjectMeta{Namespace: "other", Name: "wrong-target-namespace"},
+			Spec: v1alpha1.DeploymentSpec{
+				TargetRef: v1alpha1.ResourceRef{
+					Kind: v1alpha1.KindMCPServer,
+					Name: "tools",
+					Tag:  "stable",
+				},
+				RuntimeRef: v1alpha1.ResourceRef{
+					Kind:      v1alpha1.KindRuntime,
+					Namespace: "platform",
+					Name:      "kagent-prod",
+				},
+			},
+		},
+	)
+	require.NoError(t, err)
+	_, err = stores[v1alpha1.KindDeployment].Upsert(
+		context.Background(),
+		&v1alpha1.Deployment{
 			Metadata: v1alpha1.ObjectMeta{Namespace: "deployments", Name: "tools-prod"},
 			Spec: v1alpha1.DeploymentSpec{
 				TargetRef: v1alpha1.ResourceRef{
@@ -100,4 +139,12 @@ func TestKagentDeploymentFinderMatchesManagedTargetAndRuntime(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, found)
 	require.Equal(t, "tools-prod", deployment.Metadata.Name)
+
+	_, found, err = NewStoreDeploymentFinder(stores[v1alpha1.KindDeployment])(
+		context.Background(),
+		v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Namespace: "catalog", Name: "tools", Tag: "stable"},
+		v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Namespace: "missing", Name: "kagent-prod"},
+	)
+	require.NoError(t, err)
+	require.False(t, found)
 }

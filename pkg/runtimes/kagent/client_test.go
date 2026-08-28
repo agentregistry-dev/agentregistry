@@ -46,6 +46,18 @@ func TestAuthTransportRejectsEmptyToken(t *testing.T) {
 	assert.False(t, requestSent)
 }
 
+func TestUnauthorizedIsAuthExpired(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+
+	c, err := newRESTClient(runtimeConfig{URL: srv.URL}, nil)
+	require.NoError(t, err)
+	_, err = c.listAgents(context.Background())
+	assert.ErrorIs(t, err, ErrAuthExpired)
+}
+
 func TestIsNotFound(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)

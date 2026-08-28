@@ -19,6 +19,9 @@ const (
 	defaultUserID     = "admin@kagent.dev"
 )
 
+// ErrAuthExpired reports a kagent 401; callers can map it to a retry hint.
+var ErrAuthExpired = errors.New("kagent authentication expired")
+
 var (
 	errNotFound       = errors.New("kagent resource not found")
 	errAlreadyExists  = errors.New("kagent resource already exists")
@@ -315,6 +318,9 @@ func (c *restClient) doJSON(
 	responseBody, err := io.ReadAll(httpResponse.Body)
 	if err != nil {
 		return fmt.Errorf("read kagent response: %w", err)
+	}
+	if httpResponse.StatusCode == http.StatusUnauthorized {
+		return fmt.Errorf("kagent %s %s: %w", method, path, ErrAuthExpired)
 	}
 	if httpResponse.StatusCode == http.StatusNotFound {
 		return fmt.Errorf("kagent %s %s: %w", method, path, errNotFound)

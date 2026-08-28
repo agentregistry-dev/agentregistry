@@ -160,9 +160,9 @@ func TestDesiredFingerprintWaitsForAutomaticMCPDeploymentEndpoint(t *testing.T) 
 
 	fingerprinter := New(WithDeploymentFinder(finder)).(types.DeploymentDesiredFingerprinter)
 	_, err := fingerprinter.DesiredFingerprint(context.Background(), input)
-	require.ErrorIs(t, err, errDependencyNotReady)
+	require.ErrorIs(t, err, ErrDependencyNotReady)
 	result, err := New(WithDeploymentFinder(finder)).Apply(context.Background(), input)
-	require.ErrorIs(t, err, errDependencyNotReady)
+	require.ErrorIs(t, err, ErrDependencyNotReady)
 	require.Nil(t, result)
 	mcpDeployment.Status.Conditions = []v1alpha1.Condition{{
 		Type:    mcpServerURLCondition,

@@ -317,7 +317,7 @@ func TestBuildBYOAgentWaitsForSourceBackedMCPDeploymentEndpoint(t *testing.T) {
 		runtimeConfig{},
 		findDeployment,
 	)
-	require.ErrorIs(t, err, errDependencyNotReady)
+	require.ErrorIs(t, err, ErrDependencyNotReady)
 }
 
 func TestBuildBYOAgentMatchesDeploymentRefRuntimeByName(t *testing.T) {

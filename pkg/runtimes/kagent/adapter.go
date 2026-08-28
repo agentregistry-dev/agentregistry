@@ -115,7 +115,7 @@ func (a *adapter) DesiredFingerprint(
 	config, err := resolveAgentMCPConfig(ctx, input, agent, a.findDeployment)
 	fingerprint := agentMCPFingerprint{Config: config}
 	if err != nil {
-		if errors.Is(err, errDependencyNotReady) {
+		if errors.Is(err, ErrDependencyNotReady) {
 			return "", err
 		}
 		if !errors.Is(err, errInvalidDependency) &&
@@ -132,14 +132,14 @@ func (a *adapter) Apply(ctx context.Context, input types.ApplyInput) (*types.App
 	now := time.Now().UTC()
 	runtimeConfig, err := decodeRuntimeConfig(input.Runtime.Spec.Config)
 	if err != nil {
-		return failedApplyResult(input.Target, "InvalidRuntimeConfig", err.Error(), now), nil
+		return FailedApplyResult(input.Target, "InvalidRuntimeConfig", err.Error(), now), nil
 	}
 	deploymentConfig, err := decodeDeployConfig(
 		input.Deployment.Spec.RuntimeConfig,
 		input.Deployment.Spec.TargetRef.Kind,
 	)
 	if err != nil {
-		return failedApplyResult(input.Target, "InvalidDeployConfig", err.Error(), now), nil
+		return FailedApplyResult(input.Target, "InvalidDeployConfig", err.Error(), now), nil
 	}
 	switch input.Target.(type) {
 	case *v1alpha1.Agent:
@@ -147,7 +147,7 @@ func (a *adapter) Apply(ctx context.Context, input types.ApplyInput) (*types.App
 	case *v1alpha1.MCPServer:
 		return a.applyMCPServer(ctx, input, runtimeConfig, deploymentConfig, now)
 	default:
-		return failedApplyResult(
+		return FailedApplyResult(
 			input.Target,
 			"UnsupportedTarget",
 			fmt.Sprintf("target type %T is not supported", input.Target),

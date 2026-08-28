@@ -17,8 +17,9 @@ import (
 )
 
 var (
-	errUnsupported        = errors.New("unsupported on kagent runtime")
-	errDependencyNotReady = errors.New("dependency not ready")
+	errUnsupported = errors.New("unsupported on kagent runtime")
+	// ErrDependencyNotReady marks a retryable apply: a referenced MCP Deployment is not ready yet.
+	ErrDependencyNotReady = errors.New("dependency not ready")
 	errInvalidDependency  = errors.New("invalid dependency")
 )
 
@@ -294,7 +295,7 @@ func resolveExplicitMCPDeploymentRefs(
 		if condition == nil || condition.Status != v1alpha1.ConditionTrue || strings.TrimSpace(condition.Message) == "" {
 			return nil, fmt.Errorf(
 				"%w: kagent agent deploymentRef %s/%s MCP server endpoint is not ready",
-				errDependencyNotReady, namespace, ref.Name,
+				ErrDependencyNotReady, namespace, ref.Name,
 			)
 		}
 		configs = append(configs, mcpRuntimeConfig{
@@ -353,7 +354,7 @@ func resolveImplicitKagentMCPDeployments(
 		if !found {
 			return nil, fmt.Errorf(
 				"%w: no Kagent Deployment found for source-backed MCP server %s/%s",
-				errDependencyNotReady,
+				ErrDependencyNotReady,
 				ref.Namespace,
 				ref.Name,
 			)
@@ -362,7 +363,7 @@ func resolveImplicitKagentMCPDeployments(
 		if condition == nil || condition.Status != v1alpha1.ConditionTrue || strings.TrimSpace(condition.Message) == "" {
 			return nil, fmt.Errorf(
 				"%w: Kagent MCP Deployment %s/%s endpoint is not ready",
-				errDependencyNotReady,
+				ErrDependencyNotReady,
 				deployment.Metadata.NamespaceOrDefault(),
 				deployment.Metadata.Name,
 			)
