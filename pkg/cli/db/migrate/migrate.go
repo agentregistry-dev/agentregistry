@@ -214,7 +214,7 @@ registration order. Per source, the orchestrator acquires a
 pg_advisory_lock so concurrent pods serialize, then runs
 Steps(1) → LegacyRun (if defined) → Up().
 
-		The --source flag is intentionally not applicable to up; pass it only
+The --source flag is intentionally not applicable to up; pass it only
 on the per-source subcommands (down/goto/force).`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {

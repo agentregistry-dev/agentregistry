@@ -74,7 +74,7 @@ func displayPath(projectDir string) string {
 func NewInitCmd(deps cliruntime.Deps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   cliruntime.CommandInit + " TYPE ...",
-		Short: "Scaffold a new resource project with declarative YAML",
+		Short: "Scaffold a new declarative resource project (agent, MCP server, skill, or prompt)",
 		Long: `Scaffold a new project. The generated YAML uses the ar.dev/v1alpha1
 declarative format and can be applied directly with 'arctl apply'.
 
@@ -142,7 +142,7 @@ func newInitAgentCmd(deps cliruntime.Deps) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "agent NAME",
-		Short: "Scaffold a new agent project",
+		Short: "Scaffold a new agent project with declarative YAML and framework stubs",
 		Long: `Scaffold a new agent project.
 
 Picks a framework + language interactively (or via --framework / --language).
@@ -631,7 +631,7 @@ func newInitMCPCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "mcp NAME",
-		Short: "Scaffold a new MCP server project",
+		Short: "Scaffold a new MCP server project with declarative YAML and framework stubs",
 		Long: `Scaffold a new MCP server project.
 
 NAME must be DNS-1123 subdomain: lowercase alphanumeric, hyphens, and dots; max 253 chars;
@@ -909,7 +909,7 @@ func newInitSkillCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "skill NAME",
-		Short: "Scaffold a new skill project with declarative skill.yaml",
+		Short: "Scaffold a new skill project with declarative YAML and source stubs",
 		Long: `Scaffold a new skill project. Creates a project directory
 containing a declarative skill.yaml (ar.dev/v1alpha1) and source stubs.
 
@@ -1014,7 +1014,7 @@ func newInitPromptCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "prompt NAME",
-		Short: "Create a new declarative <name>.yaml for a prompt",
+		Short: "Create a new declarative prompt YAML using the ar.dev/v1alpha1 format",
 		Long: `Create a new <name>.yaml in the current directory using the
 ar.dev/v1alpha1 declarative format. No code scaffolding is generated.
 

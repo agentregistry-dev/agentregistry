@@ -14,7 +14,7 @@ import (
 func NewCommand(sources ...migrate.Source) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "db",
-		Short: "Database operations (migrations, inspection)",
+		Short: "Database operations for the agent registry (migrations, inspection)",
 	}
 	cmd.AddCommand(migrate.NewCommand(sources...))
 

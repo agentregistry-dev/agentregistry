@@ -22,7 +22,7 @@ func NewGetCmd(deps cliruntime.Deps) *cobra.Command {
 	var labels string
 	cmd := &cobra.Command{
 		Use:   "get TYPE [NAME]",
-		Short: "List or retrieve registry resources",
+		Short: "List or retrieve registry resources by type",
 		Long: `List or retrieve registry resources by type.
 
 Supported types: agents, mcps, skills, prompts, runtimes, deployments

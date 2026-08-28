@@ -23,7 +23,7 @@ var clientConfigurers = map[string]ClientConfigurer{
 func NewCommand(_ cliruntime.Deps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   cliruntime.CommandConfigure,
-		Short: "Configure a client",
+		Short: "Create the JSON configuration a client needs to connect to arctl",
 		Long:  `Creates the .json configuration for each client, so it can connect to arctl.`,
 	}
 

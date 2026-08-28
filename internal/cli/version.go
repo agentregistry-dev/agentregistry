@@ -17,7 +17,7 @@ func NewVersionCommand(deps cliruntime.Deps) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   cliruntime.CommandVersion,
-		Short: "Show version information",
+		Short: "Display the version of the arctl CLI",
 		Long:  `Displays the version of arctl.`,
 		Run: func(cmd *cobra.Command, args []string) {
 			output := struct {
