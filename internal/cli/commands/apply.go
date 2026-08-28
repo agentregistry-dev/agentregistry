@@ -25,7 +25,7 @@ func NewApplyCmd(deps cliruntime.Deps) *cobra.Command {
 	var dryRun bool
 	cmd := &cobra.Command{
 		Use:   cliruntime.CommandApply + " -f FILE",
-		Short: "Apply one or more registry resources from a YAML file",
+		Short: "Apply one or more resources from a YAML file",
 		Long: `Apply reads a YAML file (or stdin with -f -) containing one or more resource
 documents and applies them via POST /v0/apply.
 

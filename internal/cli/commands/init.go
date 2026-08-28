@@ -74,8 +74,10 @@ func displayPath(projectDir string) string {
 func NewInitCmd(deps cliruntime.Deps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   cliruntime.CommandInit + " TYPE ...",
-		Short: "Scaffold a new declarative resource project (agent, MCP server, skill, or prompt)",
-		Long: `Scaffold a new project. The generated YAML uses the ar.dev/v1alpha1
+		Short: "Scaffold a new resource project with declarative YAML",
+		Long: `Scaffold a new declarative resource project: an agent, MCP server, skill, or prompt.
+
+The generated YAML uses the ar.dev/v1alpha1
 declarative format and can be applied directly with 'arctl apply'.
 
 Supported types:
@@ -142,8 +144,8 @@ func newInitAgentCmd(deps cliruntime.Deps) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "agent NAME",
-		Short: "Scaffold a new agent project with declarative YAML and framework stubs",
-		Long: `Scaffold a new agent project.
+		Short: "Scaffold a new agent project",
+		Long: `Scaffold a new agent project with declarative YAML and framework stubs.
 
 Picks a framework + language interactively (or via --framework / --language).
 Writes:
@@ -631,8 +633,8 @@ func newInitMCPCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "mcp NAME",
-		Short: "Scaffold a new MCP server project with declarative YAML and framework stubs",
-		Long: `Scaffold a new MCP server project.
+		Short: "Scaffold a new MCP server project",
+		Long: `Scaffold a new MCP server project with declarative YAML and framework stubs.
 
 NAME must be DNS-1123 subdomain: lowercase alphanumeric, hyphens, and dots; max 253 chars;
 each dot-separated segment must start and end with alphanumeric (max 63 chars per segment).
@@ -909,9 +911,10 @@ func newInitSkillCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "skill NAME",
-		Short: "Scaffold a new skill project with declarative YAML and source stubs",
-		Long: `Scaffold a new skill project. Creates a project directory
-containing a declarative skill.yaml (ar.dev/v1alpha1) and source stubs.
+		Short: "Scaffold a new skill project with declarative skill.yaml",
+		Long: `Scaffold a new skill project with declarative YAML and source stubs.
+
+Creates a project directory containing a skill.yaml in the ar.dev/v1alpha1 format.
 
 The generated skill.yaml can be applied directly:
   arctl apply -f NAME/skill.yaml`,
@@ -1014,7 +1017,7 @@ func newInitPromptCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "prompt NAME",
-		Short: "Create a new declarative prompt YAML using the ar.dev/v1alpha1 format",
+		Short: "Create a new declarative <name>.yaml for a prompt",
 		Long: `Create a new <name>.yaml in the current directory using the
 ar.dev/v1alpha1 declarative format. No code scaffolding is generated.
 

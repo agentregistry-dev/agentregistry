@@ -22,7 +22,8 @@ func NewWaitCmd(deps cliruntime.Deps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   cliruntime.CommandWait + " TYPE NAME",
 		Short: "Wait for a registry resource to reach a target state",
-		Long: `Wait for a registry resource to reach a target state.
+		Long: `Wait for a registry resource to reach a target state, polling until it
+gets there or the timeout expires.
 
 Only deployments are supported. Exit codes:
 
