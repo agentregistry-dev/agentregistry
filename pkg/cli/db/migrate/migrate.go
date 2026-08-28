@@ -288,7 +288,8 @@ func newDownCmd(state *commandState) *cobra.Command {
 	return &cobra.Command{
 		Use:   "down N",
 		Short: "Roll back the N most-recent applied migrations for the selected source",
-		Long: `Roll back the N most-recent applied migrations for the selected source.
+		Long: `Undo the last N applied migrations, newest first, by running each
+migration's .down.sql.
 
 Migrations whose .down.sql raises (up-only / not-reversible migrations)
 will leave the schema_migrations row marked dirty after the failed
@@ -338,7 +339,12 @@ func newStatusCmd(state *commandState) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Show how many migrations are applied vs pending across all sources",
-		Args:  cobra.NoArgs,
+		Long: `Report how many migrations are applied and how many are still pending,
+without changing anything.
+
+Counts are aggregated across every registered source, so --source is not
+accepted here. Pass --output json for a machine-readable summary.`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if state.source != "" {
 				return errors.New("status aggregates across all registered sources; --source is not applicable")

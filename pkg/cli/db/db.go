@@ -15,6 +15,10 @@ func NewCommand(sources ...migrate.Source) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "db",
 		Short: "Database operations (migrations, inspection)",
+		Long: `Work with the agent registry database directly, without starting the server.
+
+Covers schema migrations: apply pending migrations, roll them back, and inspect
+which version each registered migration source is on.`,
 	}
 	cmd.AddCommand(migrate.NewCommand(sources...))
 

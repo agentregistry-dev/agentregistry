@@ -17,7 +17,7 @@ func NewVersionCommand(deps cliruntime.Deps) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   cliruntime.CommandVersion,
-		Short: "Show version information",
+		Short: "Display the arctl CLI and registry server versions",
 		Long: `Displays the version, git commit, and build date of the arctl CLI, and of
 the registry server when one is reachable.`,
 		Run: func(cmd *cobra.Command, args []string) {

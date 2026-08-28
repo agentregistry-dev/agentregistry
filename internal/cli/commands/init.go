@@ -74,7 +74,7 @@ func displayPath(projectDir string) string {
 func NewInitCmd(deps cliruntime.Deps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   cliruntime.CommandInit + " TYPE ...",
-		Short: "Scaffold a new resource project with declarative YAML",
+		Short: "Scaffold a declarative agent, MCP, skill, or prompt project",
 		Long: `Scaffold a new declarative resource project: an agent, MCP server, skill, or prompt.
 
 The generated YAML uses the ar.dev/v1alpha1
@@ -144,7 +144,7 @@ func newInitAgentCmd(deps cliruntime.Deps) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "agent NAME",
-		Short: "Scaffold a new agent project",
+		Short: "Scaffold an agent project with YAML and framework stubs",
 		Long: `Scaffold a new agent project with declarative YAML and framework stubs.
 
 Picks a framework + language interactively (or via --framework / --language).
@@ -633,7 +633,7 @@ func newInitMCPCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "mcp NAME",
-		Short: "Scaffold a new MCP server project",
+		Short: "Scaffold an MCP server project with YAML and framework stubs",
 		Long: `Scaffold a new MCP server project with declarative YAML and framework stubs.
 
 NAME must be DNS-1123 subdomain: lowercase alphanumeric, hyphens, and dots; max 253 chars;
@@ -911,7 +911,7 @@ func newInitSkillCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "skill NAME",
-		Short: "Scaffold a new skill project with declarative skill.yaml",
+		Short: "Scaffold a skill project with YAML and source stubs",
 		Long: `Scaffold a new skill project with declarative YAML and source stubs.
 
 Creates a project directory containing a skill.yaml in the ar.dev/v1alpha1 format.
@@ -1017,7 +1017,7 @@ func newInitPromptCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "prompt NAME",
-		Short: "Create a new declarative <name>.yaml for a prompt",
+		Short: "Create a declarative prompt YAML (ar.dev/v1alpha1)",
 		Long: `Create a new <name>.yaml in the current directory using the
 ar.dev/v1alpha1 declarative format. No code scaffolding is generated.
 

@@ -17,7 +17,7 @@ import (
 func NewDeleteCmd(deps cliruntime.Deps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   cliruntime.CommandDelete + " (TYPE NAME | -f FILE)",
-		Short: "Delete a registry resource",
+		Short: "Delete a registry resource by type and name, or from a file",
 		Long: `Delete a registry resource by type and name, or from a YAML file.
 
 File mode (declarative): reads resources from the YAML file and sends DELETE /v0/apply.

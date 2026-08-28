@@ -34,7 +34,7 @@ func NewRunCmd(_ cliruntime.Deps) *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   cliruntime.CommandRun + " [DIRECTORY]",
-		Short: "Run the agent or MCP server in the current directory",
+		Short: "Run the agent or MCP server in the current project directory",
 		Long: `Run the agent or MCP server defined by the declarative YAML in the
 project directory (defaults to ".").
 
