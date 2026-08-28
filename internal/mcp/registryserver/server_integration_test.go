@@ -107,31 +107,6 @@ func TestMCPListServers_HappyPath(t *testing.T) {
 	assert.Equal(t, "Echo test server", gotOne.Spec.Description)
 }
 
-// seedMCPServer publishes one MCPServer so the authz-seam tests have a row to
-// include/exclude, and returns its namespace/name.
-func seedMCPServer(ctx context.Context, t *testing.T, stores map[string]*v1alpha1store.Store) (namespace, name string) {
-	t.Helper()
-	namespace, name = "default", "echo"
-	_, err := stores[v1alpha1.KindMCPServer].Upsert(ctx, &v1alpha1.MCPServer{
-		Metadata: v1alpha1.ObjectMeta{Namespace: namespace, Name: name},
-		Spec: v1alpha1.MCPServerSpec{
-			Description: "Echo test server",
-			Source: &v1alpha1.MCPServerSource{
-				Package: &v1alpha1.MCPPackage{
-					Origin: v1alpha1.MCPPackageOrigin{
-						Type:       v1alpha1.MCPPackageOriginTypeOCI,
-						Identifier: "ghcr.io/example/echo:1.0.0",
-						OCI:        &v1alpha1.MCPPackageOriginOCI{ServerName: "echo"},
-					},
-					Transport: v1alpha1.MCPTransport{Type: "stdio"},
-				},
-			},
-		},
-	})
-	require.NoError(t, err, "seed server")
-	return namespace, name
-}
-
 // TestRunList_Authz exercises the list read path's RBAC seam directly with fake
 // per-kind hooks: denial short-circuits, and Extra{Where+Args} reach the SQL query.
 func TestRunList_Authz(t *testing.T) {
@@ -187,6 +162,35 @@ func TestRunList_Authz(t *testing.T) {
 	})
 }
 
+func TestRunList_TagFilter(t *testing.T) {
+	ctx := context.Background()
+	pool := v1alpha1store.NewTestPool(t)
+	stores := v1alpha1store.NewStores(pool, v1alpha1store.TestSchemaRegistry())
+	store := stores[v1alpha1.KindAgent]
+
+	for _, tag := range []string{"latest", "v1", "v2"} {
+		_, err := store.Upsert(ctx, &v1alpha1.Agent{
+			Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "test-agent", Tag: tag},
+			Spec:     v1alpha1.AgentSpec{Description: tag},
+		})
+		require.NoError(t, err)
+	}
+
+	rows, _, err := runList(ctx, store, v1alpha1.KindAgent, nil, nil, listInput{Tag: "v1"})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, "v1", rows[0].Metadata.Tag)
+
+	rows, _, err = runList(ctx, store, v1alpha1.KindAgent, nil, nil, listInput{Tag: "does-not-exist"})
+	require.NoError(t, err)
+	assert.Empty(t, rows)
+
+	rows, _, err = runList(ctx, store, v1alpha1.KindAgent, nil, nil, listInput{Tag: "LATEST"})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, "latest", rows[0].Metadata.Tag)
+}
+
 // TestGetEnvelope_Authz exercises the get read path's RBAC seam: denial
 // short-circuits before the fetch, a nil authorizer returns the object, and the
 // authorizer receives the get AuthorizeInput.
@@ -218,6 +222,31 @@ func TestGetEnvelope_Authz(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, resource.AuthorizeInput{Verb: "get", Kind: v1alpha1.KindMCPServer, Namespace: ns, Name: name}, got)
 	})
+}
+
+// seedMCPServer publishes one MCPServer so the authz-seam tests have a row to
+// include/exclude, and returns its namespace/name.
+func seedMCPServer(ctx context.Context, t *testing.T, stores map[string]*v1alpha1store.Store) (namespace, name string) {
+	t.Helper()
+	namespace, name = "default", "echo"
+	_, err := stores[v1alpha1.KindMCPServer].Upsert(ctx, &v1alpha1.MCPServer{
+		Metadata: v1alpha1.ObjectMeta{Namespace: namespace, Name: name},
+		Spec: v1alpha1.MCPServerSpec{
+			Description: "Echo test server",
+			Source: &v1alpha1.MCPServerSource{
+				Package: &v1alpha1.MCPPackage{
+					Origin: v1alpha1.MCPPackageOrigin{
+						Type:       v1alpha1.MCPPackageOriginTypeOCI,
+						Identifier: "ghcr.io/example/echo:1.0.0",
+						OCI:        &v1alpha1.MCPPackageOriginOCI{ServerName: "echo"},
+					},
+					Transport: v1alpha1.MCPTransport{Type: "stdio"},
+				},
+			},
+		},
+	})
+	require.NoError(t, err, "seed server")
+	return namespace, name
 }
 
 // envelopeMeta decodes just the identity of a v1alpha1 envelope, so one helper
@@ -339,6 +368,19 @@ func TestMCPCatalogTools(t *testing.T) {
 					Spec:     v1alpha1.PluginSpec{Description: "Test plugin"},
 				})
 				require.NoError(t, err, "seed plugin")
+				status := v1alpha1.PluginStatus{
+					Manifest: &v1alpha1.PluginManifest{
+						Commands: &v1alpha1.CommandsField{Map: map[string]v1alpha1.CommandEntry{
+							"docs": {Description: "Search documentation"},
+							"page": {Description: "Open a page"},
+						}},
+					},
+				}
+				statusJSON, err := json.Marshal(status)
+				require.NoError(t, err, "marshal plugin status")
+				require.NoError(t, stores[v1alpha1.KindPlugin].PatchStatus(ctx, namespace, name, taggedTag,
+					func(json.RawMessage) (json.RawMessage, error) { return statusJSON, nil },
+				), "seed plugin status")
 			},
 		},
 		{
