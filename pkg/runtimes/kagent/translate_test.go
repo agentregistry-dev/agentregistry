@@ -164,6 +164,25 @@ func TestBuildBYOAgentResolvesDeploymentModelRef(t *testing.T) {
 	})
 }
 
+func TestBuildBYOAgentFallsBackToLegacyAgentModelFields(t *testing.T) {
+	in := byoApplyInput()
+	agent := in.Target.(*v1alpha1.Agent)
+	agent.Spec.ModelProvider = "bedrock" //nolint:staticcheck
+	agent.Spec.ModelName = "us.anthropic.claude-sonnet-4-6"
+
+	got, err := buildTestBYOAgent(context.Background(), in, runtimeConfig{})
+	require.NoError(t, err)
+	assertEnvValueOnce(t, got.Spec.BYO.Deployment.Env, "MODEL_PROVIDER", "bedrock")
+	assertEnvValueOnce(t, got.Spec.BYO.Deployment.Env, "MODEL_NAME", "us.anthropic.claude-sonnet-4-6")
+
+	agent.Spec.ModelName = ""
+	got, err = buildTestBYOAgent(context.Background(), in, runtimeConfig{})
+	require.NoError(t, err)
+	for _, env := range got.Spec.BYO.Deployment.Env {
+		assert.NotContains(t, []string{"MODEL_PROVIDER", "MODEL_NAME"}, env.Name)
+	}
+}
+
 func TestBuildBYOAgentPreservesDeploymentModelEnvWithoutModelRef(t *testing.T) {
 	in := byoApplyInput()
 	in.Deployment.Spec.Env["MODEL_PROVIDER"] = "deployment-provider"

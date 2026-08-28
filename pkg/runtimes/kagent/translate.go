@@ -417,7 +417,8 @@ func resolveAgentModel(
 ) (string, string, error) {
 	modelRef := in.Deployment.Spec.ModelRef
 	if modelRef == nil {
-		return "", "", nil
+		provider, model := legacyAgentModel(in.Target)
+		return provider, model, nil
 	}
 	if in.Getter == nil {
 		return "", "", fmt.Errorf("resolve kagent agent model: object getter is required")
@@ -440,6 +441,16 @@ func resolveAgentModel(
 		return "", "", fmt.Errorf("resolve kagent agent model: got %T, want *v1alpha1.Model", obj)
 	}
 	return model.Spec.Provider, model.Spec.Model, nil
+}
+
+// legacyAgentModel honors the deprecated Agent model fields while they exist.
+// Both must be set; a half-set pair would clobber MODEL_NAME with an empty value.
+func legacyAgentModel(target v1alpha1.Object) (string, string) {
+	agent, ok := target.(*v1alpha1.Agent)
+	if !ok || agent.Spec.ModelProvider == "" || agent.Spec.ModelName == "" { //nolint:staticcheck
+		return "", ""
+	}
+	return agent.Spec.ModelProvider, agent.Spec.ModelName //nolint:staticcheck
 }
 
 // toolServerSpec holds either a remote or source-backed Kagent tool server.
