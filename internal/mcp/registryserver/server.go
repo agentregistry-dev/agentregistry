@@ -5,6 +5,11 @@
 // outputs are v1alpha1 envelopes (apiVersion/kind/metadata/spec/status).
 package registryserver
 
+// TODO(tim): Rename this package to internal/mcp/catalog to distinguish it
+// from the MCP Registry compatibility API.
+// TODO(tim): Replace NewServer's parallel maps with one per-kind configuration
+// so tool metadata and hooks are wired together.
+
 import (
 	"context"
 	"encoding/json"
