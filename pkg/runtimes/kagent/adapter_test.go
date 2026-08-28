@@ -316,9 +316,27 @@ func TestToolServerEndpointUsesDeclaredPath(t *testing.T) {
 	)
 }
 
-func TestLogsReportsUnsupported(t *testing.T) {
-	_, err := testAdapter(newFakeClient()).Logs(context.Background(), types.LogsInput{})
-	require.ErrorContains(t, err, "not supported")
+func TestLogsReturnsPersistedFailure(t *testing.T) {
+	adapter := testAdapter(newFakeClient())
+	_, err := adapter.Logs(context.Background(), types.LogsInput{})
+	require.Error(t, err)
+
+	deployment := &v1alpha1.Deployment{}
+	lines, err := adapter.Logs(context.Background(), types.LogsInput{Deployment: deployment})
+	require.NoError(t, err)
+	_, open := <-lines
+	assert.False(t, open)
+
+	deployment.Status.SetCondition(v1alpha1.Condition{
+		Type: "Ready", Status: v1alpha1.ConditionFalse, Reason: "Failed", Message: "boom",
+	})
+	lines, err = adapter.Logs(context.Background(), types.LogsInput{Deployment: deployment})
+	require.NoError(t, err)
+	line, open := <-lines
+	require.True(t, open)
+	assert.Equal(t, "boom", line.Line)
+	_, open = <-lines
+	assert.False(t, open)
 }
 
 func TestSecretResolverBuildsRuntimeTokenSource(t *testing.T) {

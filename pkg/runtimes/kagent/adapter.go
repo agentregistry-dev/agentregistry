@@ -319,8 +319,17 @@ func (a *adapter) Remove(
 	return &types.RemoveResult{Conditions: conditions}, nil
 }
 
-func (a *adapter) Logs(context.Context, types.LogsInput) (<-chan types.LogLine, error) {
-	return nil, fmt.Errorf("kagent workload logs are not supported")
+func (a *adapter) Logs(_ context.Context, in types.LogsInput) (<-chan types.LogLine, error) {
+	if in.Deployment == nil {
+		return nil, fmt.Errorf("kagent logs: deployment is required")
+	}
+	ch := make(chan types.LogLine, 1)
+	if ready := in.Deployment.Status.GetCondition("Ready"); ready != nil &&
+		ready.Status == v1alpha1.ConditionFalse && ready.Reason == "Failed" && ready.Message != "" {
+		ch <- types.LogLine{Timestamp: ready.LastTransitionTime, Stream: "stdout", Line: ready.Message}
+	}
+	close(ch)
+	return ch, nil
 }
 
 func (a *adapter) clientFor(
