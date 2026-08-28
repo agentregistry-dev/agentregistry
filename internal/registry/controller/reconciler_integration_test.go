@@ -44,6 +44,124 @@ func TestDeploymentController_EnqueuesAndExecutesApply(t *testing.T) {
 	require.Equal(t, deployment.Metadata.Generation, ready.ObservedGeneration)
 }
 
+func TestDeploymentController_ObservesApplyAfterPersistence(t *testing.T) {
+	ctx := context.Background()
+	stores := newControllerTestStores(t)
+	seedMCPServer(t, stores, "weather")
+	deployment := seedDeployment(t, stores, "observed-success", v1alpha1.DesiredStateDeployed)
+
+	adapter := &recordingApplyObserverAdapter{stores: stores}
+	controller := newDeploymentTestController(stores, adapter)
+	_, err := controller.FullReconcile(ctx)
+	require.NoError(t, err)
+
+	processed, err := controller.RunOnce(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, processed)
+	require.Equal(t, int32(1), adapter.observeCalls.Load())
+	require.Equal(t, deployment, adapter.observedInput.Deployment)
+	require.NotNil(t, adapter.observedResult)
+	require.Len(t, adapter.observedResult.Conditions, 1)
+	require.Equal(t, v1alpha1.ConditionTrue, adapter.observedResult.Conditions[0].Status)
+	require.NoError(t, adapter.observedErr)
+	require.True(t, adapter.persisted.Load())
+}
+
+func TestDeploymentController_ObservesAdapterApplyFailure(t *testing.T) {
+	ctx := context.Background()
+	stores := newControllerTestStores(t)
+	seedMCPServer(t, stores, "weather")
+	deployment := seedDeployment(t, stores, "observed-apply-error", v1alpha1.DesiredStateDeployed)
+	applyErr := errors.New("apply failed")
+
+	adapter := &recordingApplyObserverAdapter{
+		recordingDeploymentAdapter: recordingDeploymentAdapter{applyErr: applyErr},
+		stores:                     stores,
+	}
+	controller := newDeploymentTestController(stores, adapter)
+	_, err := controller.FullReconcile(ctx)
+	require.NoError(t, err)
+
+	processed, err := controller.RunOnce(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, processed)
+	require.Equal(t, int32(1), adapter.observeCalls.Load())
+	require.Equal(t, deployment, adapter.observedInput.Deployment)
+	require.Nil(t, adapter.observedResult)
+	require.ErrorIs(t, adapter.observedErr, applyErr)
+	require.False(t, adapter.persisted.Load())
+}
+
+func TestDeploymentController_ObservesApplyPersistenceFailure(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	stores := newControllerTestStores(t)
+	seedMCPServer(t, stores, "weather")
+	deployment := seedDeployment(t, stores, "observed-persist-error", v1alpha1.DesiredStateDeployed)
+
+	adapter := &cancellingApplyObserverAdapter{
+		recordingApplyObserverAdapter: recordingApplyObserverAdapter{stores: stores},
+		cancel:                        cancel,
+	}
+	controller := newDeploymentTestController(stores, adapter)
+	_, err := controller.FullReconcile(ctx)
+	require.NoError(t, err)
+
+	processed, err := controller.RunOnce(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, processed)
+	require.Equal(t, int32(1), adapter.observeCalls.Load())
+	require.Equal(t, deployment, adapter.observedInput.Deployment)
+	require.NotNil(t, adapter.observedResult)
+	require.Len(t, adapter.observedResult.Conditions, 1)
+	require.Equal(t, v1alpha1.ConditionTrue, adapter.observedResult.Conditions[0].Status)
+	require.ErrorIs(t, adapter.observedErr, context.Canceled)
+	require.False(t, adapter.persisted.Load())
+}
+
+func TestDeploymentController_DoesNotObserveUnchangedApply(t *testing.T) {
+	ctx := context.Background()
+	stores := newControllerTestStores(t)
+	seedMCPServer(t, stores, "weather")
+	seedDeployment(t, stores, "observed-unchanged", v1alpha1.DesiredStateDeployed)
+
+	adapter := &recordingApplyObserverAdapter{stores: stores}
+	controller := newDeploymentTestController(stores, adapter)
+	_, err := controller.FullReconcile(ctx)
+	require.NoError(t, err)
+	processed, err := controller.RunOnce(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, processed)
+
+	_, err = controller.FullReconcile(ctx)
+	require.NoError(t, err)
+	processed, err = controller.RunOnce(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, processed)
+	require.Equal(t, int32(1), adapter.applyCalls.Load())
+	require.Equal(t, int32(1), adapter.observeCalls.Load())
+}
+
+func TestDeploymentController_AdapterWithoutObserverIsUnchanged(t *testing.T) {
+	ctx := context.Background()
+	stores := newControllerTestStores(t)
+	seedMCPServer(t, stores, "weather")
+	deployment := seedDeployment(t, stores, "without-observer", v1alpha1.DesiredStateDeployed)
+
+	adapter := &recordingDeploymentAdapter{}
+	controller := newDeploymentTestController(stores, adapter)
+	_, err := controller.FullReconcile(ctx)
+	require.NoError(t, err)
+
+	processed, err := controller.RunOnce(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, processed)
+	require.Equal(t, int32(1), adapter.applyCalls.Load())
+
+	got := loadDeployment(t, stores, deployment.Metadata.Name)
+	require.NotNil(t, got.Status.GetCondition("Ready"))
+}
+
 func TestDeploymentController_SkipsUnchangedApplyAfterRepairReconcile(t *testing.T) {
 	ctx := context.Background()
 	stores := newControllerTestStores(t)
@@ -548,6 +666,69 @@ type recordingDeploymentAdapter struct {
 	lastApplyGeneration atomic.Int64
 	applyErr            error
 	removeErr           error
+}
+
+type recordingApplyObserverAdapter struct {
+	recordingDeploymentAdapter
+	stores         map[string]*v1alpha1store.Store
+	observeCalls   atomic.Int32
+	observedInput  types.ApplyInput
+	observedResult *types.ApplyResult
+	observedErr    error
+	persisted      atomic.Bool
+}
+
+func (a *recordingApplyObserverAdapter) ObserveApply(
+	_ context.Context,
+	input types.ApplyInput,
+	result *types.ApplyResult,
+	err error,
+) {
+	a.observeCalls.Add(1)
+	a.observedInput = input
+	a.observedResult = result
+	a.observedErr = err
+	a.persisted.Store(readyConditionPersisted(a.stores, input.Deployment))
+}
+
+type cancellingApplyObserverAdapter struct {
+	recordingApplyObserverAdapter
+	cancel context.CancelFunc
+}
+
+func (a *cancellingApplyObserverAdapter) Apply(
+	ctx context.Context,
+	input types.ApplyInput,
+) (*types.ApplyResult, error) {
+	result, err := a.recordingDeploymentAdapter.Apply(ctx, input)
+	a.cancel()
+	return result, err
+}
+
+func readyConditionPersisted(stores map[string]*v1alpha1store.Store, deployment *v1alpha1.Deployment) bool {
+	if deployment == nil {
+		return false
+	}
+	store := stores[v1alpha1.KindDeployment]
+	if store == nil {
+		return false
+	}
+	raw, err := store.GetLatestIncludingTerminating(
+		context.Background(),
+		deployment.Metadata.NamespaceOrDefault(),
+		deployment.Metadata.Name,
+	)
+	if err != nil {
+		return false
+	}
+	storedDeployment, err := v1alpha1.EnvelopeFromRaw(func() *v1alpha1.Deployment {
+		return &v1alpha1.Deployment{}
+	}, raw, v1alpha1.KindDeployment)
+	if err != nil {
+		return false
+	}
+	ready := storedDeployment.Status.GetCondition("Ready")
+	return ready != nil && ready.Status == v1alpha1.ConditionTrue
 }
 
 func (a *recordingDeploymentAdapter) Type() string { return "Test" }

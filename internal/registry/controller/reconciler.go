@@ -118,15 +118,32 @@ func (c *DeploymentController) apply(ctx context.Context, deployment *v1alpha1.D
 	}
 	result, err := adapter.Apply(ctx, input)
 	if err != nil {
+		observeApply(ctx, adapter, input, nil, err)
 		if errors.Is(err, v1alpha1.ErrDanglingRef) {
 			return c.blockReference(ctx, deployment, err)
 		}
 		return "", "", fmt.Errorf("adapter %q apply: %w", adapter.Type(), err)
 	}
 	if err := c.persistApplyResult(ctx, deployment, result, fingerprint, forceToken, fingerprintResult.Dependencies); err != nil {
+		observeApply(ctx, adapter, input, result, err)
 		return "", "", err
 	}
+	observeApply(ctx, adapter, input, result, nil)
 	return "success", "deployment applied", nil
+}
+
+func observeApply(
+	ctx context.Context,
+	adapter types.DeploymentAdapter,
+	in types.ApplyInput,
+	result *types.ApplyResult,
+	err error,
+) {
+	observer, ok := adapter.(types.DeploymentApplyObserver)
+	if !ok {
+		return
+	}
+	observer.ObserveApply(ctx, in, result, err)
 }
 
 func (c *DeploymentController) remove(ctx context.Context, deployment *v1alpha1.Deployment) (string, string, error) {

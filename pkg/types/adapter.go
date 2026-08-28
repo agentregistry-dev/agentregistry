@@ -172,6 +172,19 @@ type LogLine struct {
 	Line      string
 }
 
+// DeploymentApplyObserver is an optional adapter capability for observing
+// completed Apply attempts. Successful results are observed after persistence;
+// adapter and persistence errors are observed, while unchanged applies are
+// omitted. Implementations must be best-effort.
+type DeploymentApplyObserver interface {
+	ObserveApply(
+		ctx context.Context,
+		in ApplyInput,
+		result *ApplyResult,
+		err error,
+	)
+}
+
 // DeploymentDiscoverySource is an optional adapter capability for runtimes
 // that can list provider-observed workloads. Implementers MUST NOT write
 // directly to Deployment storage; the discovery controller is the single
