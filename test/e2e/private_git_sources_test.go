@@ -155,14 +155,14 @@ func getPrivateGitResource[T any](t *testing.T, regURL, resource, name, tag stri
 func requirePrivateGitFixture(t *testing.T) {
 	t.Helper()
 	manifest := privateGitTestdata("private_git_fixture.yaml")
-	cmd := exec.Command("kubectl", "--context", e2eKubeContext, "apply", "-f", manifest)
+	cmd := exec.Command("kubectl", "--context", KubeContext, "apply", "-f", manifest)
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "apply private Git fixture: %s", string(out))
 
 	t.Cleanup(func() {
 		t.Logf("Deleting private Git fixture from %s", manifest)
 		cmd := exec.Command(
-			"kubectl", "--context", e2eKubeContext,
+			"kubectl", "--context", KubeContext,
 			"delete", "-f", manifest,
 			"--ignore-not-found", "--wait=false",
 		)
@@ -172,7 +172,7 @@ func requirePrivateGitFixture(t *testing.T) {
 	})
 
 	cmd = exec.Command(
-		"kubectl", "--context", e2eKubeContext,
+		"kubectl", "--context", KubeContext,
 		"-n", privateGitFixtureNamespace,
 		"rollout", "status", "deployment/"+privateGitFixtureName,
 		"--timeout=120s",
@@ -182,7 +182,7 @@ func requirePrivateGitFixture(t *testing.T) {
 
 	t.Logf("Waiting for private Git fixture Service endpoints")
 	cmd = exec.Command(
-		"kubectl", "--context", e2eKubeContext,
+		"kubectl", "--context", KubeContext,
 		"-n", privateGitFixtureNamespace,
 		"wait", "--for=jsonpath={.subsets[0].addresses[0].ip}",
 		"endpoints/"+privateGitFixtureName,
