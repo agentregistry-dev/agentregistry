@@ -77,10 +77,10 @@ func TestRuntimeGet_YAMLOutputPreservesCanonicalEnvelope(t *testing.T) {
 		"reconcile.agentregistry.dev/force": "2026-06-16T12:00:00Z",
 	}
 	srv := runtimeTestServer(t, runtimes)
-	setupClientForServer(t, srv)
+	deps := setupClientForServer(t, srv)
 
 	out := &bytes.Buffer{}
-	cmd := commands.NewGetCmd(declarativeTestDeps(nil))
+	cmd := commands.NewGetCmd(deps)
 	cmd.SetOut(out)
 	cmd.SetArgs([]string{"runtime", "my-kagent", "-o", "yaml"})
 	require.NoError(t, cmd.Execute())
@@ -105,10 +105,10 @@ func TestRuntimeGet_TableOutput(t *testing.T) {
 	}
 	runtimes[0].Status.SetCondition(v1alpha1.Condition{Type: statusapi.ConditionTypeReady, Status: v1alpha1.ConditionTrue})
 	srv := runtimeTestServer(t, runtimes)
-	setupClientForServer(t, srv)
+	deps := setupClientForServer(t, srv)
 
 	out := &bytes.Buffer{}
-	cmd := commands.NewGetCmd(declarativeTestDeps(nil))
+	cmd := commands.NewGetCmd(deps)
 	cmd.SetOut(out)
 	cmd.SetArgs([]string{"runtime", "my-kagent"})
 	require.NoError(t, cmd.Execute())
@@ -126,10 +126,10 @@ func TestRuntimeGet_ReturnsMatchByNamespaceName(t *testing.T) {
 	teamRuntime.Metadata.Namespace = "team-a"
 	runtimes := []v1alpha1.Runtime{defaultRuntime, teamRuntime}
 	srv := runtimeTestServer(t, runtimes)
-	setupClientForServer(t, srv)
+	deps := setupClientForServer(t, srv)
 
 	out := &bytes.Buffer{}
-	cmd := commands.NewGetCmd(declarativeTestDeps(nil))
+	cmd := commands.NewGetCmd(deps)
 	cmd.SetOut(out)
 	cmd.SetArgs([]string{"runtime", "team-a/my-kagent"})
 	require.NoError(t, cmd.Execute())

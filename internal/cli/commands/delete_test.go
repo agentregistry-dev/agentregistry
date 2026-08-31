@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/commands"
-	"github.com/agentregistry-dev/agentregistry/internal/client"
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	cliruntime "github.com/agentregistry-dev/agentregistry/pkg/cli/runtime"
 )
@@ -37,22 +36,16 @@ func newDeleteTestServer(t *testing.T, results []arv0.ApplyResult) (*httptest.Se
 	return srv, captured
 }
 
-// setupDeleteClient wires a client pointing at srv into the declarative package.
-func setupDeleteClient(t *testing.T, srv *httptest.Server) {
-	t.Helper()
-	setDeclarativeTestClient(t, client.NewClient(srv.URL, ""))
-}
-
 // TestDeleteFileModeUsesDeleteApplyEndpoint verifies that -f sends DELETE to /v0/apply.
 func TestDeleteFileModeUsesDeleteApplyEndpoint(t *testing.T) {
 	results := []arv0.ApplyResult{
 		{Kind: "agent", Name: "acme-bot", Tag: "1.0.0", Status: arv0.ApplyStatusDeleted},
 	}
 	srv, captured := newDeleteTestServer(t, results)
-	setupDeleteClient(t, srv)
+	deps := setupClientForServer(t, srv)
 
 	var buf bytes.Buffer
-	cmd := commands.NewDeleteCmd(declarativeTestDeps(nil))
+	cmd := commands.NewDeleteCmd(deps)
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)
 	cmd.SetArgs([]string{"-f", writeTempYAML(t, agentYAML)})
@@ -68,10 +61,10 @@ func TestDeleteFileModeReportsResults(t *testing.T) {
 		{Kind: "agent", Name: "acme-bot", Tag: "1.0.0", Status: arv0.ApplyStatusDeleted},
 	}
 	srv, _ := newDeleteTestServer(t, results)
-	setupDeleteClient(t, srv)
+	deps := setupClientForServer(t, srv)
 
 	var out bytes.Buffer
-	cmd := commands.NewDeleteCmd(declarativeTestDeps(nil))
+	cmd := commands.NewDeleteCmd(deps)
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 	cmd.SetArgs([]string{"-f", writeTempYAML(t, agentYAML)})
@@ -86,9 +79,9 @@ func TestDeleteFileModeFailedResultsReturnError(t *testing.T) {
 		{Kind: "agent", Name: "acme-bot", Status: arv0.ApplyStatusFailed, Error: "not found"},
 	}
 	srv, _ := newDeleteTestServer(t, results)
-	setupDeleteClient(t, srv)
+	deps := setupClientForServer(t, srv)
 
-	cmd := commands.NewDeleteCmd(declarativeTestDeps(nil))
+	cmd := commands.NewDeleteCmd(deps)
 	cmd.SetArgs([]string{"-f", writeTempYAML(t, agentYAML)})
 	err := cmd.Execute()
 	require.Error(t, err)

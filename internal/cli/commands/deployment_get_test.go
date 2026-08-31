@@ -126,10 +126,10 @@ func TestDeploymentGet_ReturnsMatchByName(t *testing.T) {
 		deploymentFixture("other", "unrelated", "1.0.0", "my-aws", "agent", "deployed"),
 	}
 	srv := deploymentTestServerV1Alpha1(t, deployments)
-	setupClientForServer(t, srv)
+	deps := setupClientForServer(t, srv)
 
 	out := &bytes.Buffer{}
-	cmd := commands.NewGetCmd(declarativeTestDeps(nil))
+	cmd := commands.NewGetCmd(deps)
 	cmd.SetOut(out)
 	cmd.SetArgs([]string{"deployment", "aws-v1"})
 	require.NoError(t, cmd.Execute())
@@ -146,10 +146,10 @@ func TestDeploymentGet_ReturnsMatchByNamespaceName(t *testing.T) {
 	teamDeployment.Metadata.Namespace = "team-a"
 
 	srv := deploymentTestServerV1Alpha1(t, []v1alpha1.Deployment{defaultDeployment, teamDeployment})
-	setupClientForServer(t, srv)
+	deps := setupClientForServer(t, srv)
 
 	out := &bytes.Buffer{}
-	cmd := commands.NewGetCmd(declarativeTestDeps(nil))
+	cmd := commands.NewGetCmd(deps)
 	cmd.SetOut(out)
 	cmd.SetArgs([]string{"deployment", "team-a/aws-v1"})
 	require.NoError(t, cmd.Execute())
@@ -167,10 +167,10 @@ func TestDeploymentGet_NotFoundError(t *testing.T) {
 		deploymentFixture("other", "unrelated", "1.0.0", "my-aws", "agent", "deployed"),
 	}
 	srv := deploymentTestServerV1Alpha1(t, deployments)
-	setupClientForServer(t, srv)
+	deps := setupClientForServer(t, srv)
 
 	out := &bytes.Buffer{}
-	cmd := commands.NewGetCmd(declarativeTestDeps(nil))
+	cmd := commands.NewGetCmd(deps)
 	cmd.SetOut(out)
 	cmd.SetArgs([]string{"deployment", "does-not-exist"})
 	err := cmd.Execute()
@@ -242,10 +242,10 @@ func TestDeploymentGet_OriginFiltering(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			srv := deploymentTestServerV1Alpha1(t, deployments)
-			setupClientForServer(t, srv)
+			deps := setupClientForServer(t, srv)
 
 			out := &bytes.Buffer{}
-			cmd := commands.NewGetCmd(declarativeTestDeps(nil))
+			cmd := commands.NewGetCmd(deps)
 			cmd.SetOut(out)
 			cmd.SetArgs(tt.args)
 			err := cmd.Execute()
@@ -278,10 +278,10 @@ func TestGetAll_DeploymentOriginDefaults(t *testing.T) {
 		v1alpha1.DeploymentOriginAnnotation: v1alpha1.DeploymentOriginDiscovered,
 	}
 	srv := deploymentTestServerV1Alpha1(t, deployments)
-	setupClientForServer(t, srv)
+	deps := setupClientForServer(t, srv)
 
 	out := &bytes.Buffer{}
-	cmd := commands.NewGetCmd(declarativeTestDeps(nil))
+	cmd := commands.NewGetCmd(deps)
 	cmd.SetOut(out)
 	cmd.SetArgs([]string{"all"})
 	require.NoError(t, cmd.Execute())
@@ -302,10 +302,10 @@ func TestDeploymentGet_YAMLOutputIncludesStatus(t *testing.T) {
 		"reconcile.agentregistry.dev/force": "2026-06-16T12:00:00Z",
 	}
 	srv := deploymentTestServerV1Alpha1(t, []v1alpha1.Deployment{deployment})
-	setupClientForServer(t, srv)
+	deps := setupClientForServer(t, srv)
 
 	out := &bytes.Buffer{}
-	cmd := commands.NewGetCmd(declarativeTestDeps(nil))
+	cmd := commands.NewGetCmd(deps)
 	cmd.SetOut(out)
 	cmd.SetArgs([]string{"deployment", "aws-v1", "-o", "yaml"})
 	require.NoError(t, cmd.Execute())

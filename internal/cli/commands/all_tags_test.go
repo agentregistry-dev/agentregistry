@@ -18,12 +18,7 @@ import (
 	cliruntime "github.com/agentregistry-dev/agentregistry/pkg/cli/runtime"
 )
 
-var activeDeclarativeTestClient *client.Client
-
 func declarativeTestDeps(c *client.Client) cliruntime.Deps {
-	if c == nil {
-		c = activeDeclarativeTestClient
-	}
 	if c == nil {
 		c = client.NewClient("http://127.0.0.1:1", "")
 	}
@@ -44,18 +39,9 @@ func (e declarativeTestEnv) Getenv(key string) string {
 	return e[key]
 }
 
-func setDeclarativeTestClient(t *testing.T, c *client.Client) {
+func setupClientForServer(t *testing.T, srv *httptest.Server) cliruntime.Deps {
 	t.Helper()
-	prev := activeDeclarativeTestClient
-	activeDeclarativeTestClient = c
-	t.Cleanup(func() {
-		activeDeclarativeTestClient = prev
-	})
-}
-
-func setupClientForServer(t *testing.T, srv *httptest.Server) {
-	t.Helper()
-	setDeclarativeTestClient(t, client.NewClient(srv.URL, ""))
+	return declarativeTestDeps(client.NewClient(srv.URL, ""))
 }
 
 // agentTagFixture builds a minimal Agent envelope at the given tag for use
@@ -113,10 +99,10 @@ func TestGet_AllTags_Agent_PrintsAllRows(t *testing.T) {
 		agentTagFixture("acme-bot", "1"),
 	}
 	srv, _ := tagsListServer(t, rows)
-	setupClientForServer(t, srv)
+	deps := setupClientForServer(t, srv)
 
 	out := &bytes.Buffer{}
-	cmd := commands.NewGetCmd(declarativeTestDeps(nil))
+	cmd := commands.NewGetCmd(deps)
 	cmd.SetOut(out)
 	cmd.SetErr(out)
 	cmd.SetArgs([]string{"agent", "acme-bot", "--all-tags"})
@@ -139,9 +125,9 @@ func TestGet_AllTags_Agent_PrintsAllRowsByNamespaceName(t *testing.T) {
 		agentTagFixture("acme-bot", "1"),
 	}
 	srv, paths := tagsListServer(t, rows)
-	setupClientForServer(t, srv)
+	deps := setupClientForServer(t, srv)
 
-	cmd := commands.NewGetCmd(declarativeTestDeps(nil))
+	cmd := commands.NewGetCmd(deps)
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
 	cmd.SetArgs([]string{"agent", "team-a/acme-bot", "--all-tags"})
@@ -158,10 +144,10 @@ func TestGet_AllTags_Agent_JSONOutput(t *testing.T) {
 		agentTagFixture("acme-bot", "1"),
 	}
 	srv, _ := tagsListServer(t, rows)
-	setupClientForServer(t, srv)
+	deps := setupClientForServer(t, srv)
 
 	out := &bytes.Buffer{}
-	cmd := commands.NewGetCmd(declarativeTestDeps(nil))
+	cmd := commands.NewGetCmd(deps)
 	cmd.SetOut(out)
 	cmd.SetErr(out)
 	cmd.SetArgs([]string{"agent", "acme-bot", "--all-tags", "-o", "json"})
@@ -177,8 +163,6 @@ func TestGet_AllTags_Agent_JSONOutput(t *testing.T) {
 // (3) `arctl get deployment NAME --all-tags` errors cleanly because
 // deployments are mutable namespace/name objects, not taggable artifacts.
 func TestGet_AllTags_DeploymentRejected(t *testing.T) {
-	setDeclarativeTestClient(t, client.NewClient("http://127.0.0.1:1", ""))
-
 	cmd := commands.NewGetCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"deployment", "summarizer", "--all-tags"})
 	err := cmd.Execute()
@@ -188,8 +172,6 @@ func TestGet_AllTags_DeploymentRejected(t *testing.T) {
 }
 
 func TestGet_AllTags_RuntimeRejected(t *testing.T) {
-	setDeclarativeTestClient(t, client.NewClient("http://127.0.0.1:1", ""))
-
 	cmd := commands.NewGetCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"runtime", "my-kagent", "--all-tags"})
 	err := cmd.Execute()
@@ -201,8 +183,6 @@ func TestGet_AllTags_RuntimeRejected(t *testing.T) {
 // (4) `arctl get agents --all-tags` (no NAME) errors — the flag
 // requires a NAME argument.
 func TestGet_AllTags_RequiresName(t *testing.T) {
-	setDeclarativeTestClient(t, client.NewClient("http://127.0.0.1:1", ""))
-
 	cmd := commands.NewGetCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"agents", "--all-tags"})
 	err := cmd.Execute()
@@ -262,10 +242,10 @@ func TestDelete_AllTags_Agent_DeletesEveryListedTag(t *testing.T) {
 		agentTagFixture("acme-bot", "latest"),
 	}
 	srv, paths := deleteAllTagsServer(t, rows, "")
-	setupClientForServer(t, srv)
+	deps := setupClientForServer(t, srv)
 
 	out := &bytes.Buffer{}
-	cmd := commands.NewDeleteCmd(declarativeTestDeps(nil))
+	cmd := commands.NewDeleteCmd(deps)
 	cmd.SetOut(out)
 	cmd.SetErr(out)
 	cmd.SetArgs([]string{"agent", "acme-bot", "--all-tags"})
@@ -283,9 +263,9 @@ func TestDelete_AllTags_Agent_DeletesEveryListedTagByNamespaceName(t *testing.T)
 		agentTagFixture("acme-bot", "latest"),
 	}
 	srv, paths := deleteAllTagsServer(t, rows, "")
-	setupClientForServer(t, srv)
+	deps := setupClientForServer(t, srv)
 
-	cmd := commands.NewDeleteCmd(declarativeTestDeps(nil))
+	cmd := commands.NewDeleteCmd(deps)
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
 	cmd.SetArgs([]string{"agent", "team-a/acme-bot", "--all-tags"})
@@ -298,8 +278,6 @@ func TestDelete_AllTags_Agent_DeletesEveryListedTagByNamespaceName(t *testing.T)
 
 // (7) `arctl delete deployment NAME --all-tags` errors cleanly.
 func TestDelete_AllTags_DeploymentRejected(t *testing.T) {
-	setDeclarativeTestClient(t, client.NewClient("http://127.0.0.1:1", ""))
-
 	cmd := commands.NewDeleteCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"deployment", "summarizer", "--all-tags"})
 	err := cmd.Execute()
@@ -310,8 +288,6 @@ func TestDelete_AllTags_DeploymentRejected(t *testing.T) {
 // (7b) `arctl delete runtime NAME --all-tags` errors cleanly —
 // Runtime has no DeleteAllTags endpoint server-side.
 func TestDelete_AllTags_ProviderRejected(t *testing.T) {
-	setDeclarativeTestClient(t, client.NewClient("http://127.0.0.1:1", ""))
-
 	cmd := commands.NewDeleteCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"runtime", "my-kagent", "--all-tags"})
 	err := cmd.Execute()
@@ -333,9 +309,9 @@ func TestDelete_AllTags_AndTagMutuallyExclusive(t *testing.T) {
 func TestDelete_AllTags_PropagatesServerFailure(t *testing.T) {
 	rows := []v1alpha1.Agent{agentTagFixture("acme-bot", "stable")}
 	srv, _ := deleteAllTagsServer(t, rows, "stable")
-	setupClientForServer(t, srv)
+	deps := setupClientForServer(t, srv)
 
-	cmd := commands.NewDeleteCmd(declarativeTestDeps(nil))
+	cmd := commands.NewDeleteCmd(deps)
 	cmd.SetArgs([]string{"agent", "acme-bot", "--all-tags"})
 	err := cmd.Execute()
 	require.Error(t, err)

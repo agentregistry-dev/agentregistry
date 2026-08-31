@@ -89,9 +89,9 @@ func TestDeploymentDelete_RemovesNamedDeployment(t *testing.T) {
 		deploymentFixture("other", "unrelated", "1.0.0", "my-aws", "agent", "pending"),
 	}
 	srv, deleted, _ := deploymentTestServer(t, deployments, nil)
-	setupClientForServer(t, srv)
+	deps := setupClientForServer(t, srv)
 
-	cmd := commands.NewDeleteCmd(declarativeTestDeps(nil))
+	cmd := commands.NewDeleteCmd(deps)
 	cmd.SetArgs([]string{"deployment", "aws-v1"})
 	require.NoError(t, cmd.Execute())
 
@@ -104,9 +104,9 @@ func TestDeploymentDelete_RemovesMatchByNamespaceName(t *testing.T) {
 	teamDeployment := deploymentFixture("aws-v1", "team-summarizer", "1.0.0", "my-aws", "agent", "pending")
 	teamDeployment.Metadata.Namespace = "team-a"
 	srv, deleted, capturedQuery := deploymentTestServer(t, []v1alpha1.Deployment{defaultDeployment, teamDeployment}, nil)
-	setupClientForServer(t, srv)
+	deps := setupClientForServer(t, srv)
 
-	cmd := commands.NewDeleteCmd(declarativeTestDeps(nil))
+	cmd := commands.NewDeleteCmd(deps)
 	cmd.SetArgs([]string{"deployment", "team-a/aws-v1"})
 	require.NoError(t, cmd.Execute())
 
@@ -121,9 +121,9 @@ func TestDeploymentDelete_NotFound(t *testing.T) {
 		deploymentFixture("aws-v2", "other-target", "2.0.0", "my-aws", "agent", "pending"),
 	}
 	srv, deleted, _ := deploymentTestServer(t, deployments, nil)
-	setupClientForServer(t, srv)
+	deps := setupClientForServer(t, srv)
 
-	cmd := commands.NewDeleteCmd(declarativeTestDeps(nil))
+	cmd := commands.NewDeleteCmd(deps)
 	cmd.SetArgs([]string{"deployment", "summarizer"})
 	err := cmd.Execute()
 	require.Error(t, err)
@@ -139,9 +139,9 @@ func TestDeploymentDelete_ServerFailure(t *testing.T) {
 	}
 	// Fail the GCP delete only.
 	srv, deleted, _ := deploymentTestServer(t, deployments, map[string]bool{"gcp-v1": true})
-	setupClientForServer(t, srv)
+	deps := setupClientForServer(t, srv)
 
-	cmd := commands.NewDeleteCmd(declarativeTestDeps(nil))
+	cmd := commands.NewDeleteCmd(deps)
 	cmd.SetArgs([]string{"deployment", "gcp-v1"})
 	err := cmd.Execute()
 	require.Error(t, err, "failure must propagate")
@@ -172,9 +172,9 @@ func TestDeploymentDelete_OmitsLegacyForceQueryParam(t *testing.T) {
 	}
 
 	srv, _, capturedQuery := deploymentTestServer(t, deployments, map[string]bool{"gcp-v1": true})
-	setupClientForServer(t, srv)
+	deps := setupClientForServer(t, srv)
 
-	cmd := commands.NewDeleteCmd(declarativeTestDeps(nil))
+	cmd := commands.NewDeleteCmd(deps)
 	cmd.SetArgs([]string{"deployment", "aws-v1"})
 	require.NoError(t, cmd.Execute())
 
