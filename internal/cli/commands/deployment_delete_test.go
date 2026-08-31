@@ -18,13 +18,13 @@ import (
 
 // deploymentTestServer builds an httptest.Server routing:
 //   - GET    /v0/deployments                → returns `list`
-//   - DELETE /v0/deployments/{name}         → status 204 unless id is in `failIDs`, then 500
+//   - DELETE /v0/deployments/{name}         → returns 404, 500, or 204 from fixture state
 //
-// Captures every received DELETE id in order for assertions.
+// Captures DELETE targets and queries after they match an existing fixture.
 func deploymentTestServer(t *testing.T, list []v1alpha1.Deployment, failIDs map[string]bool) (*httptest.Server, *[]string, *[]string) {
 	t.Helper()
 	var mu sync.Mutex
-	deleted := make([]string, 0)
+	deleteTargets := make([]string, 0)
 	capturedQuery := make([]string, 0)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v0/deployments", func(w http.ResponseWriter, r *http.Request) {
@@ -59,9 +59,24 @@ func deploymentTestServer(t *testing.T, list []v1alpha1.Deployment, failIDs map[
 			}
 			w.WriteHeader(http.StatusNotFound)
 		case http.MethodDelete:
+			namespace := r.URL.Query().Get("namespace")
+			if namespace == "" {
+				namespace = v1alpha1.DefaultNamespace
+			}
+			found := false
+			for _, d := range list {
+				if d.Metadata.Name == parts[0] && d.Metadata.NamespaceOrDefault() == namespace {
+					found = true
+					break
+				}
+			}
+			if !found {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
 			mu.Lock()
 			capturedQuery = append(capturedQuery, r.URL.RawQuery)
-			deleted = append(deleted, parts[0])
+			deleteTargets = append(deleteTargets, parts[0])
 			mu.Unlock()
 			if failIDs[parts[0]] {
 				http.Error(w, fmt.Sprintf(`{"error":"simulated delete failure for %s"}`, parts[0]), http.StatusInternalServerError)
@@ -75,7 +90,7 @@ func deploymentTestServer(t *testing.T, list []v1alpha1.Deployment, failIDs map[
 	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	return srv, &deleted, &capturedQuery
+	return srv, &deleteTargets, &capturedQuery
 }
 
 // (1) Deployment delete addresses the Deployment metadata.name. Deployments do
@@ -88,14 +103,14 @@ func TestDeploymentDelete_RemovesNamedDeployment(t *testing.T) {
 		deploymentFixture("aws-v2", "summarizer", "2.0.0", "my-aws", "agent", "pending"),
 		deploymentFixture("other", "unrelated", "1.0.0", "my-aws", "agent", "pending"),
 	}
-	srv, deleted, _ := deploymentTestServer(t, deployments, nil)
+	srv, deleteTargets, _ := deploymentTestServer(t, deployments, nil)
 	deps := setupClientForServer(t, srv)
 
 	cmd := commands.NewDeleteCmd(deps)
 	cmd.SetArgs([]string{"deployment", "aws-v1"})
 	require.NoError(t, cmd.Execute())
 
-	assert.ElementsMatch(t, []string{"aws-v1"}, *deleted,
+	assert.ElementsMatch(t, []string{"aws-v1"}, *deleteTargets,
 		"only the named Deployment should be deleted; same-target variants stay untouched")
 }
 
@@ -103,14 +118,14 @@ func TestDeploymentDelete_RemovesMatchByNamespaceName(t *testing.T) {
 	defaultDeployment := deploymentFixture("aws-v1", "default-summarizer", "1.0.0", "my-aws", "agent", "pending")
 	teamDeployment := deploymentFixture("aws-v1", "team-summarizer", "1.0.0", "my-aws", "agent", "pending")
 	teamDeployment.Metadata.Namespace = "team-a"
-	srv, deleted, capturedQuery := deploymentTestServer(t, []v1alpha1.Deployment{defaultDeployment, teamDeployment}, nil)
+	srv, deleteTargets, capturedQuery := deploymentTestServer(t, []v1alpha1.Deployment{defaultDeployment, teamDeployment}, nil)
 	deps := setupClientForServer(t, srv)
 
 	cmd := commands.NewDeleteCmd(deps)
 	cmd.SetArgs([]string{"deployment", "team-a/aws-v1"})
 	require.NoError(t, cmd.Execute())
 
-	assert.ElementsMatch(t, []string{"aws-v1"}, *deleted)
+	assert.ElementsMatch(t, []string{"aws-v1"}, *deleteTargets)
 	require.Len(t, *capturedQuery, 1)
 	assert.Equal(t, "namespace=team-a", (*capturedQuery)[0])
 }
@@ -120,7 +135,7 @@ func TestDeploymentDelete_NotFound(t *testing.T) {
 	deployments := []v1alpha1.Deployment{
 		deploymentFixture("aws-v2", "other-target", "2.0.0", "my-aws", "agent", "pending"),
 	}
-	srv, deleted, _ := deploymentTestServer(t, deployments, nil)
+	srv, deleteTargets, _ := deploymentTestServer(t, deployments, nil)
 	deps := setupClientForServer(t, srv)
 
 	cmd := commands.NewDeleteCmd(deps)
@@ -129,7 +144,7 @@ func TestDeploymentDelete_NotFound(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found",
 		"no match should surface the registry not-found sentinel")
-	assert.Empty(t, *deleted, "no DELETE requests should be issued when nothing matches")
+	assert.Empty(t, *deleteTargets, "no existing deployment should be matched for deletion")
 }
 
 func TestDeploymentDelete_ServerFailure(t *testing.T) {
@@ -138,7 +153,7 @@ func TestDeploymentDelete_ServerFailure(t *testing.T) {
 		deploymentFixture("gcp-v1", "summarizer", "1.0.0", "my-gcp", "agent", "pending"),
 	}
 	// Fail the GCP delete only.
-	srv, deleted, _ := deploymentTestServer(t, deployments, map[string]bool{"gcp-v1": true})
+	srv, deleteTargets, _ := deploymentTestServer(t, deployments, map[string]bool{"gcp-v1": true})
 	deps := setupClientForServer(t, srv)
 
 	cmd := commands.NewDeleteCmd(deps)
@@ -147,8 +162,7 @@ func TestDeploymentDelete_ServerFailure(t *testing.T) {
 	require.Error(t, err, "failure must propagate")
 	assert.Contains(t, err.Error(), "gcp-v1", "error should identify which deployment failed")
 
-	// Both DELETEs should have been attempted — we don't stop on first failure.
-	assert.ElementsMatch(t, []string{"gcp-v1"}, *deleted)
+	assert.ElementsMatch(t, []string{"gcp-v1"}, *deleteTargets)
 }
 
 // (4) --tag is rejected for every mutable namespace/name kind.

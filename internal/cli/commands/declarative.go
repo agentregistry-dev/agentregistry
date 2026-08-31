@@ -227,7 +227,7 @@ func newKindFromDescriptor(
 			return listAny(ctx, c, descriptor.Kind, opts, newObj)
 		},
 		Delete: func(ctx context.Context, c *client.Client, name, tag string) error {
-			return deleteAny(ctx, c, descriptor.Kind, name, tag, newObj)
+			return deleteAny(ctx, c, descriptor.Kind, name, tag, tagged, newObj)
 		},
 	}
 	if tagged {

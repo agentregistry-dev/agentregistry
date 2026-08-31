@@ -124,6 +124,25 @@ func TestDeleteExplicitModeWithoutTag(t *testing.T) {
 	assert.NotContains(t, err.Error(), "tag")
 }
 
+func TestDeleteExplicitUntaggedSkipsGet(t *testing.T) {
+	var requests []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, r.Method+" "+r.URL.RequestURI())
+		if r.Method == http.MethodGet {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(srv.Close)
+
+	cmd := commands.NewDeleteCmd(setupClientForServer(t, srv))
+	cmd.SetArgs([]string{"runtime", "team-a/my-aws"})
+	require.NoError(t, cmd.Execute())
+
+	assert.Equal(t, []string{"DELETE /v0/runtimes/my-aws?namespace=team-a"}, requests)
+}
+
 // TestDeleteExplicitModeRequiresTwoArgs verifies that explicit mode without two args errors.
 func TestDeleteExplicitModeRequiresTwoArgs(t *testing.T) {
 	cmd := commands.NewDeleteCmd(declarativeTestDeps(nil))
