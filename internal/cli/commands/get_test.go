@@ -202,6 +202,18 @@ func TestDeployment_NoAllTagsSupport(t *testing.T) {
 	require.Nil(t, k.DeleteAllTags, "Deployment should not expose DeleteAllTags (mutable object kind)")
 }
 
+func TestSecret_CLIRegistration(t *testing.T) {
+	for _, alias := range []string{"secret", "secrets", "Secret"} {
+		k, err := scheme.Lookup(alias)
+		require.NoError(t, err, "%q should resolve via declarative's init() registration", alias)
+		require.Equal(t, "secret", k.Kind)
+		require.Equal(t, "secrets", k.Plural)
+		require.Equal(t, []scheme.Column{
+			{Header: "NAME"}, {Header: "TYPE"}, {Header: "KEYS"}, {Header: "IMMUTABLE"},
+		}, k.TableColumns)
+	}
+}
+
 // tagGetServer serves GET /v0/agents/{name}/{tag} (specific tag)
 // and /v0/agents/{name} (latest), returning the configured
 // envelope. capturedPaths records every served path so tests can assert

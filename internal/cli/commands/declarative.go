@@ -108,6 +108,17 @@ func init() {
 	)
 	scheme.Register(
 		mutableTypedKind(
+			"secret", "secrets", []string{"Secret"},
+			[]scheme.Column{
+				{Header: "NAME"}, {Header: "TYPE"}, {Header: "KEYS"}, {Header: "IMMUTABLE"},
+			},
+			v1alpha1.KindSecret,
+			func() *v1alpha1.Secret { return &v1alpha1.Secret{} },
+			secretRow,
+		),
+	)
+	scheme.Register(
+		mutableTypedKind(
 			"deployment", "deployments", []string{"Deployment"},
 			[]scheme.Column{
 				{Header: "NAME"}, {Header: "TARGET"}, {Header: "VERSION"},

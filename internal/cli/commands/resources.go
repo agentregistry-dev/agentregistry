@@ -214,6 +214,23 @@ func runtimeRow(runtime *v1alpha1.Runtime) []string {
 	return []string{runtime.Metadata.Name, runtime.Spec.Type, runtimeStatus(runtime)}
 }
 
+func secretRow(secret *v1alpha1.Secret) []string {
+	if secret == nil {
+		return []string{"<invalid>"}
+	}
+	secretType := string(secret.Spec.Type)
+	if secretType == "" {
+		secretType = string(v1alpha1.SecretTypeOpaque)
+	}
+	keys := strings.Join(secret.Status.DataKeys, ",")
+	return []string{
+		printer.TruncateString(secret.Metadata.Name, 40),
+		secretType,
+		printer.EmptyValueOrDefault(keys, "<none>"),
+		fmt.Sprintf("%t", secret.Spec.Immutable),
+	}
+}
+
 // Runtime status labels are CLI presentation values rather than API condition
 // values. Keeping them here prevents callers from treating display text as a
 // lifecycle contract.
