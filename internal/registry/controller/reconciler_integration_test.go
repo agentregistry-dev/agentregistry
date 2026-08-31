@@ -24,7 +24,7 @@ func TestDeploymentController_EnqueuesAndExecutesApply(t *testing.T) {
 	seedMCPServer(t, stores, "weather")
 	deployment := seedDeployment(t, stores, "weather-deploy", v1alpha1.DesiredStateDeployed)
 
-	adapter := &recordingDeploymentAdapter{}
+	adapter := &recordingDeploymentAdapter{runtimeMetadata: map[string]string{types.RuntimeMetadataRemoteIDKey: "agent-123"}}
 	controller := newDeploymentTestController(stores, adapter)
 	_, err := controller.FullReconcile(ctx)
 	require.NoError(t, err)
@@ -42,6 +42,11 @@ func TestDeploymentController_EnqueuesAndExecutesApply(t *testing.T) {
 	require.NotNil(t, ready)
 	require.Equal(t, v1alpha1.ConditionTrue, ready.Status)
 	require.Equal(t, deployment.Metadata.Generation, ready.ObservedGeneration)
+	var runtimeMetadata map[string]string
+	ok, err := got.Status.GetDetailsKey(deploymentRuntimeDetailsKey, &runtimeMetadata)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, "agent-123", runtimeMetadata[types.RuntimeMetadataRemoteIDKey])
 }
 
 func TestDeploymentController_SkipsUnchangedApplyAfterRepairReconcile(t *testing.T) {
@@ -571,6 +576,7 @@ type recordingDeploymentAdapter struct {
 	lastApplyGeneration atomic.Int64
 	applyErr            error
 	removeErr           error
+	runtimeMetadata     map[string]string
 }
 
 func (a *recordingDeploymentAdapter) Type() string { return "Test" }
@@ -588,6 +594,7 @@ func (a *recordingDeploymentAdapter) Apply(_ context.Context, input types.ApplyI
 		return nil, a.applyErr
 	}
 	return &types.ApplyResult{
+		RuntimeMetadata: a.runtimeMetadata,
 		Conditions: []v1alpha1.Condition{{
 			Type:               "Ready",
 			Status:             v1alpha1.ConditionTrue,
