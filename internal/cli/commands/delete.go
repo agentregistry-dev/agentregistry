@@ -21,15 +21,15 @@ func NewDeleteCmd(deps cliruntime.Deps) *cobra.Command {
 		Short: "Delete a registry resource",
 		Long: `Delete a registry resource.
 
-File mode (declarative): reads resources from the YAML file and sends DELETE /v0/apply.
+File mode: read resources from FILE and delete them declaratively.
   arctl delete -f agent.yaml
 
-Explicit mode: specify type and name. For taggable artifacts, --tag selects an
+Explicit mode: specify type and name. For tagged kinds, --tag selects an
 exact tag and defaults to latest.
-  arctl delete TYPE NAME [--tag TAG]
+  arctl delete TYPE NAME [--tag TAG | --all-tags]
 
-TYPE must be one of: ` + supportedTypes + `
-(plural and uppercase forms also accepted)`,
+TYPE must be one of: ` + supportedTypes + `.
+Type names are case-insensitive; singular, plural, and registered aliases are accepted.`,
 		Example: `  arctl delete -f my-agent/agent.yaml
   arctl delete -f my-server/mcp.yaml
   arctl delete agent acme-summarizer --tag stable
@@ -42,8 +42,8 @@ TYPE must be one of: ` + supportedTypes + `
 		},
 	}
 	cmd.Flags().StringP("filename", "f", "", "YAML file to read resources from")
-	cmd.Flags().String("tag", "", "Specific tag to delete (taggable artifact kinds only; defaults to latest)")
-	cmd.Flags().Bool("all-tags", false, "Delete every tag of NAME (taggable artifact kinds only)")
+	cmd.Flags().String("tag", "", "Tagged kinds only: delete a specific tag (defaults to latest)")
+	cmd.Flags().Bool("all-tags", false, "Tagged kinds only: delete every tag of NAME")
 	return cmd
 }
 
