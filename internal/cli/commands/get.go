@@ -20,12 +20,13 @@ import (
 // NewGetCmd returns a new "get" cobra command.
 func NewGetCmd(deps cliruntime.Deps) *cobra.Command {
 	var labels string
+	supportedTypes := supportedKindNames(kindRegistry(deps))
 	cmd := &cobra.Command{
 		Use:   "get TYPE [NAME]",
 		Short: "List or retrieve registry resources",
 		Long: `List or retrieve registry resources by type.
 
-Supported types: agents, mcps, skills, prompts, runtimes, deployments
+Supported types: ` + supportedTypes + `
 (singular and uppercase forms also accepted, e.g. Agent, agent, agents)
 
 Examples:

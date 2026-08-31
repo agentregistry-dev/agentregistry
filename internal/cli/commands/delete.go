@@ -15,6 +15,7 @@ import (
 )
 
 func NewDeleteCmd(deps cliruntime.Deps) *cobra.Command {
+	supportedTypes := supportedKindNames(kindRegistry(deps))
 	cmd := &cobra.Command{
 		Use:   cliruntime.CommandDelete + " (TYPE NAME | -f FILE)",
 		Short: "Delete a registry resource",
@@ -27,7 +28,7 @@ Explicit mode: specify type and name. For taggable artifacts, --tag selects an
 exact tag and defaults to latest.
   arctl delete TYPE NAME [--tag TAG]
 
-TYPE must be one of: agent, mcp, skill, prompt, deployment
+TYPE must be one of: ` + supportedTypes + `
 (plural and uppercase forms also accepted)`,
 		Example: `  arctl delete -f my-agent/agent.yaml
   arctl delete -f my-server/mcp.yaml
@@ -143,10 +144,10 @@ func deleteResource(cmd *cobra.Command, kinds *scheme.Registry, c *client.Client
 		return err
 	}
 
-	// Deployments and runtimes have no tag of their own; rejecting --tag here
-	// keeps users from confusing a deployment's target tag (or a runtime's
-	// non-existent tag) with the metadata identity used for delete.
-	if tag != "" && (k.Kind == "deployment" || k.Kind == "runtime") {
+	// Mutable namespace/name resources have no tag of their own. ListTags is
+	// registered only for tagged artifacts, so use that capability instead of
+	// maintaining a second hard-coded list of mutable kinds.
+	if tag != "" && k.ListTags == nil {
 		return fmt.Errorf("--tag is not supported for %s", k.Kind)
 	}
 

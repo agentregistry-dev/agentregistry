@@ -214,6 +214,18 @@ func TestSecret_CLIRegistration(t *testing.T) {
 	}
 }
 
+func TestCommandHelpListsRegisteredKinds(t *testing.T) {
+	getCmd := commands.NewGetCmd(declarativeTestDeps(nil))
+	deleteCmd := commands.NewDeleteCmd(declarativeTestDeps(nil))
+	for _, kind := range scheme.All() {
+		t.Run(kind.Kind, func(t *testing.T) {
+			require.NotEmpty(t, kind.Plural)
+			assert.Contains(t, getCmd.Long, kind.Plural)
+			assert.Contains(t, deleteCmd.Long, kind.Plural)
+		})
+	}
+}
+
 // tagGetServer serves GET /v0/agents/{name}/{tag} (specific tag)
 // and /v0/agents/{name} (latest), returning the configured
 // envelope. capturedPaths records every served path so tests can assert

@@ -151,11 +151,9 @@ func TestDeploymentDelete_ServerFailure(t *testing.T) {
 	assert.ElementsMatch(t, []string{"gcp-v1"}, *deleted)
 }
 
-// (4) --tag is rejected for deployments and runtimes: neither kind has a tag
-// of its own, so accepting one would let users confuse the target's tag (or
-// nothing at all, for runtime) with the resource's identity.
-func TestDelete_RejectsTagForDeploymentAndRuntime(t *testing.T) {
-	for _, kind := range []string{"deployment", "runtime"} {
+// (4) --tag is rejected for every mutable namespace/name kind.
+func TestDelete_RejectsTagForMutableKinds(t *testing.T) {
+	for _, kind := range []string{"deployment", "runtime", "secret"} {
 		t.Run(kind, func(t *testing.T) {
 			cmd := commands.NewDeleteCmd(declarativeTestDeps(nil))
 			cmd.SetArgs([]string{kind, "anything", "--tag", "1.0.0"})

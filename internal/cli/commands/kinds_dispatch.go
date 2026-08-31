@@ -124,3 +124,11 @@ func kindPlural(k *scheme.Kind) string {
 	}
 	return k.Kind + "s"
 }
+
+func supportedKindNames(kinds *scheme.Registry) string {
+	names := make([]string, 0, len(kinds.All()))
+	for _, kind := range kinds.All() {
+		names = append(names, kindPlural(kind))
+	}
+	return strings.Join(names, ", ")
+}
