@@ -1,12 +1,12 @@
 //go:build e2e
 
-package e2e
+package kagent
 
 import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -95,11 +95,11 @@ func (r *e2eDocRecorder) replace(value string) string {
 	for key := range r.replacements {
 		keys = append(keys, key)
 	}
-	sort.Slice(keys, func(i, j int) bool {
-		if len(keys[i]) == len(keys[j]) {
-			return keys[i] < keys[j]
+	slices.SortFunc(keys, func(a, b string) int {
+		if len(a) == len(b) {
+			return strings.Compare(a, b)
 		}
-		return len(keys[i]) > len(keys[j])
+		return len(b) - len(a)
 	})
 	for _, key := range keys {
 		value = strings.ReplaceAll(value, key, r.replacements[key])
