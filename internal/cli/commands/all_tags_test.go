@@ -187,11 +187,7 @@ func TestGet_AllTags_DeploymentRejected(t *testing.T) {
 	assert.Contains(t, err.Error(), "deployment")
 }
 
-// (3b) `arctl get runtime NAME --all-tags` errors cleanly — Runtime
-// is a mutable namespace/name object whose store has no /tags endpoint.
-// Pin the CLI surface so a future typedKind change can't
-// silently re-expose --all-tags for Runtime.
-func TestGet_AllTags_ProviderRejected(t *testing.T) {
+func TestGet_AllTags_RuntimeRejected(t *testing.T) {
 	setDeclarativeTestClient(t, client.NewClient("http://127.0.0.1:1", ""))
 
 	cmd := commands.NewGetCmd(declarativeTestDeps(nil))
