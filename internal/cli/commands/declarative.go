@@ -56,7 +56,6 @@ func init() {
 		func() *v1alpha1.Agent { return &v1alpha1.Agent{} },
 		agentRow,
 	))
-
 	scheme.Register(typedKind(
 		"mcp", "mcps", []string{"MCPServer", "mcpserver", "mcp-server", "mcpservers"},
 		[]scheme.Column{{Header: "NAME"}, {Header: "TAG"}, {Header: "DESCRIPTION"}},
@@ -64,7 +63,6 @@ func init() {
 		func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} },
 		mcpRow,
 	))
-
 	scheme.Register(typedKind(
 		"skill", "skills", []string{"Skill"},
 		[]scheme.Column{
@@ -74,7 +72,6 @@ func init() {
 		func() *v1alpha1.Skill { return &v1alpha1.Skill{} },
 		skillRow,
 	))
-
 	scheme.Register(typedKind(
 		"prompt", "prompts", []string{"Prompt"},
 		[]scheme.Column{{Header: "NAME"}, {Header: "TAG"}, {Header: "DESCRIPTION"}},
@@ -82,7 +79,6 @@ func init() {
 		func() *v1alpha1.Prompt { return &v1alpha1.Prompt{} },
 		promptRow,
 	))
-
 	scheme.Register(typedKind(
 		"plugin", "plugins", []string{"Plugin"},
 		[]scheme.Column{{Header: "NAME"}, {Header: "TAG"}, {Header: "DESCRIPTION"}},
@@ -90,24 +86,6 @@ func init() {
 		func() *v1alpha1.Plugin { return &v1alpha1.Plugin{} },
 		pluginRow,
 	))
-
-	// Runtime is registered manually because it is a mutable namespace/name
-	// object: the server's runtime store does not expose /tags or
-	// DeleteAllTags endpoints. Routing it through
-	// typedKind would advertise --all-tags on its CLI surface and call
-	// endpoints that don't exist. The Get / Delete / List closures match
-	// what typedKind would otherwise produce; ListTags / DeleteAllTags are
-	// intentionally omitted so the dispatch layer rejects --all-tags cleanly.
-	scheme.Register(
-		mutableTypedKind(
-			"runtime", "runtimes", []string{"Runtime"},
-			[]scheme.Column{{Header: "NAME"}, {Header: "TYPE"}, {Header: "STATUS"}},
-			v1alpha1.KindRuntime,
-			func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} },
-			runtimeRow,
-		),
-	)
-
 	scheme.Register(typedKind(
 		"model", "models", []string{"Model"},
 		[]scheme.Column{
@@ -119,11 +97,15 @@ func init() {
 		modelRow,
 	))
 
-	// Deployment is registered manually because it is a mutable namespace/name
-	// object: the server's deployment store does not expose /tags or
-	// DeleteAllTags endpoints. Explicit get/delete accept either NAME or
-	// NAMESPACE/NAME; ListTags / DeleteAllTags are intentionally omitted so
-	// the dispatch layer rejects --all-tags cleanly.
+	scheme.Register(
+		mutableTypedKind(
+			"runtime", "runtimes", []string{"Runtime"},
+			[]scheme.Column{{Header: "NAME"}, {Header: "TYPE"}, {Header: "STATUS"}},
+			v1alpha1.KindRuntime,
+			func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} },
+			runtimeRow,
+		),
+	)
 	scheme.Register(
 		mutableTypedKind(
 			"deployment", "deployments", []string{"Deployment"},
