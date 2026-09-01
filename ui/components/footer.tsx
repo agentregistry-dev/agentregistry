@@ -20,15 +20,6 @@ export function Footer() {
             width={180}
             height={60}
           />
-          <span>created at</span>
-          <a
-            href="https://solo.io"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-medium text-foreground hover:text-primary transition-colors"
-          >
-            Solo.io
-          </a>
         </div>
 
         <div className="flex items-center gap-4">
