@@ -25,7 +25,6 @@ const (
 
 type adapter struct {
 	newClient          clientFactory
-	tokenSource        TokenSource
 	tokenSourceFactory TokenSourceFactory
 	secretResolver     secret.Resolver
 	findDeployment     DeploymentFinderFunc
@@ -42,11 +41,6 @@ type DeploymentFinderFunc func(
 	v1alpha1.ResourceRef,
 	v1alpha1.ResourceRef,
 ) (*v1alpha1.Deployment, bool, error)
-
-// WithTokenSource configures one token source for all Kagent runtimes.
-func WithTokenSource(source TokenSource) Option {
-	return func(a *adapter) { a.tokenSource = source }
-}
 
 // WithTokenSourceFactory resolves authentication separately for each Runtime.
 func WithTokenSourceFactory(factory TokenSourceFactory) Option {
@@ -349,8 +343,8 @@ func (a *adapter) tokenSourceFor(
 	if a.tokenSourceFactory != nil {
 		return a.tokenSourceFactory(ctx, runtime)
 	}
-	if a.tokenSource != nil || auth.SecretRef == nil {
-		return a.tokenSource, nil
+	if auth.SecretRef == nil {
+		return nil, nil
 	}
 	if a.secretResolver == nil {
 		return nil, fmt.Errorf("kagent runtime auth.secretRef requires a secret resolver")
