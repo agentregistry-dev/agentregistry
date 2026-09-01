@@ -5,6 +5,11 @@
 // outputs are v1alpha1 envelopes (apiVersion/kind/metadata/spec/status).
 package registryserver
 
+// TODO(tim): Rename this package to internal/mcp/catalog to distinguish it
+// from the MCP Registry compatibility API.
+// TODO(tim): Replace NewServer's parallel maps with one per-kind configuration
+// so tool metadata and hooks are wired together.
+
 import (
 	"context"
 	"encoding/json"
@@ -121,6 +126,7 @@ func NewServer(
 	})
 	addKindTools(server, stores[v1alpha1.KindDeployment], kindTools[*v1alpha1.Deployment]{
 		Kind:       v1alpha1.KindDeployment,
+		Mutable:    true,
 		ListName:   "list_deployments",
 		GetName:    "get_deployment",
 		ListDesc:   "List deployments as v1alpha1 envelopes with optional namespace and substring-name filters.",
@@ -131,6 +137,7 @@ func NewServer(
 	})
 	addKindTools(server, stores[v1alpha1.KindRuntime], kindTools[*v1alpha1.Runtime]{
 		Kind:       v1alpha1.KindRuntime,
+		Mutable:    true,
 		ListName:   "list_runtimes",
 		GetName:    "get_runtime",
 		ListDesc:   "List runtimes as v1alpha1 envelopes with optional namespace and substring-name filters.",
@@ -148,9 +155,10 @@ func NewServer(
 // kindTools bundles the per-kind inputs the generic addKindTools helper
 // needs to register `list_X` + `get_X` for a v1alpha1 kind. Tool names
 // are explicit (not derived from Kind) because they are user-facing in
-// Claude — `list_servers` is kept, not renamed to `list_mcpservers`.
+// Claude - `list_servers` is kept, not renamed to `list_mcpservers`.
 type kindTools[T v1alpha1.Object] struct {
 	Kind     string
+	Mutable  bool
 	ListName string
 	GetName  string
 	ListDesc string
@@ -161,13 +169,8 @@ type kindTools[T v1alpha1.Object] struct {
 	ListFilter ListFilter
 }
 
-// Schemas are built here instead of letting the MCP SDK infer them because
-// the default inference maps json.RawMessage to a byte-array schema,
-// while at marshal time a RawMessage emits the raw JSON it holds (for
-// example status.details is a JSON object). Any envelope carrying a
-// populated RawMessage fails the SDK's output validation.
-// The override only applies to json.RawMessage. A named RawMessage wrapper
-// or a plain []byte field would need its own TypeSchemas entry.
+// Explicit schemas match custom JSON marshalers rather than their Go storage
+// shapes, which would reject valid structured tool output.
 func outputSchemaFor[T any]() *jsonschema.Schema {
 	rt := reflect.TypeFor[T]()
 	if rt.Kind() == reflect.Pointer {
@@ -177,6 +180,9 @@ func outputSchemaFor[T any]() *jsonschema.Schema {
 		TypeSchemas: map[reflect.Type]*jsonschema.Schema{
 			reflect.TypeFor[json.RawMessage](): {Types: []string{
 				"null", "boolean", "object", "array", "number", "string",
+			}},
+			reflect.TypeFor[v1alpha1.CommandsField](): {Types: []string{
+				"null", "object", "array", "string",
 			}},
 		},
 	})
@@ -193,11 +199,12 @@ func addKindTools[T v1alpha1.Object](server *mcp.Server, store *v1alpha1store.St
 	if store == nil {
 		return
 	}
-	mcp.AddTool(server, &mcp.Tool{
+	listTool := &mcp.Tool{
 		Name:         cfg.ListName,
 		Description:  cfg.ListDesc,
 		OutputSchema: outputSchemaFor[listOutput[T]](),
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, args listInput) (*mcp.CallToolResult, listOutput[T], error) {
+	}
+	list := func(ctx context.Context, args listInput) (*mcp.CallToolResult, listOutput[T], error) {
 		raws, next, err := runList(ctx, store, cfg.Kind, cfg.Authorize, cfg.ListFilter, args)
 		if err != nil {
 			return nil, listOutput[T]{}, err
@@ -207,14 +214,39 @@ func addKindTools[T v1alpha1.Object](server *mcp.Server, store *v1alpha1store.St
 			return nil, listOutput[T]{}, err
 		}
 		return nil, listOutput[T]{Items: items, NextCursor: next, Count: len(items)}, nil
-	})
-	mcp.AddTool(server, &mcp.Tool{
+	}
+	if !cfg.Mutable {
+		mcp.AddTool(server, listTool, func(ctx context.Context, _ *mcp.CallToolRequest, args listInput) (*mcp.CallToolResult, listOutput[T], error) {
+			return list(ctx, args)
+		})
+	} else {
+		mcp.AddTool(server, listTool, func(ctx context.Context, _ *mcp.CallToolRequest, args mutableListInput) (*mcp.CallToolResult, listOutput[T], error) {
+			return list(ctx, listInput{
+				Namespace: args.Namespace,
+				Cursor:    args.Cursor,
+				Limit:     args.Limit,
+				Search:    args.Search,
+			})
+		})
+	}
+
+	getTool := &mcp.Tool{
 		Name:         cfg.GetName,
 		Description:  cfg.GetDesc,
 		OutputSchema: outputSchemaFor[T](),
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, args getByRefInput) (*mcp.CallToolResult, T, error) {
-		return getEnvelope(ctx, store, cfg.Kind, cfg.Authorize, args, cfg.NewObj)
-	})
+	}
+	if !cfg.Mutable {
+		mcp.AddTool(server, getTool, func(ctx context.Context, _ *mcp.CallToolRequest, args getByRefInput) (*mcp.CallToolResult, T, error) {
+			return getEnvelope(ctx, store, cfg.Kind, cfg.Authorize, args, cfg.NewObj)
+		})
+	} else {
+		mcp.AddTool(server, getTool, func(ctx context.Context, _ *mcp.CallToolRequest, args getByNameInput) (*mcp.CallToolResult, T, error) {
+			return getEnvelope(ctx, store, cfg.Kind, cfg.Authorize, getByRefInput{
+				Namespace: args.Namespace,
+				Name:      args.Name,
+			}, cfg.NewObj)
+		})
+	}
 }
 
 // listInput is the shared shape for list_* tools. Search is a
@@ -225,13 +257,25 @@ type listInput struct {
 	Cursor    string `json:"cursor,omitempty"    doc:"Pagination cursor returned by a previous call"`
 	Limit     int    `json:"limit,omitempty"     doc:"Max items (1-100, default 30)"`
 	Search    string `json:"search,omitempty"    doc:"Case-insensitive substring filter on metadata.name"`
-	Tag       string `json:"tag,omitempty"       doc:"'latest' to return only the literal latest tag per (namespace, name); empty returns every tag"`
+	Tag       string `json:"tag,omitempty"       doc:"Exact tag; empty returns every tag"`
+}
+
+type mutableListInput struct {
+	Namespace string `json:"namespace,omitempty" doc:"Filter by namespace (empty = all namespaces)"`
+	Cursor    string `json:"cursor,omitempty"    doc:"Pagination cursor returned by a previous call"`
+	Limit     int    `json:"limit,omitempty"     doc:"Max items (1-100, default 30)"`
+	Search    string `json:"search,omitempty"    doc:"Case-insensitive substring filter on metadata.name"`
 }
 
 type getByRefInput struct {
 	Namespace string `json:"namespace,omitempty" doc:"Namespace (empty defaults to 'default')"`
 	Name      string `json:"name"                doc:"Resource name"    required:"true"`
 	Tag       string `json:"tag,omitempty"       doc:"Exact tag; empty or 'latest' returns the literal latest tag"`
+}
+
+type getByNameInput struct {
+	Namespace string `json:"namespace,omitempty" doc:"Namespace (empty defaults to 'default')"`
+	Name      string `json:"name"                doc:"Resource name"    required:"true"`
 }
 
 // listOutput is the generic envelope every list_* tool returns. Items
@@ -293,6 +337,8 @@ func runList(
 	tag := strings.TrimSpace(args.Tag)
 	if strings.EqualFold(tag, "latest") {
 		opts.LatestOnly = true
+	} else if tag != "" {
+		opts.Tag = tag
 	}
 	if listFilter != nil {
 		extraWhere, extraArgs, err := listFilter(ctx, resource.AuthorizeInput{Verb: "list", Kind: kind, Namespace: namespace})

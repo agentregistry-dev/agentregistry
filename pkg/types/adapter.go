@@ -144,10 +144,8 @@ type RemoveInput struct {
 	Runtime    *v1alpha1.Runtime
 }
 
-// RemoveResult describes the outcome of a Remove call. The reconciler
-// merges Conditions into Deployment.Status; idempotent re-Remove on a
-// completed teardown is the expected pattern (no separate finalizer
-// drain — soft-delete + GC handle the lifetime).
+// RemoveResult contains status updates persisted before finalizer release.
+// Remove must return an error until required provider cleanup completes.
 type RemoveResult struct {
 	// Conditions to merge into Deployment.Status (typically
 	// Progressing with Reason="Terminating", then Ready=False with

@@ -47,116 +47,115 @@ func lookupPersistentFlag(cmd *cobra.Command, name string) string {
 }
 
 func init() {
-	scheme.Register(typedKind(
-		"agent", "agents", []string{"Agent"},
+	registerKind[*v1alpha1.Agent](
+		"agent", "", nil,
 		[]scheme.Column{
 			{Header: "NAME"}, {Header: "TAG"}, {Header: "MODE"}, {Header: "DESCRIPTION"},
 		},
 		v1alpha1.KindAgent,
-		func() *v1alpha1.Agent { return &v1alpha1.Agent{} },
 		agentRow,
-	))
-
-	scheme.Register(typedKind(
+	)
+	registerKind[*v1alpha1.MCPServer](
 		"mcp", "mcps", []string{"MCPServer", "mcpserver", "mcp-server", "mcpservers"},
 		[]scheme.Column{{Header: "NAME"}, {Header: "TAG"}, {Header: "DESCRIPTION"}},
 		v1alpha1.KindMCPServer,
-		func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} },
 		mcpRow,
-	))
-
-	scheme.Register(typedKind(
-		"skill", "skills", []string{"Skill"},
+	)
+	registerKind[*v1alpha1.Skill](
+		"skill", "", nil,
 		[]scheme.Column{
 			{Header: "NAME"}, {Header: "TAG"}, {Header: "DESCRIPTION"},
 		},
 		v1alpha1.KindSkill,
-		func() *v1alpha1.Skill { return &v1alpha1.Skill{} },
 		skillRow,
-	))
-
-	scheme.Register(typedKind(
-		"prompt", "prompts", []string{"Prompt"},
+	)
+	registerKind[*v1alpha1.Prompt](
+		"prompt", "", nil,
 		[]scheme.Column{{Header: "NAME"}, {Header: "TAG"}, {Header: "DESCRIPTION"}},
 		v1alpha1.KindPrompt,
-		func() *v1alpha1.Prompt { return &v1alpha1.Prompt{} },
 		promptRow,
-	))
-
-	scheme.Register(typedKind(
-		"plugin", "plugins", []string{"Plugin"},
+	)
+	registerKind[*v1alpha1.Plugin](
+		"plugin", "", nil,
 		[]scheme.Column{{Header: "NAME"}, {Header: "TAG"}, {Header: "DESCRIPTION"}},
 		v1alpha1.KindPlugin,
-		func() *v1alpha1.Plugin { return &v1alpha1.Plugin{} },
 		pluginRow,
-	))
-
-	// Runtime is registered manually because it is a mutable namespace/name
-	// object: the server's runtime store does not expose /tags or
-	// DeleteAllTags endpoints. Routing it through
-	// typedKind would advertise --all-tags on its CLI surface and call
-	// endpoints that don't exist. The Get / Delete / List closures match
-	// what typedKind would otherwise produce; ListTags / DeleteAllTags are
-	// intentionally omitted so the dispatch layer rejects --all-tags cleanly.
-	scheme.Register(
-		mutableTypedKind(
-			"runtime", "runtimes", []string{"Runtime"},
-			[]scheme.Column{{Header: "NAME"}, {Header: "TYPE"}},
-			v1alpha1.KindRuntime,
-			func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} },
-			runtimeRow,
-		),
 	)
-
-	scheme.Register(typedKind(
-		"model", "models", []string{"Model"},
+	registerKind[*v1alpha1.Model](
+		"model", "", nil,
 		[]scheme.Column{
 			{Header: "NAME"}, {Header: "TAG"}, {Header: "PROVIDER"},
 			{Header: "MODEL"}, {Header: "AUTH"},
 		},
 		v1alpha1.KindModel,
-		func() *v1alpha1.Model { return &v1alpha1.Model{} },
 		modelRow,
-	))
+	)
 
-	// Deployment is registered manually because it is a mutable namespace/name
-	// object: the server's deployment store does not expose /tags or
-	// DeleteAllTags endpoints. Explicit get/delete accept either NAME or
-	// NAMESPACE/NAME; ListTags / DeleteAllTags are intentionally omitted so
-	// the dispatch layer rejects --all-tags cleanly.
-	scheme.Register(
-		mutableTypedKind(
-			"deployment", "deployments", []string{"Deployment"},
-			[]scheme.Column{
-				{Header: "NAME"}, {Header: "TARGET"}, {Header: "VERSION"},
-				{Header: "TYPE"}, {Header: "RUNTIME"}, {Header: "STATUS"},
-			},
-			v1alpha1.KindDeployment,
-			func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} },
-			func(deployment *v1alpha1.Deployment) []string {
-				return deploymentRow(cliCommon.DeploymentRecordFromObject(deployment))
-			},
-			withMutableListFunc(listDeploymentResources),
-		),
+	registerKind[*v1alpha1.Runtime](
+		"runtime", "", nil,
+		[]scheme.Column{{Header: "NAME"}, {Header: "TYPE"}, {Header: "STATUS"}},
+		v1alpha1.KindRuntime,
+		runtimeRow,
+	)
+	registerKind[*v1alpha1.Secret](
+		"secret", "", nil,
+		[]scheme.Column{
+			{Header: "NAME"}, {Header: "TYPE"}, {Header: "KEYS"}, {Header: "IMMUTABLE"},
+		},
+		v1alpha1.KindSecret,
+		secretRow,
+	)
+	registerKind[*v1alpha1.Deployment](
+		"deployment", "", nil,
+		[]scheme.Column{
+			{Header: "NAME"}, {Header: "TARGET"}, {Header: "VERSION"},
+			{Header: "TYPE"}, {Header: "RUNTIME"}, {Header: "STATUS"},
+		},
+		v1alpha1.KindDeployment,
+		func(deployment *v1alpha1.Deployment) []string {
+			return deploymentRow(cliCommon.DeploymentRecordFromObject(deployment))
+		},
+		withListFunc(listDeploymentResources),
 	)
 }
 
-// typedKind builds a scheme.Kind whose Get / List / Delete dispatch
-// closures all wire through the typed v1alpha1 client helpers
-// (client.GetTyped[T] / client.ListAllTyped[T] / client.Delete) for
-// the canonical kind. Per-kind callers supply the user-facing name +
-// aliases, the table layout, and a row formatter that takes the typed
-// envelope T directly. RowFunc shape-checks the input via T-assertion
-// so the registry's `any` API stays internal.
-func typedKind[T v1alpha1.Object](
+type kindOption func(*scheme.Kind)
+
+func withListFunc(fn scheme.ListFunc) kindOption {
+	return func(k *scheme.Kind) {
+		k.ListFunc = fn
+	}
+}
+
+func registerKind[T v1alpha1.Object](
 	cliName, plural string,
 	aliases []string,
 	columns []scheme.Column,
 	canonicalKind string,
-	newObj func() T,
 	row func(T) []string,
-) *scheme.Kind {
-	return &scheme.Kind{
+	opts ...kindOption,
+) {
+	descriptor, ok := v1alpha1.KindDescriptorFor(canonicalKind)
+	if !ok {
+		panic("commands.registerKind: v1alpha1 kind is not registered: " + canonicalKind)
+	}
+	if plural == "" {
+		plural = descriptor.Plural
+	}
+	if obj := descriptor.NewObject(); obj == nil {
+		panic("commands.registerKind: constructor for " + canonicalKind + " returned nil")
+	} else if _, ok := obj.(T); !ok {
+		panic(fmt.Sprintf("commands.registerKind: constructor for %s returned %T", canonicalKind, obj))
+	}
+	newObj := func() T {
+		obj, ok := descriptor.NewObject().(T)
+		if !ok {
+			panic(fmt.Sprintf("commands.registerKind: constructor for %s returned %T", canonicalKind, obj))
+		}
+		return obj
+	}
+	tagged := descriptor.Storage == v1alpha1.KindStorageTaggedArtifact
+	k := &scheme.Kind{
 		Kind:         cliName,
 		Plural:       plural,
 		Aliases:      aliases,
@@ -174,6 +173,9 @@ func typedKind[T v1alpha1.Object](
 			if err != nil {
 				return nil, err
 			}
+			if !tagged {
+				tag = ""
+			}
 			return client.GetTyped(ctx, c, canonicalKind, ref.Namespace, ref.Name, tag, newObj)
 		},
 		ListFunc: func(ctx context.Context, c *client.Client, opts scheme.ListOpts) ([]any, error) {
@@ -182,70 +184,19 @@ func typedKind[T v1alpha1.Object](
 		Delete: func(ctx context.Context, c *client.Client, name, tag string) error {
 			return deleteAny(ctx, c, canonicalKind, name, tag, newObj)
 		},
-		ListTags: func(ctx context.Context, c *client.Client, name string) ([]any, error) {
+	}
+	if tagged {
+		k.ListTags = func(ctx context.Context, c *client.Client, name string) ([]any, error) {
 			return listTagsAny(ctx, c, canonicalKind, name, newObj)
-		},
-		DeleteAllTags: func(ctx context.Context, c *client.Client, name string) error {
+		}
+		k.DeleteAllTags = func(ctx context.Context, c *client.Client, name string) error {
 			return deleteAllTagsAny(ctx, c, canonicalKind, name, newObj)
-		},
-	}
-}
-
-// mutableTypedKind is typedKind for namespace/name resources such as Runtime
-// and Deployment. These kinds use the generic v1alpha1 CRUD surface but do not
-// expose /tags, so the tag-specific callbacks are intentionally nil.
-type mutableTypedKindOption func(*scheme.Kind)
-
-// withMutableListFunc is an option to override the default ListFunc for a
-// mutableTypedKind.
-func withMutableListFunc(fn scheme.ListFunc) mutableTypedKindOption {
-	return func(k *scheme.Kind) {
-		k.ListFunc = fn
-	}
-}
-
-// mutableTypedKind builds a scheme.Kind for mutable namespace/name resources which
-// do not support tagging.
-func mutableTypedKind[T v1alpha1.Object](
-	cliName, plural string,
-	aliases []string,
-	columns []scheme.Column,
-	canonicalKind string,
-	newObj func() T,
-	row func(T) []string,
-	opts ...mutableTypedKindOption,
-) *scheme.Kind {
-	k := &scheme.Kind{
-		Kind:         cliName,
-		Plural:       plural,
-		Aliases:      aliases,
-		TableColumns: columns,
-		ToYAMLFunc:   func(item any) any { return item },
-		RowFunc: func(item any) []string {
-			t, ok := item.(T)
-			if !ok {
-				return []string{"<invalid>"}
-			}
-			return row(t)
-		},
-		Get: func(ctx context.Context, c *client.Client, name, _ string) (any, error) {
-			ref, err := parseResourceLookupRef(name)
-			if err != nil {
-				return nil, err
-			}
-			return client.GetTyped(ctx, c, canonicalKind, ref.Namespace, ref.Name, "", newObj)
-		},
-		ListFunc: func(ctx context.Context, c *client.Client, opts scheme.ListOpts) ([]any, error) {
-			return listAny(ctx, c, canonicalKind, opts, newObj)
-		},
-		Delete: func(ctx context.Context, c *client.Client, name, tag string) error {
-			return deleteAny(ctx, c, canonicalKind, name, tag, newObj)
-		},
+		}
 	}
 	for _, opt := range opts {
 		if opt != nil {
 			opt(k)
 		}
 	}
-	return k
+	scheme.Register(k)
 }

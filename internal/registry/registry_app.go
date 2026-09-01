@@ -135,6 +135,8 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	}
 	controllerConfig := deploymentControllerConfig(cfg)
 	controllerConfig.DependencyKinds = maps.Clone(options.DeploymentDependencyKinds)
+	controllerConfig.Leadership = options.DeploymentControllerLeadership
+	controllerConfig.DeploymentFinalized = options.DeploymentFinalized
 	if _, err := controller.StartDeploymentController(ctx, pool, stores, deploymentAdapters, discoverySources, controllerConfig); err != nil {
 		return fmt.Errorf("start deployment controller: %w", err)
 	}

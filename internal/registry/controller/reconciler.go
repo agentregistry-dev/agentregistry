@@ -147,7 +147,7 @@ func observeApply(
 }
 
 func (c *DeploymentController) remove(ctx context.Context, deployment *v1alpha1.Deployment) (string, string, error) {
-	runtime, err := c.resolveRuntime(ctx, deployment)
+	runtime, err := c.resolveRuntimeIncludingTerminating(ctx, deployment)
 	if err != nil {
 		return c.handleRemoveRuntimeError(ctx, deployment, err)
 	}
@@ -171,6 +171,37 @@ func (c *DeploymentController) remove(ctx context.Context, deployment *v1alpha1.
 		}
 	}
 	return "success", "deployment removed", nil
+}
+
+// resolveRuntimeIncludingTerminating keeps the parent Runtime available after
+// its deletion is accepted. Deployment removal still needs that Runtime to
+// select and configure the provider responsible for child cleanup; filtering
+// terminating rows would orphan the provider resources. A truly absent parent
+// falls through to the existing dangling-reference finalization path.
+func (c *DeploymentController) resolveRuntimeIncludingTerminating(
+	ctx context.Context,
+	deployment *v1alpha1.Deployment,
+) (*v1alpha1.Runtime, error) {
+	store := c.Stores[v1alpha1.KindRuntime]
+	if store == nil {
+		return nil, errors.New("deployment controller: no Runtime store registered")
+	}
+	ref := deployment.Spec.RuntimeRef
+	ref.Namespace = refNamespace(ref.Namespace, deployment.Metadata.NamespaceOrDefault())
+	raw, err := store.GetLatestIncludingTerminating(ctx, ref.Namespace, ref.Name)
+	if err != nil {
+		if errors.Is(err, pkgdb.ErrNotFound) {
+			return nil, v1alpha1.ErrDanglingRef
+		}
+		return nil, fmt.Errorf("resolve runtimeRef %s/%s: %w", ref.Namespace, ref.Name, err)
+	}
+	runtime, err := v1alpha1.EnvelopeFromRaw(func() *v1alpha1.Runtime {
+		return &v1alpha1.Runtime{}
+	}, raw, v1alpha1.KindRuntime)
+	if err != nil {
+		return nil, fmt.Errorf("resolve runtimeRef %s/%s: %w", ref.Namespace, ref.Name, err)
+	}
+	return runtime, nil
 }
 
 func (c *DeploymentController) handleRemoveRuntimeError(
@@ -370,6 +401,9 @@ func (c *DeploymentController) finalizeDeletedDeployment(ctx context.Context, de
 	}
 	if _, err := c.deploymentStore().PurgeFinalized(ctx); err != nil {
 		return fmt.Errorf("purge finalized deployment: %w", err)
+	}
+	if c.DeploymentFinalized != nil {
+		c.DeploymentFinalized(ctx, deployment)
 	}
 	return nil
 }

@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	cliCommon "github.com/agentregistry-dev/agentregistry/internal/cli/common"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/printer"
+	statusapi "github.com/agentregistry-dev/agentregistry/pkg/status"
 )
 
 // listAny lists rows of the given kind. The zero scheme.ListOpts returns
@@ -209,7 +211,54 @@ func runtimeRow(runtime *v1alpha1.Runtime) []string {
 	if runtime == nil {
 		return []string{"<invalid>"}
 	}
-	return []string{runtime.Metadata.Name, runtime.Spec.Type}
+	return []string{runtime.Metadata.Name, runtime.Spec.Type, runtimeStatus(runtime)}
+}
+
+func secretRow(secret *v1alpha1.Secret) []string {
+	if secret == nil {
+		return []string{"<invalid>"}
+	}
+	secretType := string(secret.Spec.Type)
+	if secretType == "" {
+		secretType = string(v1alpha1.SecretTypeOpaque)
+	}
+	keys := strings.Join(secret.Status.DataKeys, ",")
+	return []string{
+		printer.TruncateString(secret.Metadata.Name, 40),
+		secretType,
+		printer.EmptyValueOrDefault(keys, "<none>"),
+		fmt.Sprintf("%t", secret.Spec.Immutable),
+	}
+}
+
+// Runtime status labels are CLI presentation values rather than API condition
+// values. Keeping them here prevents callers from treating display text as a
+// lifecycle contract.
+const (
+	runtimeStatusTerminating = "terminating"
+	runtimeStatusPending     = "pending"
+	runtimeStatusReady       = "ready"
+	runtimeStatusNotReady    = "not ready"
+)
+
+// runtimeStatus reduces Runtime lifecycle conditions to a table-friendly value.
+// A missing Ready condition is pending; an explicit False without a reason is
+// not ready, while a deletion timestamp always takes precedence as terminating.
+func runtimeStatus(runtime *v1alpha1.Runtime) string {
+	if runtime.Metadata.DeletionTimestamp != nil {
+		return runtimeStatusTerminating
+	}
+	ready := runtime.Status.GetCondition(statusapi.ConditionTypeReady)
+	if ready == nil {
+		return runtimeStatusPending
+	}
+	if ready.Status == v1alpha1.ConditionTrue {
+		return runtimeStatusReady
+	}
+	if ready.Reason != "" {
+		return strings.ToLower(ready.Reason)
+	}
+	return runtimeStatusNotReady
 }
 
 func modelRow(model *v1alpha1.Model) []string {

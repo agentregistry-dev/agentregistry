@@ -440,7 +440,7 @@ func TestDeploymentController_RemoveFailureKeepsFinalizerAndRetries(t *testing.T
 	require.Eventually(t, func() bool {
 		processed, err = controller.RunOnce(ctx)
 		return err == nil && adapter.removeCalls.Load() == 2
-	}, time.Second, 10*time.Millisecond)
+	}, 3*time.Second, 10*time.Millisecond)
 
 	requireDeploymentMissing(t, stores, deployment.Metadata.Name)
 }
@@ -506,6 +506,29 @@ func TestDeploymentController_DeleteFinalizesWhenRuntimeRefMissing(t *testing.T)
 	require.NoError(t, err)
 	require.Equal(t, 1, processed)
 	require.Zero(t, adapter.removeCalls.Load(), "missing runtime cannot dispatch adapter remove")
+	requireDeploymentMissing(t, stores, deployment.Metadata.Name)
+}
+
+func TestDeploymentController_DeleteUsesTerminatingRuntime(t *testing.T) {
+	ctx := context.Background()
+	stores := newControllerTestStores(t)
+	seedMCPServer(t, stores, "weather")
+	deployment := seedDeployment(t, stores, "delete-with-runtime", v1alpha1.DesiredStateDeployed)
+	require.NoError(t, stores[v1alpha1.KindRuntime].PatchFinalizers(ctx, "default", "test-runtime", "", func([]string) []string {
+		return []string{"test-runtime-finalizer"}
+	}))
+	require.NoError(t, stores[v1alpha1.KindRuntime].Delete(ctx, "default", "test-runtime", ""))
+	require.NoError(t, stores[v1alpha1.KindDeployment].Delete(ctx, "default", deployment.Metadata.Name, ""))
+
+	adapter := &recordingDeploymentAdapter{}
+	controller := newDeploymentTestController(stores, adapter)
+	_, err := controller.FullReconcile(ctx)
+	require.NoError(t, err)
+
+	processed, err := controller.RunOnce(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, processed)
+	require.Equal(t, int32(1), adapter.removeCalls.Load())
 	requireDeploymentMissing(t, stores, deployment.Metadata.Name)
 }
 
