@@ -72,9 +72,10 @@ func validateAgentSpec(s *AgentSpec) FieldErrors {
 		if s.Source.Protocol != nil {
 			protocol := ptr.Deref(s.Source.Protocol, AgentProtocol(""))
 			switch protocol {
-			case AgentProtocolA2A, AgentProtocolHTTP:
+			case AgentProtocolA2A, AgentProtocolHTTP, AgentProtocolOpenAIResponses:
 			default:
-				errs.Append("spec.source.protocol", fmt.Errorf("%w: must be %q or %q, got %q", ErrInvalidFormat, AgentProtocolA2A, AgentProtocolHTTP, protocol))
+				errs.Append("spec.source.protocol", fmt.Errorf("%w: must be %q, %q, or %q, got %q", ErrInvalidFormat,
+					AgentProtocolA2A, AgentProtocolHTTP, AgentProtocolOpenAIResponses, protocol))
 			}
 		}
 	}

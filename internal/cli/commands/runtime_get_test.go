@@ -13,6 +13,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/commands"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	statusapi "github.com/agentregistry-dev/agentregistry/pkg/status"
 )
 
 // runtimeTestServer builds an httptest.Server that serves:
@@ -102,6 +103,7 @@ func TestRuntimeGet_TableOutput(t *testing.T) {
 	runtimes := []v1alpha1.Runtime{
 		runtimeFixture("my-kagent", "Kagent", nil),
 	}
+	runtimes[0].Status.SetCondition(v1alpha1.Condition{Type: statusapi.ConditionTypeReady, Status: v1alpha1.ConditionTrue})
 	srv := runtimeTestServer(t, runtimes)
 	setupClientForServer(t, srv)
 
@@ -114,6 +116,8 @@ func TestRuntimeGet_TableOutput(t *testing.T) {
 	got := out.String()
 	assert.Contains(t, got, "my-kagent")
 	assert.Contains(t, got, "Kagent")
+	assert.Contains(t, got, "STATUS")
+	assert.Contains(t, got, "ready")
 }
 
 func TestRuntimeGet_ReturnsMatchByNamespaceName(t *testing.T) {

@@ -20,13 +20,14 @@ import (
 // NewGetCmd returns a new "get" cobra command.
 func NewGetCmd(deps cliruntime.Deps) *cobra.Command {
 	var labels string
+	supportedTypes := supportedKindNames(kindRegistry(deps))
 	cmd := &cobra.Command{
 		Use:   "get TYPE [NAME]",
 		Short: "List or retrieve registry resources",
 		Long: `List or retrieve registry resources by type.
 
-Supported types: agents, mcps, skills, prompts, runtimes, deployments
-(singular and uppercase forms also accepted, e.g. Agent, agent, agents)
+Supported types: ` + supportedTypes + `.
+Type names are case-insensitive; singular, plural, and registered aliases are accepted.
 
 Examples:
   arctl get all
@@ -34,7 +35,7 @@ Examples:
   arctl get agents -l team=platform,tier=production
   arctl get agents --show-labels         # list rows with a LABELS column
   arctl get agents --tag stable          # list rows with a specific tag
-  arctl get agents --latest              # list rows pinned to the "latest" tag
+  arctl get agents --latest              # list rows with the literal "latest" tag
   arctl get mcps
   arctl get agent acme-summarizer
   arctl get agent acme-summarizer -o yaml
@@ -51,12 +52,12 @@ Examples:
 		},
 	}
 	cmd.Flags().StringP("output", "o", "table", "Output format: table, yaml, json")
-	cmd.Flags().StringVarP(&labels, "labels", "l", "", "Content kinds only: filter list rows by comma-separated key=value labels.")
+	cmd.Flags().StringVarP(&labels, "labels", "l", "", "Tagged kinds only: filter list rows by comma-separated key=value labels.")
 	cmd.Flags().Bool("show-labels", false, "Print an additional LABELS column with each resource's labels; ignored for -o yaml/json, which already include labels.")
 	cmd.Flags().String("tag", "", "Tagged kinds only. With NAME: fetch one tag (defaults to latest). Without NAME: filter the list to this tag.")
-	cmd.Flags().Bool("latest", false, "List mode only: restrict to rows pinned to the literal 'latest' tag (equivalent to --tag latest).")
-	cmd.Flags().Bool("all-tags", false, "List every tag of NAME (tagged content kinds only)")
-	cmd.Flags().String("origin", "", "Deployments only: filter by provenance — managed, discovered, or all (defaults to managed when unset).")
+	cmd.Flags().Bool("latest", false, "Tagged kinds only: list rows with the literal 'latest' tag (equivalent to --tag latest).")
+	cmd.Flags().Bool("all-tags", false, "Tagged kinds only: list every tag of NAME")
+	cmd.Flags().String("origin", "", "Deployments only: filter provenance by managed, discovered, or all (defaults to managed when unset).")
 	return cmd
 }
 

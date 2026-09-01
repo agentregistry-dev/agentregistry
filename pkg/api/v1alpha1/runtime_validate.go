@@ -3,6 +3,7 @@ package v1alpha1
 import (
 	"fmt"
 	"strings"
+	"sync"
 )
 
 // KnownRuntimeTypes is the set of canonical Runtime spec.type values the
@@ -13,9 +14,33 @@ import (
 // exact-match equality after admission.
 var KnownRuntimeTypes = map[string]struct{}{}
 
-// RuntimeConfigValidators lets runtime packages register admission checks
-// without coupling the API package to concrete adapter implementations.
-var RuntimeConfigValidators = map[string]func(map[string]any) error{}
+var (
+	runtimeConfigValidatorsMu sync.RWMutex
+	runtimeConfigValidators   = map[string]func(map[string]any) error{}
+)
+
+// RegisterRuntimeConfigValidator associates a runtime type with its config
+// admission check. A runtime type may register only one validator.
+func RegisterRuntimeConfigValidator(
+	runtimeType string,
+	validator func(map[string]any) error,
+) error {
+	runtimeType = strings.TrimSpace(runtimeType)
+	if runtimeType == "" {
+		return fmt.Errorf("runtime type is required")
+	}
+	if validator == nil {
+		return fmt.Errorf("runtime config validator for %q is required", runtimeType)
+	}
+
+	runtimeConfigValidatorsMu.Lock()
+	defer runtimeConfigValidatorsMu.Unlock()
+	if _, exists := runtimeConfigValidators[runtimeType]; exists {
+		return fmt.Errorf("runtime config validator for %q is already registered", runtimeType)
+	}
+	runtimeConfigValidators[runtimeType] = validator
+	return nil
+}
 
 // Validate runs Runtime's structural checks and canonicalizes
 // Spec.Type to its CamelCase form.
@@ -53,7 +78,9 @@ func (r *Runtime) Validate() error {
 }
 
 func validateRegisteredRuntimeConfig(runtimeType string, config map[string]any) FieldErrors {
-	validate := RuntimeConfigValidators[runtimeType]
+	runtimeConfigValidatorsMu.RLock()
+	validate := runtimeConfigValidators[runtimeType]
+	runtimeConfigValidatorsMu.RUnlock()
 	if validate == nil {
 		return nil
 	}

@@ -2,6 +2,7 @@ package commands
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
@@ -77,5 +78,29 @@ func TestAgentRowIncludesModeAndDescription(t *testing.T) {
 	want := []string{"reviewer", "stable", "source+harness", "Reviews pull requests"}
 	if got := agentRow(agent); !reflect.DeepEqual(got, want) {
 		t.Fatalf("agentRow() = %#v, want %#v", got, want)
+	}
+}
+
+func TestSecretRowShowsMetadataWithoutPayloadValues(t *testing.T) {
+	secret := &v1alpha1.Secret{
+		Metadata: v1alpha1.ObjectMeta{Name: "provider-credentials"},
+		Spec: v1alpha1.SecretSpec{
+			Immutable:  true,
+			Data:       map[string]string{"token": "c2Vuc2l0aXZl"},
+			StringData: map[string]string{"password": "sensitive"},
+		},
+		Status: v1alpha1.SecretStatus{DataKeys: []string{"password", "token"}},
+	}
+
+	want := []string{"provider-credentials", "Opaque", "password,token", "true"}
+	got := secretRow(secret)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("secretRow() = %#v, want %#v", got, want)
+	}
+	row := strings.Join(got, " ")
+	for _, payload := range []string{"c2Vuc2l0aXZl", "sensitive"} {
+		if strings.Contains(row, payload) {
+			t.Fatalf("secretRow() exposed payload value %q", payload)
+		}
 	}
 }

@@ -360,30 +360,27 @@ func discoveredDeploymentFromResult(
 	}, true
 }
 
-// deploymentDiscoveryRemoteID reads the provider identity from the storage
-// location owned by the deployment's controller. Discovery persists runtime
-// metadata in status details, while managed adapters persist it in namespaced
-// annotations.
+// deploymentDiscoveryRemoteID reads provider identity from status, with a
+// legacy annotation fallback for Deployments that have not migrated yet.
 func deploymentDiscoveryRemoteID(deployment *v1alpha1.Deployment) string {
 	if deployment == nil {
 		return ""
 	}
-	if !v1alpha1.IsDiscoveredDeployment(deployment) {
-		for key, value := range deployment.Metadata.Annotations {
-			if strings.HasSuffix(strings.TrimSpace(key), "/"+types.RuntimeMetadataRemoteIDKey) {
-				if remoteID := strings.TrimSpace(value); remoteID != "" {
-					return remoteID
-				}
-			}
-		}
-		return ""
-	}
 	var metadata map[string]string
 	found, err := deployment.Status.GetDetailsKey(deploymentRuntimeDetailsKey, &metadata)
-	if err != nil || !found {
-		return ""
+	if err == nil && found {
+		if remoteID := strings.TrimSpace(metadata[types.RuntimeMetadataRemoteIDKey]); remoteID != "" {
+			return remoteID
+		}
 	}
-	return strings.TrimSpace(metadata[types.RuntimeMetadataRemoteIDKey])
+	for key, value := range deployment.Metadata.Annotations {
+		if strings.HasSuffix(strings.TrimSpace(key), "/"+types.RuntimeMetadataRemoteIDKey) {
+			if remoteID := strings.TrimSpace(value); remoteID != "" {
+				return remoteID
+			}
+		}
+	}
+	return ""
 }
 
 // deploymentRemoteIDKey scopes a provider identity to its deployment runtime.

@@ -21,7 +21,9 @@ const (
 // Registers Kagent with the admission validator so Runtime{spec.type: Kagent} passes Validate.
 func init() {
 	v1alpha1.KnownRuntimeTypes[RuntimeType] = struct{}{}
-	v1alpha1.RuntimeConfigValidators[RuntimeType] = validateRuntimeConfigForAdmission
+	if err := v1alpha1.RegisterRuntimeConfigValidator(RuntimeType, validateRuntimeConfigForAdmission); err != nil {
+		panic(err)
+	}
 }
 
 func validateRuntimeConfigForAdmission(config map[string]any) error {
@@ -52,6 +54,7 @@ type runtimeConnectionConfig struct {
 }
 
 type runtimeDeploymentConfig struct {
+	Labels       map[string]string   `json:"labels,omitempty"`
 	NodeSelector map[string]string   `json:"nodeSelector,omitempty"`
 	Tolerations  []corev1.Toleration `json:"tolerations,omitempty"`
 	Affinity     *corev1.Affinity    `json:"affinity,omitempty"`

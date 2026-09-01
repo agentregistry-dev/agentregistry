@@ -3,12 +3,24 @@ package controller
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
+
+func TestDeploymentRateLimiterCapsRetriesAtOneMinute(t *testing.T) {
+	limiter := deploymentRateLimiter()
+	key := deploymentQueueKey{Namespace: "default", Name: "deployment"}
+
+	require.Equal(t, 2*time.Second, limiter.When(key))
+	for range 20 {
+		require.LessOrEqual(t, limiter.When(key), time.Minute)
+	}
+	require.Equal(t, time.Minute, limiter.When(key))
+}
 
 func TestDeploymentControllerSyncReplaysIgnoredEvents(t *testing.T) {
 	reader := fakeEventReader{

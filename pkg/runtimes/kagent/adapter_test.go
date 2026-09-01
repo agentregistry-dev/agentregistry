@@ -35,10 +35,9 @@ func (*fakeSecretResolver) ResolveAll(
 }
 
 func testAdapter(client *fakeClient, options ...Option) types.DeploymentAdapter {
-	options = append(options, withClientFactory(func(runtimeConfig) (kagentClient, error) {
+	return newAdapter(func(runtimeConfig) (kagentClient, error) {
 		return client, nil
-	}))
-	return New(options...)
+	}, options...)
 }
 
 func withRuntimeConfig(input types.ApplyInput) types.ApplyInput {
@@ -196,16 +195,60 @@ func TestApplyMCPServerUsesEstablishedRuntimeMetadata(t *testing.T) {
 	assert.Equal(t, "https://mcp.example.com/mcp", endpoint.Message)
 }
 
-func TestApplyAddsConfiguredLabelsToPodBackedResources(t *testing.T) {
-	client := newFakeClient()
-	input := withRuntimeConfig(byoApplyInput())
-	adapter := testAdapter(client, WithWorkloadLabels(map[string]string{"example.com/managed": "true"}))
+func TestApplyUsesRuntimeLabelsForPodBackedResources(t *testing.T) {
+	const labelKey = "example.com/managed"
 
-	_, err := adapter.Apply(context.Background(), input)
-	require.NoError(t, err)
-	agent := client.agents["kagent/my-agent"]
-	assert.Equal(t, "true", agent.Labels["example.com/managed"])
-	assert.Equal(t, "true", agent.Spec.BYO.Deployment.Labels["example.com/managed"])
+	withLabels := func(input types.ApplyInput) types.ApplyInput {
+		input = withRuntimeConfig(input)
+		input.Runtime.Spec.Config["deployment"] = map[string]any{
+			"labels": map[string]any{labelKey: "true"},
+		}
+		return input
+	}
+
+	t.Run("agent", func(t *testing.T) {
+		client := newFakeClient()
+
+		_, err := testAdapter(client).Apply(context.Background(), withLabels(byoApplyInput()))
+		require.NoError(t, err)
+		agent := client.agents["kagent/my-agent"]
+		assert.Equal(t, "true", agent.Labels[labelKey])
+		assert.Equal(t, "true", agent.Spec.BYO.Deployment.Labels[labelKey])
+	})
+
+	t.Run("source-backed MCP server", func(t *testing.T) {
+		client := newFakeClient()
+		input := mcpApplyInput()
+		input.Deployment.Spec.TargetRef.Name = "source-tools"
+		input.Target = &v1alpha1.MCPServer{
+			Metadata: v1alpha1.ObjectMeta{Name: "source-tools", Namespace: "default"},
+			Spec: v1alpha1.MCPServerSpec{
+				Source: &v1alpha1.MCPServerSource{Package: &v1alpha1.MCPPackage{
+					Origin: v1alpha1.MCPPackageOrigin{
+						Type:       v1alpha1.MCPPackageOriginTypeNPM,
+						Identifier: "@acme/source-tools",
+						NPM:        &v1alpha1.MCPPackageOriginNPM{Version: "1.2.3"},
+					},
+					Transport: v1alpha1.MCPTransport{Type: "stdio"},
+				}},
+			},
+		}
+
+		_, err := testAdapter(client).Apply(context.Background(), withLabels(input))
+		require.NoError(t, err)
+		server := client.toolServers["kagent/source-tools"].MCP
+		assert.Equal(t, "true", server.Labels[labelKey])
+		assert.Equal(t, "true", server.Spec.Deployment.Labels[labelKey])
+	})
+
+	t.Run("remote MCP server", func(t *testing.T) {
+		client := newFakeClient()
+
+		_, err := testAdapter(client).Apply(context.Background(), withLabels(mcpApplyInput()))
+		require.NoError(t, err)
+		server := client.toolServers["kagent/gh-mcp"].Remote
+		assert.NotContains(t, server.Labels, labelKey)
+	})
 }
 
 func TestApplyUnsupportedHarnessReturnsFailedStatus(t *testing.T) {

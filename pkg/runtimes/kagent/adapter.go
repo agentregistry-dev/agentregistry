@@ -25,11 +25,9 @@ const (
 
 type adapter struct {
 	newClient          clientFactory
-	tokenSource        TokenSource
 	tokenSourceFactory TokenSourceFactory
 	secretResolver     secret.Resolver
 	findDeployment     DeploymentFinderFunc
-	workloadLabels     map[string]string
 }
 
 type Option func(*adapter)
@@ -43,15 +41,6 @@ type DeploymentFinderFunc func(
 	v1alpha1.ResourceRef,
 	v1alpha1.ResourceRef,
 ) (*v1alpha1.Deployment, bool, error)
-
-func withClientFactory(factory clientFactory) Option {
-	return func(a *adapter) { a.newClient = factory }
-}
-
-// WithTokenSource configures one token source for all Kagent runtimes.
-func WithTokenSource(source TokenSource) Option {
-	return func(a *adapter) { a.tokenSource = source }
-}
 
 // WithTokenSourceFactory resolves authentication separately for each Runtime.
 func WithTokenSourceFactory(factory TokenSourceFactory) Option {
@@ -68,13 +57,12 @@ func WithDeploymentFinder(finder DeploymentFinderFunc) Option {
 	return func(a *adapter) { a.findDeployment = finder }
 }
 
-// WithWorkloadLabels adds labels to pod-backed Kagent resources.
-func WithWorkloadLabels(labels map[string]string) Option {
-	return func(a *adapter) { a.workloadLabels = maps.Clone(labels) }
+func New(options ...Option) types.DeploymentAdapter {
+	return newAdapter(nil, options...)
 }
 
-func New(options ...Option) types.DeploymentAdapter {
-	a := &adapter{}
+func newAdapter(factory clientFactory, options ...Option) *adapter {
+	a := &adapter{newClient: factory}
 	for _, option := range options {
 		option(a)
 	}
@@ -171,10 +159,10 @@ func (a *adapter) applyAgent(
 	if err != nil {
 		return translationFailure(input.Target, err, now)
 	}
-	agent.Labels = mergeLabels(agent.Labels, a.workloadLabels)
+	agent.Labels = mergeLabels(agent.Labels, runtimeConfig.Deployment.Labels)
 	agent.Spec.BYO.Deployment.Labels = mergeLabels(
 		agent.Spec.BYO.Deployment.Labels,
-		a.workloadLabels,
+		runtimeConfig.Deployment.Labels,
 	)
 	client, err := a.clientFor(ctx, input.Runtime, runtimeConfig)
 	if err != nil {
@@ -203,10 +191,10 @@ func (a *adapter) applyMCPServer(
 		return translationFailure(input.Target, err, now)
 	}
 	if server.MCP != nil {
-		server.MCP.Labels = mergeLabels(server.MCP.Labels, a.workloadLabels)
+		server.MCP.Labels = mergeLabels(server.MCP.Labels, runtimeConfig.Deployment.Labels)
 		server.MCP.Spec.Deployment.Labels = mergeLabels(
 			server.MCP.Spec.Deployment.Labels,
-			a.workloadLabels,
+			runtimeConfig.Deployment.Labels,
 		)
 	}
 	client, err := a.clientFor(ctx, input.Runtime, runtimeConfig)
@@ -355,8 +343,8 @@ func (a *adapter) tokenSourceFor(
 	if a.tokenSourceFactory != nil {
 		return a.tokenSourceFactory(ctx, runtime)
 	}
-	if a.tokenSource != nil || auth.SecretRef == nil {
-		return a.tokenSource, nil
+	if auth.SecretRef == nil {
+		return nil, nil
 	}
 	if a.secretResolver == nil {
 		return nil, fmt.Errorf("kagent runtime auth.secretRef requires a secret resolver")

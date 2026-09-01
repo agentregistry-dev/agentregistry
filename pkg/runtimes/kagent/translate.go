@@ -505,7 +505,6 @@ func buildToolServer(in types.ApplyInput, rcfg runtimeConfig, dcfg deployConfig)
 			)
 		}
 		remote := &remoteMCPServerPayload{
-			TypeMeta:   metav1.TypeMeta{APIVersion: kagentV1Alpha2APIVersion, Kind: "RemoteMCPServer"},
 			ObjectMeta: meta,
 			Spec: remoteMCPServerPayloadSpec{
 				Description: meta.Name,
@@ -567,7 +566,6 @@ func buildToolServer(in types.ApplyInput, rcfg runtimeConfig, dcfg deployConfig)
 			return nil, fmt.Errorf("%w: unsupported kagent MCP transport %q", errUnsupported, pkg.Transport.Type)
 		}
 		mcp := &mcpServerPayload{
-			TypeMeta:   metav1.TypeMeta{APIVersion: kagentV1Alpha1APIVersion, Kind: "MCPServer"},
 			ObjectMeta: meta,
 			Spec: mcpServerPayloadSpec{
 				Deployment:     deployment,

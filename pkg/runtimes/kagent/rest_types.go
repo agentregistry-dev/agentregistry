@@ -6,8 +6,6 @@ import (
 )
 
 const (
-	kagentV1Alpha2APIVersion        = "kagent.dev/v1alpha2"
-	kagentV1Alpha1APIVersion        = "kagent.dev/v1alpha1"
 	agentTypeBYO                    = "BYO"
 	remoteMCPProtocolStreamableHTTP = "STREAMABLE_HTTP"
 	transportTypeStdio              = "stdio"
@@ -17,7 +15,6 @@ const (
 // These private payload types preserve the Kagent v0.10.0-rc3 REST wire contract
 // without importing Kagent controller modules.
 type agentPayload struct {
-	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 	Spec              agentPayloadSpec `json:"spec,omitempty"`
 	Status            struct{}         `json:"status,omitempty"`
@@ -44,7 +41,6 @@ type byoDeploymentPayload struct {
 }
 
 type remoteMCPServerPayload struct {
-	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 	Spec              remoteMCPServerPayloadSpec `json:"spec,omitempty"`
 	Status            struct{}                   `json:"status,omitempty"`
@@ -57,7 +53,6 @@ type remoteMCPServerPayloadSpec struct {
 }
 
 type mcpServerPayload struct {
-	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 	Spec              mcpServerPayloadSpec `json:"spec,omitempty"`
 	Status            struct{}             `json:"status,omitempty"`

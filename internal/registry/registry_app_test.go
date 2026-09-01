@@ -325,7 +325,7 @@ func TestDeploymentControllerConfigMapsRetentionSettings(t *testing.T) {
 func TestBuildStoresAddsExtraStoreTables(t *testing.T) {
 	stores := buildStores(nil, map[string]string{
 		"ExtensionOnly": "extension_only",
-	}, nil, nil)
+	}, nil)
 	if stores["ExtensionOnly"] == nil {
 		t.Fatalf("extra v1alpha1 store was not registered")
 	}

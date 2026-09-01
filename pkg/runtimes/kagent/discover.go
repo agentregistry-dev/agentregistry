@@ -39,7 +39,7 @@ func (a *adapter) Discover(ctx context.Context, in types.DiscoverInput) ([]types
 			Name:       w.Name,
 			RuntimeMetadata: map[string]string{
 				types.RuntimeMetadataRemoteIDKey: w.Name,
-				"namespace":                      w.Namespace,
+				metaNamespace:                    w.Namespace,
 			},
 		})
 	}

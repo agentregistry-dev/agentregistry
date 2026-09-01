@@ -15,20 +15,21 @@ import (
 )
 
 func NewDeleteCmd(deps cliruntime.Deps) *cobra.Command {
+	supportedTypes := supportedKindNames(kindRegistry(deps))
 	cmd := &cobra.Command{
 		Use:   cliruntime.CommandDelete + " (TYPE NAME | -f FILE)",
 		Short: "Delete a registry resource",
 		Long: `Delete a registry resource.
 
-File mode (declarative): reads resources from the YAML file and sends DELETE /v0/apply.
+File mode: read resources from FILE and delete them declaratively.
   arctl delete -f agent.yaml
 
-Explicit mode: specify type and name. For taggable artifacts, --tag selects an
+Explicit mode: specify type and name. For tagged kinds, --tag selects an
 exact tag and defaults to latest.
-  arctl delete TYPE NAME [--tag TAG]
+  arctl delete TYPE NAME [--tag TAG | --all-tags]
 
-TYPE must be one of: agent, mcp, skill, prompt, deployment
-(plural and uppercase forms also accepted)`,
+TYPE must be one of: ` + supportedTypes + `.
+Type names are case-insensitive; singular, plural, and registered aliases are accepted.`,
 		Example: `  arctl delete -f my-agent/agent.yaml
   arctl delete -f my-server/mcp.yaml
   arctl delete agent acme-summarizer --tag stable
@@ -41,8 +42,8 @@ TYPE must be one of: agent, mcp, skill, prompt, deployment
 		},
 	}
 	cmd.Flags().StringP("filename", "f", "", "YAML file to read resources from")
-	cmd.Flags().String("tag", "", "Specific tag to delete (taggable artifact kinds only; defaults to latest)")
-	cmd.Flags().Bool("all-tags", false, "Delete every tag of NAME (taggable artifact kinds only)")
+	cmd.Flags().String("tag", "", "Tagged kinds only: delete a specific tag (defaults to latest)")
+	cmd.Flags().Bool("all-tags", false, "Tagged kinds only: delete every tag of NAME")
 	return cmd
 }
 
@@ -143,10 +144,10 @@ func deleteResource(cmd *cobra.Command, kinds *scheme.Registry, c *client.Client
 		return err
 	}
 
-	// Deployments and runtimes have no tag of their own; rejecting --tag here
-	// keeps users from confusing a deployment's target tag (or a runtime's
-	// non-existent tag) with the metadata identity used for delete.
-	if tag != "" && (k.Kind == "deployment" || k.Kind == "runtime") {
+	// Mutable namespace/name resources have no tag of their own. ListTags is
+	// registered only for tagged artifacts, so use that capability instead of
+	// maintaining a second hard-coded list of mutable kinds.
+	if tag != "" && k.ListTags == nil {
 		return fmt.Errorf("--tag is not supported for %s", k.Kind)
 	}
 

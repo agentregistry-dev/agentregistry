@@ -300,6 +300,27 @@ func TestDeploymentDiscoveryController_DedupesManagedDeploymentRemoteID(t *testi
 	stores := newControllerTestStores(t)
 	seedAgentDeployment(t, stores, "managed-agent", "managed-agent", v1alpha1.DesiredStateDeployed)
 	managed := loadDeployment(t, stores, "managed-agent")
+	require.NoError(t, stores[v1alpha1.KindDeployment].PatchStatus(ctx, "default", managed.Metadata.Name, "", v1alpha1.StatusPatcher(func(status *v1alpha1.Status) {
+		_ = status.SetDetailsKey(deploymentRuntimeDetailsKey, map[string]string{types.RuntimeMetadataRemoteIDKey: "agent-123"})
+	})))
+	source := &discoveryTestAdapter{results: []types.DiscoveryResult{{
+		TargetKind:      v1alpha1.KindAgent,
+		Name:            "provider-name",
+		RuntimeMetadata: map[string]string{types.RuntimeMetadataRemoteIDKey: "agent-123"},
+	}}}
+	discovery := newDeploymentDiscoveryTestController(stores, source)
+
+	result, err := discovery.Sync(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Runtimes)
+	require.Zero(t, result.Discovered)
+}
+
+func TestDeploymentDiscoveryController_DedupesLegacyManagedDeploymentRemoteID(t *testing.T) {
+	ctx := context.Background()
+	stores := newControllerTestStores(t)
+	seedAgentDeployment(t, stores, "managed-agent", "managed-agent", v1alpha1.DesiredStateDeployed)
+	managed := loadDeployment(t, stores, "managed-agent")
 	require.NoError(t, stores[v1alpha1.KindDeployment].PatchAnnotations(ctx, "default", managed.Metadata.Name, "", func(annotations map[string]string) map[string]string {
 		if annotations == nil {
 			annotations = map[string]string{}
