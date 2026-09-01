@@ -106,8 +106,8 @@ type ApplyInput struct {
 	Getter v1alpha1.GetterFunc
 }
 
-// ApplyResult captures the status + annotation deltas the reconciler
-// should persist after Apply.
+// ApplyResult captures the status updates the reconciler should persist after
+// Apply.
 type ApplyResult struct {
 	// Conditions to merge into Deployment.Status via
 	// Store.PatchStatus. Canonical types:
@@ -117,16 +117,15 @@ type ApplyResult struct {
 	//   - "Degraded"    — transient failure, will retry
 	Conditions []v1alpha1.Condition
 
-	// RuntimeMetadata carries adapter-internal state to persist
-	// into Deployment.Metadata.Annotations (keyed under
-	// runtimes.agentregistry.solo.io/<type>/*). Callers marshal
-	// to string values since Annotations is map[string]string.
+	// RuntimeMetadata carries provider state persisted in
+	// Deployment.Status.Details.runtimeMetadata.
 	RuntimeMetadata map[string]string
 
 	// Details is a map of top-level keys to JSON-encoded values to merge into
 	// Deployment.Status.Details via Status.SetDetailsKeyJSON. Each adapter owns its
-	// own top-level key; other keys in Status.Details are preserved across
-	// the patch. A nil value at a key removes that key.
+	// own top-level key; other keys in Status.Details are preserved across the
+	// patch. The "runtimeMetadata" key is reserved for RuntimeMetadata and must not
+	// be set here. A nil value at a key removes that key.
 	//
 	// Use Details for structured state that Conditions cannot express cleanly;
 	// stable, typed status should still be modeled as Conditions.

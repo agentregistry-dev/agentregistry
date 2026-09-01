@@ -34,11 +34,7 @@ var builtInKinds = map[string]struct{}{
 // (tagged-artifact behavior). Extension kinds are intentionally not built here;
 // the composition root wires them from V1Alpha1StoreTables after this function
 // returns.
-//
-// The variadic opts are applied to every Store produced. Downstream
-// callers pass WithAuditor(...) here to plumb a single audit sink
-// across all kinds in one call.
-func NewStores(pool *pgxpool.Pool, schemas *pkgdb.SchemaRegistry, opts ...StoreOption) map[string]*Store {
+func NewStores(pool *pgxpool.Pool, schemas *pkgdb.SchemaRegistry) map[string]*Store {
 	// The OSS source's schema is statically known to be registered by the
 	// composition root before stores are built; a missing entry is a
 	// wiring bug, so MustGet panics rather than returning a nil schema
@@ -54,16 +50,11 @@ func NewStores(pool *pgxpool.Pool, schemas *pkgdb.SchemaRegistry, opts ...StoreO
 		if table == "" {
 			panic("v1alpha1store: empty table for built-in kind " + kind)
 		}
-		// Prepend WithKind so per-kind audit events name the kind
-		// correctly even if the inbound object's TypeMeta is empty.
-		// Caller-supplied opts win (they appear after WithKind in the
-		// option chain).
-		kindOpts := append([]StoreOption{WithKind(kind)}, opts...)
 		if descriptor.Storage == v1alpha1.KindStorageMutableObject {
-			out[kind] = NewMutableObjectStore(pool, ossSchema, table, kindOpts...)
+			out[kind] = NewMutableObjectStore(pool, ossSchema, table)
 			continue
 		}
-		out[kind] = NewStore(pool, ossSchema, table, kindOpts...)
+		out[kind] = NewStore(pool, ossSchema, table)
 	}
 	for kind := range builtInKinds {
 		if _, ok := out[kind]; !ok {

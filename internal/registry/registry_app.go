@@ -108,7 +108,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	discoverySources := map[string]types.DeploymentDiscoverySource{}
 	maps.Copy(discoverySources, options.DeploymentDiscoverySources)
 	pool := db.Pool()
-	stores := buildStores(pool, options.V1Alpha1StoreTables, options.V1Alpha1MutableStoreKinds, options.Auditor)
+	stores := buildStores(pool, options.V1Alpha1StoreTables, options.V1Alpha1MutableStoreKinds)
 	secretStore, err := buildSecretStore(cfg, pool, options.SecretStore)
 	if err != nil {
 		return fmt.Errorf("initialize secret store: %w", err)
@@ -270,16 +270,13 @@ func resolveExtraStoreSchema(table string, ossSchema pkgdb.Schema) (pkgdb.Schema
 	return ossSchema, table
 }
 
-func buildStores(pool *pgxpool.Pool, extraStoreTables map[string]string, mutableExtraKinds map[string]bool, auditor types.Auditor) map[string]*v1alpha1store.Store {
-	if auditor == nil {
-		auditor = types.NoopAuditor
-	}
+func buildStores(pool *pgxpool.Pool, extraStoreTables map[string]string, mutableExtraKinds map[string]bool) map[string]*v1alpha1store.Store {
 	// Resolve schemas once and inject them, so the stores qualify their
 	// tables explicitly rather than depend on the connection's
 	// search_path.
 	schemas := pkgdb.OSSSchemaRegistry()
 	ossSchema := schemas.MustGet(pkgdb.OSSSourceName)
-	stores := v1alpha1store.NewStores(pool, schemas, v1alpha1store.WithAuditor(auditor))
+	stores := v1alpha1store.NewStores(pool, schemas)
 	for kind, table := range extraStoreTables {
 		if kind == "" || table == "" {
 			slog.Warn("skipping v1alpha1 extra store with empty kind or table", "kind", kind, "table", table)
@@ -293,12 +290,11 @@ func buildStores(pool *pgxpool.Pool, extraStoreTables map[string]string, mutable
 			slog.Warn("skipping v1alpha1 extra store with empty table after schema qualifier", "kind", kind, "table", table)
 			continue
 		}
-		opts := []v1alpha1store.StoreOption{v1alpha1store.WithKind(kind), v1alpha1store.WithAuditor(auditor)}
 		if mutableExtraKinds[kind] {
-			stores[kind] = v1alpha1store.NewMutableObjectStore(pool, sch, tbl, opts...)
+			stores[kind] = v1alpha1store.NewMutableObjectStore(pool, sch, tbl)
 			continue
 		}
-		stores[kind] = v1alpha1store.NewStore(pool, sch, tbl, opts...)
+		stores[kind] = v1alpha1store.NewStore(pool, sch, tbl)
 	}
 
 	// pool == nil is the noop/DatabaseFactory path used by gen-openapi

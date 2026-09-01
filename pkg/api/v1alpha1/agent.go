@@ -81,15 +81,16 @@ type AgentSource struct {
 	// Protocol is the application protocol spoken by every runnable form of the
 	// agent, whether built from Repository or supplied as Image. When omitted,
 	// A2A is inferred as the default.
-	Protocol *AgentProtocol `json:"protocol,omitempty" yaml:"protocol,omitempty" enum:"A2A,HTTP"`
+	Protocol *AgentProtocol `json:"protocol,omitempty" yaml:"protocol,omitempty" enum:"A2A,HTTP,OpenAIResponses"`
 }
 
 // AgentProtocol is the application protocol exposed by an Agent source.
 type AgentProtocol string
 
 const (
-	AgentProtocolA2A  AgentProtocol = "A2A"
-	AgentProtocolHTTP AgentProtocol = "HTTP"
+	AgentProtocolA2A             AgentProtocol = "A2A"
+	AgentProtocolHTTP            AgentProtocol = "HTTP"
+	AgentProtocolOpenAIResponses AgentProtocol = "OpenAIResponses"
 )
 
 // HarnessCompatibility declares one harness family this Agent can run under.
