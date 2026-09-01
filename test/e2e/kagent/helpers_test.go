@@ -25,18 +25,19 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	registryv1alpha1 "github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	registrytypes "github.com/agentregistry-dev/agentregistry/pkg/types"
 	e2e "github.com/agentregistry-dev/agentregistry/test/e2e"
 )
 
 const (
-	kagentControllerURL = "http://kagent-controller.kagent:8083"
-	kagentNamespace     = "kagent"
-	kagentMCPPackage    = "@modelcontextprotocol/server-memory"
-	kagentMCPVersion    = "2026.7.4"
-	kagentMCPServerName = "io.github.modelcontextprotocol/server-memory"
-	kagentMCPPort       = 3000
-	kagentMCPPath       = "/mcp"
-	kagentRemoteIDKey   = "runtimes.agentregistry.solo.io/kagent/remoteId"
+	kagentControllerURL       = "http://kagent-controller.kagent:8083"
+	kagentNamespace           = "kagent"
+	kagentMCPPackage          = "@modelcontextprotocol/server-memory"
+	kagentMCPVersion          = "2026.7.4"
+	kagentMCPServerName       = "io.github.modelcontextprotocol/server-memory"
+	kagentMCPPort             = 3000
+	kagentMCPPath             = "/mcp"
+	runtimeMetadataDetailsKey = "runtimeMetadata"
 )
 
 func newKagentScenarioDocs(t *testing.T, name, title, id string) *e2eDocRecorder {
@@ -294,7 +295,11 @@ func assertKagentDeploymentRemoteID(
 	e2e.RequireSuccess(t, result)
 	var deployment registryv1alpha1.Deployment
 	require.NoError(t, json.Unmarshal([]byte(result.Stdout), &deployment))
-	require.Equal(t, want, deployment.Metadata.Annotations[kagentRemoteIDKey])
+	var runtimeMetadata map[string]string
+	found, err := deployment.Status.GetDetailsKey(runtimeMetadataDetailsKey, &runtimeMetadata)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, want, runtimeMetadata[registrytypes.RuntimeMetadataRemoteIDKey])
 }
 
 func applyKagentObject(t *testing.T, fileName, manifest string) {
