@@ -19,8 +19,7 @@ const (
 	metaImage      = "image"
 	metaKind       = "kind"
 
-	runtimeDetailsKey            = "runtimeMetadata"
-	runtimeRemoteIDAnnotationKey = "runtimes.agentregistry.solo.io/kagent/" + types.RuntimeMetadataRemoteIDKey
+	runtimeDetailsKey = "runtimeMetadata"
 )
 
 type adapter struct {

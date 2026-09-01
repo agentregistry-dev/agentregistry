@@ -1,7 +1,6 @@
 package kagent
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -36,16 +35,10 @@ func successfulApplyResult(
 	if extraCondition != nil {
 		conditions = append(conditions, *extraCondition)
 	}
-	result := &types.ApplyResult{Conditions: conditions}
-	if remoteID := metadata[metaRemoteID]; remoteID != "" {
-		result.RuntimeMetadata = map[string]string{
-			runtimeRemoteIDAnnotationKey: remoteID,
-		}
-	}
-	if err := attachRuntimeMetadata(result, metadata); err != nil {
-		return nil, err
-	}
-	return result, nil
+	return &types.ApplyResult{
+		Conditions:      conditions,
+		RuntimeMetadata: metadata,
+	}, nil
 }
 
 // FailedApplyResult builds the Ready=False/Failed result the adapter persists
@@ -66,15 +59,6 @@ func FailedApplyResult(
 		})
 	}
 	return &types.ApplyResult{Conditions: conditions}
-}
-
-func attachRuntimeMetadata(result *types.ApplyResult, metadata map[string]string) error {
-	encoded, err := json.Marshal(metadata)
-	if err != nil {
-		return fmt.Errorf("encode kagent runtime metadata: %w", err)
-	}
-	result.Details = map[string]json.RawMessage{runtimeDetailsKey: encoded}
-	return nil
 }
 
 func deploymentRuntimeMetadata(deployment *v1alpha1.Deployment) (map[string]string, error) {
