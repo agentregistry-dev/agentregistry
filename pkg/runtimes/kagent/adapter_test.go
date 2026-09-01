@@ -2,7 +2,6 @@ package kagent
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"testing"
 
@@ -69,13 +68,6 @@ func mcpApplyInput() types.ApplyInput {
 	}
 }
 
-func resultRuntimeMetadata(t *testing.T, result *types.ApplyResult) map[string]string {
-	t.Helper()
-	var metadata map[string]string
-	require.NoError(t, json.Unmarshal(result.Details[runtimeDetailsKey], &metadata))
-	return metadata
-}
-
 func findCondition(
 	conditions []v1alpha1.Condition,
 	conditionType string,
@@ -100,10 +92,8 @@ func TestApplyAgentUsesEstablishedRuntimeMetadata(t *testing.T) {
 		"remoteName": "my-agent",
 		"namespace":  "kagent",
 		"image":      "ghcr.io/acme/agent:1.0.0",
-	}, resultRuntimeMetadata(t, result))
-	assert.Equal(t, map[string]string{
-		runtimeRemoteIDAnnotationKey: "my-agent",
 	}, result.RuntimeMetadata)
+	assert.Empty(t, result.Details)
 	assert.Equal(t, v1alpha1.ConditionTrue, findCondition(result.Conditions, "Ready").Status)
 }
 
@@ -120,7 +110,7 @@ func TestApplyAndDiscoverUseSameRemoteIDForNormalizedAgentName(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.Len(t, discovered, 1)
-	assert.Equal(t, "my-agent", result.RuntimeMetadata[runtimeRemoteIDAnnotationKey])
+	assert.Equal(t, "my-agent", result.RuntimeMetadata[types.RuntimeMetadataRemoteIDKey])
 	assert.Equal(t, "my-agent", discovered[0].RuntimeMetadata[types.RuntimeMetadataRemoteIDKey])
 }
 
@@ -185,10 +175,8 @@ func TestApplyMCPServerUsesEstablishedRuntimeMetadata(t *testing.T) {
 		"remoteName": "gh-mcp",
 		"namespace":  "kagent",
 		"kind":       "RemoteMCPServer",
-	}, resultRuntimeMetadata(t, result))
-	assert.Equal(t, map[string]string{
-		runtimeRemoteIDAnnotationKey: "gh-mcp",
 	}, result.RuntimeMetadata)
+	assert.Empty(t, result.Details)
 	endpoint := findCondition(result.Conditions, mcpServerURLCondition)
 	require.NotNil(t, endpoint)
 	assert.Equal(t, v1alpha1.ConditionTrue, endpoint.Status)
