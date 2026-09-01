@@ -53,6 +53,10 @@ type DeploymentController struct {
 	// DeploymentFinalized runs after required provider cleanup, finalizer removal,
 	// and row purge. It wakes owners whose cleanup is gated on child removal.
 	DeploymentFinalized func(context.Context, *v1alpha1.Deployment)
+	// DeploymentApplied runs after an apply attempt. Successful results are
+	// reported after persistence; adapter and persistence failures are reported
+	// with their errors.
+	DeploymentApplied func(context.Context, types.ApplyInput, *types.ApplyResult, error)
 
 	mu         sync.RWMutex
 	checkpoint int64

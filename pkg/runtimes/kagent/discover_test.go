@@ -75,7 +75,7 @@ func TestDiscoverSurvivesRealAgentIDFormat(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	a := New(withClientFactory(func(cfg runtimeConfig) (kagentClient, error) { return newRESTClient(cfg, nil) })).(types.DeploymentDiscoverySource)
+	a := newAdapter(func(cfg runtimeConfig) (kagentClient, error) { return newRESTClient(cfg, nil) })
 	got, err := a.Discover(context.Background(), types.DiscoverInput{
 		Runtime: &v1alpha1.Runtime{
 			Metadata: v1alpha1.ObjectMeta{Name: "my-kagent"},

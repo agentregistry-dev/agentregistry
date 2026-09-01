@@ -10,6 +10,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/status"
 )
 
 const runtimeMetadataPrefix = "runtimes.agentregistry.solo.io/"
@@ -160,11 +161,11 @@ func DeploymentStatus(dep *v1alpha1.Deployment) string {
 	if dep.Metadata.DeletionTimestamp != nil {
 		return "terminating"
 	}
-	if ready := dep.Status.GetCondition("Ready"); ready != nil {
+	if ready := dep.Status.GetCondition(status.ConditionTypeReady); ready != nil {
 		if ready.Status == v1alpha1.ConditionTrue {
 			return "deployed"
 		}
-		if ready.Status == v1alpha1.ConditionFalse && ready.Reason == "Failed" {
+		if ready.Status == v1alpha1.ConditionFalse && ready.Reason == status.ConditionReasonFailed {
 			return "failed"
 		}
 	}

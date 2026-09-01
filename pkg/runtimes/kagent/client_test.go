@@ -298,8 +298,6 @@ func TestEnsureRemoteToolServerPostsExpectedPayload(t *testing.T) {
 	assert.JSONEq(t, `{
 		"type": "RemoteMCPServer",
 		"remoteMCPServer": {
-			"apiVersion": "kagent.dev/v1alpha2",
-			"kind": "RemoteMCPServer",
 			"metadata": {"name": "remote-tools", "namespace": "kagent"},
 			"spec": {
 				"description": "remote-tools",
@@ -344,8 +342,6 @@ func TestEnsureSourceToolServerPostsExpectedPayload(t *testing.T) {
 	assert.JSONEq(t, `{
 		"type": "MCPServer",
 		"mcpServer": {
-			"apiVersion": "kagent.dev/v1alpha1",
-			"kind": "MCPServer",
 			"metadata": {"name": "source-tools", "namespace": "kagent"},
 			"spec": {
 				"deployment": {

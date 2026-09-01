@@ -52,6 +52,8 @@ type ControllerConfig struct {
 	// DeploymentFinalized runs after required cleanup and finalizer release so a
 	// parent Runtime can promptly re-evaluate whether all children are gone.
 	DeploymentFinalized func(context.Context, *v1alpha1.Deployment)
+	// DeploymentApplied reports completed apply attempts to lifecycle observers.
+	DeploymentApplied func(context.Context, types.ApplyInput, *types.ApplyResult, error)
 }
 
 // StartDeploymentController constructs the Deployment controller, runs the
@@ -126,6 +128,7 @@ func startDeploymentControllerTerm(
 		Events:              controlPlaneEventStore,
 		DependencyKinds:     config.DependencyKinds,
 		DeploymentFinalized: config.DeploymentFinalized,
+		DeploymentApplied:   config.DeploymentApplied,
 	}
 	if _, err := controller.Refresh(generationCtx); err != nil {
 		cancelGeneration()

@@ -250,6 +250,11 @@ type AppOptions struct {
 	// default behavior of running under the application context.
 	DeploymentControllerLeadership <-chan context.Context
 
+	// DeploymentApplied observes Deployment apply attempts. Successful applies
+	// are reported after status persistence; adapter and persistence failures
+	// are also reported. Unchanged Deployments are omitted.
+	DeploymentApplied func(context.Context, ApplyInput, *ApplyResult, error)
+
 	// DeploymentFinalized notifies lifecycle owners after required Deployment
 	// cleanup finishes and the row is purged. It allows parent
 	// reconciliation to react immediately instead of waiting for a periodic scan.

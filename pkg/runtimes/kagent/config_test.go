@@ -27,6 +27,7 @@ func TestDecodeRuntimeConfig(t *testing.T) {
 				},
 				"imagePullSecrets": []any{"registry-creds"},
 				"deployment": map[string]any{
+					"labels":       map[string]any{"example.com/managed": "true"},
 					"nodeSelector": map[string]any{"node-group": "agents"},
 					"tolerations": []any{map[string]any{
 						"key": "dedicated", "operator": "Equal", "value": "agents", "effect": "NoSchedule",
@@ -46,6 +47,7 @@ func TestDecodeRuntimeConfig(t *testing.T) {
 				},
 				ImagePullSecrets: []string{"registry-creds"},
 				Deployment: runtimeDeploymentConfig{
+					Labels:       map[string]string{"example.com/managed": "true"},
 					NodeSelector: map[string]string{"node-group": "agents"},
 					Tolerations: []corev1.Toleration{{
 						Key: "dedicated", Operator: corev1.TolerationOpEqual, Value: "agents", Effect: corev1.TaintEffectNoSchedule,

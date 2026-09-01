@@ -44,122 +44,101 @@ func TestDeploymentController_EnqueuesAndExecutesApply(t *testing.T) {
 	require.Equal(t, deployment.Metadata.Generation, ready.ObservedGeneration)
 }
 
-func TestDeploymentController_ObservesApplyAfterPersistence(t *testing.T) {
-	ctx := context.Background()
-	stores := newControllerTestStores(t)
-	seedMCPServer(t, stores, "weather")
-	deployment := seedDeployment(t, stores, "observed-success", v1alpha1.DesiredStateDeployed)
-
-	adapter := &recordingApplyObserverAdapter{stores: stores}
-	controller := newDeploymentTestController(stores, adapter)
-	_, err := controller.FullReconcile(ctx)
-	require.NoError(t, err)
-
-	processed, err := controller.RunOnce(ctx)
-	require.NoError(t, err)
-	require.Equal(t, 1, processed)
-	require.Equal(t, int32(1), adapter.observeCalls.Load())
-	require.Equal(t, deployment, adapter.observedInput.Deployment)
-	require.NotNil(t, adapter.observedResult)
-	require.Len(t, adapter.observedResult.Conditions, 1)
-	require.Equal(t, v1alpha1.ConditionTrue, adapter.observedResult.Conditions[0].Status)
-	require.NoError(t, adapter.observedErr)
-	require.True(t, adapter.persisted.Load())
-}
-
-func TestDeploymentController_ObservesAdapterApplyFailure(t *testing.T) {
-	ctx := context.Background()
-	stores := newControllerTestStores(t)
-	seedMCPServer(t, stores, "weather")
-	deployment := seedDeployment(t, stores, "observed-apply-error", v1alpha1.DesiredStateDeployed)
+func TestDeploymentController_ReportsApplyLifecycle(t *testing.T) {
 	applyErr := errors.New("apply failed")
-
-	adapter := &recordingApplyObserverAdapter{
-		recordingDeploymentAdapter: recordingDeploymentAdapter{applyErr: applyErr},
-		stores:                     stores,
+	tests := []struct {
+		name                string
+		applyErr            error
+		cancelBeforePersist bool
+		reconcileAgain      bool
+		wantResult          bool
+		wantErr             error
+		wantPersisted       bool
+	}{
+		{
+			name:          "success after persistence",
+			wantResult:    true,
+			wantPersisted: true,
+		},
+		{
+			name:     "adapter apply failure",
+			applyErr: applyErr,
+			wantErr:  applyErr,
+		},
+		{
+			name:                "persistence failure",
+			cancelBeforePersist: true,
+			wantResult:          true,
+			wantErr:             context.Canceled,
+		},
+		{
+			name:           "unchanged apply is omitted",
+			reconcileAgain: true,
+			wantResult:     true,
+			wantPersisted:  true,
+		},
 	}
-	controller := newDeploymentTestController(stores, adapter)
-	_, err := controller.FullReconcile(ctx)
-	require.NoError(t, err)
 
-	processed, err := controller.RunOnce(ctx)
-	require.NoError(t, err)
-	require.Equal(t, 1, processed)
-	require.Equal(t, int32(1), adapter.observeCalls.Load())
-	require.Equal(t, deployment, adapter.observedInput.Deployment)
-	require.Nil(t, adapter.observedResult)
-	require.ErrorIs(t, adapter.observedErr, applyErr)
-	require.False(t, adapter.persisted.Load())
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			t.Cleanup(cancel)
+			stores := newControllerTestStores(t)
+			seedMCPServer(t, stores, "weather")
+			deployment := seedDeployment(t, stores, "observed", v1alpha1.DesiredStateDeployed)
 
-func TestDeploymentController_ObservesApplyPersistenceFailure(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	stores := newControllerTestStores(t)
-	seedMCPServer(t, stores, "weather")
-	deployment := seedDeployment(t, stores, "observed-persist-error", v1alpha1.DesiredStateDeployed)
+			baseAdapter := &recordingDeploymentAdapter{applyErr: tt.applyErr}
+			var adapter types.DeploymentAdapter = baseAdapter
+			if tt.cancelBeforePersist {
+				adapter = &cancellingDeploymentAdapter{
+					recordingDeploymentAdapter: baseAdapter,
+					cancel:                     cancel,
+				}
+			}
 
-	adapter := &cancellingApplyObserverAdapter{
-		recordingApplyObserverAdapter: recordingApplyObserverAdapter{stores: stores},
-		cancel:                        cancel,
+			var observations []applyObservation
+			controller := newDeploymentTestController(stores, adapter)
+			controller.DeploymentApplied = func(
+				_ context.Context,
+				input types.ApplyInput,
+				result *types.ApplyResult,
+				err error,
+			) {
+				observations = append(observations, applyObservation{
+					input:     input,
+					result:    result,
+					err:       err,
+					persisted: readyConditionPersisted(stores, input.Deployment),
+				})
+			}
+
+			_, err := controller.FullReconcile(ctx)
+			require.NoError(t, err)
+			processed, err := controller.RunOnce(ctx)
+			require.NoError(t, err)
+			require.Equal(t, 1, processed)
+
+			if tt.reconcileAgain {
+				_, err = controller.FullReconcile(ctx)
+				require.NoError(t, err)
+				processed, err = controller.RunOnce(ctx)
+				require.NoError(t, err)
+				require.Equal(t, 1, processed)
+			}
+
+			require.Len(t, observations, 1)
+			observation := observations[0]
+			require.Equal(t, deployment, observation.input.Deployment)
+			if tt.wantResult {
+				require.NotNil(t, observation.result)
+				require.Len(t, observation.result.Conditions, 1)
+			} else {
+				require.Nil(t, observation.result)
+			}
+			require.ErrorIs(t, observation.err, tt.wantErr)
+			require.Equal(t, tt.wantPersisted, observation.persisted)
+		})
 	}
-	controller := newDeploymentTestController(stores, adapter)
-	_, err := controller.FullReconcile(ctx)
-	require.NoError(t, err)
-
-	processed, err := controller.RunOnce(ctx)
-	require.NoError(t, err)
-	require.Equal(t, 1, processed)
-	require.Equal(t, int32(1), adapter.observeCalls.Load())
-	require.Equal(t, deployment, adapter.observedInput.Deployment)
-	require.NotNil(t, adapter.observedResult)
-	require.Len(t, adapter.observedResult.Conditions, 1)
-	require.Equal(t, v1alpha1.ConditionTrue, adapter.observedResult.Conditions[0].Status)
-	require.ErrorIs(t, adapter.observedErr, context.Canceled)
-	require.False(t, adapter.persisted.Load())
-}
-
-func TestDeploymentController_DoesNotObserveUnchangedApply(t *testing.T) {
-	ctx := context.Background()
-	stores := newControllerTestStores(t)
-	seedMCPServer(t, stores, "weather")
-	seedDeployment(t, stores, "observed-unchanged", v1alpha1.DesiredStateDeployed)
-
-	adapter := &recordingApplyObserverAdapter{stores: stores}
-	controller := newDeploymentTestController(stores, adapter)
-	_, err := controller.FullReconcile(ctx)
-	require.NoError(t, err)
-	processed, err := controller.RunOnce(ctx)
-	require.NoError(t, err)
-	require.Equal(t, 1, processed)
-
-	_, err = controller.FullReconcile(ctx)
-	require.NoError(t, err)
-	processed, err = controller.RunOnce(ctx)
-	require.NoError(t, err)
-	require.Equal(t, 1, processed)
-	require.Equal(t, int32(1), adapter.applyCalls.Load())
-	require.Equal(t, int32(1), adapter.observeCalls.Load())
-}
-
-func TestDeploymentController_AdapterWithoutObserverIsUnchanged(t *testing.T) {
-	ctx := context.Background()
-	stores := newControllerTestStores(t)
-	seedMCPServer(t, stores, "weather")
-	deployment := seedDeployment(t, stores, "without-observer", v1alpha1.DesiredStateDeployed)
-
-	adapter := &recordingDeploymentAdapter{}
-	controller := newDeploymentTestController(stores, adapter)
-	_, err := controller.FullReconcile(ctx)
-	require.NoError(t, err)
-
-	processed, err := controller.RunOnce(ctx)
-	require.NoError(t, err)
-	require.Equal(t, 1, processed)
-	require.Equal(t, int32(1), adapter.applyCalls.Load())
-
-	got := loadDeployment(t, stores, deployment.Metadata.Name)
-	require.NotNil(t, got.Status.GetCondition("Ready"))
 }
 
 func TestDeploymentController_SkipsUnchangedApplyAfterRepairReconcile(t *testing.T) {
@@ -691,35 +670,19 @@ type recordingDeploymentAdapter struct {
 	removeErr           error
 }
 
-type recordingApplyObserverAdapter struct {
-	recordingDeploymentAdapter
-	stores         map[string]*v1alpha1store.Store
-	observeCalls   atomic.Int32
-	observedInput  types.ApplyInput
-	observedResult *types.ApplyResult
-	observedErr    error
-	persisted      atomic.Bool
+type applyObservation struct {
+	input     types.ApplyInput
+	result    *types.ApplyResult
+	err       error
+	persisted bool
 }
 
-func (a *recordingApplyObserverAdapter) ObserveApply(
-	_ context.Context,
-	input types.ApplyInput,
-	result *types.ApplyResult,
-	err error,
-) {
-	a.observeCalls.Add(1)
-	a.observedInput = input
-	a.observedResult = result
-	a.observedErr = err
-	a.persisted.Store(readyConditionPersisted(a.stores, input.Deployment))
-}
-
-type cancellingApplyObserverAdapter struct {
-	recordingApplyObserverAdapter
+type cancellingDeploymentAdapter struct {
+	*recordingDeploymentAdapter
 	cancel context.CancelFunc
 }
 
-func (a *cancellingApplyObserverAdapter) Apply(
+func (a *cancellingDeploymentAdapter) Apply(
 	ctx context.Context,
 	input types.ApplyInput,
 ) (*types.ApplyResult, error) {
