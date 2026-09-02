@@ -229,17 +229,41 @@ test-cli-e2e: ## Run CLI subprocess e2e tests (no docker/k8s required; DB cases 
 	$(GOTESTSUM) --format testdox -- -tags=e2e -timeout 5m ./pkg/cli/...
 
 # Run e2e tests against a local Kind cluster.
+E2E_SETUP ?= true
+E2E_SUITE ?= all
+E2E_RUN ?=
+E2E_GEN_DOCS ?= false
 E2E_DISCOVERY_INTERVAL ?= 5s
 
+ifeq ($(E2E_SUITE),all)
+E2E_PACKAGES := ./test/e2e/...
+else ifeq ($(E2E_SUITE),registry)
+E2E_PACKAGES := ./test/e2e
+else ifeq ($(E2E_SUITE),kagent)
+E2E_PACKAGES := ./test/e2e/kagent/...
+else
+$(error unsupported E2E_SUITE "$(E2E_SUITE)"; expected all, registry, or kagent)
+endif
+
 .PHONY: test-e2e
-test-e2e: setup-kind-cluster build-cli ## Run end-to-end tests against Kubernetes
+test-e2e: build-cli ## Run end-to-end tests against Kubernetes
+ifeq ($(E2E_SETUP),true)
+test-e2e: setup-kind-cluster
 	@kubectl --context $(KIND_CLUSTER_CONTEXT) -n $(KIND_NAMESPACE) set env \
 	  deployment/agentregistry AGENT_REGISTRY_CONTROLLER_DISCOVERY_INTERVAL=$(E2E_DISCOVERY_INTERVAL)
 	@kubectl --context $(KIND_CLUSTER_CONTEXT) -n $(KIND_NAMESPACE) rollout status \
 	  deployment/agentregistry --timeout=2m
+else ifneq ($(E2E_SETUP),false)
+$(error unsupported E2E_SETUP "$(E2E_SETUP)"; expected true or false)
+endif
 	@KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) KIND_NAMESPACE=$(KIND_NAMESPACE) KAGENT_NAMESPACE=$(KAGENT_NAMESPACE) \
-	  GOOGLE_API_KEY=$(GOOGLE_API_KEY) OPENAI_API_KEY=$(OPENAI_API_KEY) \
-	  $(GOTESTSUM) --format testdox -- -count=1 -v -tags=e2e -timeout 45m ./test/e2e/...
+	  GOOGLE_API_KEY=$(GOOGLE_API_KEY) OPENAI_API_KEY=$(OPENAI_API_KEY) E2E_GEN_DOCS=$(E2E_GEN_DOCS) \
+	  $(GOTESTSUM) --format testdox -- -count=1 -v -tags=e2e -timeout 45m \
+	  $(if $(strip $(E2E_RUN)),-run '^$(E2E_RUN)$$') $(E2E_PACKAGES)
+
+.PHONY: generate-e2e-docs
+generate-e2e-docs: E2E_GEN_DOCS := true
+generate-e2e-docs: test-e2e ## Generate scenario docs from E2E tests
 
 .PHONY: gen-openapi
 gen-openapi: ## Generate the OpenAPI specification
