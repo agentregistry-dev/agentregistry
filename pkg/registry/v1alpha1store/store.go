@@ -19,7 +19,6 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
-	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
 // StoreBehavior names the private persistence behavior used below the single
@@ -72,8 +71,6 @@ type Store struct {
 	// different schema (e.g. an extension's).
 	qualified string
 	behavior  StoreBehavior
-	kind      string
-	auditor   types.Auditor
 }
 
 // Behavior reports which private persistence behavior this Store uses. Generic
@@ -86,55 +83,20 @@ func (s *Store) Behavior() StoreBehavior {
 	return s.behavior
 }
 
-// StoreOption configures an optional Store behaviour at construction
-// time. Options compose; later options override earlier ones for the
-// same field.
-type StoreOption func(*Store)
-
-// WithAuditor plugs a types.Auditor into the Store so every state
-// change the Store considers significant fires the matching audit
-// event after the underlying transaction commits. Default is
-// types.NoopAuditor.
-func WithAuditor(a types.Auditor) StoreOption {
-	return func(s *Store) {
-		if a != nil {
-			s.auditor = a
-		}
-	}
-}
-
-// WithKind tags a Store with the canonical v1alpha1 Kind name (e.g.
-// v1alpha1.KindAgent) so audit events can name the kind without the
-// caller having to set obj.TypeMeta. NewStores sets this for every
-// kind; ad-hoc constructors leave it empty unless the caller passes
-// WithKind explicitly. When unset, the Store falls back to the Kind
-// carried on the inbound object (if any).
-func WithKind(kind string) StoreOption {
-	return func(s *Store) { s.kind = kind }
-}
-
 // NewStore constructs a tagged-artifact Store bound to a single table
 // (e.g. "agents") in schema. The table must exist; NewStore does not
 // validate it. Queries qualify the table with schema explicitly, so the
 // Store does not depend on the connection's search_path.
 //
 // For mutable object tables, use NewMutableObjectStore.
-func NewStore(pool *pgxpool.Pool, schema pkgdb.Schema, table string, opts ...StoreOption) *Store {
-	s := &Store{pool: pool, table: table, qualified: schema.Qualify(table), behavior: TaggedArtifactStore, auditor: types.NoopAuditor}
-	for _, opt := range opts {
-		opt(s)
-	}
-	return s
+func NewStore(pool *pgxpool.Pool, schema pkgdb.Schema, table string) *Store {
+	return &Store{pool: pool, table: table, qualified: schema.Qualify(table), behavior: TaggedArtifactStore}
 }
 
 // NewMutableObjectStore constructs a mutable-object Store for tables keyed by
 // namespace/name in schema.
-func NewMutableObjectStore(pool *pgxpool.Pool, schema pkgdb.Schema, table string, opts ...StoreOption) *Store {
-	s := &Store{pool: pool, table: table, qualified: schema.Qualify(table), behavior: MutableObjectStore, auditor: types.NoopAuditor}
-	for _, opt := range opts {
-		opt(s)
-	}
-	return s
+func NewMutableObjectStore(pool *pgxpool.Pool, schema pkgdb.Schema, table string) *Store {
+	return &Store{pool: pool, table: table, qualified: schema.Qualify(table), behavior: MutableObjectStore}
 }
 
 // UpsertOutcome categorises what an Upsert call did.
@@ -283,31 +245,9 @@ func (s *Store) Upsert(ctx context.Context, obj v1alpha1.Object, opts ...UpsertO
 	}
 
 	if s.behavior == TaggedArtifactStore {
-		res, err := s.upsertTagged(ctx, meta, specJSON)
-		if err != nil {
-			return res, err
-		}
-		// Fire the audit event AFTER the transaction commits. If the tx
-		// rolls back (err != nil above) the event is suppressed. Branch 2
-		// outcomes (UpsertNoOp, UpsertLabelsUpdated) do not introduce a
-		// new tag row, so they are not recorded.
-		if res.Outcome == UpsertCreated {
-			s.auditor.ResourceTagCreated(ctx, s.kindFor(obj), meta.Namespace, meta.Name, res.Tag)
-		}
-		return res, nil
+		return s.upsertTagged(ctx, meta, specJSON)
 	}
 	return s.upsertMutable(ctx, meta, specJSON, opt)
-}
-
-// kindFor returns the canonical Kind name to attach to audit events.
-// Prefers the Kind set at construction time (NewStores does this);
-// falls back to the inbound object's TypeMeta.Kind. May be "" when
-// neither is populated (ad-hoc unit-test construction).
-func (s *Store) kindFor(obj v1alpha1.Object) string {
-	if s.kind != "" {
-		return s.kind
-	}
-	return obj.GetKind()
 }
 
 // upsertTagged implements the tag apply semantics for tagged artifact tables.

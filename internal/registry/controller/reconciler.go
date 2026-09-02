@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
 	"slices"
 
 	"k8s.io/client-go/util/workqueue"
@@ -307,17 +306,8 @@ func (c *DeploymentController) persistApplyResult(
 		}
 		return nil
 	}
-	if len(result.Conditions) > 0 || len(result.Details) > 0 || fingerprint != "" {
+	if len(result.Conditions) > 0 || len(result.Details) > 0 || len(result.RuntimeMetadata) > 0 || fingerprint != "" {
 		patch.Status = deploymentControllerStatusPatch(deployment, result, fingerprint, forceToken, dependencies)
-	}
-	if len(result.RuntimeMetadata) > 0 {
-		patch.Annotations = func(annotations map[string]string) map[string]string {
-			if annotations == nil {
-				annotations = map[string]string{}
-			}
-			maps.Copy(annotations, result.RuntimeMetadata)
-			return annotations
-		}
 	}
 	if err := c.deploymentStore().ApplyPatch(ctx, deployment.Metadata.NamespaceOrDefault(), deployment.Metadata.Name, "", patch); err != nil {
 		return fmt.Errorf("persist apply result: %w", err)
@@ -342,6 +332,9 @@ func deploymentControllerStatusPatch(
 			}
 			for key, encoded := range result.Details {
 				_ = s.SetDetailsKeyJSON(key, encoded)
+			}
+			if len(result.RuntimeMetadata) > 0 {
+				_ = s.SetDetailsKey(deploymentRuntimeDetailsKey, result.RuntimeMetadata)
 			}
 		}
 		if fingerprint != "" {

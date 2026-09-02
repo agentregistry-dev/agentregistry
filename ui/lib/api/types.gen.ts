@@ -14,7 +14,7 @@ export type Agent = {
 
 export type AgentSource = {
     image?: string;
-    protocol?: 'A2A' | 'HTTP';
+    protocol?: 'A2A' | 'HTTP' | 'OpenAIResponses';
     repository?: Repository;
 };
 

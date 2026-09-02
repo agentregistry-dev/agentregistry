@@ -13,6 +13,7 @@ import (
 )
 
 const runtimeMetadataPrefix = "runtimes.agentregistry.solo.io/"
+const runtimeMetadataDetailsKey = "runtimeMetadata"
 const deploymentOriginManaged = "managed"
 
 // DeploymentRecord is the CLI-friendly projection of a v1alpha1 Deployment.
@@ -109,7 +110,7 @@ func DeploymentRecordFromObject(dep *v1alpha1.Deployment) *DeploymentRecord {
 		Origin:            "managed",
 		Env:               cloneStringMap(dep.Spec.Env),
 		RuntimeConfig:     cloneAnyMap(dep.Spec.RuntimeConfig),
-		RuntimeMetadata:   deploymentRuntimeMetadata(dep.Metadata.Annotations),
+		RuntimeMetadata:   deploymentRuntimeMetadata(dep),
 		Error:             deploymentError(dep.Status),
 		CreatedAt:         dep.Metadata.CreatedAt,
 		UpdatedAt:         dep.Metadata.UpdatedAt,
@@ -187,7 +188,17 @@ func deploymentError(status v1alpha1.Status) string {
 	return ""
 }
 
-func deploymentRuntimeMetadata(annotations map[string]string) map[string]any {
+func deploymentRuntimeMetadata(deployment *v1alpha1.Deployment) map[string]any {
+	if deployment == nil {
+		return nil
+	}
+	var metadata map[string]any
+	found, err := deployment.Status.GetDetailsKey(runtimeMetadataDetailsKey, &metadata)
+	if err == nil && found && len(metadata) > 0 {
+		return metadata
+	}
+
+	annotations := deployment.Metadata.Annotations
 	if len(annotations) == 0 {
 		return nil
 	}

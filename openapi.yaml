@@ -28,6 +28,7 @@ components:
           enum:
           - A2A
           - HTTP
+          - OpenAIResponses
           type: string
         repository:
           $ref: '#/components/schemas/Repository'

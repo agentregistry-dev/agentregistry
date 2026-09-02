@@ -154,52 +154,58 @@ func TestGetCmd_RegistryDrivenColumnLookup(t *testing.T) {
 		"should fail at API client check, not kind lookup")
 }
 
-// TestProvider_NoAllTagsSupport pins that Runtime — a mutable
-// namespace/name object — is registered without ListTags /
-// DeleteAllTags closures. The dispatch layer rejects --all-tags
-// when those fields are nil, which is exactly the behavior we want for
-// Runtime on this branch (its server store has no /tags endpoint).
-func TestProvider_NoAllTagsSupport(t *testing.T) {
-	k, err := scheme.Lookup("runtime")
-	require.NoError(t, err)
-	require.Nil(t, k.ListTags, "Runtime should not expose ListTags (mutable object kind)")
-	require.Nil(t, k.DeleteAllTags, "Runtime should not expose DeleteAllTags (mutable object kind)")
-}
-
-func TestModel_AllTagsSupport(t *testing.T) {
-	k, err := scheme.Lookup("model")
-	require.NoError(t, err)
-	require.NotNil(t, k.ListTags, "tagged Model should expose ListTags")
-	require.NotNil(t, k.DeleteAllTags, "tagged Model should expose DeleteAllTags")
-	require.Equal(t, "model", k.Kind)
-	require.Equal(t, "models", k.Plural)
-}
-
-// TestPlugin_AllTagsSupport pins that Plugin — a tag-versioned artifact kind —
-// resolves via every alias and keeps its tagged-kind wiring (ListTags /
-// DeleteAllTags), so it never silently loses registration or --all-tags support.
-func TestPlugin_AllTagsSupport(t *testing.T) {
-	for _, alias := range []string{"plugin", "plugins", "Plugin"} {
+func TestSecret_CLIRegistration(t *testing.T) {
+	for _, alias := range []string{"secret", "secrets", "Secret"} {
 		k, err := scheme.Lookup(alias)
 		require.NoError(t, err, "%q should resolve via declarative's init() registration", alias)
-		require.NotNil(t, k.ListTags, "tagged Plugin should expose ListTags")
-		require.NotNil(t, k.DeleteAllTags, "tagged Plugin should expose DeleteAllTags")
-		require.Equal(t, "plugin", k.Kind)
-		require.Equal(t, "plugins", k.Plural)
-		require.NotEmpty(t, k.TableColumns, "expected TableColumns on the plugin kind")
+		require.Equal(t, "secret", k.Kind)
+		require.Equal(t, "secrets", k.Plural)
+		require.Equal(t, []scheme.Column{
+			{Header: "NAME"}, {Header: "TYPE"}, {Header: "KEYS"}, {Header: "IMMUTABLE"},
+		}, k.TableColumns)
 	}
 }
 
-// TestDeployment_NoAllTagsSupport is the symmetric assertion for
-// Deployment — also a mutable namespace/name object. Already
-// covered by TestGet_AllTags_DeploymentRejected at the CLI surface
-// but pinning it at the registry shape level guards against an
-// accidental ListTags wiring regression.
-func TestDeployment_NoAllTagsSupport(t *testing.T) {
-	k, err := scheme.Lookup("deployment")
-	require.NoError(t, err)
-	require.Nil(t, k.ListTags, "Deployment should not expose ListTags (mutable object kind)")
-	require.Nil(t, k.DeleteAllTags, "Deployment should not expose DeleteAllTags (mutable object kind)")
+func TestCommandHelpListsRegisteredKinds(t *testing.T) {
+	getCmd := commands.NewGetCmd(declarativeTestDeps(nil))
+	deleteCmd := commands.NewDeleteCmd(declarativeTestDeps(nil))
+	for _, kind := range scheme.All() {
+		t.Run(kind.Kind, func(t *testing.T) {
+			require.NotEmpty(t, kind.Plural)
+			assert.Contains(t, getCmd.Long, kind.Plural)
+			assert.Contains(t, deleteCmd.Long, kind.Plural)
+		})
+	}
+}
+
+func TestEveryAPIKindHasCLIRegistration(t *testing.T) {
+	for _, descriptor := range v1alpha1.KindDescriptors() {
+		t.Run(descriptor.Kind, func(t *testing.T) {
+			kind, err := scheme.Lookup(descriptor.Kind)
+			require.NoError(t, err, "API kind %q is missing CLI registration", descriptor.Kind)
+			require.NotEmpty(t, kind.Plural)
+			require.NotEmpty(t, kind.TableColumns)
+			require.NotNil(t, kind.RowFunc)
+			require.NotNil(t, kind.ToYAMLFunc)
+			require.NotNil(t, kind.Get)
+			require.NotNil(t, kind.ListFunc)
+			require.NotNil(t, kind.Delete)
+
+			row := kind.RowFunc(descriptor.NewObject())
+			require.Len(t, row, len(kind.TableColumns))
+
+			switch descriptor.Storage {
+			case v1alpha1.KindStorageTaggedArtifact:
+				require.NotNil(t, kind.ListTags)
+				require.NotNil(t, kind.DeleteAllTags)
+			case v1alpha1.KindStorageMutableObject:
+				require.Nil(t, kind.ListTags)
+				require.Nil(t, kind.DeleteAllTags)
+			default:
+				t.Fatalf("unsupported storage type %q", descriptor.Storage)
+			}
+		})
+	}
 }
 
 // tagGetServer serves GET /v0/agents/{name}/{tag} (specific tag)
