@@ -7,13 +7,15 @@
 Start the registry port-forward in a separate terminal:
 
 ```shell
-kubectl --context "kind-${KIND_CLUSTER_NAME:-agentregistry}" -n agentregistry port-forward svc/agentregistry 18121:12121
+kubectl --context "kind-${KIND_CLUSTER_NAME:-agentregistry}" -n "${KIND_NAMESPACE:-agentregistry}" port-forward svc/agentregistry 18121:12121
 ```
 
 Set the scenario variables:
 
 ```shell
 export KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-agentregistry}"
+export KIND_NAMESPACE="${KIND_NAMESPACE:-agentregistry}"
+export KAGENT_NAMESPACE="${KAGENT_NAMESPACE:-kagent}"
 export E2E_ID="${E2E_ID:-$(date +%s)}"
 export ARCTL_API_BASE_URL="${ARCTL_API_BASE_URL:-http://localhost:18121/v0}"
 ```
@@ -40,8 +42,8 @@ metadata:
 spec:
   type: Kagent
   config:
-    kagentUrl: http://kagent-controller.kagent:8083
-    namespace: kagent
+    kagentUrl: http://kagent-controller.${KAGENT_NAMESPACE}:8083
+    namespace: ${KAGENT_NAMESPACE}
     auth:
       secretRef:
         name: e2e-${E2E_ID}-secret
@@ -131,7 +133,7 @@ arctl delete deployment e2e-${E2E_ID}-deployment
 ```
 
 ```shell
-kubectl --context kind-${KIND_CLUSTER_NAME} -n kagent wait --for=delete agent/e2e-${E2E_ID}-agent --timeout=2m
+kubectl --context kind-${KIND_CLUSTER_NAME} -n "${KAGENT_NAMESPACE}" wait --for=delete agent/e2e-${E2E_ID}-agent --timeout=2m
 ```
 
 ```shell
@@ -160,8 +162,8 @@ metadata:
 spec:
   type: Kagent
   config:
-    kagentUrl: http://kagent-controller.kagent:8083
-    namespace: kagent
+    kagentUrl: http://kagent-controller.${KAGENT_NAMESPACE}:8083
+    namespace: ${KAGENT_NAMESPACE}
     auth:
       secretRef:
         name: e2e-${E2E_ID}-secret

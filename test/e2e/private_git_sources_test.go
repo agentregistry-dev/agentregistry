@@ -22,13 +22,12 @@ import (
 )
 
 const (
-	privateGitFixtureName      = "git-fixture"
-	privateGitFixtureNamespace = "agentregistry"
-	privateGitInvalidPassword  = "invalid-e2e-token"
+	privateGitFixtureName     = "git-fixture"
+	privateGitInvalidPassword = "invalid-e2e-token"
 )
 
 func TestPrivateGitCatalogSources(t *testing.T) {
-	t.Logf("Setting up private Git fixture %s/%s", privateGitFixtureNamespace, privateGitFixtureName)
+	t.Logf("Setting up private Git fixture %s/%s", RegistryNamespace, privateGitFixtureName)
 	requirePrivateGitFixture(t)
 
 	regURL := RegistryURL(t)
@@ -42,6 +41,7 @@ func TestPrivateGitCatalogSources(t *testing.T) {
 	skillAnonName := UniqueNameWithPrefix("e2e-skill-anon")
 
 	path := renderPrivateGitSources(t, tmpDir, map[string]string{
+		"Namespace":             RegistryNamespace,
 		"SecretName":            secretName,
 		"InvalidSecretName":     invalidSecretName,
 		"PluginAuthName":        pluginAuthName,
@@ -93,13 +93,30 @@ func TestPrivateGitCatalogSources(t *testing.T) {
 
 func renderPrivateGitSources(t *testing.T, outputDir string, data map[string]string) string {
 	t.Helper()
-	manifest := privateGitTestdata("private_git_sources.yaml.tmpl")
+	return renderPrivateGitTemplate(
+		t,
+		outputDir,
+		"private_git_sources.yaml.tmpl",
+		"private-git-sources.yaml",
+		data,
+	)
+}
+
+func renderPrivateGitTemplate(
+	t *testing.T,
+	outputDir string,
+	templateName string,
+	outputName string,
+	data map[string]string,
+) string {
+	t.Helper()
+	manifest := privateGitTestdata(templateName)
 	tmpl, err := template.New(filepath.Base(manifest)).Option("missingkey=error").ParseFiles(manifest)
 	require.NoError(t, err)
 
 	var rendered bytes.Buffer
 	require.NoError(t, tmpl.Execute(&rendered, data))
-	return writeDeclarativeYAML(t, outputDir, "private-git-sources.yaml", rendered.String())
+	return writeDeclarativeYAML(t, outputDir, outputName, rendered.String())
 }
 
 func waitForPluginReady(t *testing.T, regURL, name string, want v1alpha1.ConditionStatus) (*v1alpha1.Plugin, string) {
@@ -154,7 +171,13 @@ func getPrivateGitResource[T any](t *testing.T, regURL, resource, name, tag stri
 
 func requirePrivateGitFixture(t *testing.T) {
 	t.Helper()
-	manifest := privateGitTestdata("private_git_fixture.yaml")
+	manifest := renderPrivateGitTemplate(
+		t,
+		t.TempDir(),
+		"private_git_fixture.yaml",
+		"private-git-fixture.yaml",
+		map[string]string{"Namespace": RegistryNamespace},
+	)
 	cmd := exec.Command("kubectl", "--context", KubeContext, "apply", "-f", manifest)
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "apply private Git fixture: %s", string(out))
@@ -173,7 +196,7 @@ func requirePrivateGitFixture(t *testing.T) {
 
 	cmd = exec.Command(
 		"kubectl", "--context", KubeContext,
-		"-n", privateGitFixtureNamespace,
+		"-n", RegistryNamespace,
 		"rollout", "status", "deployment/"+privateGitFixtureName,
 		"--timeout=120s",
 	)
@@ -183,7 +206,7 @@ func requirePrivateGitFixture(t *testing.T) {
 	t.Logf("Waiting for private Git fixture Service endpoints")
 	cmd = exec.Command(
 		"kubectl", "--context", KubeContext,
-		"-n", privateGitFixtureNamespace,
+		"-n", RegistryNamespace,
 		"wait", "--for=jsonpath={.subsets[0].addresses[0].ip}",
 		"endpoints/"+privateGitFixtureName,
 		"--timeout=120s",

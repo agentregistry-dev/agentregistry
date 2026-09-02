@@ -20,11 +20,12 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
-// ClusterName and KubeContext are derived from KIND_CLUSTER_NAME so that
-// tests target whatever cluster was set up externally by `make setup-kind-cluster`.
+// ClusterName, KubeContext, and RegistryNamespace identify the environment
+// prepared by `make setup-kind-cluster`.
 var (
-	ClusterName = getEnv("KIND_CLUSTER_NAME", "agentregistry")
-	KubeContext = "kind-" + ClusterName
+	ClusterName       = getEnv("KIND_CLUSTER_NAME", "agentregistry")
+	KubeContext       = "kind-" + ClusterName
+	RegistryNamespace = getEnv("KIND_NAMESPACE", "agentregistry")
 )
 
 // StartRegistry verifies prerequisites, points ARCTL_BINARY at the pre-built
@@ -58,7 +59,7 @@ func resolveRegistryURL(portEnv string) (string, func()) {
 	var lastErr error
 
 	err := wait.PollUntilContextTimeout(context.Background(), pollInterval, timeout, true, func(ctx context.Context) (bool, error) {
-		cmd := exec.CommandContext(ctx, "kubectl", "--context", KubeContext, "-n", "agentregistry",
+		cmd := exec.CommandContext(ctx, "kubectl", "--context", KubeContext, "-n", RegistryNamespace,
 			"get", "svc", "agentregistry", "-o", "jsonpath={.status.loadBalancer.ingress[0].ip}")
 		out, pollErr := cmd.Output()
 		if pollErr != nil {
@@ -108,7 +109,7 @@ func startPortForward(portEnv string, servicePort int) (string, func()) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cmd := exec.CommandContext(ctx, "kubectl",
 		"--context", KubeContext,
-		"-n", "agentregistry",
+		"-n", RegistryNamespace,
 		"port-forward",
 		"svc/agentregistry",
 		fmt.Sprintf("%d:%d", localPort, servicePort),

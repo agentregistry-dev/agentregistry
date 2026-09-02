@@ -40,11 +40,13 @@ func newE2EDocRecorder(
 			"## Run locally\n\n"+
 			"Start the registry port-forward in a separate terminal:\n\n"+
 			"```shell\n"+
-			"kubectl --context \"kind-${KIND_CLUSTER_NAME:-agentregistry}\" -n agentregistry port-forward svc/agentregistry 18121:12121\n"+
+			"kubectl --context \"kind-${KIND_CLUSTER_NAME:-agentregistry}\" -n \"${KIND_NAMESPACE:-agentregistry}\" port-forward svc/agentregistry 18121:12121\n"+
 			"```\n\n"+
 			"Set the scenario variables:\n\n"+
 			"```shell\n"+
 			"export KIND_CLUSTER_NAME=\"${KIND_CLUSTER_NAME:-agentregistry}\"\n"+
+			"export KIND_NAMESPACE=\"${KIND_NAMESPACE:-agentregistry}\"\n"+
+			"export KAGENT_NAMESPACE=\"${KAGENT_NAMESPACE:-kagent}\"\n"+
 			"export E2E_ID=\"${E2E_ID:-$(date +%%s)}\"\n"+
 			"export ARCTL_API_BASE_URL=\"${ARCTL_API_BASE_URL:-http://localhost:18121/v0}\"\n"+
 			"```\n",
@@ -130,11 +132,13 @@ func TestE2EDocRecorderWritesSuccessfulRun(t *testing.T) {
 		"## Run locally\n\n" +
 		"Start the registry port-forward in a separate terminal:\n\n" +
 		"```shell\n" +
-		"kubectl --context \"kind-${KIND_CLUSTER_NAME:-agentregistry}\" -n agentregistry port-forward svc/agentregistry 18121:12121\n" +
+		"kubectl --context \"kind-${KIND_CLUSTER_NAME:-agentregistry}\" -n \"${KIND_NAMESPACE:-agentregistry}\" port-forward svc/agentregistry 18121:12121\n" +
 		"```\n\n" +
 		"Set the scenario variables:\n\n" +
 		"```shell\n" +
 		"export KIND_CLUSTER_NAME=\"${KIND_CLUSTER_NAME:-agentregistry}\"\n" +
+		"export KIND_NAMESPACE=\"${KIND_NAMESPACE:-agentregistry}\"\n" +
+		"export KAGENT_NAMESPACE=\"${KAGENT_NAMESPACE:-kagent}\"\n" +
 		"export E2E_ID=\"${E2E_ID:-$(date +%s)}\"\n" +
 		"export ARCTL_API_BASE_URL=\"${ARCTL_API_BASE_URL:-http://localhost:18121/v0}\"\n" +
 		"```\n\n" +

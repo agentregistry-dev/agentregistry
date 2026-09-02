@@ -56,7 +56,7 @@ func TestKagentAgent(t *testing.T) {
 
 	docs.Step("Remove the Agent Deployment", "Delete the AgentRegistry Deployment and verify Kagent removes the Agent workload.")
 	docs.Command("arctl delete deployment " + deploymentName)
-	docs.Command("kubectl --context kind-${KIND_CLUSTER_NAME} -n kagent wait --for=delete agent/" + agentName + " --timeout=2m")
+	docs.Command("kubectl --context kind-${KIND_CLUSTER_NAME} -n \"${KAGENT_NAMESPACE}\" wait --for=delete agent/" + agentName + " --timeout=2m")
 	docs.Command("arctl delete agent " + agentName)
 	docs.Command("arctl delete model " + modelName + " --tag e2e")
 	docs.Command("arctl delete -f - <<EOF\n" + kagentRuntimeManifest(secretName, runtimeName) + "\nEOF")
