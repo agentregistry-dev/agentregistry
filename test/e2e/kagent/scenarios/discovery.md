@@ -7,13 +7,15 @@
 Start the registry port-forward in a separate terminal:
 
 ```shell
-kubectl --context "kind-${KIND_CLUSTER_NAME:-agentregistry}" -n agentregistry port-forward svc/agentregistry 18121:12121
+kubectl --context "kind-${KIND_CLUSTER_NAME:-agentregistry}" -n "${KIND_NAMESPACE:-agentregistry}" port-forward svc/agentregistry 18121:12121
 ```
 
 Set the scenario variables:
 
 ```shell
 export KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-agentregistry}"
+export KIND_NAMESPACE="${KIND_NAMESPACE:-agentregistry}"
+export KAGENT_NAMESPACE="${KAGENT_NAMESPACE:-kagent}"
 export E2E_ID="${E2E_ID:-$(date +%s)}"
 export ARCTL_API_BASE_URL="${ARCTL_API_BASE_URL:-http://localhost:18121/v0}"
 ```
@@ -40,8 +42,8 @@ metadata:
 spec:
   type: Kagent
   config:
-    kagentUrl: http://kagent-controller.kagent:8083
-    namespace: kagent
+    kagentUrl: http://kagent-controller.${KAGENT_NAMESPACE}:8083
+    namespace: ${KAGENT_NAMESPACE}
     auth:
       secretRef:
         name: e2e-${E2E_ID}-secret
@@ -59,7 +61,7 @@ apiVersion: kagent.dev/v1alpha2
 kind: Agent
 metadata:
   name: e2e-${E2E_ID}-agent
-  namespace: kagent
+  namespace: ${KAGENT_NAMESPACE}
 spec:
   type: BYO
   description: Out-of-band AgentRegistry E2E fixture
@@ -72,11 +74,32 @@ EOF
 
 ## Remove the discovered Agent
 
-Delete the out-of-band Agent and its Runtime, then verify the discovered Deployment is removed.
+Delete the out-of-band Agent, then verify its discovered Deployment is removed while the Runtime still exists.
 
 ```shell
-kubectl --context kind-${KIND_CLUSTER_NAME} -n kagent delete agent e2e-${E2E_ID}-agent
+kubectl --context kind-${KIND_CLUSTER_NAME} -n "${KAGENT_NAMESPACE}" delete agent e2e-${E2E_ID}-agent
 ```
+
+```shell
+wait_for_discovered_deployment_removal() {
+  attempt=0
+  while [ "$attempt" -lt 60 ]; do
+    deployments=$(arctl get deployments --origin discovered) || return 1
+    if ! printf '%s\n' "$deployments" | grep -Fq "e2e-${E2E_ID}-agent"; then
+      return 0
+    fi
+    attempt=$((attempt + 1))
+    sleep 5
+  done
+  echo "discovered Deployment for e2e-${E2E_ID}-agent was not removed" >&2
+  return 1
+}
+wait_for_discovered_deployment_removal
+```
+
+## Remove the Kagent runtime
+
+Delete the Runtime after stale discovery cleanup has been verified.
 
 ```shell
 arctl delete -f - <<EOF
@@ -96,8 +119,8 @@ metadata:
 spec:
   type: Kagent
   config:
-    kagentUrl: http://kagent-controller.kagent:8083
-    namespace: kagent
+    kagentUrl: http://kagent-controller.${KAGENT_NAMESPACE}:8083
+    namespace: ${KAGENT_NAMESPACE}
     auth:
       secretRef:
         name: e2e-${E2E_ID}-secret

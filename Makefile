@@ -229,10 +229,17 @@ test-cli-e2e: ## Run CLI subprocess e2e tests (no docker/k8s required; DB cases 
 	$(GOTESTSUM) --format testdox -- -tags=e2e -timeout 5m ./pkg/cli/...
 
 # Run e2e tests against a local Kind cluster.
+E2E_DISCOVERY_INTERVAL ?= 5s
+
 .PHONY: test-e2e
 test-e2e: setup-kind-cluster build-cli ## Run end-to-end tests against Kubernetes
-	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) GOOGLE_API_KEY=$(GOOGLE_API_KEY) OPENAI_API_KEY=$(OPENAI_API_KEY) \
-	  $(GOTESTSUM) --format testdox -- -v -tags=e2e -timeout 45m ./test/e2e/...
+	@kubectl --context $(KIND_CLUSTER_CONTEXT) -n $(KIND_NAMESPACE) set env \
+	  deployment/agentregistry AGENT_REGISTRY_CONTROLLER_DISCOVERY_INTERVAL=$(E2E_DISCOVERY_INTERVAL)
+	@kubectl --context $(KIND_CLUSTER_CONTEXT) -n $(KIND_NAMESPACE) rollout status \
+	  deployment/agentregistry --timeout=2m
+	@KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) KIND_NAMESPACE=$(KIND_NAMESPACE) KAGENT_NAMESPACE=$(KAGENT_NAMESPACE) \
+	  GOOGLE_API_KEY=$(GOOGLE_API_KEY) OPENAI_API_KEY=$(OPENAI_API_KEY) \
+	  $(GOTESTSUM) --format testdox -- -count=1 -v -tags=e2e -timeout 45m ./test/e2e/...
 
 .PHONY: gen-openapi
 gen-openapi: ## Generate the OpenAPI specification
@@ -466,10 +473,10 @@ dump-kind-state: ## Dump Kind cluster state for debugging (pods, events, kagent 
 	@kubectl get events -A --sort-by='.lastTimestamp' --context $(KIND_CLUSTER_CONTEXT) 2>/dev/null | tail -50 || true
 	@echo ""
 	@echo "=== Kagent pods ==="
-	@kubectl get pods -n kagent --context $(KIND_CLUSTER_CONTEXT) 2>/dev/null || true
+	@kubectl get pods -n $(KAGENT_NAMESPACE) --context $(KIND_CLUSTER_CONTEXT) 2>/dev/null || true
 	@echo ""
 	@echo "=== Kagent controller logs ==="
-	@kubectl logs deployment/kagent-controller -n kagent --context $(KIND_CLUSTER_CONTEXT) --tail=100 2>/dev/null || true
+	@kubectl logs deployment/kagent-controller -n $(KAGENT_NAMESPACE) --context $(KIND_CLUSTER_CONTEXT) --tail=100 2>/dev/null || true
 
 bin/arctl-linux-amd64:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o bin/arctl-linux-amd64 cmd/cli/main.go

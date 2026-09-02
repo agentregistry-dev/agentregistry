@@ -30,8 +30,6 @@ import (
 )
 
 const (
-	kagentControllerURL       = "http://kagent-controller.kagent:8083"
-	kagentNamespace           = "kagent"
 	kagentMCPPackage          = "@modelcontextprotocol/server-memory"
 	kagentMCPVersion          = "2026.7.4"
 	kagentMCPServerName       = "io.github.modelcontextprotocol/server-memory"
@@ -40,13 +38,29 @@ const (
 	runtimeMetadataDetailsKey = "runtimeMetadata"
 )
 
+var (
+	kagentNamespace     = envOrDefault("KAGENT_NAMESPACE", "kagent")
+	kagentControllerURL = fmt.Sprintf("http://kagent-controller.%s:8083", kagentNamespace)
+)
+
+func envOrDefault(name, fallback string) string {
+	if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+		return value
+	}
+	return fallback
+}
+
 func newKagentScenarioDocs(t *testing.T, name, title, id string) *e2eDocRecorder {
 	t.Helper()
 	return newE2EDocRecorder(
 		t,
 		filepath.Join(testDir(), "scenarios", name+".md"),
 		title,
-		map[string]string{id: "${E2E_ID}"},
+		map[string]string{
+			id:                              "${E2E_ID}",
+			kagentControllerURL:             "http://kagent-controller.${KAGENT_NAMESPACE}:8083",
+			"namespace: " + kagentNamespace: "namespace: ${KAGENT_NAMESPACE}",
+		},
 	)
 }
 
@@ -337,6 +351,11 @@ func waitForDiscoveredKagentDeployment(
 	present bool,
 ) *registryv1alpha1.Deployment {
 	t.Helper()
+	timeout := 2 * time.Minute
+	if !present {
+		// Discovered rows are deleted after five missed polls.
+		timeout = 7 * time.Minute
+	}
 	var matched *registryv1alpha1.Deployment
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		deployments, err := listDiscoveredDeployments(registryURL)
@@ -353,7 +372,7 @@ func waitForDiscoveredKagentDeployment(
 			return
 		}
 		matched = &matches[0]
-	}, 2*time.Minute, 2*time.Second)
+	}, timeout, 2*time.Second)
 	return matched
 }
 

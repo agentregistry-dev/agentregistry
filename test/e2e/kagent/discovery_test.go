@@ -3,6 +3,7 @@
 package kagent
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -41,10 +42,26 @@ func TestKagentDiscovery(t *testing.T) {
 	require.Equal(t, registryv1alpha1.KindAgent, discovered.Spec.TargetRef.Kind)
 	require.Equal(t, registryv1alpha1.DeploymentOriginDiscovered, discovered.Metadata.Annotations[registryv1alpha1.DeploymentOriginAnnotation])
 
-	docs.Step("Remove the discovered Agent", "Delete the out-of-band Agent and its Runtime, then verify the discovered Deployment is removed.")
-	docs.Command("kubectl --context kind-${KIND_CLUSTER_NAME} -n kagent delete agent " + agentName)
-	docs.Command("arctl delete -f - <<EOF\n" + kagentRuntimeManifest(secretName, runtimeName) + "\nEOF")
+	docs.Step("Remove the discovered Agent", "Delete the out-of-band Agent, then verify its discovered Deployment is removed while the Runtime still exists.")
+	docs.Command("kubectl --context kind-${KIND_CLUSTER_NAME} -n \"${KAGENT_NAMESPACE}\" delete agent " + agentName)
 	deleteKagentObject(t, "agents.kagent.dev", agentName)
-	cleanupRegistry()
 	waitForDiscoveredKagentDeployment(t, env.registryURL, runtimeName, agentName, false)
+	docs.Command(fmt.Sprintf(`wait_for_discovered_deployment_removal() {
+  attempt=0
+  while [ "$attempt" -lt 60 ]; do
+    deployments=$(arctl get deployments --origin discovered) || return 1
+    if ! printf '%%s\n' "$deployments" | grep -Fq "%s"; then
+      return 0
+    fi
+    attempt=$((attempt + 1))
+    sleep 5
+  done
+  echo "discovered Deployment for %s was not removed" >&2
+  return 1
+}
+wait_for_discovered_deployment_removal`, agentName, agentName))
+
+	docs.Step("Remove the Kagent runtime", "Delete the Runtime after stale discovery cleanup has been verified.")
+	docs.Command("arctl delete -f - <<EOF\n" + kagentRuntimeManifest(secretName, runtimeName) + "\nEOF")
+	cleanupRegistry()
 }
