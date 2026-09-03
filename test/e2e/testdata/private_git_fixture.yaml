@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: git-fixture
-  namespace: agentregistry
+  namespace: {{ .Namespace }}
 data:
   htpasswd: |
     git:$apr1$e2etest$UMVlrgHCOL949vUHSFgxm0
@@ -43,7 +43,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: git-fixture
-  namespace: agentregistry
+  namespace: {{ .Namespace }}
 spec:
   replicas: 1
   selector:
@@ -95,7 +95,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: git-fixture
-  namespace: agentregistry
+  namespace: {{ .Namespace }}
 spec:
   selector:
     app: git-fixture
