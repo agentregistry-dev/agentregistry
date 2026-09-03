@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="802" viewBox="0 0 960 802" role="img" aria-labelledby="title desc">
+<title id="title">Tenant-scoped catalog and admin operation</title>
+<desc id="desc">An issuer-qualified principal selects Tenant A, where tenantID equals metadata.namespace. The server authorizes an action against a Tenant-qualified resource identity, then filters reads before secondary operations or authorizes writes before mutation.</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#495057"/></marker></defs>
+<rect width="960" height="802" fill="#ffffff"/>
+<text x="40" y="56.16" fill="#1e1e1e" font-family="Arial, Helvetica, sans-serif" font-size="32" font-weight="500" text-anchor="start">Tenant-scoped catalog and admin operation</text>
+<text x="40" y="88.72" fill="#495057" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="400" text-anchor="start">The active Tenant stays attached from authentication through storage and audit.</text>
+<rect x="80" y="125" width="800" height="90" rx="14" fill="#e6fcf5" stroke="#2b8a3e" stroke-width="2"/>
+<text x="110" y="175.36" fill="#2b8a3e" font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="500" text-anchor="start">1 · Authenticate</text>
+<text x="340" y="174.59" fill="#1e1e1e" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400" text-anchor="start">Issuer + stable subject or group ID</text>
+<line x1="480" y1="215" x2="480" y2="237" stroke="#495057" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="80" y="245" width="800" height="90" rx="14" fill="#f3f0ff" stroke="#7048e8" stroke-width="2"/>
+<text x="110" y="295.36" fill="#6741d9" font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="500" text-anchor="start">2 · Select Tenant</text>
+<text x="340" y="294.59" fill="#1e1e1e" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400" text-anchor="start">tenantID = metadata.namespace = tenant-a</text>
+<line x1="480" y1="335" x2="480" y2="357" stroke="#495057" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="80" y="365" width="800" height="90" rx="14" fill="#e7f5ff" stroke="#1971c2" stroke-width="2"/>
+<text x="110" y="415.36" fill="#1864ab" font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="500" text-anchor="start">3 · Authorize</text>
+<text x="340" y="403.34" fill="#1e1e1e" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400" text-anchor="start">Check action against the</text>
+<text x="340" y="425.84" fill="#1e1e1e" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400" text-anchor="start">Tenant-qualified resource identity</text>
+<line x1="480" y1="455" x2="480" y2="477" stroke="#495057" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="80" y="485" width="800" height="170" rx="14" fill="#e6fcf5" stroke="#099268" stroke-width="2"/>
+<text x="110" y="573.36" fill="#087f5b" font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="500" text-anchor="start">4 · Read or mutate</text>
+<text x="340" y="520.84" fill="#1e1e1e" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400" text-anchor="start">Reads filter before counts and cursors</text>
+<text x="340" y="543.34" fill="#1e1e1e" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400" text-anchor="start">before tags and search</text>
+<text x="340" y="577.84" fill="#1e1e1e" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400" text-anchor="start">Writes authorize before mutation</text>
+<text x="340" y="606.34" fill="#1e1e1e" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400" text-anchor="start">Audit records actor, tenantUID,</text>
+<text x="340" y="628.84" fill="#1e1e1e" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400" text-anchor="start">action, result, and revision</text>
+<rect x="80" y="695" width="800" height="77" rx="12" fill="#e7f5ff" stroke="#1971c2" stroke-width="2"/>
+<text x="480" y="726.84" fill="#1864ab" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400" text-anchor="middle">GlobalSuperAdmin follows the same flow and</text>
+<text x="480" y="749.34" fill="#1864ab" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400" text-anchor="middle">names one target Tenant for every mutation.</text>
+</svg>

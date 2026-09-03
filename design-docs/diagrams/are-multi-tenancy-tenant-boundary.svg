@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="616" viewBox="0 0 1200 616" role="img" aria-labelledby="title desc">
+<title id="title">Tenant boundary for catalog and administration</title>
+<desc id="desc">Tenant A uses tenantID as AgentRegistry metadata.namespace. The namespace contains issuer-qualified identities and roles, catalog resources, and administrative resources. References resolve inside the same namespace.</desc>
+<rect width="1200" height="616" fill="#ffffff"/>
+<text x="40" y="56.16" fill="#1e1e1e" font-family="Arial, Helvetica, sans-serif" font-size="32" font-weight="500" text-anchor="start">Tenant boundary for catalog and administration</text>
+<text x="40" y="88.72" fill="#495057" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="400" text-anchor="start">For catalog and administrative APIs, tenantID is the resource metadata.namespace.</text>
+<rect x="40" y="120" width="1120" height="373" rx="18" fill="#e6fcf5" stroke="#2b8a3e" stroke-width="2"/>
+<text x="68" y="166" fill="#2b8a3e" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="500" text-anchor="start">Tenant A</text>
+<text x="68" y="194.72" fill="#1e1e1e" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="400" text-anchor="start">tenantID = metadata.namespace = tenant-a (immutable)</text>
+<rect x="70" y="230" width="330" height="233" rx="14" fill="#ffffff" stroke="#2b8a3e" stroke-width="2"/>
+<text x="90" y="269.36" fill="#2b8a3e" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="500" text-anchor="start">Identity and RBAC</text>
+<text x="90" y="307.34" fill="#1e1e1e" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400" text-anchor="start">Issuer + stable</text>
+<text x="90" y="329.84" fill="#1e1e1e" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400" text-anchor="start">subject/group ID</text>
+<text x="90" y="360.34" fill="#1e1e1e" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400" text-anchor="start">TenantRoles</text>
+<text x="90" y="382.84" fill="#1e1e1e" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400" text-anchor="start">and bindings</text>
+<text x="90" y="413.34" fill="#1e1e1e" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400" text-anchor="start">One active Tenant</text>
+<text x="90" y="435.84" fill="#1e1e1e" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400" text-anchor="start">per API operation</text>
+<rect x="435" y="230" width="330" height="233" rx="14" fill="#ffffff" stroke="#2b8a3e" stroke-width="2"/>
+<text x="455" y="269.36" fill="#2b8a3e" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="500" text-anchor="start">Catalog resources</text>
+<text x="455" y="307.34" fill="#1e1e1e" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400" text-anchor="start">Agents · MCPServers</text>
+<text x="455" y="329.84" fill="#1e1e1e" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400" text-anchor="start">Models</text>
+<text x="455" y="360.34" fill="#1e1e1e" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400" text-anchor="start">Skills · Prompts</text>
+<text x="455" y="382.84" fill="#1e1e1e" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400" text-anchor="start">Plugins</text>
+<text x="455" y="413.34" fill="#1e1e1e" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400" text-anchor="start">References stay</text>
+<text x="455" y="435.84" fill="#1e1e1e" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400" text-anchor="start">within tenant-a</text>
+<rect x="800" y="230" width="330" height="233" rx="14" fill="#ffffff" stroke="#2b8a3e" stroke-width="2"/>
+<text x="820" y="269.36" fill="#2b8a3e" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="500" text-anchor="start">Administration</text>
+<text x="820" y="307.34" fill="#1e1e1e" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400" text-anchor="start">Secrets · Deployments</text>
+<text x="820" y="329.84" fill="#1e1e1e" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400" text-anchor="start">Approvals</text>
+<text x="820" y="360.34" fill="#1e1e1e" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400" text-anchor="start">Runtime · Gateway</text>
+<text x="820" y="382.84" fill="#1e1e1e" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400" text-anchor="start">Connection records</text>
+<text x="820" y="413.34" fill="#1e1e1e" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400" text-anchor="start">Tenant lifecycle</text>
+<text x="820" y="435.84" fill="#1e1e1e" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400" text-anchor="start">Deployment operations</text>
+<rect x="40" y="528" width="1120" height="58" rx="12" fill="#f8f9fa" stroke="#adb5bd" stroke-width="2"/>
+<text x="600" y="560.72" fill="#343a40" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="400" text-anchor="middle">AgentRegistry namespaces scope registry objects; they are not Kubernetes namespaces.</text>
+</svg>
