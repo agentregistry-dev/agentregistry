@@ -40,8 +40,7 @@ type staticTokenSource string
 
 func (s staticTokenSource) Token(context.Context) (string, error) { return string(s), nil }
 
-// StaticToken returns a TokenSource that always yields token.
-func StaticToken(token string) TokenSource { return staticTokenSource(token) }
+func staticToken(token string) TokenSource { return staticTokenSource(token) }
 
 type kagentClient interface {
 	ensureAgent(ctx context.Context, agent *agentPayload) error

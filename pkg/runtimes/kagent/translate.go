@@ -79,7 +79,7 @@ func workloadEnv(in types.ApplyInput) []corev1.EnvVar {
 		keys = append(keys, k)
 	}
 	slices.Sort(keys)
-	env := make([]corev1.EnvVar, 0, len(keys)+1)
+	env := make([]corev1.EnvVar, 0, len(keys))
 	for _, k := range keys {
 		env = append(env, corev1.EnvVar{Name: k, Value: in.Deployment.Spec.Env[k]})
 	}

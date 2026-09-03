@@ -299,7 +299,7 @@ func (a *adapter) Remove(
 			Type:               mcpServerURLCondition,
 			Status:             v1alpha1.ConditionFalse,
 			Reason:             "Removed",
-			Message:            "kagent MCP server removed",
+			Message:            "Kagent MCP server removed",
 			LastTransitionTime: now,
 		})
 	}
@@ -359,5 +359,5 @@ func (a *adapter) tokenSourceFor(
 	if err != nil {
 		return nil, fmt.Errorf("resolve kagent runtime credential: %w", err)
 	}
-	return StaticToken(string(value.Reveal())), nil
+	return staticToken(string(value.Reveal())), nil
 }
