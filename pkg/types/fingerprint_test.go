@@ -276,7 +276,7 @@ func TestDefaultApplyFingerprintIgnoresHarnessCompositionWhenDeploymentDoesNotSe
 
 func testApplyInput() ApplyInput {
 	return ApplyInput{
-		Deployment: &v1alpha1.Deployment{
+		Deployment: &DeploymentRecord{Deployment: &v1alpha1.Deployment{
 			TypeMeta: v1alpha1.TypeMeta{Kind: v1alpha1.KindDeployment},
 			Metadata: v1alpha1.ObjectMeta{
 				Namespace:  "default",
@@ -289,7 +289,7 @@ func testApplyInput() ApplyInput {
 				RuntimeRef: v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "test-runtime"},
 				Env:        map[string]string{"LOG_LEVEL": "debug"},
 			},
-		},
+		}},
 		Target: testMCPServer("ghcr.io/example/weather:1.0.0"),
 		Runtime: &v1alpha1.Runtime{
 			TypeMeta: v1alpha1.TypeMeta{Kind: v1alpha1.KindRuntime},

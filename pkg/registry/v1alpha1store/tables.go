@@ -51,7 +51,11 @@ func NewStores(pool *pgxpool.Pool, schemas *pkgdb.SchemaRegistry) map[string]*St
 			panic("v1alpha1store: empty table for built-in kind " + kind)
 		}
 		if descriptor.Storage == v1alpha1.KindStorageMutableObject {
-			out[kind] = NewMutableObjectStore(pool, ossSchema, table)
+			if kind == v1alpha1.KindDeployment || kind == v1alpha1.KindRuntime {
+				out[kind] = NewMutableObjectStore(pool, ossSchema, table, WithInternalMeta())
+			} else {
+				out[kind] = NewMutableObjectStore(pool, ossSchema, table)
+			}
 			continue
 		}
 		out[kind] = NewStore(pool, ossSchema, table)

@@ -173,7 +173,7 @@ components:
         spec:
           $ref: '#/components/schemas/DeploymentSpec'
         status:
-          $ref: '#/components/schemas/Status'
+          $ref: '#/components/schemas/DeploymentStatus'
       required:
       - metadata
       - spec
@@ -199,6 +199,18 @@ components:
           type: string
       required:
       - name
+      type: object
+    DeploymentRuntimeStatus:
+      additionalProperties: false
+      properties:
+        endpoint:
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        resourceId:
+          type: string
       type: object
     DeploymentSpec:
       additionalProperties: false
@@ -229,6 +241,18 @@ components:
       required:
       - targetRef
       - runtimeRef
+      type: object
+    DeploymentStatus:
+      additionalProperties: false
+      properties:
+        conditions:
+          items:
+            $ref: '#/components/schemas/Condition'
+          type:
+          - array
+          - "null"
+        runtime:
+          $ref: '#/components/schemas/DeploymentRuntimeStatus'
       type: object
     ErrorDetail:
       additionalProperties: false
@@ -1317,7 +1341,6 @@ components:
           type:
           - array
           - "null"
-        details: {}
         inventory:
           $ref: '#/components/schemas/PluginInventory'
         manifest:
@@ -1428,7 +1451,7 @@ components:
         spec:
           $ref: '#/components/schemas/RuntimeSpec'
         status:
-          $ref: '#/components/schemas/Status'
+          $ref: '#/components/schemas/RuntimeStatus'
       required:
       - metadata
       - spec
@@ -1447,6 +1470,16 @@ components:
           type: string
       required:
       - type
+      type: object
+    RuntimeStatus:
+      additionalProperties: false
+      properties:
+        conditions:
+          items:
+            $ref: '#/components/schemas/Condition'
+          type:
+          - array
+          - "null"
       type: object
     Secret:
       additionalProperties: false
@@ -1711,7 +1744,6 @@ components:
           type:
           - array
           - "null"
-        details: {}
         resolvedSource:
           $ref: '#/components/schemas/SkillResolvedSource'
       type: object
@@ -1724,7 +1756,6 @@ components:
           type:
           - array
           - "null"
-        details: {}
       type: object
     VersionBody:
       additionalProperties: false
