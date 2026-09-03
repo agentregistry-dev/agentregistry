@@ -23,7 +23,7 @@ func TestAuthTransportSetsHeaders(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c, err := newRESTClient(runtimeConfig{URL: srv.URL, Auth: authConfig{UserID: "ar"}}, StaticToken("tok"))
+	c, err := newRESTClient(runtimeConfig{URL: srv.URL, Auth: authConfig{UserID: "ar"}}, staticToken("tok"))
 	require.NoError(t, err)
 	_, err = c.listAgents(context.Background())
 	require.NoError(t, err)
@@ -39,7 +39,7 @@ func TestAuthTransportRejectsEmptyToken(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c, err := newRESTClient(runtimeConfig{URL: srv.URL}, StaticToken(""))
+	c, err := newRESTClient(runtimeConfig{URL: srv.URL}, staticToken(""))
 	require.NoError(t, err)
 	_, err = c.listAgents(context.Background())
 	require.ErrorContains(t, err, "resolve kagent token: empty token")

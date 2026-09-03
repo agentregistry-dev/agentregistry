@@ -331,6 +331,7 @@ func TestRemoveMCPServerClearsEndpoint(t *testing.T) {
 	require.NotNil(t, condition)
 	assert.Equal(t, v1alpha1.ConditionFalse, condition.Status)
 	assert.Equal(t, "Removed", condition.Reason)
+	assert.Equal(t, "Kagent MCP server removed", condition.Message)
 }
 
 func TestToolServerEndpointUsesDeclaredPath(t *testing.T) {
@@ -397,7 +398,7 @@ func TestTokenSourceFactoryReceivesRuntime(t *testing.T) {
 		runtime *v1alpha1.Runtime,
 	) (TokenSource, error) {
 		received = runtime
-		return StaticToken("runtime-token"), nil
+		return staticToken("runtime-token"), nil
 	})).(*adapter)
 	runtime := &v1alpha1.Runtime{Metadata: v1alpha1.ObjectMeta{Name: "runtime-one"}}
 

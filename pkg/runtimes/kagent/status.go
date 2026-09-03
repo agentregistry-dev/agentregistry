@@ -82,7 +82,7 @@ func completedConditions(now time.Time) []v1alpha1.Condition {
 			Type:               "Ready",
 			Status:             v1alpha1.ConditionTrue,
 			Reason:             "Completed",
-			Message:            "deployment completed",
+			Message:            "Deployment completed",
 			LastTransitionTime: now,
 		},
 	}
@@ -106,7 +106,7 @@ func removedConditions(now time.Time) []v1alpha1.Condition {
 			Type:               "Ready",
 			Status:             v1alpha1.ConditionFalse,
 			Reason:             "Removed",
-			Message:            "kagent workload removed",
+			Message:            "Kagent workload removed",
 			LastTransitionTime: now,
 		},
 	}
