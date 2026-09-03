@@ -63,9 +63,6 @@ func (a *Adapter) Apply(ctx context.Context, in types.ApplyInput) (*types.ApplyR
 				LastTransitionTime: now,
 			},
 		},
-		RuntimeMetadata: map[string]string{
-			"runtimes.agentregistry.solo.io/noop/applied-at": now.Format(time.RFC3339),
-		},
 	}, nil
 }
 

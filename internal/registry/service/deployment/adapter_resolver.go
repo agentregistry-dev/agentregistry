@@ -56,7 +56,7 @@ func (r *AdapterResolver) Logs(ctx context.Context, deployment *v1alpha1.Deploym
 	if err != nil {
 		return nil, err
 	}
-	in.Deployment = deployment
+	in.Deployment = &types.DeploymentRecord{Deployment: deployment}
 	return adapter.Logs(ctx, in)
 }
 

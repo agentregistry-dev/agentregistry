@@ -9,9 +9,23 @@ package v1alpha1
 // spec.targetRef.tag.
 type Deployment struct {
 	TypeMeta `json:",inline" yaml:",inline"`
-	Metadata ObjectMeta     `json:"metadata" yaml:"metadata"`
-	Spec     DeploymentSpec `json:"spec" yaml:"spec"`
-	Status   Status         `json:"status,omitzero" yaml:"status,omitempty"`
+	Metadata ObjectMeta       `json:"metadata" yaml:"metadata"`
+	Spec     DeploymentSpec   `json:"spec" yaml:"spec"`
+	Status   DeploymentStatus `json:"status,omitzero" yaml:"status,omitempty"`
+}
+
+// DeploymentStatus is the public observed state of a Deployment.
+type DeploymentStatus struct {
+	Status  `json:",inline" yaml:",inline"`
+	Runtime *DeploymentRuntimeStatus `json:"runtime,omitempty" yaml:"runtime,omitempty"`
+}
+
+// DeploymentRuntimeStatus identifies the provider runtime serving a Deployment.
+type DeploymentRuntimeStatus struct {
+	ID         string `json:"id,omitempty" yaml:"id,omitempty"`
+	Name       string `json:"name,omitempty" yaml:"name,omitempty"`
+	ResourceID string `json:"resourceId,omitempty" yaml:"resourceId,omitempty"`
+	Endpoint   string `json:"endpoint,omitempty" yaml:"endpoint,omitempty"`
 }
 
 func init() {

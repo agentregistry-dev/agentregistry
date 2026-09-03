@@ -2,7 +2,6 @@ package common
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"maps"
 	"strings"
@@ -13,8 +12,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/status"
 )
 
-const runtimeMetadataPrefix = "runtimes.agentregistry.solo.io/"
-const runtimeMetadataDetailsKey = "runtimeMetadata"
 const deploymentOriginManaged = "managed"
 
 // DeploymentRecord is the CLI-friendly projection of a v1alpha1 Deployment.
@@ -31,7 +28,6 @@ type DeploymentRecord struct {
 	Origin            string            `json:"origin"`
 	Env               map[string]string `json:"env,omitempty"`
 	RuntimeConfig     map[string]any    `json:"runtimeConfig,omitempty"`
-	RuntimeMetadata   map[string]any    `json:"runtimeMetadata,omitempty"`
 	Error             string            `json:"error,omitempty"`
 	CreatedAt         time.Time         `json:"deployedAt,omitempty"`
 	UpdatedAt         time.Time         `json:"updatedAt,omitempty"`
@@ -41,9 +37,6 @@ type DeploymentRecord struct {
 	// reconcilers. Surfaced alongside the derived Status phase so YAML/JSON
 	// consumers can see fine-grained state without losing the compact view.
 	Conditions []v1alpha1.Condition `json:"conditions,omitempty"`
-
-	// Details is the opaque adapter-owned status map (see v1alpha1.Status.Details).
-	Details json.RawMessage `json:"details,omitempty"`
 }
 
 // ListDeployments returns managed Deployment rows visible from the default namespace.
@@ -111,13 +104,11 @@ func DeploymentRecordFromObject(dep *v1alpha1.Deployment) *DeploymentRecord {
 		Origin:            "managed",
 		Env:               cloneStringMap(dep.Spec.Env),
 		RuntimeConfig:     cloneAnyMap(dep.Spec.RuntimeConfig),
-		RuntimeMetadata:   deploymentRuntimeMetadata(dep),
-		Error:             deploymentError(dep.Status),
+		Error:             deploymentError(dep.Status.Status),
 		CreatedAt:         dep.Metadata.CreatedAt,
 		UpdatedAt:         dep.Metadata.UpdatedAt,
 		DeletionTimestamp: dep.Metadata.DeletionTimestamp,
 		Conditions:        cloneConditions(dep.Status.Conditions),
-		Details:           cloneDetails(dep.Status.Details),
 	}
 }
 
@@ -126,15 +117,6 @@ func cloneConditions(in []v1alpha1.Condition) []v1alpha1.Condition {
 		return nil
 	}
 	out := make([]v1alpha1.Condition, len(in))
-	copy(out, in)
-	return out
-}
-
-func cloneDetails(in json.RawMessage) json.RawMessage {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make(json.RawMessage, len(in))
 	copy(out, in)
 	return out
 }
@@ -192,41 +174,6 @@ func deploymentError(status v1alpha1.Status) string {
 		}
 	}
 	return ""
-}
-
-func deploymentRuntimeMetadata(deployment *v1alpha1.Deployment) map[string]any {
-	if deployment == nil {
-		return nil
-	}
-	var metadata map[string]any
-	found, err := deployment.Status.GetDetailsKey(runtimeMetadataDetailsKey, &metadata)
-	if err == nil && found && len(metadata) > 0 {
-		return metadata
-	}
-
-	annotations := deployment.Metadata.Annotations
-	if len(annotations) == 0 {
-		return nil
-	}
-
-	out := map[string]any{}
-	shortKeys := map[string]bool{}
-	for key, value := range annotations {
-		if !strings.HasPrefix(key, runtimeMetadataPrefix) {
-			continue
-		}
-		shortKey := key[strings.LastIndex(key, "/")+1:]
-		if shortKey == "" || shortKeys[shortKey] {
-			out[key] = value
-			continue
-		}
-		shortKeys[shortKey] = true
-		out[shortKey] = value
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
 }
 
 func deploymentResourceType(kind string) string {

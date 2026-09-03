@@ -3,7 +3,6 @@ package common
 import (
 	"context"
 	"encoding/json"
-	"maps"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -16,57 +15,15 @@ import (
 )
 
 func TestDeploymentStatusReportsReadyFailure(t *testing.T) {
-	deployment := &v1alpha1.Deployment{Status: v1alpha1.Status{
+	deployment := &v1alpha1.Deployment{Status: v1alpha1.DeploymentStatus{Status: v1alpha1.Status{
 		Conditions: []v1alpha1.Condition{{
 			Type:   "Ready",
 			Status: v1alpha1.ConditionFalse,
 			Reason: "Failed",
 		}},
-	}}
+	}}}
 
 	require.Equal(t, "failed", DeploymentStatus(deployment))
-}
-
-func TestDeploymentRecordFromObject_RuntimeMetadata(t *testing.T) {
-	tests := []struct {
-		name        string
-		status      map[string]string
-		annotations map[string]string
-		want        map[string]any
-	}{
-		{
-			name:   "status details",
-			status: map[string]string{"remoteId": "status-id"},
-			annotations: map[string]string{
-				"runtimes.agentregistry.solo.io/test/remoteId": "annotation-id",
-			},
-			want: map[string]any{"remoteId": "status-id"},
-		},
-		{
-			name: "legacy annotation fallback",
-			annotations: map[string]string{
-				"runtimes.agentregistry.solo.io/test/remoteId": "annotation-id",
-			},
-			want: map[string]any{"remoteId": "annotation-id"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			deployment := &v1alpha1.Deployment{}
-			deployment.Metadata.Annotations = tt.annotations
-			if tt.status != nil {
-				if err := deployment.Status.SetDetailsKey(runtimeMetadataDetailsKey, tt.status); err != nil {
-					t.Fatalf("SetDetailsKey() error = %v", err)
-				}
-			}
-
-			got := DeploymentRecordFromObject(deployment).RuntimeMetadata
-			if !maps.Equal(got, tt.want) {
-				t.Fatalf("RuntimeMetadata = %#v, want %#v", got, tt.want)
-			}
-		})
-	}
 }
 
 func TestListDeploymentsDefaultsOriginManaged(t *testing.T) {

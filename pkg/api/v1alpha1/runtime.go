@@ -6,9 +6,33 @@ package v1alpha1
 // applications embedding the registry.
 type Runtime struct {
 	TypeMeta `json:",inline" yaml:",inline"`
-	Metadata ObjectMeta  `json:"metadata" yaml:"metadata"`
-	Spec     RuntimeSpec `json:"spec" yaml:"spec"`
-	Status   Status      `json:"status,omitzero" yaml:"status,omitempty"`
+	Metadata ObjectMeta    `json:"metadata" yaml:"metadata"`
+	Spec     RuntimeSpec   `json:"spec" yaml:"spec"`
+	Status   RuntimeStatus `json:"status,omitzero" yaml:"status,omitempty"`
+}
+
+// RuntimeStatus is the public observed state of a Runtime.
+type RuntimeStatus struct {
+	ObservedGeneration int64       `json:"-" yaml:"-"`
+	Conditions         []Condition `json:"conditions,omitempty" yaml:"conditions,omitempty"`
+}
+
+// SetCondition adds or updates the condition matching c.Type.
+func (s *RuntimeStatus) SetCondition(c Condition) {
+	status := Status{ObservedGeneration: s.ObservedGeneration, Conditions: s.Conditions}
+	status.SetCondition(c)
+	s.ObservedGeneration = status.ObservedGeneration
+	s.Conditions = status.Conditions
+}
+
+// GetCondition returns the condition matching conditionType.
+func (s *RuntimeStatus) GetCondition(conditionType string) *Condition {
+	for i := range s.Conditions {
+		if s.Conditions[i].Type == conditionType {
+			return &s.Conditions[i]
+		}
+	}
+	return nil
 }
 
 func init() {

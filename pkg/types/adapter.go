@@ -2,7 +2,6 @@ package types
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
@@ -85,7 +84,7 @@ type DeploymentAdapter interface {
 // and hands in concrete objects.
 type ApplyInput struct {
 	// Deployment is the resource being applied.
-	Deployment *v1alpha1.Deployment
+	Deployment *DeploymentRecord
 
 	// Target is the resolved TargetRef — either *v1alpha1.Agent or
 	// *v1alpha1.MCPServer. Adapters type-switch on it.
@@ -117,19 +116,11 @@ type ApplyResult struct {
 	//   - "Degraded"    — transient failure, will retry
 	Conditions []v1alpha1.Condition
 
-	// RuntimeMetadata carries provider state persisted in
-	// Deployment.Status.Details.runtimeMetadata.
-	RuntimeMetadata map[string]string
+	// InternalMeta is durable state shared by internal reconcilers.
+	InternalMeta *DeploymentInternalMeta
 
-	// Details is a map of top-level keys to JSON-encoded values to merge into
-	// Deployment.Status.Details via Status.SetDetailsKeyJSON. Each adapter owns its
-	// own top-level key; other keys in Status.Details are preserved across the
-	// patch. The "runtimeMetadata" key is reserved for RuntimeMetadata and must not
-	// be set here. A nil value at a key removes that key.
-	//
-	// Use Details for structured state that Conditions cannot express cleanly;
-	// stable, typed status should still be modeled as Conditions.
-	Details map[string]json.RawMessage
+	// Runtime is the public provider runtime identity.
+	Runtime *v1alpha1.DeploymentRuntimeStatus
 }
 
 // RuntimeMetadataRemoteIDKey is the stable provider identity used to correlate discoveries.
@@ -139,7 +130,7 @@ const RuntimeMetadataRemoteIDKey = status.RuntimeMetadataRemoteIDKey
 // Runtime (the Target has already been dereferenced and is not
 // included; teardown operates on the recorded runtime state).
 type RemoveInput struct {
-	Deployment *v1alpha1.Deployment
+	Deployment *DeploymentRecord
 	Runtime    *v1alpha1.Runtime
 }
 
@@ -154,7 +145,7 @@ type RemoveResult struct {
 
 // LogsInput selects a log stream for the deployed workload.
 type LogsInput struct {
-	Deployment *v1alpha1.Deployment
+	Deployment *DeploymentRecord
 	// Follow ⇒ stream indefinitely until ctx is cancelled. !Follow ⇒
 	// return the available backlog and close.
 	Follow bool
@@ -197,10 +188,8 @@ type DiscoveryResult struct {
 	Namespace string
 	Name      string
 	Tag       string
-	// RuntimeMetadata mirrors what Apply writes so the caller can
-	// correlate this discovery with an existing Deployment's
-	// annotations.
-	RuntimeMetadata map[string]string
+	// InternalMeta identifies the provider workload without exposing it in status.
+	InternalMeta DeploymentInternalMeta
 }
 
 // -----------------------------------------------------------------------------

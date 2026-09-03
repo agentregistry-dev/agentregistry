@@ -35,12 +35,9 @@ func (a *adapter) Discover(ctx context.Context, in types.DiscoverInput) ([]types
 			continue
 		}
 		out = append(out, types.DiscoveryResult{
-			TargetKind: w.Kind,
-			Name:       w.Name,
-			RuntimeMetadata: map[string]string{
-				types.RuntimeMetadataRemoteIDKey: w.Name,
-				metaNamespace:                    w.Namespace,
-			},
+			TargetKind:   w.Kind,
+			Name:         w.Name,
+			InternalMeta: types.DeploymentInternalMeta{RuntimeID: w.Name, RuntimeName: w.Name},
 		})
 	}
 	return out, nil
