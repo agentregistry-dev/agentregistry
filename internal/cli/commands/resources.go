@@ -93,10 +93,13 @@ func deleteAllTagsAny[T v1alpha1.Object](ctx context.Context, c *client.Client, 
 	return errorsJoin(errs)
 }
 
-func deleteAny[T v1alpha1.Object](ctx context.Context, c *client.Client, kind, name, tag string, newObj func() T) error {
+func deleteAny[T v1alpha1.Object](ctx context.Context, c *client.Client, kind, name, tag string, tagged bool, newObj func() T) error {
 	ref, err := parseResourceLookupRef(name)
 	if err != nil {
 		return err
+	}
+	if !tagged {
+		return c.Delete(ctx, kind, ref.Namespace, ref.Name, "")
 	}
 	targetTag := tag
 	if targetTag == "" {

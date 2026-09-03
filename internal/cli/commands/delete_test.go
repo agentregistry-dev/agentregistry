@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/commands"
-	"github.com/agentregistry-dev/agentregistry/internal/client"
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	cliruntime "github.com/agentregistry-dev/agentregistry/pkg/cli/runtime"
 )
@@ -37,22 +36,16 @@ func newDeleteTestServer(t *testing.T, results []arv0.ApplyResult) (*httptest.Se
 	return srv, captured
 }
 
-// setupDeleteClient wires a client pointing at srv into the declarative package.
-func setupDeleteClient(t *testing.T, srv *httptest.Server) {
-	t.Helper()
-	setDeclarativeTestClient(t, client.NewClient(srv.URL, ""))
-}
-
 // TestDeleteFileModeUsesDeleteApplyEndpoint verifies that -f sends DELETE to /v0/apply.
 func TestDeleteFileModeUsesDeleteApplyEndpoint(t *testing.T) {
 	results := []arv0.ApplyResult{
 		{Kind: "agent", Name: "acme-bot", Tag: "1.0.0", Status: arv0.ApplyStatusDeleted},
 	}
 	srv, captured := newDeleteTestServer(t, results)
-	setupDeleteClient(t, srv)
+	deps := setupClientForServer(t, srv)
 
 	var buf bytes.Buffer
-	cmd := commands.NewDeleteCmd(declarativeTestDeps(nil))
+	cmd := commands.NewDeleteCmd(deps)
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)
 	cmd.SetArgs([]string{"-f", writeTempYAML(t, agentYAML)})
@@ -68,10 +61,10 @@ func TestDeleteFileModeReportsResults(t *testing.T) {
 		{Kind: "agent", Name: "acme-bot", Tag: "1.0.0", Status: arv0.ApplyStatusDeleted},
 	}
 	srv, _ := newDeleteTestServer(t, results)
-	setupDeleteClient(t, srv)
+	deps := setupClientForServer(t, srv)
 
 	var out bytes.Buffer
-	cmd := commands.NewDeleteCmd(declarativeTestDeps(nil))
+	cmd := commands.NewDeleteCmd(deps)
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 	cmd.SetArgs([]string{"-f", writeTempYAML(t, agentYAML)})
@@ -86,9 +79,9 @@ func TestDeleteFileModeFailedResultsReturnError(t *testing.T) {
 		{Kind: "agent", Name: "acme-bot", Status: arv0.ApplyStatusFailed, Error: "not found"},
 	}
 	srv, _ := newDeleteTestServer(t, results)
-	setupDeleteClient(t, srv)
+	deps := setupClientForServer(t, srv)
 
-	cmd := commands.NewDeleteCmd(declarativeTestDeps(nil))
+	cmd := commands.NewDeleteCmd(deps)
 	cmd.SetArgs([]string{"-f", writeTempYAML(t, agentYAML)})
 	err := cmd.Execute()
 	require.Error(t, err)
@@ -129,6 +122,25 @@ func TestDeleteExplicitModeWithoutTag(t *testing.T) {
 	// Fails because no API client is set, but NOT because of missing tag.
 	require.Error(t, err)
 	assert.NotContains(t, err.Error(), "tag")
+}
+
+func TestDeleteExplicitUntaggedSkipsGet(t *testing.T) {
+	var requests []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, r.Method+" "+r.URL.RequestURI())
+		if r.Method == http.MethodGet {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(srv.Close)
+
+	cmd := commands.NewDeleteCmd(setupClientForServer(t, srv))
+	cmd.SetArgs([]string{"runtime", "team-a/my-aws"})
+	require.NoError(t, cmd.Execute())
+
+	assert.Equal(t, []string{"DELETE /v0/runtimes/my-aws?namespace=team-a"}, requests)
 }
 
 // TestDeleteExplicitModeRequiresTwoArgs verifies that explicit mode without two args errors.
