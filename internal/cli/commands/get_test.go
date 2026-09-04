@@ -17,7 +17,74 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	cliruntime "github.com/agentregistry-dev/agentregistry/pkg/cli/runtime"
+	statusapi "github.com/agentregistry-dev/agentregistry/pkg/status"
 )
+
+func TestGet_PluginAndSkillReadiness(t *testing.T) {
+	tests := []struct {
+		name       string
+		conditions []v1alpha1.Condition
+		ready      string
+		reason     string
+	}{
+		{name: "unreconciled", ready: "<none>", reason: "<none>"},
+		{name: "unrelated", conditions: []v1alpha1.Condition{{Type: "Validated", Status: v1alpha1.ConditionTrue, Reason: "Valid"}}, ready: "<none>", reason: "<none>"},
+		{name: "resolved", conditions: []v1alpha1.Condition{{Type: statusapi.ConditionTypeReady, Status: v1alpha1.ConditionTrue, Reason: "Resolved"}}, ready: "True", reason: "Resolved"},
+		{name: "progressing", conditions: []v1alpha1.Condition{{Type: statusapi.ConditionTypeReady, Status: v1alpha1.ConditionFalse, Reason: "Progressing"}}, ready: "False", reason: "Progressing"},
+		{name: "failed", conditions: []v1alpha1.Condition{{Type: statusapi.ConditionTypeReady, Status: v1alpha1.ConditionFalse, Reason: "SourceUnresolvable"}}, ready: "False", reason: "SourceUnresolvable"},
+		{name: "unknown", conditions: []v1alpha1.Condition{{Type: statusapi.ConditionTypeReady, Status: v1alpha1.ConditionUnknown, Reason: "Reconciling"}}, ready: "Unknown", reason: "Reconciling"},
+		{name: "no-reason", conditions: []v1alpha1.Condition{{Type: statusapi.ConditionTypeReady, Status: v1alpha1.ConditionFalse}}, ready: "False", reason: "<none>"},
+	}
+	for _, kind := range []string{v1alpha1.KindPlugin, v1alpha1.KindSkill} {
+		plural := strings.ToLower(kind) + "s"
+		t.Run(plural, func(t *testing.T) {
+			var items []any
+			for _, tt := range tests {
+				item := map[string]any{
+					"apiVersion": v1alpha1.GroupVersion,
+					"kind":       kind,
+					"metadata":   v1alpha1.ObjectMeta{Name: tt.name, Tag: "stable"},
+					"spec":       map[string]string{"description": "example"},
+				}
+				if len(tt.conditions) > 0 {
+					item["status"] = v1alpha1.Status{Conditions: tt.conditions}
+				}
+				items = append(items, item)
+			}
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, http.MethodGet, r.Method)
+				assert.Equal(t, "/v0/"+plural, r.URL.Path)
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]any{"items": items})
+			}))
+			t.Cleanup(srv.Close)
+			setupClientForServer(t, srv)
+
+			out := &bytes.Buffer{}
+			cmd := commands.NewGetCmd(declarativeTestDeps(nil))
+			cmd.SetOut(out)
+			cmd.SetArgs([]string{plural})
+			require.NoError(t, cmd.Execute())
+
+			lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+			require.Len(t, lines, len(tests)+1)
+			assert.Equal(t, []string{"NAME", "TAG", "READY", "REASON", "DESCRIPTION"}, strings.Fields(lines[0]))
+			for i, tt := range tests {
+				assert.Equal(t, []string{tt.name, "stable", tt.ready, tt.reason, "example"}, strings.Fields(lines[i+1]))
+			}
+
+			// Table-only columns must not change the API-shaped JSON output.
+			out.Reset()
+			jsonCmd := commands.NewGetCmd(declarativeTestDeps(nil))
+			jsonCmd.SetOut(out)
+			jsonCmd.SetArgs([]string{plural, "-o", "json"})
+			require.NoError(t, jsonCmd.Execute())
+			wantJSON, err := json.Marshal(items)
+			require.NoError(t, err)
+			assert.JSONEq(t, string(wantJSON), out.String())
+		})
+	}
+}
 
 func TestGetCmd_RejectsUnknownType(t *testing.T) {
 	cmd := commands.NewGetCmd(declarativeTestDeps(nil))
