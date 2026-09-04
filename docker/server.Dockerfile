@@ -14,9 +14,6 @@ RUN make build-ui
 ARG BUILDPLATFORM
 FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
 
-# alpine install make
-RUN apk add --no-cache make
-
 WORKDIR /app
 
 COPY go.mod go.sum ./
@@ -41,7 +38,6 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -ldfl
 FROM ubuntu:22.04 AS runtime
 
 RUN apt-get update && apt-get install -y \
-    curl \
     git \
     && rm -rf /var/lib/apt/lists/*
 
