@@ -48,9 +48,9 @@ type AgentSpec struct {
 	// Composition — top-level, harness-agnostic references to what the agent
 	// is assembled from. The selected Deployment harness materializes what it
 	// supports and drops-with-warning the rest (capability matrix). Plugins,
-	// Skills, and Instructions require compatibleHarnesses because a prebuilt
-	// Image cannot consume them by itself. MCPServers flow to harness runtimes
-	// and remain available to any other runtime that supports MCP. Each ref's
+	// Skills, and Instructions can also be delivered directly to an
+	// image Agent. MCPServers flow to harness runtimes and remain available to
+	// any other runtime that supports MCP. Each ref's
 	// Kind defaults to the field's resource kind; empty Tag means "resolve
 	// latest at reference time".
 	Plugins      []ResourceRef `json:"plugins,omitempty" yaml:"plugins,omitempty"`
