@@ -81,7 +81,7 @@ export type Deployment = {
     kind: string;
     metadata: ObjectMeta;
     spec: DeploymentSpec;
-    status?: Status;
+    status?: DeploymentStatus;
 };
 
 export type DeploymentHarness = {
@@ -92,6 +92,13 @@ export type DeploymentHarness = {
 export type DeploymentRef = {
     name: string;
     namespace?: string;
+};
+
+export type DeploymentRuntimeStatus = {
+    endpoint?: string;
+    id?: string;
+    name?: string;
+    resourceId?: string;
 };
 
 export type DeploymentSpec = {
@@ -107,6 +114,11 @@ export type DeploymentSpec = {
     };
     runtimeRef: ResourceRef;
     targetRef: ResourceRef;
+};
+
+export type DeploymentStatus = {
+    conditions?: Array<Condition> | null;
+    runtime?: DeploymentRuntimeStatus;
 };
 
 export type ErrorDetail = {
@@ -611,7 +623,6 @@ export type PluginSpec = {
 
 export type PluginStatus = {
     conditions?: Array<Condition> | null;
-    details?: unknown;
     inventory?: PluginInventory;
     manifest?: PluginManifest;
     resolvedSource?: PluginResolvedSource;
@@ -667,7 +678,7 @@ export type Runtime = {
     kind: string;
     metadata: ObjectMeta;
     spec: RuntimeSpec;
-    status?: Status;
+    status?: RuntimeStatus;
 };
 
 export type RuntimeSpec = {
@@ -676,6 +687,10 @@ export type RuntimeSpec = {
     };
     telemetryEndpoint?: string;
     type: string;
+};
+
+export type RuntimeStatus = {
+    conditions?: Array<Condition> | null;
 };
 
 export type Secret = {
@@ -792,13 +807,11 @@ export type SkillSpec = {
 
 export type SkillStatus = {
     conditions?: Array<Condition> | null;
-    details?: unknown;
     resolvedSource?: SkillResolvedSource;
 };
 
 export type Status = {
     conditions?: Array<Condition> | null;
-    details?: unknown;
 };
 
 export type VersionBody = {

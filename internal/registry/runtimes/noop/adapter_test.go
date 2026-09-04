@@ -22,7 +22,7 @@ func TestAdapter_ApplyReportsReady(t *testing.T) {
 	dep := &v1alpha1.Deployment{
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "d"},
 	}
-	res, err := a.Apply(context.Background(), types.ApplyInput{Deployment: dep})
+	res, err := a.Apply(context.Background(), types.ApplyInput{Deployment: &types.DeploymentRecord{Deployment: dep}})
 	require.NoError(t, err)
 	require.NotNil(t, res)
 
@@ -36,9 +36,6 @@ func TestAdapter_ApplyReportsReady(t *testing.T) {
 	}
 	require.NotNil(t, ready)
 	require.Equal(t, v1alpha1.ConditionTrue, ready.Status)
-
-	// RuntimeMetadata has the applied-at stamp.
-	require.Contains(t, res.RuntimeMetadata, "runtimes.agentregistry.solo.io/noop/applied-at")
 }
 
 // TestAdapter_RemoveReportsRemovedCondition replaces the prior
@@ -49,7 +46,7 @@ func TestAdapter_RemoveReportsRemovedCondition(t *testing.T) {
 	dep := &v1alpha1.Deployment{
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "d"},
 	}
-	res, err := a.Remove(context.Background(), types.RemoveInput{Deployment: dep})
+	res, err := a.Remove(context.Background(), types.RemoveInput{Deployment: &types.DeploymentRecord{Deployment: dep}})
 	require.NoError(t, err)
 	require.Equal(t, v1alpha1.ConditionFalse, res.Conditions[0].Status)
 	require.Equal(t, "Removed", res.Conditions[0].Reason)

@@ -17,13 +17,13 @@ import (
 
 func byoApplyInput() types.ApplyInput {
 	return types.ApplyInput{
-		Deployment: &v1alpha1.Deployment{
+		Deployment: &types.DeploymentRecord{Deployment: &v1alpha1.Deployment{
 			Metadata: v1alpha1.ObjectMeta{Name: "my-deploy", Namespace: "default"},
 			Spec: v1alpha1.DeploymentSpec{
 				TargetRef: v1alpha1.ResourceRef{Kind: v1alpha1.KindAgent, Name: "My Agent"},
 				Env:       map[string]string{"FOO": "bar"},
 			},
-		},
+		}},
 		Target: &v1alpha1.Agent{
 			Metadata: v1alpha1.ObjectMeta{Name: "My Agent", Namespace: "default"},
 			Spec: v1alpha1.AgentSpec{
@@ -225,10 +225,10 @@ func TestBuildBYOAgentResolvesRemoteAndDeployedMCPServers(t *testing.T) {
 					TargetRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "local-tools"},
 					RuntimeRef: v1alpha1.ResourceRef{Name: "kagent-prod"},
 				},
-				Status: v1alpha1.Status{Conditions: []v1alpha1.Condition{{
+				Status: v1alpha1.DeploymentStatus{Status: v1alpha1.Status{Conditions: []v1alpha1.Condition{{
 					Type: mcpServerURLCondition, Status: v1alpha1.ConditionTrue,
 					Message: "http://local-tools.kagent.svc.cluster.local:3000/mcp",
-				}}},
+				}}}},
 			}, nil
 		default:
 			t.Fatalf("unexpected ref: %+v", ref)
@@ -283,11 +283,11 @@ func TestBuildBYOAgentFindsSourceBackedMCPDeployment(t *testing.T) {
 		}
 		return &v1alpha1.Deployment{
 			Metadata: v1alpha1.ObjectMeta{Name: "local-tools-prod", Namespace: "default"},
-			Status: v1alpha1.Status{Conditions: []v1alpha1.Condition{{
+			Status: v1alpha1.DeploymentStatus{Status: v1alpha1.Status{Conditions: []v1alpha1.Condition{{
 				Type:    mcpServerURLCondition,
 				Status:  v1alpha1.ConditionTrue,
 				Message: "http://local-tools.kagent.svc.cluster.local:3000/mcp",
-			}}},
+			}}}},
 		}, true, nil
 	})
 
@@ -351,9 +351,9 @@ func TestBuildBYOAgentMatchesDeploymentRefRuntimeByName(t *testing.T) {
 				TargetRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "tools"},
 				RuntimeRef: v1alpha1.ResourceRef{Name: "kagent-prod"},
 			},
-			Status: v1alpha1.Status{Conditions: []v1alpha1.Condition{{
+			Status: v1alpha1.DeploymentStatus{Status: v1alpha1.Status{Conditions: []v1alpha1.Condition{{
 				Type: mcpServerURLCondition, Status: v1alpha1.ConditionTrue, Message: "http://tools/mcp",
-			}}},
+			}}}},
 		}, nil
 	}
 	got, err := buildTestBYOAgent(context.Background(), in, runtimeConfig{})
@@ -377,9 +377,9 @@ func TestBuildBYOAgentMatchesMCPDeploymentByNamespaceAndName(t *testing.T) {
 			Spec: v1alpha1.DeploymentSpec{
 				TargetRef: v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "tools", Tag: "v1"},
 			},
-			Status: v1alpha1.Status{Conditions: []v1alpha1.Condition{{
+			Status: v1alpha1.DeploymentStatus{Status: v1alpha1.Status{Conditions: []v1alpha1.Condition{{
 				Type: mcpServerURLCondition, Status: v1alpha1.ConditionTrue, Message: "http://tools/mcp",
-			}}},
+			}}}},
 		}, nil
 	}
 	findDeployment := DeploymentFinderFunc(func(

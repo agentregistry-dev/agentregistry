@@ -69,8 +69,19 @@ type Store struct {
 	// the schema explicitly rather than relying on search_path, so the
 	// Store is correct even on a connection whose search_path points at a
 	// different schema (e.g. an extension's).
-	qualified string
-	behavior  StoreBehavior
+	qualified    string
+	behavior     StoreBehavior
+	internalMeta bool
+}
+
+// StoreOption configures optional Store capabilities.
+type StoreOption func(*Store)
+
+// WithInternalMeta enables persistence of the internal_meta column.
+func WithInternalMeta() StoreOption {
+	return func(store *Store) {
+		store.internalMeta = true
+	}
 }
 
 // Behavior reports which private persistence behavior this Store uses. Generic
@@ -95,8 +106,17 @@ func NewStore(pool *pgxpool.Pool, schema pkgdb.Schema, table string) *Store {
 
 // NewMutableObjectStore constructs a mutable-object Store for tables keyed by
 // namespace/name in schema.
-func NewMutableObjectStore(pool *pgxpool.Pool, schema pkgdb.Schema, table string) *Store {
-	return &Store{pool: pool, table: table, qualified: schema.Qualify(table), behavior: MutableObjectStore}
+func NewMutableObjectStore(pool *pgxpool.Pool, schema pkgdb.Schema, table string, options ...StoreOption) *Store {
+	store := &Store{
+		pool:      pool,
+		table:     table,
+		qualified: schema.Qualify(table),
+		behavior:  MutableObjectStore,
+	}
+	for _, option := range options {
+		option(store)
+	}
+	return store
 }
 
 // UpsertOutcome categorises what an Upsert call did.
@@ -457,9 +477,8 @@ func (s *Store) upsertMutable(ctx context.Context, meta *v1alpha1.ObjectMeta, sp
 	return result, nil
 }
 
-// PatchOpts bundles optional column mutations applied atomically by
-// ApplyPatch. Nil mutators skip the corresponding column entirely; the
-// row's other fields are never touched.
+// PatchOpts bundles optional column changes applied atomically by ApplyPatch.
+// Nil fields skip their corresponding columns.
 type PatchOpts struct {
 	Status      func(current json.RawMessage) (json.RawMessage, error)
 	Annotations func(map[string]string) map[string]string
@@ -476,22 +495,29 @@ type PatchOpts struct {
 // PatchFinalizers on a tagged-artifact Store returns an error to
 // surface the misconfiguration loudly rather than silently no-op.
 func (s *Store) ApplyPatch(ctx context.Context, namespace, name, tag string, patch PatchOpts) error {
-	if patch.Status == nil && patch.Annotations == nil && patch.Finalizers == nil {
+	return s.applyPatch(ctx, namespace, name, tag, patch, nil)
+}
+
+func (s *Store) applyPatch(ctx context.Context, namespace, name, tag string, patch PatchOpts, internalMeta any) error {
+	if patch.Status == nil && internalMeta == nil && patch.Annotations == nil && patch.Finalizers == nil {
 		return nil
 	}
 	if patch.Finalizers != nil && s.behavior == TaggedArtifactStore {
 		return errors.New("v1alpha1 store: finalizers patching not supported on tagged-artifact tables")
 	}
+	if internalMeta != nil && !s.internalMeta {
+		return errors.New("v1alpha1 store: internal meta patching not supported on this table")
+	}
 	if tag == "" && s.behavior == TaggedArtifactStore {
 		return errors.New("v1alpha1 store: tag is required")
 	}
 	return runInTx(ctx, s.pool, func(tx pgx.Tx) error {
-		statusJSON, annotationsJSON, finalizersJSON, err := s.loadPatchRow(ctx, tx, namespace, name, tag)
+		statusJSON, internalMetaJSON, annotationsJSON, finalizersJSON, err := s.loadPatchRow(ctx, tx, namespace, name, tag)
 		if err != nil {
 			return err
 		}
 
-		setClauses := make([]string, 0, 3)
+		setClauses := make([]string, 0, 4)
 		args := []any{namespace, name}
 		where := "namespace=$1 AND name=$2"
 		if s.behavior == TaggedArtifactStore {
@@ -511,6 +537,16 @@ func (s *Store) ApplyPatch(ctx context.Context, namespace, name, tag string, pat
 			if !equalSpecJSON(statusJSON, newJSON) {
 				args = append(args, newJSON)
 				setClauses = append(setClauses, fmt.Sprintf("status=$%d", len(args)))
+			}
+		}
+		if internalMeta != nil {
+			newJSON, err := json.Marshal(internalMeta)
+			if err != nil {
+				return fmt.Errorf("encode internal meta: %w", err)
+			}
+			if !equalSpecJSON(internalMetaJSON, newJSON) {
+				args = append(args, newJSON)
+				setClauses = append(setClauses, fmt.Sprintf("internal_meta=$%d", len(args)))
 			}
 		}
 		if patch.Annotations != nil {
@@ -547,12 +583,19 @@ func (s *Store) ApplyPatch(ctx context.Context, namespace, name, tag string, pat
 	})
 }
 
-// loadPatchRow loads the columns ApplyPatch may mutate
-// (status, annotations, and on mutable-object stores finalizers) and returns
+// loadPatchRow loads the columns ApplyPatch may mutate and returns
 // pkgdb.ErrNotFound if no row matches. The finalizers payload is empty
 // for tagged-artifact stores.
-func (s *Store) loadPatchRow(ctx context.Context, tx pgx.Tx, namespace, name, tag string) (statusJSON, annotationsJSON, finalizersJSON []byte, err error) {
-	if s.behavior == MutableObjectStore {
+func (s *Store) loadPatchRow(ctx context.Context, tx pgx.Tx, namespace, name, tag string) (statusJSON, internalMetaJSON, annotationsJSON, finalizersJSON []byte, err error) {
+	if s.internalMeta {
+		err = tx.QueryRow(ctx,
+			fmt.Sprintf(`
+				SELECT status, internal_meta, annotations, finalizers FROM %s
+				WHERE namespace=$1 AND name=$2
+				FOR UPDATE`, s.qualified),
+			namespace, name,
+		).Scan(&statusJSON, &internalMetaJSON, &annotationsJSON, &finalizersJSON)
+	} else if s.behavior == MutableObjectStore {
 		err = tx.QueryRow(ctx,
 			fmt.Sprintf(`
 				SELECT status, annotations, finalizers FROM %s
@@ -570,12 +613,12 @@ func (s *Store) loadPatchRow(ctx context.Context, tx pgx.Tx, namespace, name, ta
 		).Scan(&statusJSON, &annotationsJSON)
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil, nil, pkgdb.ErrNotFound
+		return nil, nil, nil, nil, pkgdb.ErrNotFound
 	}
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("load row: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("load row: %w", err)
 	}
-	return statusJSON, annotationsJSON, finalizersJSON, nil
+	return statusJSON, internalMetaJSON, annotationsJSON, finalizersJSON, nil
 }
 
 // buildStatusPatch hands the row's current status JSONB payload to the
@@ -638,6 +681,25 @@ func buildFinalizersPatch(current []byte, mutate func([]string) []string) ([]byt
 // status case.
 func (s *Store) PatchStatus(ctx context.Context, namespace, name, tag string, mutate func(current json.RawMessage) (json.RawMessage, error)) error {
 	return s.ApplyPatch(ctx, namespace, name, tag, PatchOpts{Status: mutate})
+}
+
+// PatchInternalMeta replaces only internal_meta when its value changed.
+func (s *Store) PatchInternalMeta(ctx context.Context, namespace, name string, meta any) error {
+	if meta == nil {
+		return errors.New("v1alpha1 store: internal meta must not be nil")
+	}
+	return s.applyPatch(ctx, namespace, name, "", PatchOpts{}, meta)
+}
+
+// PatchStatusAndMeta atomically patches status and replaces internal_meta.
+func (s *Store) PatchStatusAndMeta(ctx context.Context, namespace, name string, mutate func(current json.RawMessage) (json.RawMessage, error), meta any) error {
+	if mutate == nil {
+		return errors.New("v1alpha1 store: status patch must not be nil")
+	}
+	if meta == nil {
+		return errors.New("v1alpha1 store: internal meta must not be nil")
+	}
+	return s.applyPatch(ctx, namespace, name, "", PatchOpts{Status: mutate}, meta)
 }
 
 // PatchFinalizers is a thin wrapper over ApplyPatch for the single-
@@ -1211,10 +1273,14 @@ func (s *Store) FindReferrers(ctx context.Context, pathJSON json.RawMessage, opt
 func (s *Store) selectColumns() string {
 	if s.behavior == TaggedArtifactStore {
 		return `namespace, name, tag, uid::text, generation, labels, annotations, spec, status,
-		       deletion_timestamp, '[]'::jsonb AS finalizers, created_at, updated_at`
+		       '{}'::jsonb AS internal_meta, deletion_timestamp, '[]'::jsonb AS finalizers, created_at, updated_at`
+	}
+	if !s.internalMeta {
+		return `namespace, name, ''::text AS tag, uid::text, generation, labels, annotations, spec, status,
+		       '{}'::jsonb AS internal_meta, deletion_timestamp, finalizers, created_at, updated_at`
 	}
 	return `namespace, name, ''::text AS tag, uid::text, generation, labels, annotations, spec, status,
-		       deletion_timestamp, finalizers, created_at, updated_at`
+		       internal_meta, deletion_timestamp, finalizers, created_at, updated_at`
 }
 
 // canonicalJSONMap renders m to canonical JSON suitable for an

@@ -21,11 +21,9 @@ func TestDeploymentDiscoveryController_MaterializesDiscoveredDeployment(t *testi
 	ctx := context.Background()
 	stores := newControllerTestStores(t)
 	adapter := &discoveryTestAdapter{results: []types.DiscoveryResult{{
-		TargetKind: v1alpha1.KindAgent,
-		Name:       "external-agent",
-		RuntimeMetadata: map[string]string{
-			types.RuntimeMetadataRemoteIDKey: "agent-123",
-		},
+		TargetKind:   v1alpha1.KindAgent,
+		Name:         "external-agent",
+		InternalMeta: types.DeploymentInternalMeta{RuntimeID: "agent-123"},
 	}}}
 	discovery := newDeploymentDiscoveryTestController(stores, adapter)
 
@@ -46,11 +44,7 @@ func TestDeploymentDiscoveryController_MaterializesDiscoveredDeployment(t *testi
 	require.Equal(t, v1alpha1.ConditionTrue, deployment.Status.GetCondition("Ready").Status)
 	require.Equal(t, v1alpha1.ConditionTrue, deployment.Status.GetCondition(deploymentDiscoveryCondition).Status)
 
-	var runtimeMetadata map[string]string
-	ok, err := deployment.Status.GetDetailsKey(deploymentRuntimeDetailsKey, &runtimeMetadata)
-	require.NoError(t, err)
-	require.True(t, ok)
-	require.Equal(t, "agent-123", runtimeMetadata[types.RuntimeMetadataRemoteIDKey])
+	require.Equal(t, "agent-123", loadDeploymentRecord(t, stores, name).InternalMeta.RuntimeID)
 }
 
 func TestDeploymentDiscoveryController_MarksRowsStaleAfterConsecutiveMisses(t *testing.T) {
@@ -76,7 +70,7 @@ func TestDeploymentDiscoveryController_MarksRowsStaleAfterConsecutiveMisses(t *t
 		require.Zero(t, result.Removed)
 		deployment := loadDeployment(t, stores, name)
 		require.Equal(t, v1alpha1.ConditionTrue, deployment.Status.GetCondition(deploymentDiscoveryCondition).Status)
-		require.Equal(t, miss, discoveredMissCount(deployment))
+		require.Equal(t, miss, discoveredMissCount(loadDeploymentRecord(t, stores, name)))
 	}
 
 	result, err := discovery.Sync(ctx)
@@ -142,7 +136,7 @@ func TestDeploymentDiscoveryController_UsesConfiguredMissThresholds(t *testing.T
 	require.Equal(t, 1, result.Stale)
 	require.Zero(t, result.Removed)
 	deployment := loadDeployment(t, stores, name)
-	require.Equal(t, 1, discoveredMissCount(deployment))
+	require.Equal(t, 1, discoveredMissCount(loadDeploymentRecord(t, stores, name)))
 	require.Equal(t, v1alpha1.ConditionFalse, deployment.Status.GetCondition(deploymentDiscoveryCondition).Status)
 
 	result, err = discovery.Sync(ctx)
@@ -194,13 +188,13 @@ func TestDeploymentDiscoveryController_ReobservedRowResetsMissCounter(t *testing
 		_, err := discovery.Sync(ctx)
 		require.NoError(t, err)
 	}
-	require.Equal(t, 2, discoveredMissCount(loadDeployment(t, stores, name)))
+	require.Equal(t, 2, discoveredMissCount(loadDeploymentRecord(t, stores, name)))
 
 	adapter.results = results
 	_, err = discovery.Sync(ctx)
 	require.NoError(t, err)
 	deployment := loadDeployment(t, stores, name)
-	require.Zero(t, discoveredMissCount(deployment))
+	require.Zero(t, discoveredMissCount(loadDeploymentRecord(t, stores, name)))
 	require.Equal(t, v1alpha1.ConditionTrue, deployment.Status.GetCondition(deploymentDiscoveryCondition).Status)
 
 	adapter.results = nil
@@ -209,7 +203,7 @@ func TestDeploymentDiscoveryController_ReobservedRowResetsMissCounter(t *testing
 		require.NoError(t, err)
 	}
 	deployment = loadDeployment(t, stores, name)
-	require.Equal(t, 2, discoveredMissCount(deployment))
+	require.Equal(t, 2, discoveredMissCount(loadDeploymentRecord(t, stores, name)))
 	require.Equal(t, v1alpha1.ConditionTrue, deployment.Status.GetCondition(deploymentDiscoveryCondition).Status)
 }
 
@@ -235,7 +229,7 @@ func TestDeploymentDiscoveryController_ErrorDoesNotMarkRowsStale(t *testing.T) {
 	condition := deployment.Status.GetCondition(deploymentDiscoveryCondition)
 	require.NotNil(t, condition)
 	require.Equal(t, v1alpha1.ConditionTrue, condition.Status)
-	require.Zero(t, discoveredMissCount(deployment), "errored polls must not count as misses")
+	require.Zero(t, discoveredMissCount(loadDeploymentRecord(t, stores, name)), "errored polls must not count as misses")
 }
 
 func TestDeploymentDiscoveryController_SkipsRuntimeWithoutDiscoverySource(t *testing.T) {
@@ -274,9 +268,9 @@ func TestDeploymentDiscoveryController_PreservesNameForRemoteID(t *testing.T) {
 	ctx := context.Background()
 	stores := newControllerTestStores(t)
 	source := &discoveryTestAdapter{results: []types.DiscoveryResult{{
-		TargetKind:      v1alpha1.KindAgent,
-		Name:            "original-name",
-		RuntimeMetadata: map[string]string{types.RuntimeMetadataRemoteIDKey: "agent-123"},
+		TargetKind:   v1alpha1.KindAgent,
+		Name:         "original-name",
+		InternalMeta: types.DeploymentInternalMeta{RuntimeID: "agent-123"},
 	}}}
 	discovery := newDeploymentDiscoveryTestController(stores, source)
 	_, err := discovery.Sync(ctx)
@@ -300,13 +294,11 @@ func TestDeploymentDiscoveryController_DedupesManagedDeploymentRemoteID(t *testi
 	stores := newControllerTestStores(t)
 	seedAgentDeployment(t, stores, "managed-agent", "managed-agent", v1alpha1.DesiredStateDeployed)
 	managed := loadDeployment(t, stores, "managed-agent")
-	require.NoError(t, stores[v1alpha1.KindDeployment].PatchStatus(ctx, "default", managed.Metadata.Name, "", v1alpha1.StatusPatcher(func(status *v1alpha1.Status) {
-		_ = status.SetDetailsKey(deploymentRuntimeDetailsKey, map[string]string{types.RuntimeMetadataRemoteIDKey: "agent-123"})
-	})))
+	require.NoError(t, stores[v1alpha1.KindDeployment].PatchInternalMeta(ctx, "default", managed.Metadata.Name, types.DeploymentInternalMeta{RuntimeID: "agent-123"}))
 	source := &discoveryTestAdapter{results: []types.DiscoveryResult{{
-		TargetKind:      v1alpha1.KindAgent,
-		Name:            "provider-name",
-		RuntimeMetadata: map[string]string{types.RuntimeMetadataRemoteIDKey: "agent-123"},
+		TargetKind:   v1alpha1.KindAgent,
+		Name:         "provider-name",
+		InternalMeta: types.DeploymentInternalMeta{RuntimeID: "agent-123"},
 	}}}
 	discovery := newDeploymentDiscoveryTestController(stores, source)
 
@@ -316,7 +308,7 @@ func TestDeploymentDiscoveryController_DedupesManagedDeploymentRemoteID(t *testi
 	require.Zero(t, result.Discovered)
 }
 
-func TestDeploymentDiscoveryController_DedupesLegacyManagedDeploymentRemoteID(t *testing.T) {
+func TestDeploymentDiscoveryController_DoesNotReadLegacyManagedDeploymentRemoteID(t *testing.T) {
 	ctx := context.Background()
 	stores := newControllerTestStores(t)
 	seedAgentDeployment(t, stores, "managed-agent", "managed-agent", v1alpha1.DesiredStateDeployed)
@@ -329,16 +321,16 @@ func TestDeploymentDiscoveryController_DedupesLegacyManagedDeploymentRemoteID(t 
 		return annotations
 	}))
 	source := &discoveryTestAdapter{results: []types.DiscoveryResult{{
-		TargetKind:      v1alpha1.KindAgent,
-		Name:            "provider-name",
-		RuntimeMetadata: map[string]string{types.RuntimeMetadataRemoteIDKey: "agent-123"},
+		TargetKind:   v1alpha1.KindAgent,
+		Name:         "provider-name",
+		InternalMeta: types.DeploymentInternalMeta{RuntimeID: "agent-123"},
 	}}}
 	discovery := newDeploymentDiscoveryTestController(stores, source)
 
 	result, err := discovery.Sync(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 1, result.Runtimes)
-	require.Zero(t, result.Discovered)
+	require.Equal(t, 1, result.Discovered)
 }
 
 func TestDeploymentController_SkipsDiscoveredRows(t *testing.T) {

@@ -24,7 +24,7 @@ func TestDeploymentController_EnqueuesAndExecutesApply(t *testing.T) {
 	seedMCPServer(t, stores, "weather")
 	deployment := seedDeployment(t, stores, "weather-deploy", v1alpha1.DesiredStateDeployed)
 
-	adapter := &recordingDeploymentAdapter{runtimeMetadata: map[string]string{types.RuntimeMetadataRemoteIDKey: "agent-123"}}
+	adapter := &recordingDeploymentAdapter{internalMeta: &types.DeploymentInternalMeta{RuntimeID: "agent-123"}}
 	controller := newDeploymentTestController(stores, adapter)
 	_, err := controller.FullReconcile(ctx)
 	require.NoError(t, err)
@@ -42,11 +42,7 @@ func TestDeploymentController_EnqueuesAndExecutesApply(t *testing.T) {
 	require.NotNil(t, ready)
 	require.Equal(t, v1alpha1.ConditionTrue, ready.Status)
 	require.Equal(t, deployment.Metadata.Generation, ready.ObservedGeneration)
-	var runtimeMetadata map[string]string
-	ok, err := got.Status.GetDetailsKey(deploymentRuntimeDetailsKey, &runtimeMetadata)
-	require.NoError(t, err)
-	require.True(t, ok)
-	require.Equal(t, "agent-123", runtimeMetadata[types.RuntimeMetadataRemoteIDKey])
+	require.Equal(t, "agent-123", loadDeploymentRecord(t, stores, deployment.Metadata.Name).InternalMeta.RuntimeID)
 }
 
 func TestDeploymentController_ReportsApplyLifecycle(t *testing.T) {
@@ -162,12 +158,8 @@ func TestDeploymentController_SkipsUnchangedApplyAfterRepairReconcile(t *testing
 	require.Equal(t, 1, processed)
 	require.Equal(t, int32(1), adapter.applyCalls.Load())
 
-	applied := loadDeployment(t, stores, deployment.Metadata.Name)
-	var details deploymentControllerDetails
-	ok, err := applied.Status.GetDetailsKey(deploymentControllerDetailsKey, &details)
-	require.NoError(t, err)
-	require.True(t, ok)
-	require.NotEmpty(t, details.LastAppliedFingerprint)
+	applied := loadDeploymentRecord(t, stores, deployment.Metadata.Name)
+	require.NotEmpty(t, applied.InternalMeta.LastAppliedFingerprint)
 
 	_, err = controller.FullReconcile(ctx)
 	require.NoError(t, err)
@@ -241,12 +233,8 @@ func TestDeploymentController_ForceAnnotationBypassesUnchangedApplyOnce(t *testi
 	require.Equal(t, 1, processed)
 	require.Equal(t, int32(2), adapter.applyCalls.Load(), "the same force token must not force every resync forever")
 
-	got := loadDeployment(t, stores, deployment.Metadata.Name)
-	var details deploymentControllerDetails
-	ok, err := got.Status.GetDetailsKey(deploymentControllerDetailsKey, &details)
-	require.NoError(t, err)
-	require.True(t, ok)
-	require.Equal(t, "manual-1", details.LastForceToken)
+	got := loadDeploymentRecord(t, stores, deployment.Metadata.Name)
+	require.Equal(t, "manual-1", got.InternalMeta.LastForceToken)
 }
 
 func TestDeploymentController_BlocksMissingTargetWithoutAdapterCall(t *testing.T) {
@@ -323,17 +311,9 @@ func TestDeploymentController_ReappliesAgentDeploymentWhenReferencedMCPServerCha
 	require.Equal(t, 1, processed)
 	require.Equal(t, int32(1), adapter.applyCalls.Load())
 
-	applied := loadDeployment(t, stores, "assistant-deploy")
-	var firstDetails deploymentControllerDetails
-	ok, err := applied.Status.GetDetailsKey(deploymentControllerDetailsKey, &firstDetails)
-	require.NoError(t, err)
-	require.True(t, ok)
-	require.Len(t, firstDetails.Dependencies, 1)
-	require.Equal(t, v1alpha1.KindMCPServer, firstDetails.Dependencies[0].Kind)
-	require.Equal(t, "default", firstDetails.Dependencies[0].Namespace)
-	require.Equal(t, "weather", firstDetails.Dependencies[0].Name)
-	require.NotEmpty(t, firstDetails.Dependencies[0].MaterialHash)
-	firstDependencyHash := firstDetails.Dependencies[0].MaterialHash
+	applied := loadDeploymentRecord(t, stores, "assistant-deploy")
+	require.NotEmpty(t, applied.InternalMeta.LastAppliedFingerprint)
+	firstFingerprint := applied.InternalMeta.LastAppliedFingerprint
 
 	seedMCPServerWithIdentifier(t, stores, "weather", "ghcr.io/example/weather:2.0.0")
 	_, err = controller.HandleEvent(ctx, v1alpha1store.ControlPlaneEvent{
@@ -353,15 +333,9 @@ func TestDeploymentController_ReappliesAgentDeploymentWhenReferencedMCPServerCha
 	}, time.Second, 10*time.Millisecond)
 	require.Equal(t, 1, processed)
 
-	reapplied := loadDeployment(t, stores, "assistant-deploy")
-	var secondDetails deploymentControllerDetails
-	ok, err = reapplied.Status.GetDetailsKey(deploymentControllerDetailsKey, &secondDetails)
-	require.NoError(t, err)
-	require.True(t, ok)
-	require.Len(t, secondDetails.Dependencies, 1)
-	require.Equal(t, "weather", secondDetails.Dependencies[0].Name)
-	require.NotEqual(t, firstDependencyHash, secondDetails.Dependencies[0].MaterialHash,
-		"dependency material hash should change after the referenced MCPServer spec changes")
+	reapplied := loadDeploymentRecord(t, stores, "assistant-deploy")
+	require.NotEqual(t, firstFingerprint, reapplied.InternalMeta.LastAppliedFingerprint,
+		"fingerprint should change after the referenced MCPServer spec changes")
 }
 
 func TestDeploymentController_DeleteWaitsForRemoveThenPurgesFinalizedRow(t *testing.T) {
@@ -640,12 +614,14 @@ func seedAgentDeployment(t *testing.T, stores map[string]*v1alpha1store.Store, n
 }
 
 func loadDeployment(t *testing.T, stores map[string]*v1alpha1store.Store, name string) *v1alpha1.Deployment {
+	return loadDeploymentRecord(t, stores, name).Deployment
+}
+
+func loadDeploymentRecord(t *testing.T, stores map[string]*v1alpha1store.Store, name string) *types.DeploymentRecord {
 	t.Helper()
 	raw, err := stores[v1alpha1.KindDeployment].GetLatestIncludingTerminating(context.Background(), "default", name)
 	require.NoError(t, err)
-	deployment, err := v1alpha1.EnvelopeFromRaw(func() *v1alpha1.Deployment {
-		return &v1alpha1.Deployment{}
-	}, raw, v1alpha1.KindDeployment)
+	deployment, err := types.DeploymentRecordFromRaw(raw)
 	require.NoError(t, err)
 	return deployment
 }
@@ -673,7 +649,7 @@ type recordingDeploymentAdapter struct {
 	lastApplyGeneration atomic.Int64
 	applyErr            error
 	removeErr           error
-	runtimeMetadata     map[string]string
+	internalMeta        *types.DeploymentInternalMeta
 }
 
 type applyObservation struct {
@@ -738,7 +714,7 @@ func (a *recordingDeploymentAdapter) Apply(_ context.Context, input types.ApplyI
 		return nil, a.applyErr
 	}
 	return &types.ApplyResult{
-		RuntimeMetadata: a.runtimeMetadata,
+		InternalMeta: a.internalMeta,
 		Conditions: []v1alpha1.Condition{{
 			Type:               "Ready",
 			Status:             v1alpha1.ConditionTrue,
