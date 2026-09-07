@@ -1,10 +1,7 @@
 package commands
 
 import (
-	"context"
-
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
-	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
@@ -37,56 +34,20 @@ func NewExtensionKind(k ExtensionKind) *scheme.Kind {
 	if k.CanonicalKind == "" {
 		k.CanonicalKind = k.Name
 	}
-	if k.NewObject == nil {
-		k.NewObject = newSchemeObject(k.CanonicalKind)
+	descriptor, ok := v1alpha1.KindDescriptorFor(k.CanonicalKind)
+	if !ok {
+		panic("commands.RegisterExtensionKind: v1alpha1 kind is not registered: " + k.CanonicalKind)
 	}
 	if len(k.TableColumns) == 0 {
 		k.TableColumns = []scheme.Column{{Header: "NAME"}}
 	}
-
-	return &scheme.Kind{
-		Kind:         k.Name,
-		Plural:       k.Plural,
-		Aliases:      k.Aliases,
-		TableColumns: k.TableColumns,
-		ToYAMLFunc:   func(item any) any { return item },
-		RowFunc: func(item any) []string {
-			obj, ok := item.(v1alpha1.Object)
-			if !ok {
-				return []string{"<invalid>"}
-			}
-			if k.Row != nil {
-				return k.Row(obj)
-			}
-			meta := obj.GetMetadata()
-			return []string{meta.Name}
-		},
-		Get: func(ctx context.Context, c *client.Client, name, _ string) (any, error) {
-			ref, err := parseResourceLookupRef(name)
-			if err != nil {
-				return nil, err
-			}
-			return client.GetTyped(ctx, c, k.CanonicalKind, ref.Namespace, ref.Name, "", k.NewObject)
-		},
-		ListFunc: func(ctx context.Context, c *client.Client, opts scheme.ListOpts) ([]any, error) {
-			return listAny(ctx, c, k.CanonicalKind, opts, k.NewObject)
-		},
-		Delete: func(ctx context.Context, c *client.Client, name, tag string) error {
-			return deleteAny(ctx, c, k.CanonicalKind, name, tag, k.NewObject)
-		},
-	}
-}
-
-func newSchemeObject(kind string) func() v1alpha1.Object {
-	_, newAny, ok := v1alpha1.Default.Lookup(kind)
-	if !ok {
-		panic("commands.RegisterExtensionKind: v1alpha1 kind is not registered: " + kind)
-	}
-	return func() v1alpha1.Object {
-		obj, ok := newAny().(v1alpha1.Object)
-		if !ok {
-			panic("commands.RegisterExtensionKind: object does not implement v1alpha1.Object: " + kind)
-		}
-		return obj
-	}
+	return newKindFromDescriptor(
+		descriptor,
+		k.Name,
+		k.Plural,
+		k.Aliases,
+		k.TableColumns,
+		k.NewObject,
+		k.Row,
+	)
 }

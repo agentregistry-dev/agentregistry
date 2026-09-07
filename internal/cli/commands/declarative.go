@@ -139,20 +139,65 @@ func registerKind[T v1alpha1.Object](
 	if !ok {
 		panic("commands.registerKind: v1alpha1 kind is not registered: " + canonicalKind)
 	}
-	if plural == "" {
-		plural = descriptor.Plural
-	}
 	if obj := descriptor.NewObject(); obj == nil {
 		panic("commands.registerKind: constructor for " + canonicalKind + " returned nil")
 	} else if _, ok := obj.(T); !ok {
 		panic(fmt.Sprintf("commands.registerKind: constructor for %s returned %T", canonicalKind, obj))
 	}
-	newObj := func() T {
+	newObj := func() v1alpha1.Object {
 		obj, ok := descriptor.NewObject().(T)
 		if !ok {
 			panic(fmt.Sprintf("commands.registerKind: constructor for %s returned %T", canonicalKind, obj))
 		}
 		return obj
+	}
+	rowObject := func(obj v1alpha1.Object) []string {
+		t, ok := obj.(T)
+		if !ok {
+			return []string{"<invalid>"}
+		}
+		return row(t)
+	}
+	scheme.Register(newKindFromDescriptor(
+		descriptor,
+		cliName,
+		plural,
+		aliases,
+		columns,
+		newObj,
+		rowObject,
+		opts...,
+	))
+}
+
+func newKindFromDescriptor(
+	descriptor v1alpha1.KindDescriptor,
+	cliName, plural string,
+	aliases []string,
+	columns []scheme.Column,
+	newObj func() v1alpha1.Object,
+	row func(v1alpha1.Object) []string,
+	opts ...kindOption,
+) *scheme.Kind {
+	if plural == "" {
+		plural = descriptor.Plural
+	}
+	if newObj == nil {
+		newObj = func() v1alpha1.Object {
+			obj, ok := descriptor.NewObject().(v1alpha1.Object)
+			if !ok {
+				panic(fmt.Sprintf("commands: constructor for %s returned %T", descriptor.Kind, obj))
+			}
+			return obj
+		}
+	}
+	if obj := newObj(); obj == nil {
+		panic("commands: constructor for " + descriptor.Kind + " returned nil")
+	}
+	if row == nil {
+		row = func(obj v1alpha1.Object) []string {
+			return []string{obj.GetMetadata().Name}
+		}
 	}
 	tagged := descriptor.Storage == v1alpha1.KindStorageTaggedArtifact
 	k := &scheme.Kind{
@@ -162,11 +207,11 @@ func registerKind[T v1alpha1.Object](
 		TableColumns: columns,
 		ToYAMLFunc:   func(item any) any { return item },
 		RowFunc: func(item any) []string {
-			t, ok := item.(T)
+			obj, ok := item.(v1alpha1.Object)
 			if !ok {
 				return []string{"<invalid>"}
 			}
-			return row(t)
+			return row(obj)
 		},
 		Get: func(ctx context.Context, c *client.Client, name, tag string) (any, error) {
 			ref, err := parseResourceLookupRef(name)
@@ -176,21 +221,21 @@ func registerKind[T v1alpha1.Object](
 			if !tagged {
 				tag = ""
 			}
-			return client.GetTyped(ctx, c, canonicalKind, ref.Namespace, ref.Name, tag, newObj)
+			return client.GetTyped(ctx, c, descriptor.Kind, ref.Namespace, ref.Name, tag, newObj)
 		},
 		ListFunc: func(ctx context.Context, c *client.Client, opts scheme.ListOpts) ([]any, error) {
-			return listAny(ctx, c, canonicalKind, opts, newObj)
+			return listAny(ctx, c, descriptor.Kind, opts, newObj)
 		},
 		Delete: func(ctx context.Context, c *client.Client, name, tag string) error {
-			return deleteAny(ctx, c, canonicalKind, name, tag, newObj)
+			return deleteAny(ctx, c, descriptor.Kind, name, tag, tagged, newObj)
 		},
 	}
 	if tagged {
 		k.ListTags = func(ctx context.Context, c *client.Client, name string) ([]any, error) {
-			return listTagsAny(ctx, c, canonicalKind, name, newObj)
+			return listTagsAny(ctx, c, descriptor.Kind, name, newObj)
 		}
 		k.DeleteAllTags = func(ctx context.Context, c *client.Client, name string) error {
-			return deleteAllTagsAny(ctx, c, canonicalKind, name, newObj)
+			return deleteAllTagsAny(ctx, c, descriptor.Kind, name, newObj)
 		}
 	}
 	for _, opt := range opts {
@@ -198,5 +243,5 @@ func registerKind[T v1alpha1.Object](
 			opt(k)
 		}
 	}
-	scheme.Register(k)
+	return k
 }

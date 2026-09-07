@@ -14,7 +14,6 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/commands"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
-	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	cliruntime "github.com/agentregistry-dev/agentregistry/pkg/cli/runtime"
 )
@@ -52,9 +51,9 @@ func TestGet_Labels_ListModeForwardsSelector(t *testing.T) {
 				_, _ = w.Write([]byte(`{"items":[]}`))
 			}))
 			t.Cleanup(srv.Close)
-			setupClientForServer(t, srv)
+			deps := setupClientForServer(t, srv)
 
-			cmd := commands.NewGetCmd(declarativeTestDeps(nil))
+			cmd := commands.NewGetCmd(deps)
 			cmd.SetArgs([]string{"agents", flag, "team=platform,tier=production"})
 			require.NoError(t, cmd.Execute())
 			assert.Equal(t, "team=platform,tier=production", got)
@@ -63,7 +62,6 @@ func TestGet_Labels_ListModeForwardsSelector(t *testing.T) {
 }
 
 func TestGet_Labels_RejectsNonListUses(t *testing.T) {
-	setDeclarativeTestClient(t, client.NewClient("http://127.0.0.1:1", ""))
 
 	for _, tc := range []struct {
 		name string
@@ -99,10 +97,10 @@ func TestGet_ShowLabels(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"items": rows})
 	}))
 	t.Cleanup(srv.Close)
-	setupClientForServer(t, srv)
+	deps := setupClientForServer(t, srv)
 
 	out := &bytes.Buffer{}
-	cmd := commands.NewGetCmd(declarativeTestDeps(nil))
+	cmd := commands.NewGetCmd(deps)
 	cmd.SetOut(out)
 	cmd.SetErr(out)
 	cmd.SetArgs([]string{"agents", "--show-labels"})
@@ -121,10 +119,10 @@ func TestGet_ShowLabels_OmittedByDefault(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"items": rows})
 	}))
 	t.Cleanup(srv.Close)
-	setupClientForServer(t, srv)
+	deps := setupClientForServer(t, srv)
 
 	out := &bytes.Buffer{}
-	cmd := commands.NewGetCmd(declarativeTestDeps(nil))
+	cmd := commands.NewGetCmd(deps)
 	cmd.SetOut(out)
 	cmd.SetErr(out)
 	cmd.SetArgs([]string{"agents"})
@@ -251,10 +249,10 @@ func TestGet_Tag_FetchesSpecificTag(t *testing.T) {
 	v1 := agentTagFixture("acme-bot", "1")
 	v2 := agentTagFixture("acme-bot", "2")
 	srv, captured := tagGetServer(t, v2, v1)
-	setupClientForServer(t, srv)
+	deps := setupClientForServer(t, srv)
 
 	out := &bytes.Buffer{}
-	cmd := commands.NewGetCmd(declarativeTestDeps(nil))
+	cmd := commands.NewGetCmd(deps)
 	cmd.SetOut(out)
 	cmd.SetErr(out)
 	cmd.SetArgs([]string{"agent", "acme-bot", "--tag", "1", "-o", "json"})
@@ -281,10 +279,10 @@ func TestGet_Tag_FetchesSpecificTagByNamespaceName(t *testing.T) {
 	v1 := agentTagFixture("acme-bot", "1")
 	v2 := agentTagFixture("acme-bot", "2")
 	srv, captured := tagGetServer(t, v2, v1)
-	setupClientForServer(t, srv)
+	deps := setupClientForServer(t, srv)
 
 	out := &bytes.Buffer{}
-	cmd := commands.NewGetCmd(declarativeTestDeps(nil))
+	cmd := commands.NewGetCmd(deps)
 	cmd.SetOut(out)
 	cmd.SetErr(out)
 	cmd.SetArgs([]string{"agent", "team-a/acme-bot", "--tag", "1", "-o", "json"})
@@ -299,10 +297,10 @@ func TestGet_Tag_DefaultsToLatest(t *testing.T) {
 	v1 := agentTagFixture("acme-bot", "1")
 	v2 := agentTagFixture("acme-bot", "2")
 	srv, captured := tagGetServer(t, v2, v1)
-	setupClientForServer(t, srv)
+	deps := setupClientForServer(t, srv)
 
 	out := &bytes.Buffer{}
-	cmd := commands.NewGetCmd(declarativeTestDeps(nil))
+	cmd := commands.NewGetCmd(deps)
 	cmd.SetOut(out)
 	cmd.SetErr(out)
 	cmd.SetArgs([]string{"agent", "acme-bot", "-o", "json"})
@@ -322,8 +320,6 @@ func TestGet_Tag_DefaultsToLatest(t *testing.T) {
 // TestGet_Tag_MutuallyExclusiveWithAllTags pins the flag-validation
 // guard on runGet.
 func TestGet_Tag_MutuallyExclusiveWithAllTags(t *testing.T) {
-	setDeclarativeTestClient(t, client.NewClient("http://127.0.0.1:1", ""))
-
 	cmd := commands.NewGetCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"agent", "acme-bot", "--tag", "1", "--all-tags"})
 	err := cmd.Execute()
@@ -335,8 +331,6 @@ func TestGet_Tag_MutuallyExclusiveWithAllTags(t *testing.T) {
 // for mutable namespace/name kinds (Runtime, Deployment) before any client
 // dispatch happens.
 func TestGet_Tag_NotSupportedForProvider(t *testing.T) {
-	setDeclarativeTestClient(t, client.NewClient("http://127.0.0.1:1", ""))
-
 	cmd := commands.NewGetCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"runtime", "my-kagent", "--tag", "1"})
 	err := cmd.Execute()
@@ -348,8 +342,6 @@ func TestGet_Tag_NotSupportedForProvider(t *testing.T) {
 // TestGet_Tag_NotSupportedForDeployment is the symmetric assertion
 // for Deployment.
 func TestGet_Tag_NotSupportedForDeployment(t *testing.T) {
-	setDeclarativeTestClient(t, client.NewClient("http://127.0.0.1:1", ""))
-
 	cmd := commands.NewGetCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"deployment", "summarizer", "--tag", "1"})
 	err := cmd.Execute()
@@ -376,9 +368,9 @@ func TestGet_Tag_ListModeFiltersByTag(t *testing.T) {
 		_, _ = w.Write([]byte(`{"items":[]}`))
 	}))
 	t.Cleanup(srv.Close)
-	setupClientForServer(t, srv)
+	deps := setupClientForServer(t, srv)
 
-	cmd := commands.NewGetCmd(declarativeTestDeps(nil))
+	cmd := commands.NewGetCmd(deps)
 	cmd.SetArgs([]string{"agents", "--tag", "0.1.0"})
 	require.NoError(t, cmd.Execute())
 
@@ -405,9 +397,9 @@ func TestGet_Latest_ListModeFiltersByLatestOnly(t *testing.T) {
 		_, _ = w.Write([]byte(`{"items":[]}`))
 	}))
 	t.Cleanup(srv.Close)
-	setupClientForServer(t, srv)
+	deps := setupClientForServer(t, srv)
 
-	cmd := commands.NewGetCmd(declarativeTestDeps(nil))
+	cmd := commands.NewGetCmd(deps)
 	cmd.SetArgs([]string{"agents", "--latest"})
 	require.NoError(t, cmd.Execute())
 
@@ -435,9 +427,9 @@ func TestGet_ListModeDefault_NoTagFilter(t *testing.T) {
 		_, _ = w.Write([]byte(`{"items":[]}`))
 	}))
 	t.Cleanup(srv.Close)
-	setupClientForServer(t, srv)
+	deps := setupClientForServer(t, srv)
 
-	cmd := commands.NewGetCmd(declarativeTestDeps(nil))
+	cmd := commands.NewGetCmd(deps)
 	cmd.SetArgs([]string{"agents"})
 	require.NoError(t, cmd.Execute())
 
@@ -452,8 +444,6 @@ func TestGet_ListModeDefault_NoTagFilter(t *testing.T) {
 
 // TestGet_TagAndLatest_MutuallyExclusive pins the flag-validation guard.
 func TestGet_TagAndLatest_MutuallyExclusive(t *testing.T) {
-	setDeclarativeTestClient(t, client.NewClient("http://127.0.0.1:1", ""))
-
 	cmd := commands.NewGetCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"agents", "--tag", "1", "--latest"})
 	err := cmd.Execute()
@@ -465,8 +455,6 @@ func TestGet_TagAndLatest_MutuallyExclusive(t *testing.T) {
 // is also a tag-shaped filter and should be rejected for mutable kinds
 // before any dispatch.
 func TestGet_Latest_NotSupportedForProvider(t *testing.T) {
-	setDeclarativeTestClient(t, client.NewClient("http://127.0.0.1:1", ""))
-
 	cmd := commands.NewGetCmd(declarativeTestDeps(nil))
 	cmd.SetArgs([]string{"runtime", "--latest"})
 	err := cmd.Execute()

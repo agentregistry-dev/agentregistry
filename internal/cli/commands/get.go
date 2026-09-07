@@ -114,9 +114,6 @@ func runGet(cmd *cobra.Command, deps cliruntime.Deps, args []string) error {
 		return runGetAllTags(cmd, deps, k, args, outputFormat)
 	}
 
-	// --tag / --latest are only meaningful for tagged content-registry kinds.
-	// ListTags is set exclusively on those kinds via typedKind, so it's a
-	// stable proxy without coupling get.go to v1alpha1's kind table.
 	if tag != "" && k.ListTags == nil {
 		return fmt.Errorf("%s not supported for kind %q (resource is not tagged)", tagFlag, k.Kind)
 	}
@@ -124,7 +121,7 @@ func runGet(cmd *cobra.Command, deps cliruntime.Deps, args []string) error {
 		return fmt.Errorf("%s not supported for kind %q (resource is not tagged)", latestFlag, k.Kind)
 	}
 	if labels != "" && k.ListTags == nil {
-		return fmt.Errorf("--labels not supported for kind %q (resource is not a content kind)", k.Kind)
+		return fmt.Errorf("--labels not supported for kind %q (resource is not tagged)", k.Kind)
 	}
 	if labels != "" && len(args) == 2 {
 		return fmt.Errorf("--labels is a list filter and cannot be combined with a resource NAME")

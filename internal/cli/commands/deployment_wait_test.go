@@ -67,10 +67,10 @@ func TestDeploymentWait_DeployedReturnsImmediately(t *testing.T) {
 	srv := deploymentWaitTestServer(t, []v1alpha1.Deployment{
 		deploymentFixture("aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "deployed"),
 	})
-	setupClientForServer(t, srv)
+	deps := setupClientForServer(t, srv)
 
 	out := &bytes.Buffer{}
-	cmd := commands.NewWaitCmd(declarativeTestDeps(nil))
+	cmd := commands.NewWaitCmd(deps)
 	cmd.SetOut(out)
 	cmd.SetArgs([]string{"deployment", "aws-v1", "--timeout=1s"})
 
@@ -83,10 +83,10 @@ func TestDeploymentWait_ReturnsMatchByNamespaceName(t *testing.T) {
 	teamDeployment := deploymentFixture("aws-v1", "team-summarizer", "1.0.0", "my-aws", "agent", "deployed")
 	teamDeployment.Metadata.Namespace = "team-a"
 	srv := deploymentWaitTestServer(t, []v1alpha1.Deployment{defaultDeployment, teamDeployment})
-	setupClientForServer(t, srv)
+	deps := setupClientForServer(t, srv)
 
 	out := &bytes.Buffer{}
-	cmd := commands.NewWaitCmd(declarativeTestDeps(nil))
+	cmd := commands.NewWaitCmd(deps)
 	cmd.SetOut(out)
 	cmd.SetArgs([]string{"deployment", "team-a/aws-v1", "--timeout=1s"})
 
@@ -100,9 +100,9 @@ func TestDeploymentWait_FailedSurfacesError(t *testing.T) {
 	srv := deploymentWaitTestServer(t, []v1alpha1.Deployment{
 		deploymentFixture("aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "failed"),
 	})
-	setupClientForServer(t, srv)
+	deps := setupClientForServer(t, srv)
 
-	cmd := commands.NewWaitCmd(declarativeTestDeps(nil))
+	cmd := commands.NewWaitCmd(deps)
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
 	cmd.SetArgs([]string{"deployment", "aws-v1", "--timeout=1s"})
@@ -117,10 +117,10 @@ func TestDeploymentWait_ForFailedSucceedsOnFailed(t *testing.T) {
 	srv := deploymentWaitTestServer(t, []v1alpha1.Deployment{
 		deploymentFixture("aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "failed"),
 	})
-	setupClientForServer(t, srv)
+	deps := setupClientForServer(t, srv)
 
 	out := &bytes.Buffer{}
-	cmd := commands.NewWaitCmd(declarativeTestDeps(nil))
+	cmd := commands.NewWaitCmd(deps)
 	cmd.SetOut(out)
 	cmd.SetArgs([]string{"deployment", "aws-v1", "--for=failed", "--timeout=1s"})
 
@@ -133,10 +133,10 @@ func TestDeploymentWait_ForDeleteSucceedsWhenAbsent(t *testing.T) {
 	srv := deploymentWaitTestServer(t, []v1alpha1.Deployment{
 		deploymentFixture("other", "unrelated", "1.0.0", "my-aws", "agent", "deployed"),
 	})
-	setupClientForServer(t, srv)
+	deps := setupClientForServer(t, srv)
 
 	out := &bytes.Buffer{}
-	cmd := commands.NewWaitCmd(declarativeTestDeps(nil))
+	cmd := commands.NewWaitCmd(deps)
 	cmd.SetOut(out)
 	cmd.SetArgs([]string{"deployment", "aws-v1", "--for=delete", "--timeout=1s"})
 
@@ -149,9 +149,9 @@ func TestDeploymentWait_NotFound(t *testing.T) {
 	srv := deploymentWaitTestServer(t, []v1alpha1.Deployment{
 		deploymentFixture("other", "unrelated", "1.0.0", "my-aws", "agent", "deployed"),
 	})
-	setupClientForServer(t, srv)
+	deps := setupClientForServer(t, srv)
 
-	cmd := commands.NewWaitCmd(declarativeTestDeps(nil))
+	cmd := commands.NewWaitCmd(deps)
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
 	cmd.SetArgs([]string{"deployment", "aws-v1", "--timeout=1s"})
@@ -166,9 +166,9 @@ func TestDeploymentWait_RejectsUnknownForValue(t *testing.T) {
 	srv := deploymentWaitTestServer(t, []v1alpha1.Deployment{
 		deploymentFixture("aws-v1", "summarizer", "1.0.0", "my-aws", "agent", "deploying"),
 	})
-	setupClientForServer(t, srv)
+	deps := setupClientForServer(t, srv)
 
-	cmd := commands.NewWaitCmd(declarativeTestDeps(nil))
+	cmd := commands.NewWaitCmd(deps)
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
 	cmd.SetArgs([]string{"deployment", "aws-v1", "--for=garbage", "--timeout=1s"})
@@ -181,9 +181,9 @@ func TestDeploymentWait_RejectsUnknownForValue(t *testing.T) {
 // Non-deployment kinds are rejected.
 func TestDeploymentWait_RejectsNonDeploymentKinds(t *testing.T) {
 	srv := deploymentWaitTestServer(t, nil)
-	setupClientForServer(t, srv)
+	deps := setupClientForServer(t, srv)
 
-	cmd := commands.NewWaitCmd(declarativeTestDeps(nil))
+	cmd := commands.NewWaitCmd(deps)
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
 	cmd.SetArgs([]string{"agent", "summarizer"})
