@@ -20,7 +20,7 @@ func TestRootExtraCommandsReceiveDeps(t *testing.T) {
 		factoryCalls++
 		gotDeps = deps
 		return []*cobra.Command{{
-			Use: "enterprise",
+			Use: "extension",
 			RunE: func(cmd *cobra.Command, _ []string) error {
 				var err error
 				gotTarget, err = deps.Runtime.ResolveRegistryTarget(cmd.Context())
@@ -33,7 +33,7 @@ func TestRootExtraCommandsReceiveDeps(t *testing.T) {
 	root.SetArgs([]string{
 		"--registry-url", "registry.example.com",
 		"--registry-token", "flag-token",
-		"enterprise",
+		"extension",
 	})
 	if err := root.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
@@ -63,7 +63,7 @@ func TestRootExtraCommandsReceiveDeps(t *testing.T) {
 func TestRootDisabledCommandPaths(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Disabled["db migrate goto"] = true
-	cfg.ExtraMigrationSources = []dbmigrate.Source{{Name: "enterprise"}}
+	cfg.ExtraMigrationSources = []dbmigrate.Source{{Name: "extension"}}
 
 	root := Root(cfg)
 

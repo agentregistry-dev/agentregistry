@@ -371,7 +371,7 @@ func TestScheme_DecodeMulti_SkipsEmptyDocs(t *testing.T) {
 	doc := []byte(`---
 apiVersion: ar.dev/v1alpha1
 kind: Prompt
-metadata: { name: solo }
+metadata: { name: extension }
 spec: { content: x }
 ---
 ---

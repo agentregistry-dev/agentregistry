@@ -2,12 +2,12 @@
 
 `Root` builds an `arctl` command tree from `Config`.
 
-Downstream CLIs should put customization in the config they pass to `Root`:
+Embedding CLIs should put customization in the config they pass to `Root`:
 
 ```go
 root := cli.Root(cli.Config{
 	Version: version.Version,
-	Auth: enterpriseAuthProvider{},
+	Auth: extensionAuthProvider{},
 	Disabled: map[string]bool{
 		"db migrate goto": true,
 	},
@@ -18,13 +18,13 @@ root := cli.Root(cli.Config{
 		}
 	},
 	ExtraMigrationSources: []migrate.Source{
-		entlegacymigrate.EnterpriseSource(),
+		extlegacymigrate.ExtensionSource(),
 	},
 })
 ```
 
 Extra commands receive the same runtime, authentication provider, and kind
-registry as built-in commands. Commands using an extended downstream client
+registry as built-in commands. Commands using an extension client
 should call `deps.Runtime.ResolveRegistryTarget` and pass the returned base URL
 and token to that client; commands using the OSS API client can call
 `deps.Runtime.RegistryClient` directly.

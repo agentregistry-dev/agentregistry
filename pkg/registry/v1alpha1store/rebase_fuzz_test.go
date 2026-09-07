@@ -46,8 +46,8 @@ func TestRebaseSQLPlaceholders_Examples(t *testing.T) {
 // tokens is preserved, and the relative ordering of placeholders is
 // preserved.
 //
-// Why fuzzing matters here: ExtraWhere is the authz seam — enterprise
-// builds wire RBAC predicates through it, so silent reordering or
+// Why fuzzing matters here: ExtraWhere is the authz seam -- extensions
+// wire RBAC predicates through it, so silent reordering or
 // dropped placeholders would be a privilege-escalation bug, not just a
 // SQL parse error. The fuzz driver is cheap insurance against the
 // regex pass mis-handling adversarial input shapes (very large N,

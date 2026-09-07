@@ -78,7 +78,7 @@ def create_model():
     """Use an AWS Bedrock Claude model via the anthropic[bedrock] SDK.
 
     LiteLLM's bedrock translation is known to drop tool descriptions; the
-    custom BedrockClaude adapter (vendored from solo-io/agentregistry-dev-samples)
+    custom BedrockClaude adapter from the reference implementation
     talks to Bedrock via anthropic.AnthropicBedrock directly and keeps tool
     schemas intact.
     """

@@ -493,7 +493,7 @@ func TestCrudPerKindHooksCopiesAuthorizeInput(t *testing.T) {
 	obj := &v1alpha1.Deployment{
 		Metadata: v1alpha1.ObjectMeta{Namespace: "prod", Name: "checkout"},
 		Spec: v1alpha1.DeploymentSpec{
-			TargetRef: v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "solo-docs"},
+			TargetRef: v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "extension-docs"},
 		},
 	}
 	in := resource.AuthorizeInput{
