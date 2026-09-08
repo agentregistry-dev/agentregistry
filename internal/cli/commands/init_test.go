@@ -145,6 +145,32 @@ func TestInitAgent_ModelFlagsRemainScaffoldOnly(t *testing.T) {
 
 			projectDir := filepath.Join(tmp, projectName)
 
+			dockerfile, err := os.ReadFile(filepath.Join(projectDir, "Dockerfile"))
+			require.NoError(t, err)
+			assert.Contains(t, string(dockerfile), "ARG VERSION=0.10.1")
+			assert.Contains(t, string(dockerfile), "ENV PYTHONPATH=/app")
+			assert.Contains(t, string(dockerfile), "RUN --mount=from=ghcr.io/astral-sh/uv:")
+			assert.Contains(t, string(dockerfile), "USER 65532:65532")
+			assert.NotContains(t, string(dockerfile), "RUN uv sync",
+				"the distroless ADK image has no shell and sync would remove its installed packages")
+
+			pyproject, err := os.ReadFile(filepath.Join(projectDir, "pyproject.toml"))
+			require.NoError(t, err)
+			assert.Contains(t, string(pyproject), "google-adk==1.38.0")
+			assert.Contains(t, string(pyproject),
+				"constraint-dependencies = [\"opentelemetry-resourcedetector-gcp==1.14.0\"]")
+			if tt.provider == "openai" || tt.provider == "anthropic" {
+				assert.Contains(t, string(pyproject), "litellm>=1.83.7,<=1.83.14")
+			} else {
+				assert.NotContains(t, string(pyproject), "litellm")
+			}
+			if tt.provider == "agentgateway" {
+				assert.Contains(t, string(pyproject),
+					"[dependency-groups]\ndev = [\"kagent-adk==0.10.1\", \"a2a-sdk==0.3.26\"]")
+			} else {
+				assert.NotContains(t, string(pyproject), "kagent-adk")
+			}
+
 			// Every existing provider/model choice still drives its generated
 			// source template and local compose wiring.
 			agentSource, err := os.ReadFile(filepath.Join(projectDir, projectName, "agent.py"))
