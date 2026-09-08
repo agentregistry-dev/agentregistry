@@ -3,6 +3,7 @@
 package crud_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -108,4 +109,40 @@ func TestModelCRUD(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, resp.Code, resp.Body.String())
 	resp = api.Get("/v0/models/claude-opus")
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+}
+
+func TestRuntimeCRUDShowsTerminatingRuntime(t *testing.T) {
+	pool := v1alpha1store.NewTestPool(t)
+	stores := v1alpha1store.NewStores(pool, v1alpha1store.TestSchemaRegistry())
+	_, api := humatest.New(t)
+	crud.Register(api, "/v0", stores, nil, nil, crud.PerKindHooks{
+		InitialFinalizers: map[string]func(v1alpha1.Object) []string{
+			v1alpha1.KindRuntime: func(v1alpha1.Object) []string { return []string{"test/finalizer"} },
+		},
+	}, nil)
+	runtime := v1alpha1.Runtime{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindRuntime},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "terminating-runtime"},
+		Spec:     v1alpha1.RuntimeSpec{Type: "Test"},
+	}
+	_, err := stores[v1alpha1.KindRuntime].Upsert(context.Background(), &runtime, v1alpha1store.UpsertOpts{
+		InitialFinalizers: []string{"test/finalizer"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, http.StatusNoContent, api.Delete("/v0/runtimes/terminating-runtime").Code)
+
+	resp := api.Get("/v0/runtimes/terminating-runtime")
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	var got v1alpha1.Runtime
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &got))
+	require.NotNil(t, got.Metadata.DeletionTimestamp)
+
+	resp = api.Get("/v0/runtimes")
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	var list struct {
+		Items []v1alpha1.Runtime `json:"items"`
+	}
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &list))
+	require.Len(t, list.Items, 1)
+	require.NotNil(t, list.Items[0].Metadata.DeletionTimestamp)
 }

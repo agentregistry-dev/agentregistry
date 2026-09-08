@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	cliruntime "github.com/agentregistry-dev/agentregistry/pkg/cli/runtime"
 )
 
@@ -395,6 +397,31 @@ func TestConfigure_ListsSupportedClients(t *testing.T) {
 	for _, client := range []string{"vscode", "cursor", "claude-code", "kiro"} {
 		if !strings.Contains(output, client) {
 			t.Errorf("client listing missing %q\ngot:\n%s", client, output)
+		}
+	}
+}
+
+func TestConfigure_ClientsAreSubcommands(t *testing.T) {
+	cmd := NewCommand(cliruntime.Deps{})
+	if cmd.Use != cliruntime.CommandConfigure {
+		t.Fatalf("Use = %q, want %q", cmd.Use, cliruntime.CommandConfigure)
+	}
+	if cmd.Flags().Lookup("url") != nil {
+		t.Fatal("configure parent unexpectedly has client flags")
+	}
+	for _, name := range []string{"vscode", "cursor", "claude-code", "kiro"} {
+		var client *cobra.Command
+		for _, candidate := range cmd.Commands() {
+			if candidate.Name() == name {
+				client = candidate
+				break
+			}
+		}
+		if client == nil {
+			t.Fatalf("missing %q subcommand", name)
+		}
+		if client.Flags().Lookup("url") == nil {
+			t.Fatalf("%q subcommand is missing --url", name)
 		}
 	}
 }

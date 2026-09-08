@@ -50,6 +50,9 @@ type ApplyConfig struct {
 	// hooks. Built-in Deployment apply is controller-owned and does not use
 	// this synchronous surface.
 	PostUpserts map[string]func(ctx context.Context, obj v1alpha1.Object) error
+	// OnUpsertErrors compensates per-kind Prepare side effects after a failed
+	// production metadata upsert.
+	OnUpsertErrors map[string]func(ctx context.Context, obj v1alpha1.Object, cause error) error
 
 	// PostDeletes mirrors resource.Config.PostDelete per kind for extension
 	// hooks. Built-in Deployment teardown is controller-owned and does not use
@@ -196,6 +199,7 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 		Resolver:          cfg.Resolver,
 		RegistryValidator: cfg.RegistryValidator,
 		PostUpsert:        cfg.PostUpserts[obj.GetKind()],
+		OnUpsertError:     cfg.OnUpsertErrors[obj.GetKind()],
 		InitialFinalizers: cfg.InitialFinalizers[obj.GetKind()],
 		Admission:         cfg.Admission,
 		Source:            cfg.Source,

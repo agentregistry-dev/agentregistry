@@ -135,7 +135,7 @@ See [`DEVELOPMENT.md`](https://github.com/agentregistry-dev/agentregistry/blob/m
 | Environment | Configuration |
 |---|---|
 | **PoC / Local** | Docker Compose with bundled PostgreSQL. Single node. Lifecycle is managed directly with Docker Compose. |
-| **Development** | Docker Compose or Kind (local Kubernetes). See `scripts/kind/README.md`. |
+| **Development** | Docker Compose or Kind (local Kubernetes). See `hack/kind/README.md`. |
 | **Test** | Kubernetes (Kind) with Helm chart and an external PostgreSQL instance. |
 | **Production** | Kubernetes cluster with Helm chart (`oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry`). Requires an external, HA PostgreSQL instance. |
 

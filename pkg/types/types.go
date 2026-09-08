@@ -5,6 +5,7 @@ package types
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"reflect"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -14,12 +15,17 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	"github.com/agentregistry-dev/agentregistry/pkg/secret"
 )
 
 // DatabaseFactory is a function type that creates a store implementation.
 // This allows implementors to run additional migrations and wrap the base
 // store.
 type DatabaseFactory func(ctx context.Context, databaseURL string, baseStore database.Store, authz auth.Authorizer) (database.Store, error)
+
+// GitCredentialFunc resolves git credentials for a repository reference in the
+// referring resource's namespace. A nil Userinfo means "fetch anonymously".
+type GitCredentialFunc func(ctx context.Context, namespace string, repo *v1alpha1.Repository) (*url.Userinfo, error)
 
 // AuthorizeInput is the per-call context handed to
 // Authorizer + ListFilter callbacks. Mirrors
@@ -71,6 +77,10 @@ type PostDelete func(ctx context.Context, obj v1alpha1.Object) error
 // batch's per-doc prepare hook. Used to mutate the decoded object
 // before persistence (e.g. strip sensitive spec fields).
 type Prepare func(ctx context.Context, obj v1alpha1.Object) error
+
+// UpsertError runs when the production metadata upsert fails after Prepare.
+// It allows Prepare hooks with external side effects to compensate them.
+type UpsertError func(ctx context.Context, obj v1alpha1.Object, cause error) error
 
 const (
 	AdmissionSourceApply  = "apply"
@@ -149,29 +159,6 @@ type ResourceRouteContext struct {
 	Delete            func(ctx context.Context, obj v1alpha1.Object, dryRun bool) v0.ApplyResult
 }
 
-// Auditor receives audit events for state changes that the OSS layer
-// considers significant. The default OSS implementation is a no-op;
-// downstream builds plug in a real audit sink via NewStore options.
-//
-// Audit completeness is enforced at the source: every code path that
-// produces a recordable state change calls into Auditor directly,
-// rather than relying on observers (PostUpsert hooks, etc.) to remember
-// to log.
-type Auditor interface {
-	// ResourceTagCreated is invoked when Store.Upsert creates a new tag row
-	// for a content-registry kind. Mutable-object kinds do not produce this
-	// event.
-	ResourceTagCreated(ctx context.Context, kind, namespace, name, tag string)
-}
-
-type noopAuditor struct{}
-
-func (noopAuditor) ResourceTagCreated(ctx context.Context, kind, namespace, name, tag string) {
-}
-
-// NoopAuditor is the default Auditor used when none is plugged in.
-var NoopAuditor Auditor = noopAuditor{}
-
 // AppOptions contains configuration for the registry app.
 // All fields are optional and allow external developers to extend
 // functionality.
@@ -182,6 +169,9 @@ var NoopAuditor Auditor = noopAuditor{}
 // (internal/registry/registry_app.go) can reference it without a cyclic
 // import.
 type AppOptions struct {
+	// SecretStore supplies payload persistence for the OSS Secret service.
+	SecretStore secret.Store
+
 	// OpenAPISchemaNamer overrides Huma's default schema naming function.
 	// Use this when an application exposes same-named Go types from different
 	// packages; Huma's default namer omits package paths and panics on those
@@ -222,11 +212,30 @@ type AppOptions struct {
 	// adapters here.
 	DeploymentAdapters map[string]DeploymentAdapter
 
+	// DeploymentDiscoverySources registers discovery by Runtime.Spec.Type,
+	// independently of managed deployment support.
+	DeploymentDiscoverySources map[string]DeploymentDiscoverySource
+
 	// DeploymentDependencyKinds registers additional resource kinds whose
 	// durable control-plane events may change a Deployment's desired inputs.
 	// The Deployment controller requeues current Deployments for these events;
 	// its apply fingerprint still suppresses unchanged adapter work.
 	DeploymentDependencyKinds map[string]bool
+
+	// DeploymentControllerLeadership supplies one context for each interval in
+	// which this replica may run Deployment reconciliation. Nil preserves the
+	// default behavior of running under the application context.
+	DeploymentControllerLeadership <-chan context.Context
+
+	// DeploymentApplied observes Deployment apply attempts. Successful applies
+	// are reported after status persistence; adapter and persistence failures
+	// are also reported. Unchanged Deployments are omitted.
+	DeploymentApplied func(context.Context, ApplyInput, *ApplyResult, error)
+
+	// DeploymentFinalized notifies lifecycle owners after required Deployment
+	// cleanup finishes and the row is purged. It allows parent
+	// reconciliation to react immediately instead of waiting for a periodic scan.
+	DeploymentFinalized func(context.Context, *v1alpha1.Deployment)
 
 	// Authorizers gates every read + write operation on the
 	// generic v1alpha1 resource handler, keyed by canonical Kind name
@@ -277,6 +286,10 @@ type AppOptions struct {
 	// TODO(controller): temporary synchronous-handler bridge; remove with
 	// reconciler admission/staging.
 	DeleteAdmission DeleteAdmission
+
+	// GitCredentials overrides Secret-backed Repository.CredentialsRef resolution.
+	// Nil uses the registry's configured Secret store when available.
+	GitCredentials GitCredentialFunc
 
 	// ResolverWrapper decorates the shared ResourceRef resolver before route
 	// registration. Nil preserves the default store-backed resolver.
@@ -376,12 +389,6 @@ type AppOptions struct {
 	// only, letting a build apply bridge-specific validation (e.g. audience
 	// binding to the MCP resource). Nil falls back to AuthnProvider.
 	MCPAuthnProvider auth.AuthnProvider
-
-	// Auditor receives audit events from the v1alpha1 store layer
-	// (e.g. ResourceTagCreated on Upsert creates). The default OSS
-	// behavior is a no-op; downstream builds plug in a real audit sink.
-	// If nil, NoopAuditor is used.
-	Auditor Auditor
 
 	// InitialFinalizers seeds finalizers atomically on create for kinds
 	// whose external teardown must be protected from a concurrent delete.

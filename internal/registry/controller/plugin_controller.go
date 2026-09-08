@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"k8s.io/client-go/util/workqueue"
 
+	"github.com/agentregistry-dev/agentregistry/internal/cli/common/gitutil"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/plugins/bundle"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/plugins/source"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
@@ -18,10 +19,11 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
-// PluginControllerDeps are the Plugin controller's dependencies. Resolver pins
-// a plugin's source pointer and loads its bundle; it is required.
+// PluginControllerDeps are the Plugin controller's dependencies. Git pins a
+// plugin's git source and fetches the tree at that pin; it defaults to an
+// anonymous source when nil, which cannot read private repositories.
 type PluginControllerDeps struct {
-	Resolver source.Resolver
+	Git *gitutil.Source
 }
 
 // pluginStore is the subset of *v1alpha1store.Store the controller uses,
@@ -52,9 +54,9 @@ type pluginQueueKey struct {
 // opens its OWN control-plane LISTEN subscription (the Deployment controller has
 // a separate one); there is no shared listen loop.
 type PluginController struct {
-	Store    pluginStore
-	Resolver source.Resolver
-	Wakeups  <-chan struct{}
+	Store   pluginStore
+	Git     *gitutil.Source
+	Wakeups <-chan struct{}
 
 	pool   *pgxpool.Pool
 	resync time.Duration
@@ -81,14 +83,15 @@ func NewPluginController(
 	if store == nil {
 		return nil, errors.New("plugin controller: Plugin store is required")
 	}
-	if deps.Resolver == nil {
-		return nil, errors.New("plugin controller: Resolver is required")
+	git := deps.Git
+	if git == nil {
+		git = gitutil.NewSource(nil)
 	}
 	return &PluginController{
-		Store:    store,
-		Resolver: deps.Resolver,
-		pool:     pool,
-		resync:   defaultControllerResyncInterval,
+		Store:  store,
+		Git:    git,
+		pool:   pool,
+		resync: defaultControllerResyncInterval,
 	}, nil
 }
 
@@ -98,8 +101,8 @@ func (c *PluginController) Start(ctx context.Context) error {
 	if c == nil || c.Store == nil {
 		return errors.New("plugin controller: Plugin store is required")
 	}
-	if c.Resolver == nil {
-		return errors.New("plugin controller: Resolver is required")
+	if c.Git == nil {
+		return errors.New("plugin controller: Git source is required")
 	}
 	c.lifecycleMu.Lock()
 	defer c.lifecycleMu.Unlock()
@@ -162,8 +165,8 @@ func (c *PluginController) Run(ctx context.Context, resync time.Duration) error 
 	if c == nil || c.Store == nil {
 		return errors.New("plugin controller: Plugin store is required")
 	}
-	if c.Resolver == nil {
-		return errors.New("plugin controller: Resolver is required")
+	if c.Git == nil {
+		return errors.New("plugin controller: Git source is required")
 	}
 	queue := c.workQueue()
 	defer queue.ShutDown()
@@ -314,7 +317,7 @@ func (c *PluginController) reconcile(ctx context.Context, p *v1alpha1.Plugin) (s
 		}
 	}
 
-	resolved, b, err := c.Resolver.Resolve(ctx, p)
+	resolved, b, err := source.Resolve(ctx, p, c.Git)
 	if err != nil {
 		reason, terminal := classifyResolveErr(err)
 		bump := int64(0)

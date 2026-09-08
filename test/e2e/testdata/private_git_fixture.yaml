@@ -1,0 +1,104 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: git-fixture
+  namespace: agentregistry
+data:
+  htpasswd: |
+    git:$apr1$e2etest$UMVlrgHCOL949vUHSFgxm0
+  nginx.conf: |
+    events {}
+    http {
+      server {
+        listen 80;
+        auth_basic "git";
+        auth_basic_user_file /config/htpasswd;
+        location / {
+          include /etc/nginx/fastcgi_params;
+          fastcgi_param SCRIPT_FILENAME /usr/libexec/git-core/git-http-backend;
+          fastcgi_param GIT_PROJECT_ROOT /srv;
+          fastcgi_param GIT_HTTP_EXPORT_ALL 1;
+          fastcgi_param PATH_INFO $uri;
+          fastcgi_pass 127.0.0.1:9000;
+        }
+      }
+    }
+  seed.sh: |
+    set -eu
+    git init -q --bare /srv/acme/private.git
+    git init -q /tmp/work
+    cd /tmp/work
+    git config user.email e2e@example.com
+    git config user.name e2e
+    mkdir -p plugin/.claude-plugin skill
+    printf '{"name":"private-plugin","version":"1.0.0"}\n' > plugin/.claude-plugin/plugin.json
+    printf '%s\n' '---' 'name: private-skill' 'description: E2E private skill' '---' > skill/SKILL.md
+    git add -A
+    git commit -qm "e2e private catalog sources"
+    git branch -M main
+    git push -q /srv/acme/private.git main
+    git -C /srv/acme/private.git symbolic-ref HEAD refs/heads/main
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: git-fixture
+  namespace: agentregistry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: git-fixture
+  template:
+    metadata:
+      labels:
+        app: git-fixture
+    spec:
+      volumes:
+        - name: repos
+          emptyDir: {}
+        - name: config
+          configMap:
+            name: git-fixture
+            defaultMode: 0755
+      initContainers:
+        - name: seed
+          image: alpine/git:v2.47.2
+          command: ["/bin/sh", "/config/seed.sh"]
+          volumeMounts:
+            - name: repos
+              mountPath: /srv
+            - name: config
+              mountPath: /config
+      containers:
+        - name: git-http
+          image: nginx:1.27-alpine
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              apk add --no-cache fcgiwrap git git-daemon
+              fcgiwrap -s tcp:127.0.0.1:9000 &
+              exec nginx -c /config/nginx.conf -g 'daemon off;'
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            tcpSocket:
+              port: 80
+          volumeMounts:
+            - name: repos
+              mountPath: /srv
+            - name: config
+              mountPath: /config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: git-fixture
+  namespace: agentregistry
+spec:
+  selector:
+    app: git-fixture
+  ports:
+    - port: 80
+      targetPort: 80

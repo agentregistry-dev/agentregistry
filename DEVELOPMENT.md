@@ -56,7 +56,7 @@ psql -h localhost -U agentregistry -d agentregistry
 make delete-kind-cluster
 ```
 
-See [`scripts/kind/README.md`](scripts/kind/README.md) for more detail on configuration, troubleshooting, and overriding defaults.
+See [`hack/kind/README.md`](hack/kind/README.md) for more detail on configuration, troubleshooting, and overriding defaults.
 
 ---
 

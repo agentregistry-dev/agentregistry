@@ -20,31 +20,38 @@ var clientConfigurers = map[string]ClientConfigurer{
 	"kiro":        &KiroConfigurer{},
 }
 
-func NewCommand(deps cliruntime.Deps) *cobra.Command {
+func NewCommand(_ cliruntime.Deps) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   cliruntime.CommandConfigure,
+		Short: "Write the JSON config a client needs to connect to arctl",
+		Long:  `Creates the .json configuration for each client, so it can connect to arctl.`,
+	}
+
+	for name, configurer := range clientConfigurers {
+		cmd.AddCommand(newClientCommand(name, configurer))
+	}
+
+	return cmd
+}
+
+func newClientCommand(clientName string, configurer ClientConfigurer) *cobra.Command {
 	var configureURL, configurePort, configureTokenEnv string
 
 	cmd := &cobra.Command{
-		Use:   cliruntime.CommandConfigure + " [client-name]",
-		Short: "Configure a client",
-		Long:  `Creates the .json configuration for each client, so it can connect to arctl.`,
-		Args:  cobra.MaximumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) == 0 {
-				out := cmd.OutOrStdout()
-				fmt.Fprintln(out, "Supported clients:")
-				for name, configurer := range clientConfigurers {
-					fmt.Fprintf(out, "  %-15s - %s\n", name, configurer.GetClientName())
-				}
-				fmt.Fprintf(out, "\nUsage:\n  %s <client-name>\n", cmd.CommandPath())
-				return nil
-			}
+		Use:   clientName,
+		Short: "Configure " + configurer.GetClientName(),
+		Long: fmt.Sprintf(`Write the MCP server entry that %s reads, so it can reach this registry.
 
-			clientName := args[0]
-			configurer, ok := clientConfigurers[clientName]
-			if !ok {
-				return fmt.Errorf("client %q is not supported; run 'arctl configure' to see supported clients", clientName)
-			}
+The entry is merged into the client's existing configuration file rather than
+replacing it, and the file is created if it does not exist yet.
 
+The endpoint defaults to http://localhost:%s/mcp. Override the port with --port,
+or the whole URL with --url. Clients that support OAuth authenticate
+interactively; for static or direct access, pass --token-env with the name of
+the environment variable holding the MCP bearer token. Only that name is written
+into the config, never the token itself.`, configurer.GetClientName(), common.DefaultAgentGatewayPort),
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			url := fmt.Sprintf("http://localhost:%s/mcp", configurePort)
 			if configureURL != "" {
 				if cmd.Flags().Changed("port") {

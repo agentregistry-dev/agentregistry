@@ -120,6 +120,10 @@ type Config struct {
 	// write and surface to the caller.
 	Prepare func(ctx context.Context, obj v1alpha1.Object) error
 
+	// OnUpsertError compensates side effects performed by Prepare when the
+	// metadata upsert fails.
+	OnUpsertError func(ctx context.Context, obj v1alpha1.Object, cause error) error
+
 	// DeleteAdmission optionally owns the final delete after authz. Nil uses
 	// ProductionDeleteAdmission, which deletes from the configured Store and
 	// runs PostDelete.
@@ -513,6 +517,7 @@ func registerApplyMutable[T v1alpha1.Object](api huma.API, cfg Config, newObj fu
 			PostUpsert:        cfg.PostUpsert,
 			InitialFinalizers: cfg.InitialFinalizers,
 			Prepare:           cfg.Prepare,
+			OnUpsertError:     cfg.OnUpsertError,
 		}, false); ae != nil {
 			return nil, mapApplyErrorToHuma(ae, kind, ns, name, "")
 		}

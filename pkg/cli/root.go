@@ -6,8 +6,8 @@ import (
 	"github.com/spf13/cobra"
 
 	internalcli "github.com/agentregistry-dev/agentregistry/internal/cli"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/commands"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/configure"
-	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
@@ -54,7 +54,7 @@ func Root(cfg Config) *cobra.Command {
 		for _, header := range kind.TableColumns {
 			columns = append(columns, scheme.Column{Header: header})
 		}
-		kinds.Register(declarative.NewExtensionKind(declarative.ExtensionKind{
+		kinds.Register(commands.NewExtensionKind(commands.ExtensionKind{
 			Name:          kind.Name,
 			Plural:        kind.Plural,
 			CanonicalKind: kind.CanonicalKind,
@@ -72,14 +72,14 @@ func Root(cfg Config) *cobra.Command {
 	}
 	root.AddCommand(configure.NewCommand(deps))
 	root.AddCommand(internalcli.NewVersionCommand(deps))
-	root.AddCommand(declarative.NewApplyCmd(deps))
-	root.AddCommand(declarative.NewGetCmd(deps))
-	root.AddCommand(declarative.NewDeleteCmd(deps))
-	root.AddCommand(declarative.NewInitCmd(deps))
-	root.AddCommand(declarative.NewBuildCmd(deps))
-	root.AddCommand(declarative.NewRunCmd(deps))
-	root.AddCommand(declarative.NewPullCmd(deps))
-	root.AddCommand(declarative.NewWaitCmd(deps))
+	root.AddCommand(commands.NewApplyCmd(deps))
+	root.AddCommand(commands.NewGetCmd(deps))
+	root.AddCommand(commands.NewDeleteCmd(deps))
+	root.AddCommand(commands.NewInitCmd(deps))
+	root.AddCommand(commands.NewBuildCmd(deps))
+	root.AddCommand(commands.NewRunCmd(deps))
+	root.AddCommand(commands.NewPullCmd(deps))
+	root.AddCommand(commands.NewWaitCmd(deps))
 	migrationSources := append([]migrate.Source{legacymigrate.OSSSource()}, cfg.ExtraMigrationSources...)
 	root.AddCommand(db.NewCommand(migrationSources...))
 

@@ -3,6 +3,7 @@
 package gitutil
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -15,10 +16,14 @@ import (
 	"strings"
 )
 
+const maxGitDiagnosticRunes = 4096
+
 var (
-	// ErrUnsupportedHost is returned for a non-GitHub/non-GitLab host. It is a
-	// permanent condition: callers can errors.Is it to avoid retrying hosts that
-	// are not supported.
+	// ErrUnsupportedHost is returned for a web URL on a host whose layout is not
+	// understood — every host but github.com and GitLab. Such a host is still
+	// usable through its plain clone URL (see ParseGitURL). It is a permanent
+	// condition: callers can errors.Is it to avoid retrying a URL that cannot
+	// be parsed.
 	ErrUnsupportedHost = errors.New("unsupported git host")
 	// ErrRefNotFound is returned when a ref resolves to no commit on the remote
 	// (deleted branch/tag, typo, or a short/non-existent SHA). Terminal:
@@ -32,6 +37,13 @@ var (
 // Branch names containing slashes (e.g. feature/my-branch) are supported when
 // encoded as %2F in the URL. The raw (escaped) path is used for splitting so
 // the encoded branch segment is preserved, then unescaped for the return value.
+//
+// Any other host — Bitbucket Server, Gitea, GitHub Enterprise on a company
+// domain — is accepted through its plain clone URL, the path ending in ".git".
+// There is no web-URL layout to infer a branch or subdirectory from in that
+// case, so both come back empty and the caller supplies them explicitly
+// (Repository.Branch and Repository.Subfolder). A non-clone URL on such a host
+// returns ErrUnsupportedHost.
 func ParseGitURL(rawURL string) (cloneURL, branch, subPath string, err error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
@@ -60,13 +72,19 @@ func ParseGitURL(rawURL string) (cloneURL, branch, subPath string, err error) {
 		return parseGitLabStyleURL(u, parts, gitLabMarker)
 	}
 	if strings.Contains(strings.ToLower(u.Host), "gitlab") {
-		return parseGitLabRootURL(u, parts)
+		return parseRepoRootURL(u, parts)
 	}
-	if u.Host != "github.com" {
-		return "", "", "", fmt.Errorf("%w: %q", ErrUnsupportedHost, u.Host)
+	if u.Host == "github.com" {
+		return parseGitHubStyleURL(u, parts)
+	}
+	// Unknown host: accept it only as a plain clone URL, which is unambiguous
+	// on every git server. Guessing a web layout instead would silently
+	// mis-parse namespaces (Bitbucket Server's /scm/ prefix, Gitea's /raw/).
+	if strings.HasSuffix(parts[len(parts)-1], ".git") {
+		return parseRepoRootURL(u, parts)
 	}
 
-	return parseGitHubStyleURL(u, parts)
+	return "", "", "", fmt.Errorf("%w: %q (pass the repository clone URL, ending in .git)", ErrUnsupportedHost, u.Host)
 }
 
 func parseGitHubStyleURL(u *url.URL, parts []string) (cloneURL, branch, subPath string, err error) {
@@ -88,7 +106,10 @@ func parseGitHubStyleURL(u *url.URL, parts []string) (cloneURL, branch, subPath 
 	return cloneURL, branch, subPath, nil
 }
 
-func parseGitLabRootURL(u *url.URL, parts []string) (cloneURL, branch, subPath string, err error) {
+// parseRepoRootURL treats the whole path as the repository, so it carries no
+// branch or subdirectory. It is host-agnostic: a GitLab project root and a
+// plain clone URL on any other host reduce to the same shape.
+func parseRepoRootURL(u *url.URL, parts []string) (cloneURL, branch, subPath string, err error) {
 	repoParts := append([]string(nil), parts...)
 	repoParts[len(repoParts)-1] = strings.TrimSuffix(repoParts[len(repoParts)-1], ".git")
 	cloneURL = fmt.Sprintf("%s://%s/%s.git", u.Scheme, u.Host, strings.Join(repoParts, "/"))
@@ -122,10 +143,12 @@ func parseGitLabStyleURL(u *url.URL, parts []string, marker int) (cloneURL, bran
 // commit argument explicitly. branch is passed to `git clone --branch`; commit
 // triggers a fetch + checkout after the clone.
 //
+// A non-nil auth is spliced into the clone URL for a private repository.
+//
 // Every git invocation runs under ctx, so a caller can bound
 // clone/fetch/checkout time (and disk/CPU runaway) by passing a
 // context.WithTimeout. ctx cancellation kills the git child process.
-func CloneAndCopyContext(ctx context.Context, repoURL, branch, commit, subPath, targetDir string, verbose bool) error {
+func CloneAndCopyContext(ctx context.Context, repoURL, branch, commit, subPath, targetDir string, verbose bool, auth *url.Userinfo) error {
 	cloneURL, urlBranch, urlSubPath, err := ParseGitURL(repoURL)
 	if err != nil {
 		return fmt.Errorf("parse Git URL: %w", err)
@@ -145,6 +168,11 @@ func CloneAndCopyContext(ctx context.Context, repoURL, branch, commit, subPath, 
 		return err
 	}
 
+	cloneURL, safeURL, err := authenticate(cloneURL, auth)
+	if err != nil {
+		return err
+	}
+
 	tempDir, err := os.MkdirTemp("", "arctl-git-clone-*")
 	if err != nil {
 		return fmt.Errorf("create temp directory: %w", err)
@@ -158,35 +186,89 @@ func CloneAndCopyContext(ctx context.Context, repoURL, branch, commit, subPath, 
 	cloneArgs = append(cloneArgs, cloneURL, tempDir)
 
 	gitCmd := exec.CommandContext(ctx, "git", cloneArgs...)
-	if verbose {
-		gitCmd.Stdout = os.Stdout
-		gitCmd.Stderr = os.Stderr
-	}
-	if err := gitCmd.Run(); err != nil {
-		return fmt.Errorf("clone repository: %w", err)
+	output, err := runGitCommand(gitCmd, verbose)
+	if err != nil {
+		return gitCommandError("clone repository "+safeURL, err, output, cloneURL, safeURL, auth)
 	}
 
 	if commit != "" {
 		fetchCmd := exec.CommandContext(ctx, "git", "-C", tempDir, "fetch", "--depth", "1", "origin", commit)
-		if verbose {
-			fetchCmd.Stdout = os.Stdout
-			fetchCmd.Stderr = os.Stderr
-		}
-		if err := fetchCmd.Run(); err != nil {
-			return fmt.Errorf("fetch commit %s: %w", commit, err)
+		output, err := runGitCommand(fetchCmd, verbose)
+		if err != nil {
+			return gitCommandError("fetch commit "+commit, err, output, cloneURL, safeURL, auth)
 		}
 
 		checkoutCmd := exec.CommandContext(ctx, "git", "-C", tempDir, "checkout", "FETCH_HEAD")
-		if verbose {
-			checkoutCmd.Stdout = os.Stdout
-			checkoutCmd.Stderr = os.Stderr
-		}
-		if err := checkoutCmd.Run(); err != nil {
-			return fmt.Errorf("checkout commit %s: %w", commit, err)
+		output, err = runGitCommand(checkoutCmd, verbose)
+		if err != nil {
+			return gitCommandError("checkout commit "+commit, err, output, cloneURL, safeURL, auth)
 		}
 	}
 
 	return CopyRepoContents(tempDir, subPath, targetDir)
+}
+
+func runGitCommand(cmd *exec.Cmd, verbose bool) ([]byte, error) {
+	if !verbose {
+		return cmd.CombinedOutput()
+	}
+	var output bytes.Buffer
+	cmd.Stdout = io.MultiWriter(os.Stdout, &output)
+	cmd.Stderr = io.MultiWriter(os.Stderr, &output)
+	err := cmd.Run()
+	return output.Bytes(), err
+}
+
+func gitCommandError(action string, err error, output []byte, execURL, safeURL string, auth *url.Userinfo) error {
+	diagnostic := sanitizeGitDiagnostic(string(output), execURL, safeURL, auth)
+	if diagnostic == "" {
+		return fmt.Errorf("%s: %w", action, err)
+	}
+	return fmt.Errorf("%s: %w: %s", action, err, diagnostic)
+}
+
+func sanitizeGitDiagnostic(diagnostic, execURL, safeURL string, auth *url.Userinfo) string {
+	diagnostic = strings.ReplaceAll(diagnostic, execURL, safeURL)
+	if auth != nil {
+		diagnostic = strings.ReplaceAll(diagnostic, auth.String(), "xxxxx")
+		if password, ok := auth.Password(); ok {
+			diagnostic = redactCredential(diagnostic, password)
+		} else {
+			diagnostic = redactCredential(diagnostic, auth.Username())
+		}
+	}
+	diagnostic = strings.TrimSpace(diagnostic)
+	runes := []rune(diagnostic)
+	if len(runes) > maxGitDiagnosticRunes {
+		diagnostic = "..." + string(runes[len(runes)-maxGitDiagnosticRunes:])
+	}
+	return diagnostic
+}
+
+func redactCredential(value, credential string) string {
+	if credential == "" {
+		return value
+	}
+	for _, encoded := range []string{credential, url.PathEscape(credential), url.QueryEscape(credential)} {
+		value = strings.ReplaceAll(value, encoded, "xxxxx")
+	}
+	return value
+}
+
+// authenticate splices auth into a clone URL and returns it with a redacted
+// form; errors must use the redacted form because status persists them.
+func authenticate(cloneURL string, auth *url.Userinfo) (execURL, safeURL string, err error) {
+	if auth == nil {
+		return cloneURL, cloneURL, nil
+	}
+	u, err := url.Parse(cloneURL)
+	if err != nil {
+		return "", "", fmt.Errorf("invalid clone URL: %w", err)
+	}
+	u.User = auth
+	execURL = u.String()
+	u.User = url.User("xxxxx")
+	return execURL, u.String(), nil
 }
 
 // safeGitRef rejects a ref/branch/commit that git could mis-parse as a
@@ -219,7 +301,9 @@ func isFullCommitSHA(s string) bool {
 // (after the URL-embedded branch is considered) resolves the remote's default
 // branch (HEAD). ctx bounds the ls-remote call. A ref that resolves to no
 // commit returns ErrRefNotFound (terminal).
-func ResolveRefContext(ctx context.Context, repoURL, ref string) (string, error) {
+//
+// A non-nil auth authenticates against a private remote.
+func ResolveRefContext(ctx context.Context, repoURL, ref string, auth *url.Userinfo) (string, error) {
 	if isFullCommitSHA(ref) {
 		return strings.ToLower(ref), nil
 	}
@@ -237,13 +321,27 @@ func ResolveRefContext(ctx context.Context, repoURL, ref string) (string, error)
 	if err := safeGitRef(lsRef); err != nil {
 		return "", err
 	}
-	out, err := exec.CommandContext(ctx, "git", "ls-remote", cloneURL, lsRef).Output()
+	cloneURL, safeURL, err := authenticate(cloneURL, auth)
 	if err != nil {
-		return "", fmt.Errorf("git ls-remote %s %q: %w", cloneURL, lsRef, err)
+		return "", err
+	}
+	cmd := exec.CommandContext(ctx, "git", "ls-remote", cloneURL, lsRef)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		return "", gitCommandError(
+			fmt.Sprintf("git ls-remote %s %q", safeURL, lsRef),
+			err,
+			stderr.Bytes(),
+			cloneURL,
+			safeURL,
+			auth,
+		)
 	}
 	sha := firstLSRemoteSHA(string(out), lsRef)
 	if sha == "" {
-		return "", fmt.Errorf("%w: %q in %s", ErrRefNotFound, lsRef, cloneURL)
+		return "", fmt.Errorf("%w: %q in %s", ErrRefNotFound, lsRef, safeURL)
 	}
 	return sha, nil
 }

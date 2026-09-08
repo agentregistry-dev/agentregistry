@@ -17,31 +17,11 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
-// SkillResolveFunc resolves a skill's git source ref to a concrete commit SHA.
-// It is the only I/O-bearing dependency of the Skill controller, so tests inject
-// a fake instead of touching the network.
-type SkillResolveFunc func(ctx context.Context, repo *v1alpha1.Repository) (commit string, err error)
-
-// SkillControllerDeps are the Skill controller's dependencies. Resolve pins a
-// skill's git source ref to a commit; it defaults to a git ls-remote resolver
-// when nil.
+// SkillControllerDeps are the Skill controller's dependencies. Git pins a
+// skill's git source ref to a commit; it defaults to an anonymous source when
+// nil, which cannot read private repositories.
 type SkillControllerDeps struct {
-	Resolve SkillResolveFunc
-}
-
-// defaultSkillResolve pins a skill's git source by resolving its ref (an
-// explicit commit, else the branch, else the repo/HEAD default) to a concrete
-// commit SHA via ls-remote. It is intentionally lighter than the Plugin
-// resolver: a skill has no manifest/inventory to scan, so the controller only
-// needs the pin. Materialization (the actual checkout) happens at deploy time.
-func defaultSkillResolve(ctx context.Context, repo *v1alpha1.Repository) (string, error) {
-	ref := repo.Commit
-	if ref == "" {
-		ref = repo.Branch
-	}
-	ctx, cancel := context.WithTimeout(ctx, skillResolveTimeout)
-	defer cancel()
-	return gitutil.ResolveRefContext(ctx, repo.URL, ref)
+	Git *gitutil.Source
 }
 
 const skillResolveTimeout = 2 * time.Minute
@@ -75,7 +55,7 @@ type skillQueueKey struct {
 // OWN control-plane LISTEN subscription.
 type SkillController struct {
 	Store   skillStore
-	Resolve SkillResolveFunc
+	Git     *gitutil.Source
 	Wakeups <-chan struct{}
 
 	pool   *pgxpool.Pool
@@ -103,15 +83,15 @@ func NewSkillController(
 	if store == nil {
 		return nil, errors.New("skill controller: Skill store is required")
 	}
-	resolve := deps.Resolve
-	if resolve == nil {
-		resolve = defaultSkillResolve
+	git := deps.Git
+	if git == nil {
+		git = gitutil.NewSource(nil)
 	}
 	return &SkillController{
-		Store:   store,
-		Resolve: resolve,
-		pool:    pool,
-		resync:  defaultControllerResyncInterval,
+		Store:  store,
+		Git:    git,
+		pool:   pool,
+		resync: defaultControllerResyncInterval,
 	}, nil
 }
 
@@ -121,8 +101,8 @@ func (c *SkillController) Start(ctx context.Context) error {
 	if c == nil || c.Store == nil {
 		return errors.New("skill controller: Skill store is required")
 	}
-	if c.Resolve == nil {
-		c.Resolve = defaultSkillResolve
+	if c.Git == nil {
+		return errors.New("skill controller: Git source is required")
 	}
 	c.lifecycleMu.Lock()
 	defer c.lifecycleMu.Unlock()
@@ -185,8 +165,8 @@ func (c *SkillController) Run(ctx context.Context, resync time.Duration) error {
 	if c == nil || c.Store == nil {
 		return errors.New("skill controller: Skill store is required")
 	}
-	if c.Resolve == nil {
-		c.Resolve = defaultSkillResolve
+	if c.Git == nil {
+		return errors.New("skill controller: Git source is required")
 	}
 	queue := c.workQueue()
 	defer queue.ShutDown()
@@ -343,7 +323,12 @@ func (c *SkillController) reconcile(ctx context.Context, sk *v1alpha1.Skill) (st
 		}
 	}
 
-	commit, err := c.Resolve(ctx, sk.Spec.Source.Repository)
+	// Bound the pin so a slow or hostile origin cannot hang the worker; gitutil
+	// kills the git child when ctx expires. Pinning is all a skill needs — it has
+	// no manifest/inventory to scan, so the tree is fetched at deploy time.
+	pinCtx, cancel := context.WithTimeout(ctx, skillResolveTimeout)
+	defer cancel()
+	commit, err := c.Git.Pin(pinCtx, ns, sk.Spec.Source.Repository)
 	if err != nil {
 		reason, terminal := classifySkillResolveErr(err)
 		bump := int64(0)

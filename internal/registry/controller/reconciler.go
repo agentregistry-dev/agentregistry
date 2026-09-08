@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
 	"slices"
 
 	"k8s.io/client-go/util/workqueue"
@@ -118,19 +117,28 @@ func (c *DeploymentController) apply(ctx context.Context, deployment *v1alpha1.D
 	}
 	result, err := adapter.Apply(ctx, input)
 	if err != nil {
+		if c.DeploymentApplied != nil {
+			c.DeploymentApplied(ctx, input, nil, err)
+		}
 		if errors.Is(err, v1alpha1.ErrDanglingRef) {
 			return c.blockReference(ctx, deployment, err)
 		}
 		return "", "", fmt.Errorf("adapter %q apply: %w", adapter.Type(), err)
 	}
 	if err := c.persistApplyResult(ctx, deployment, result, fingerprint, forceToken, fingerprintResult.Dependencies); err != nil {
+		if c.DeploymentApplied != nil {
+			c.DeploymentApplied(ctx, input, result, err)
+		}
 		return "", "", err
+	}
+	if c.DeploymentApplied != nil {
+		c.DeploymentApplied(ctx, input, result, nil)
 	}
 	return "success", "deployment applied", nil
 }
 
 func (c *DeploymentController) remove(ctx context.Context, deployment *v1alpha1.Deployment) (string, string, error) {
-	runtime, err := c.resolveRuntime(ctx, deployment)
+	runtime, err := c.resolveRuntimeIncludingTerminating(ctx, deployment)
 	if err != nil {
 		return c.handleRemoveRuntimeError(ctx, deployment, err)
 	}
@@ -154,6 +162,37 @@ func (c *DeploymentController) remove(ctx context.Context, deployment *v1alpha1.
 		}
 	}
 	return "success", "deployment removed", nil
+}
+
+// resolveRuntimeIncludingTerminating keeps the parent Runtime available after
+// its deletion is accepted. Deployment removal still needs that Runtime to
+// select and configure the provider responsible for child cleanup; filtering
+// terminating rows would orphan the provider resources. A truly absent parent
+// falls through to the existing dangling-reference finalization path.
+func (c *DeploymentController) resolveRuntimeIncludingTerminating(
+	ctx context.Context,
+	deployment *v1alpha1.Deployment,
+) (*v1alpha1.Runtime, error) {
+	store := c.Stores[v1alpha1.KindRuntime]
+	if store == nil {
+		return nil, errors.New("deployment controller: no Runtime store registered")
+	}
+	ref := deployment.Spec.RuntimeRef
+	ref.Namespace = refNamespace(ref.Namespace, deployment.Metadata.NamespaceOrDefault())
+	raw, err := store.GetLatestIncludingTerminating(ctx, ref.Namespace, ref.Name)
+	if err != nil {
+		if errors.Is(err, pkgdb.ErrNotFound) {
+			return nil, v1alpha1.ErrDanglingRef
+		}
+		return nil, fmt.Errorf("resolve runtimeRef %s/%s: %w", ref.Namespace, ref.Name, err)
+	}
+	runtime, err := v1alpha1.EnvelopeFromRaw(func() *v1alpha1.Runtime {
+		return &v1alpha1.Runtime{}
+	}, raw, v1alpha1.KindRuntime)
+	if err != nil {
+		return nil, fmt.Errorf("resolve runtimeRef %s/%s: %w", ref.Namespace, ref.Name, err)
+	}
+	return runtime, nil
 }
 
 func (c *DeploymentController) handleRemoveRuntimeError(
@@ -276,17 +315,8 @@ func (c *DeploymentController) persistApplyResult(
 		}
 		return nil
 	}
-	if len(result.Conditions) > 0 || len(result.Details) > 0 || fingerprint != "" {
+	if len(result.Conditions) > 0 || len(result.Details) > 0 || len(result.RuntimeMetadata) > 0 || fingerprint != "" {
 		patch.Status = deploymentControllerStatusPatch(deployment, result, fingerprint, forceToken, dependencies)
-	}
-	if len(result.RuntimeMetadata) > 0 {
-		patch.Annotations = func(annotations map[string]string) map[string]string {
-			if annotations == nil {
-				annotations = map[string]string{}
-			}
-			maps.Copy(annotations, result.RuntimeMetadata)
-			return annotations
-		}
 	}
 	if err := c.deploymentStore().ApplyPatch(ctx, deployment.Metadata.NamespaceOrDefault(), deployment.Metadata.Name, "", patch); err != nil {
 		return fmt.Errorf("persist apply result: %w", err)
@@ -311,6 +341,9 @@ func deploymentControllerStatusPatch(
 			}
 			for key, encoded := range result.Details {
 				_ = s.SetDetailsKeyJSON(key, encoded)
+			}
+			if len(result.RuntimeMetadata) > 0 {
+				_ = s.SetDetailsKey(deploymentRuntimeDetailsKey, result.RuntimeMetadata)
 			}
 		}
 		if fingerprint != "" {
@@ -353,6 +386,9 @@ func (c *DeploymentController) finalizeDeletedDeployment(ctx context.Context, de
 	}
 	if _, err := c.deploymentStore().PurgeFinalized(ctx); err != nil {
 		return fmt.Errorf("purge finalized deployment: %w", err)
+	}
+	if c.DeploymentFinalized != nil {
+		c.DeploymentFinalized(ctx, deployment)
 	}
 	return nil
 }

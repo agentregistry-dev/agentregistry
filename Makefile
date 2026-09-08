@@ -40,7 +40,7 @@ endif
 ifndef VERSION
 VERSION := $(shell git describe --tags --always 2>/dev/null | grep v || echo "v0.0.0-g$(GIT_COMMIT)")
 endif
-KAGENT_VERSION ?= v0.8.0-beta6
+KAGENT_VERSION ?= v0.10.0-rc3
 ifndef KAGENT_HELM_VERSION
 KAGENT_HELM_VERSION := $(shell echo $(KAGENT_VERSION) | sed 's/^v//')
 endif
@@ -74,6 +74,8 @@ GOLANGCI_LINT ?= $(GO_TOOL) golangci-lint
 GOTESTSUM     ?= $(GO_TOOL) gotestsum
 HELM          ?= $(GO_TOOL) helm
 HELM_DOCS     ?= $(GO_TOOL) helm-docs --log-level=fatal
+# Extra flags appended to the local AgentRegistry Helm install.
+HELM_EXTRA_ARGS ?=
 KIND          ?= $(GO_TOOL) kind
 
 ## Helm / Chart settings
@@ -359,9 +361,9 @@ create-kind-cluster: local-registry ## Create a local Kind cluster with MetalLB 
 		KIND_IMAGE_VERSION=$(KIND_IMAGE_VERSION) \
 		REG_NAME=kind-registry \
 		REG_PORT=5001 \
-		bash ./scripts/kind/setup-kind.sh; \
+		bash ./hack/kind/setup-kind.sh; \
 	fi
-	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) bash ./scripts/kind/setup-metallb.sh
+	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) bash ./hack/kind/setup-metallb.sh
 
 .PHONY: delete-kind-cluster
 delete-kind-cluster: ## Delete the local Kind cluster (no-op if it does not exist)
@@ -400,6 +402,7 @@ endif
 	    --set image.repository=$(DOCKER_REPO) \
 	    --set image.tag=$(VERSION) \
 	    --set service.type=LoadBalancer \
+	    $(HELM_EXTRA_ARGS) \
 	    --wait \
 	    --timeout=5m;
 
@@ -424,18 +427,18 @@ install-kagent-controller: ## Deploy kagent controller (minimal, no agents/tools
 	  --version $(KAGENT_HELM_VERSION) \
 	  --set ui.replicas=0 \
 	  --set kagent-tools.enabled=false \
-	  --set tools.grafana-mcp.enabled=false \
-	  --set tools.querydoc.enabled=false \
-	  --set agents.argo-rollouts-agent.enabled=false \
-	  --set agents.cilium-debug-agent.enabled=false \
-	  --set agents.cilium-manager-agent.enabled=false \
-	  --set agents.cilium-policy-agent.enabled=false \
-	  --set agents.helm-agent.enabled=false \
-	  --set agents.istio-agent.enabled=false \
-	  --set agents.k8s-agent.enabled=false \
-	  --set agents.kgateway-agent.enabled=false \
-	  --set agents.observability-agent.enabled=false \
-	  --set agents.promql-agent.enabled=false \
+	  --set grafana-mcp.enabled=false \
+	  --set querydoc.enabled=false \
+	  --set argo-rollouts-agent.enabled=false \
+	  --set cilium-debug-agent.enabled=false \
+	  --set cilium-manager-agent.enabled=false \
+	  --set cilium-policy-agent.enabled=false \
+	  --set helm-agent.enabled=false \
+	  --set istio-agent.enabled=false \
+	  --set k8s-agent.enabled=false \
+	  --set kgateway-agent.enabled=false \
+	  --set observability-agent.enabled=false \
+	  --set promql-agent.enabled=false \
 	  --wait \
 	  --timeout=5m
 
@@ -611,4 +614,4 @@ helm-unittest-install: ## Install the helm-unittest plugin if needed
 	HELM_PLUGIN_UNITTEST_URL=$(HELM_PLUGIN_UNITTEST_URL) \
 	HELM_PLUGIN_UNITTEST_VERSION=$(HELM_PLUGIN_UNITTEST_VERSION) \
 	HELM_PLUGIN_INSTALL_FLAGS="$(HELM_PLUGIN_INSTALL_FLAGS)" \
-	bash ./scripts/install-helm-unittest.sh
+	bash ./hack/install-helm-unittest.sh

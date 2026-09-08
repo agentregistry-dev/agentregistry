@@ -2,8 +2,14 @@ package gitutil
 
 import (
 	"context"
+	"errors"
+	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
 func TestIsFullCommitSHA(t *testing.T) {
@@ -68,7 +74,7 @@ func TestSafeGitRef(t *testing.T) {
 
 func TestResolveRefRejectsOptionInjection(t *testing.T) {
 	// A ref that git would parse as an option must be rejected before exec.
-	if _, err := ResolveRefContext(context.Background(), "https://github.com/org/repo", "--upload-pack=touch /tmp/pwn"); err == nil {
+	if _, err := ResolveRefContext(context.Background(), "https://github.com/org/repo", "--upload-pack=touch /tmp/pwn", nil); err == nil {
 		t.Fatal("expected ResolveRefContext to reject an option-like ref")
 	}
 }
@@ -76,11 +82,170 @@ func TestResolveRefRejectsOptionInjection(t *testing.T) {
 func TestResolveRefPassesThroughFullSHA(t *testing.T) {
 	// A full SHA needs no network round-trip; it is returned lowercased.
 	sha := strings.Repeat("A", 40)
-	got, err := ResolveRefContext(context.Background(), "https://github.com/org/repo", sha)
+	got, err := ResolveRefContext(context.Background(), "https://github.com/org/repo", sha, nil)
 	if err != nil {
 		t.Fatalf("ResolveRefContext: %v", err)
 	}
 	if got != strings.ToLower(sha) {
 		t.Fatalf("ResolveRefContext passthrough = %q, want lowercased SHA", got)
+	}
+}
+
+func TestAuthenticate(t *testing.T) {
+	const cloneURL = "https://github.com/org/repo.git"
+
+	execURL, safeURL, err := authenticate(cloneURL, nil)
+	if err != nil {
+		t.Fatalf("authenticate(nil): %v", err)
+	}
+	if execURL != cloneURL || safeURL != cloneURL {
+		t.Fatalf("authenticate(nil) = (%q, %q), want the URL unchanged", execURL, safeURL)
+	}
+
+	execURL, safeURL, err = authenticate(cloneURL, url.UserPassword("git", "ghp_secret"))
+	if err != nil {
+		t.Fatalf("authenticate: %v", err)
+	}
+	if execURL != "https://git:ghp_secret@github.com/org/repo.git" {
+		t.Fatalf("exec URL = %q, want the token spliced in", execURL)
+	}
+	if strings.Contains(safeURL, "ghp_secret") {
+		t.Fatalf("safe URL = %q, must not carry the token", safeURL)
+	}
+	if safeURL != "https://xxxxx@github.com/org/repo.git" {
+		t.Fatalf("safe URL = %q, want all userinfo redacted", safeURL)
+	}
+}
+
+func TestResolveRefRedactsCredentialsInErrors(t *testing.T) {
+	// Resolve errors are persisted into resource status, so a spliced token must
+	// never reach the error string. A cancelled ctx fails ls-remote without
+	// touching the network.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := ResolveRefContext(ctx, "https://github.com/org/repo.git", "main", url.UserPassword("git", "ghp_secret"))
+	if err == nil {
+		t.Fatal("expected ls-remote to fail under a cancelled context")
+	}
+	if strings.Contains(err.Error(), "ghp_secret") {
+		t.Fatalf("error leaks the token: %v", err)
+	}
+}
+
+func TestResolveRefIncludesRedactedStderr(t *testing.T) {
+	installFakeGit(t, `printf 'fatal: unable to access %s: authentication failed\n' "$2" >&2
+exit 128
+`)
+
+	_, err := ResolveRefContext(
+		context.Background(),
+		"https://github.com/org/private.git",
+		"main",
+		url.UserPassword("x-access-token", "ghp_secret"),
+	)
+	if err == nil {
+		t.Fatal("expected ls-remote to fail")
+	}
+	if !strings.Contains(err.Error(), "fatal: unable to access") || !strings.Contains(err.Error(), "authentication failed") {
+		t.Fatalf("error = %v, want Git stderr", err)
+	}
+	if strings.Contains(err.Error(), "ghp_secret") || strings.Contains(err.Error(), "x-access-token") {
+		t.Fatalf("error leaks credentials: %v", err)
+	}
+	if !strings.Contains(err.Error(), "https://xxxxx@github.com/org/private.git") {
+		t.Fatalf("error = %v, want redacted authenticated URL", err)
+	}
+}
+
+func TestCloneIncludesRedactedOutput(t *testing.T) {
+	installFakeGit(t, `printf 'fatal: clone failed for %s\n' "$*" >&2
+exit 128
+`)
+
+	err := CloneAndCopyContext(
+		context.Background(),
+		"https://github.com/org/private.git",
+		"main",
+		"",
+		"",
+		t.TempDir(),
+		false,
+		url.UserPassword("x-access-token", "ghp_secret"),
+	)
+	if err == nil {
+		t.Fatal("expected clone to fail")
+	}
+	if !strings.Contains(err.Error(), "fatal: clone failed") {
+		t.Fatalf("error = %v, want Git output", err)
+	}
+	if strings.Contains(err.Error(), "ghp_secret") || strings.Contains(err.Error(), "x-access-token") {
+		t.Fatalf("error leaks credentials: %v", err)
+	}
+	if !strings.Contains(err.Error(), "https://xxxxx@github.com/org/private.git") {
+		t.Fatalf("error = %v, want redacted authenticated URL", err)
+	}
+}
+
+func TestSanitizeGitDiagnosticBoundsOutputAndRedactsTokenOnlyAuth(t *testing.T) {
+	auth := url.User("ghp_secret")
+	diagnostic := strings.Repeat("x", maxGitDiagnosticRunes+100) + " ghp_secret"
+	got := sanitizeGitDiagnostic(diagnostic, "", "", auth)
+	if strings.Contains(got, "ghp_secret") {
+		t.Fatalf("diagnostic leaks token-only auth: %q", got)
+	}
+	if len([]rune(got)) > maxGitDiagnosticRunes+3 {
+		t.Fatalf("diagnostic length = %d, want at most %d", len([]rune(got)), maxGitDiagnosticRunes+3)
+	}
+	if !strings.HasPrefix(got, "...") {
+		t.Fatalf("diagnostic = %q, want truncation marker", got)
+	}
+}
+
+func installFakeGit(t *testing.T, body string) {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "git")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+body), 0o755); err != nil {
+		t.Fatalf("write fake git: %v", err)
+	}
+	t.Setenv("PATH", dir)
+}
+
+func TestSourceCredentialFailureIsWrapped(t *testing.T) {
+	repo := &v1alpha1.Repository{URL: "https://github.com/org/repo", Branch: "main"}
+	want := errors.New("boom")
+	src := NewSource(func(context.Context, string, *v1alpha1.Repository) (*url.Userinfo, error) {
+		return nil, want
+	})
+	_, err := src.Pin(context.Background(), "ns", repo)
+	if !errors.Is(err, want) {
+		t.Fatalf("Pin error = %v, want it to wrap %v", err, want)
+	}
+	if !strings.Contains(err.Error(), "resolve git credentials") {
+		t.Fatalf("Pin error = %v, want it to name credential resolution", err)
+	}
+}
+
+func TestSourceRequiresURL(t *testing.T) {
+	src := NewSource(nil)
+	if _, err := src.Pin(context.Background(), "ns", &v1alpha1.Repository{}); err == nil {
+		t.Fatal("expected Pin to reject a repository with no url")
+	}
+	if _, err := src.Fetch(context.Background(), "ns", nil, t.TempDir()); err == nil {
+		t.Fatal("expected Fetch to reject a nil repository")
+	}
+}
+
+// A pinned full SHA needs no network, so Pin must short-circuit to it.
+func TestSourcePinPrefersExplicitCommit(t *testing.T) {
+	const sha = "0123456789abcdef0123456789abcdef01234567"
+	got, err := NewSource(nil).Pin(context.Background(), "ns", &v1alpha1.Repository{
+		URL: "https://github.com/org/repo", Branch: "main", Commit: sha,
+	})
+	if err != nil {
+		t.Fatalf("Pin: %v", err)
+	}
+	if got != sha {
+		t.Fatalf("Pin = %q, want %q", got, sha)
 	}
 }

@@ -13,8 +13,6 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
-	"github.com/agentregistry-dev/agentregistry/pkg/types"
-	"github.com/agentregistry-dev/agentregistry/pkg/types/typestest"
 )
 
 // agentObj returns an Agent envelope with the given name + a deterministic
@@ -204,76 +202,4 @@ func TestUpsert_IdempotentAcrossRestarts(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, res1.Tag, res2.Tag)
 	require.Equal(t, v1alpha1store.UpsertNoOp, res2.Outcome)
-}
-
-func setupAgentStoreWithAuditor(t *testing.T, a types.Auditor) *v1alpha1store.Store {
-	t.Helper()
-	pool := v1alpha1store.NewTestPool(t)
-	return v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents",
-		v1alpha1store.WithKind(v1alpha1.KindAgent),
-		v1alpha1store.WithAuditor(a),
-	)
-}
-
-func setupProviderStoreWithAuditor(t *testing.T, a types.Auditor) *v1alpha1store.Store {
-	t.Helper()
-	pool := v1alpha1store.NewTestPool(t)
-	return v1alpha1store.NewMutableObjectStore(pool, v1alpha1store.TestSchema(), "runtimes",
-		v1alpha1store.WithKind(v1alpha1.KindRuntime),
-		v1alpha1store.WithAuditor(a),
-	)
-}
-
-// TestUpsert_AuditorCalledOnUpsertCreated verifies the Auditor fires when a
-// new tag row is created and stays silent for no-op or replacement writes.
-func TestUpsert_AuditorCalledOnUpsertCreated(t *testing.T) {
-	auditor := &typestest.RecordingAuditor{}
-	store := setupAgentStoreWithAuditor(t, auditor)
-	ctx := context.Background()
-
-	// Branch 1: no prior row → audit event with tag latest.
-	_, err := store.Upsert(ctx, agentObj("foo", "model-a", nil))
-	require.NoError(t, err)
-	require.Len(t, auditor.Events(), 1)
-	firstTag := auditor.Events()[0].Tag
-	require.Equal(t, v1alpha1store.DefaultTag(), firstTag)
-	require.Equal(t, typestest.ResourceTagEvent{Kind: v1alpha1.KindAgent, Namespace: "default", Name: "foo", Tag: firstTag}, auditor.Events()[0])
-
-	// Branch 2 (no-op): same spec, same labels → no event.
-	_, err = store.Upsert(ctx, agentObj("foo", "model-a", nil))
-	require.NoError(t, err)
-	require.Len(t, auditor.Events(), 1, "UpsertNoOp must not produce an audit event")
-
-	// Branch 3 (labels updated): same tag, different labels → replacement,
-	// but no new tag-row audit event.
-	_, err = store.Upsert(ctx, agentObj("foo", "model-a", map[string]string{"env": "prod"}))
-	require.NoError(t, err)
-	require.Len(t, auditor.Events(), 1, "same-tag replacement must not produce an audit event")
-
-	// Branch 3: changed spec under same tag → replacement, still no event.
-	_, err = store.Upsert(ctx, agentObj("foo", "model-b", nil))
-	require.NoError(t, err)
-	require.Len(t, auditor.Events(), 1)
-
-	_, err = store.Upsert(ctx, taggedAgentObj("foo", "stable", "model-b", nil))
-	require.NoError(t, err)
-	require.Len(t, auditor.Events(), 2)
-	require.Equal(t, "stable", auditor.Events()[1].Tag)
-}
-
-// TestUpsert_AuditorNotCalledForMutableObjectKinds verifies the
-// Runtime/Deployment upsert path does not fire ResourceTagCreated; those kinds
-// model lifecycle state and are out of scope for tag-creation audit events.
-func TestUpsert_AuditorNotCalledForMutableObjectKinds(t *testing.T) {
-	auditor := &typestest.RecordingAuditor{}
-	store := setupProviderStoreWithAuditor(t, auditor)
-	ctx := context.Background()
-
-	_, err := store.Upsert(ctx, &v1alpha1.Runtime{
-		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindRuntime},
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "p1"},
-		Spec:     v1alpha1.RuntimeSpec{Type: "Test"},
-	})
-	require.NoError(t, err)
-	require.Empty(t, auditor.Events(), "mutable-object kinds must not emit ResourceTagCreated")
 }

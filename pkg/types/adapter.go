@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/status"
 )
 
 // DeploymentAdapter is the v1alpha1 runtime surface for deploying
@@ -105,8 +106,8 @@ type ApplyInput struct {
 	Getter v1alpha1.GetterFunc
 }
 
-// ApplyResult captures the status + annotation deltas the reconciler
-// should persist after Apply.
+// ApplyResult captures the status updates the reconciler should persist after
+// Apply.
 type ApplyResult struct {
 	// Conditions to merge into Deployment.Status via
 	// Store.PatchStatus. Canonical types:
@@ -116,21 +117,23 @@ type ApplyResult struct {
 	//   - "Degraded"    — transient failure, will retry
 	Conditions []v1alpha1.Condition
 
-	// RuntimeMetadata carries adapter-internal state to persist
-	// into Deployment.Metadata.Annotations (keyed under
-	// runtimes.agentregistry.solo.io/<type>/*). Callers marshal
-	// to string values since Annotations is map[string]string.
+	// RuntimeMetadata carries provider state persisted in
+	// Deployment.Status.Details.runtimeMetadata.
 	RuntimeMetadata map[string]string
 
 	// Details is a map of top-level keys to JSON-encoded values to merge into
 	// Deployment.Status.Details via Status.SetDetailsKeyJSON. Each adapter owns its
-	// own top-level key; other keys in Status.Details are preserved across
-	// the patch. A nil value at a key removes that key.
+	// own top-level key; other keys in Status.Details are preserved across the
+	// patch. The "runtimeMetadata" key is reserved for RuntimeMetadata and must not
+	// be set here. A nil value at a key removes that key.
 	//
 	// Use Details for structured state that Conditions cannot express cleanly;
 	// stable, typed status should still be modeled as Conditions.
 	Details map[string]json.RawMessage
 }
+
+// RuntimeMetadataRemoteIDKey is the stable provider identity used to correlate discoveries.
+const RuntimeMetadataRemoteIDKey = status.RuntimeMetadataRemoteIDKey
 
 // RemoveInput carries the Deployment being torn down plus its resolved
 // Runtime (the Target has already been dereferenced and is not
@@ -140,10 +143,8 @@ type RemoveInput struct {
 	Runtime    *v1alpha1.Runtime
 }
 
-// RemoveResult describes the outcome of a Remove call. The reconciler
-// merges Conditions into Deployment.Status; idempotent re-Remove on a
-// completed teardown is the expected pattern (no separate finalizer
-// drain — soft-delete + GC handle the lifetime).
+// RemoveResult contains status updates persisted before finalizer release.
+// Remove must return an error until required provider cleanup completes.
 type RemoveResult struct {
 	// Conditions to merge into Deployment.Status (typically
 	// Progressing with Reason="Terminating", then Ready=False with

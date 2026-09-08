@@ -41,5 +41,5 @@ claude plugin marketplace add https://registry.example.com/plugin-marketplace/ma
 ## Caveats
 
 - **Off by default; RBAC-aware via the same hook as the native read path.** The endpoint reuses the per-kind `ListFilter` that the native Plugin read path uses. In the **OSS** build this hook is not wired, so the catalogue is flat and unfiltered across all namespaces. A **downstream** build that wires `crud.PerKindHooks` for Plugin gets the same RBAC/tenancy scoping automatically.
-- **Anonymous by design, even with an authn provider.** When enabled, its route is registered as an authn public path: requests bypass credential authentication and carry an `auth.PublicSession` instead, so `ListFilter` still receives a session and decides what the public catalogue exposes.
+- **Uses configured authentication.** OSS does not configure an authn provider, so its catalogue remains permissive. A downstream build that configures one protects this route with the normal authn middleware; its authenticated session reaches the `ListFilter` for RBAC or tenancy scoping.
 - **Best-effort field mapping.** Description/version prefer the scanned `plugin.json` manifest, falling back to the Plugin spec's description and an empty version (Claude Code falls back to the resolved commit SHA).

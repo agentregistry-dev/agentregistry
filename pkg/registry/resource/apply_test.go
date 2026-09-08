@@ -5,6 +5,7 @@ package resource_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -261,6 +262,30 @@ func TestApplyObject_ReusesProductionApplyPath(t *testing.T) {
 	row, err := agents.Get(t.Context(), "default", "replayed-agent", "stable")
 	require.NoError(t, err)
 	require.Equal(t, "stable", row.Metadata.Tag)
+}
+
+func TestApplyObject_CompensatesPrepareWhenAdmissionFails(t *testing.T) {
+	obj := &v1alpha1.Agent{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "failed-agent", Tag: "latest"},
+		Spec:     v1alpha1.AgentSpec{Title: "Failed Agent"},
+	}
+	compensated := false
+	res := resource.ApplyObject(t.Context(), resource.ApplyConfig{
+		Stores: map[string]*v1alpha1store.Store{v1alpha1.KindAgent: {}},
+		Admission: func(context.Context, types.AdmissionInput) (types.AdmissionResult, error) {
+			return types.AdmissionResult{}, errors.New("admission failed")
+		},
+		OnUpsertErrors: map[string]func(context.Context, v1alpha1.Object, error) error{
+			v1alpha1.KindAgent: func(context.Context, v1alpha1.Object, error) error {
+				compensated = true
+				return nil
+			},
+		},
+	}, obj, false)
+
+	require.Equal(t, arv0.ApplyStatusFailed, res.Status)
+	require.True(t, compensated)
 }
 
 func TestRegisterApply_MutableObjectResultsDoNotExposeVersion(t *testing.T) {

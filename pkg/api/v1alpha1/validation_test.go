@@ -127,6 +127,7 @@ func TestAgentValidate_Protocol(t *testing.T) {
 		{name: "omitted defaults at consumption"},
 		{name: "A2A", protocol: new(AgentProtocolA2A)},
 		{name: "HTTP", protocol: new(AgentProtocolHTTP)},
+		{name: "OpenAI Responses", protocol: new(AgentProtocolOpenAIResponses)},
 		{name: "reject empty", protocol: new(AgentProtocol("")), wantErr: true},
 		{name: "reject lowercase", protocol: new(AgentProtocol("http")), wantErr: true},
 		{name: "reject unknown", protocol: new(AgentProtocol("GRPC")), wantErr: true},

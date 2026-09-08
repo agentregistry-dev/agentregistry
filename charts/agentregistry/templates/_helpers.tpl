@@ -340,6 +340,17 @@ Called from templates/validate.yaml so it fires during helm template/install.
 {{- $errors = append $errors "database.postgres.external.* is set but ignored because type=bundled. Set type=external to use these fields, or remove them." }}
 {{- end }}
 {{- end }}
+{{- if not (has .Values.secretStore.type (list "Kubernetes" "Database")) }}
+{{- $errors = append $errors (printf "secretStore.type must be \"Kubernetes\" or \"Database\" (got %q)." .Values.secretStore.type) }}
+{{- end }}
+{{- if eq .Values.secretStore.type "Database" }}
+{{- if not .Values.secretStore.encryptionKeySecretRef.name }}
+{{- $errors = append $errors "secretStore.encryptionKeySecretRef.name must be set when secretStore.type=Database" }}
+{{- end }}
+{{- if not .Values.secretStore.encryptionKeySecretRef.key }}
+{{- $errors = append $errors "secretStore.encryptionKeySecretRef.key must be set when secretStore.type=Database" }}
+{{- end }}
+{{- end }}
 {{- range $errors }}
 {{ . }}
 {{- end }}

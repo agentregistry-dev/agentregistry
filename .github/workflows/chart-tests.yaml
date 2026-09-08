@@ -2,7 +2,7 @@ name: Chart Tests
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main ]
     paths:
       - 'charts/**'
       - '.github/workflows/chart-tests.yml'
