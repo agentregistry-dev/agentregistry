@@ -310,7 +310,15 @@ func results(agents []agent, platform string, common map[string]string) []types.
 		put(metadata, status.MicrosoftDiscoveryModelKey, a.model)
 		put(metadata, status.MicrosoftDiscoveryToolsKey, tools(a.tools))
 		put(metadata, status.MicrosoftFoundryAgentGUIDKey, guid(a.raw))
-		out = append(out, types.DiscoveryResult{TargetKind: v1alpha1.KindAgent, Name: name, RuntimeMetadata: metadata})
+		out = append(out, types.DiscoveryResult{
+			TargetKind: v1alpha1.KindAgent,
+			Name:       name,
+			InternalMeta: types.DeploymentInternalMeta{
+				RuntimeID:         metadata[status.RuntimeMetadataRemoteIDKey],
+				RuntimeName:       metadata[status.MicrosoftDiscoveryRemoteNameKey],
+				RuntimeResourceID: metadata[status.RuntimeMetadataRemoteIDKey],
+			},
+		})
 	}
 	return out
 }

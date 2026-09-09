@@ -395,10 +395,9 @@ func TestMCPCatalogTools(t *testing.T) {
 					},
 				})
 				require.NoError(t, err, "seed deployment")
-				// Populated status.details (a JSON object held in a json.RawMessage)
-				// The envelope must survive the tools' output-schema validation.
-				var status v1alpha1.Status
-				require.NoError(t, status.SetDetailsKey("runtimeMetadata", map[string]any{"state": "ready"}))
+				status := v1alpha1.DeploymentStatus{
+					Runtime: &v1alpha1.DeploymentRuntimeStatus{ID: "runtime-1", Name: "test-runtime"},
+				}
 				statusJSON, err := json.Marshal(status)
 				require.NoError(t, err, "marshal deployment status")
 				require.NoError(t, stores[v1alpha1.KindDeployment].PatchStatus(ctx, namespace, name, "",

@@ -2,7 +2,6 @@ package kagent
 
 import (
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
@@ -27,7 +26,8 @@ func translationFailure(
 }
 
 func successfulApplyResult(
-	metadata map[string]string,
+	runtimeID string,
+	runtimeNamespace string,
 	extraCondition *v1alpha1.Condition,
 	now time.Time,
 ) (*types.ApplyResult, error) {
@@ -35,9 +35,18 @@ func successfulApplyResult(
 	if extraCondition != nil {
 		conditions = append(conditions, *extraCondition)
 	}
+	runtime := &v1alpha1.DeploymentRuntimeStatus{ID: runtimeID, Name: runtimeID}
+	if extraCondition != nil {
+		runtime.Endpoint = extraCondition.Message
+	}
 	return &types.ApplyResult{
-		Conditions:      conditions,
-		RuntimeMetadata: metadata,
+		Conditions: conditions,
+		InternalMeta: &types.DeploymentInternalMeta{
+			RuntimeID:        runtimeID,
+			RuntimeName:      runtimeID,
+			RuntimeNamespace: runtimeNamespace,
+		},
+		Runtime: runtime,
 	}, nil
 }
 
@@ -61,19 +70,18 @@ func FailedApplyResult(
 	return &types.ApplyResult{Conditions: conditions}
 }
 
-func deploymentRuntimeMetadata(deployment *v1alpha1.Deployment) (map[string]string, error) {
+func deploymentRuntimeID(deployment *types.DeploymentRecord) string {
 	if deployment == nil {
-		return nil, nil
+		return ""
 	}
-	var metadata map[string]string
-	found, err := deployment.Status.GetDetailsKey(runtimeDetailsKey, &metadata)
-	if err != nil {
-		return nil, fmt.Errorf("decode kagent runtime metadata: %w", err)
+	return deployment.InternalMeta.RuntimeID
+}
+
+func deploymentRuntimeNamespace(deployment *types.DeploymentRecord) string {
+	if deployment == nil {
+		return ""
 	}
-	if !found {
-		return nil, nil
-	}
-	return metadata, nil
+	return deployment.InternalMeta.RuntimeNamespace
 }
 
 func completedConditions(now time.Time) []v1alpha1.Condition {

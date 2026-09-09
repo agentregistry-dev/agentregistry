@@ -258,10 +258,18 @@ func (r *Runtime) UnmarshalSpec(data json.RawMessage) error {
 	return json.Unmarshal(data, &r.Spec)
 }
 func (r *Runtime) MarshalStatus() (json.RawMessage, error) {
-	return MarshalStatusForStorage(r.Status)
+	return MarshalStatusForStorage(Status{
+		ObservedGeneration: r.Status.ObservedGeneration,
+		Conditions:         r.Status.Conditions,
+	})
 }
 func (r *Runtime) UnmarshalStatus(data json.RawMessage) error {
-	return UnmarshalStatusFromStorage(data, &r.Status)
+	var status Status
+	if err := UnmarshalStatusFromStorage(data, &status); err != nil {
+		return err
+	}
+	r.Status = RuntimeStatus(status)
+	return nil
 }
 
 func (m *Model) GetMetadata() *ObjectMeta { return &m.Metadata }
@@ -288,8 +296,35 @@ func (d *Deployment) UnmarshalSpec(data json.RawMessage) error {
 	return json.Unmarshal(data, &d.Spec)
 }
 func (d *Deployment) MarshalStatus() (json.RawMessage, error) {
-	return MarshalStatusForStorage(d.Status)
+	base, err := MarshalStatusForStorage(d.Status.Status)
+	if err != nil {
+		return nil, err
+	}
+	m := map[string]json.RawMessage{}
+	if err := json.Unmarshal(base, &m); err != nil {
+		return nil, err
+	}
+	if d.Status.Runtime != nil {
+		if m["runtime"], err = json.Marshal(d.Status.Runtime); err != nil {
+			return nil, err
+		}
+	}
+	return json.Marshal(m)
 }
 func (d *Deployment) UnmarshalStatus(data json.RawMessage) error {
-	return UnmarshalStatusFromStorage(data, &d.Status)
+	if len(data) == 0 {
+		d.Status = DeploymentStatus{}
+		return nil
+	}
+	if err := UnmarshalStatusFromStorage(data, &d.Status.Status); err != nil {
+		return err
+	}
+	var custom struct {
+		Runtime *DeploymentRuntimeStatus `json:"runtime"`
+	}
+	if err := json.Unmarshal(data, &custom); err != nil {
+		return err
+	}
+	d.Status.Runtime = custom.Runtime
+	return nil
 }
