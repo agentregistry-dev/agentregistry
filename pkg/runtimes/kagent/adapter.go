@@ -12,16 +12,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
-const (
-	metaRemoteID   = "remoteId"
-	metaRemoteName = "remoteName"
-	metaNamespace  = "namespace"
-	metaImage      = "image"
-	metaKind       = "kind"
-
-	runtimeDetailsKey = "runtimeMetadata"
-)
-
 type adapter struct {
 	newClient          clientFactory
 	tokenSourceFactory TokenSourceFactory
@@ -170,12 +160,7 @@ func (a *adapter) applyAgent(
 	if err := client.ensureAgent(ctx, agent); err != nil {
 		return nil, err
 	}
-	return successfulApplyResult(map[string]string{
-		metaRemoteID:   agent.Name,
-		metaRemoteName: agent.Name,
-		metaNamespace:  agent.Namespace,
-		metaImage:      agent.Spec.BYO.Deployment.Image,
-	}, nil, now)
+	return successfulApplyResult(agent.Name, agent.Namespace, nil, now)
 }
 
 func (a *adapter) applyMCPServer(
@@ -210,12 +195,7 @@ func (a *adapter) applyMCPServer(
 		Message:            toolServerEndpoint(server),
 		LastTransitionTime: now,
 	}
-	return successfulApplyResult(map[string]string{
-		metaRemoteID:   server.Name(),
-		metaRemoteName: server.Name(),
-		metaNamespace:  server.Namespace(),
-		metaKind:       server.Kind,
-	}, endpoint, now)
+	return successfulApplyResult(server.Name(), server.Namespace(), endpoint, now)
 }
 
 func mergeLabels(existing, additional map[string]string) map[string]string {
@@ -255,10 +235,6 @@ func (a *adapter) Remove(
 	ctx context.Context,
 	input types.RemoveInput,
 ) (*types.RemoveResult, error) {
-	metadata, err := deploymentRuntimeMetadata(input.Deployment)
-	if err != nil {
-		return nil, fmt.Errorf("kagent remove: %w", err)
-	}
 	runtimeConfig, err := decodeRuntimeConnectionConfig(input.Runtime.Spec.Config)
 	if err != nil {
 		return nil, fmt.Errorf("kagent remove: %w", err)
@@ -268,11 +244,11 @@ func (a *adapter) Remove(
 		return nil, fmt.Errorf("build kagent client: %w", err)
 	}
 
-	name := metadata[metaRemoteID]
+	name := deploymentRuntimeID(input.Deployment)
 	if name == "" {
 		name = WorkloadName(input.Deployment.Spec.TargetRef.Name)
 	}
-	namespace := metadata[metaNamespace]
+	namespace := deploymentRuntimeNamespace(input.Deployment)
 	if namespace == "" {
 		namespace = targetNamespace(runtimeConfig)
 	}

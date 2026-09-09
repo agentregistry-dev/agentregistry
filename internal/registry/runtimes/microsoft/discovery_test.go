@@ -52,11 +52,8 @@ func TestDiscoverySources(t *testing.T) {
 				}
 			},
 			wantScope: foundryScope,
-			want: types.DiscoveryResult{TargetKind: v1alpha1.KindAgent, Name: "weather", RuntimeMetadata: map[string]string{
-				"provider": "microsoft", "platform": "foundry", "remoteId": "agent-1", "remoteName": "weather",
-				"remoteVersion": "3", "description": "Weather agent", "state": "active", "agentGuid": "guid-1",
-				"kind": "prompt", "model": "gpt", "tools": "function", "subscriptionId": "sub-1",
-				"resourceGroup": "rg-1", "tenantId": "tenant", // endpoint fields and lastSeenAt are normalized below.
+			want: types.DiscoveryResult{TargetKind: v1alpha1.KindAgent, Name: "weather", InternalMeta: types.DeploymentInternalMeta{
+				RuntimeID: "agent-1", RuntimeName: "weather", RuntimeResourceID: "agent-1",
 			}},
 		},
 		{
@@ -68,9 +65,8 @@ func TestDiscoverySources(t *testing.T) {
 				return map[string]any{"environmentId": "env-1", "dataEndpoint": base + "/dataverse", "auth": authConfig(base)}
 			},
 			wantScope: "DYNAMIC",
-			want: types.DiscoveryResult{TargetKind: v1alpha1.KindAgent, Name: "support", RuntimeMetadata: map[string]string{
-				"provider": "microsoft", "platform": "copilot_studio", "remoteId": "bot-1", "remoteName": "support",
-				"state": "active", "environmentId": "env-1", "tenantId": "tenant",
+			want: types.DiscoveryResult{TargetKind: v1alpha1.KindAgent, Name: "support", InternalMeta: types.DeploymentInternalMeta{
+				RuntimeID: "bot-1", RuntimeName: "support", RuntimeResourceID: "bot-1",
 			}},
 		},
 	}
@@ -106,12 +102,6 @@ func TestDiscoverySources(t *testing.T) {
 			got, err := s.Discover(context.Background(), types.DiscoverInput{Runtime: runtime})
 			require.NoError(t, err)
 			require.Len(t, got, 1)
-			delete(got[0].RuntimeMetadata, "lastSeenAt")
-			if tt.runtimeType == v1alpha1.TypeMicrosoftFoundry {
-				tt.want.RuntimeMetadata["projectEndpoint"] = server.URL + "/project"
-			} else {
-				tt.want.RuntimeMetadata["dataEndpoint"] = server.URL + "/dataverse"
-			}
 			require.Equal(t, tt.want, got[0])
 			if tt.wantScope == "DYNAMIC" {
 				require.Equal(t, server.URL+"/dataverse/.default", tokenScope)
@@ -209,9 +199,8 @@ func TestDiscoveryResultsDeduplicate(t *testing.T) {
 		{name: "two", version: "1"},
 	}, "foundry", nil)
 	require.Len(t, got, 2)
-	require.Equal(t, "same", got[0].RuntimeMetadata["remoteId"])
-	_, hasRemoteID := got[1].RuntimeMetadata["remoteId"]
-	require.False(t, hasRemoteID)
+	require.Equal(t, "same", got[0].InternalMeta.RuntimeID)
+	require.Empty(t, got[1].InternalMeta.RuntimeID)
 }
 
 func TestTokenURL(t *testing.T) {

@@ -33,7 +33,7 @@ type rowScanner interface {
 // Column order must match:
 //
 //	namespace, name, tag-or-empty, uid, generation, labels, annotations, spec, status,
-//	deletion_timestamp, finalizers, created_at, updated_at
+//	internal_meta, deletion_timestamp, finalizers, created_at, updated_at
 func scanRow(row rowScanner, tagged bool) (*v1alpha1.RawObject, error) {
 	var (
 		namespace         string
@@ -45,6 +45,7 @@ func scanRow(row rowScanner, tagged bool) (*v1alpha1.RawObject, error) {
 		annotationsJSON   []byte
 		specJSON          []byte
 		statusJSON        []byte
+		internalMetaJSON  []byte
 		deletionTimestamp *time.Time
 		finalizersJSON    []byte
 		createdAt         time.Time
@@ -53,7 +54,7 @@ func scanRow(row rowScanner, tagged bool) (*v1alpha1.RawObject, error) {
 
 	if err := row.Scan(
 		&namespace, &name, &tag, &uid, &generation,
-		&labelsJSON, &annotationsJSON, &specJSON, &statusJSON,
+		&labelsJSON, &annotationsJSON, &specJSON, &statusJSON, &internalMetaJSON,
 		&deletionTimestamp, &finalizersJSON,
 		&createdAt, &updatedAt,
 	); err != nil {
@@ -93,9 +94,10 @@ func scanRow(row rowScanner, tagged bool) (*v1alpha1.RawObject, error) {
 		DeletionTimestamp: deletionTimestamp,
 	}
 	raw := &v1alpha1.RawObject{
-		Metadata: meta,
-		Spec:     json.RawMessage(specJSON),
-		Status:   json.RawMessage(statusJSON),
+		Metadata:     meta,
+		Spec:         json.RawMessage(specJSON),
+		Status:       json.RawMessage(statusJSON),
+		InternalMeta: json.RawMessage(internalMetaJSON),
 	}
 	if tagged {
 		meta.Tag = tag

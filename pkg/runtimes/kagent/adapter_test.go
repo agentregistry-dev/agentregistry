@@ -49,12 +49,12 @@ func withRuntimeConfig(input types.ApplyInput) types.ApplyInput {
 
 func mcpApplyInput() types.ApplyInput {
 	return types.ApplyInput{
-		Deployment: &v1alpha1.Deployment{
+		Deployment: &types.DeploymentRecord{Deployment: &v1alpha1.Deployment{
 			Metadata: v1alpha1.ObjectMeta{Name: "my-deploy", Namespace: "default"},
 			Spec: v1alpha1.DeploymentSpec{
 				TargetRef: v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "gh-mcp"},
 			},
-		},
+		}},
 		Target: &v1alpha1.MCPServer{
 			Metadata: v1alpha1.ObjectMeta{Name: "gh-mcp", Namespace: "default"},
 			Spec: v1alpha1.MCPServerSpec{
@@ -87,13 +87,9 @@ func TestApplyAgentUsesEstablishedRuntimeMetadata(t *testing.T) {
 	result, err := testAdapter(client).Apply(context.Background(), input)
 	require.NoError(t, err)
 	require.Contains(t, client.agents, "kagent/my-agent")
-	assert.Equal(t, map[string]string{
-		"remoteId":   "my-agent",
-		"remoteName": "my-agent",
-		"namespace":  "kagent",
-		"image":      "ghcr.io/acme/agent:1.0.0",
-	}, result.RuntimeMetadata)
-	assert.Empty(t, result.Details)
+	assert.Equal(t, "my-agent", result.InternalMeta.RuntimeID)
+	assert.Equal(t, "kagent", result.InternalMeta.RuntimeNamespace)
+	assert.Equal(t, "my-agent", result.Runtime.ID)
 	assert.Equal(t, v1alpha1.ConditionTrue, findCondition(result.Conditions, "Ready").Status)
 }
 
@@ -110,8 +106,8 @@ func TestApplyAndDiscoverUseSameRemoteIDForNormalizedAgentName(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.Len(t, discovered, 1)
-	assert.Equal(t, "my-agent", result.RuntimeMetadata[types.RuntimeMetadataRemoteIDKey])
-	assert.Equal(t, "my-agent", discovered[0].RuntimeMetadata[types.RuntimeMetadataRemoteIDKey])
+	assert.Equal(t, "my-agent", result.InternalMeta.RuntimeID)
+	assert.Equal(t, "my-agent", discovered[0].InternalMeta.RuntimeID)
 }
 
 func TestDesiredFingerprintWaitsForAutomaticMCPDeploymentEndpoint(t *testing.T) {
@@ -170,13 +166,9 @@ func TestApplyMCPServerUsesEstablishedRuntimeMetadata(t *testing.T) {
 	result, err := testAdapter(client).Apply(context.Background(), input)
 	require.NoError(t, err)
 	require.Contains(t, client.toolServers, "kagent/gh-mcp")
-	assert.Equal(t, map[string]string{
-		"remoteId":   "gh-mcp",
-		"remoteName": "gh-mcp",
-		"namespace":  "kagent",
-		"kind":       "RemoteMCPServer",
-	}, result.RuntimeMetadata)
-	assert.Empty(t, result.Details)
+	assert.Equal(t, "gh-mcp", result.InternalMeta.RuntimeID)
+	assert.Equal(t, "kagent", result.InternalMeta.RuntimeNamespace)
+	assert.Equal(t, "gh-mcp", result.Runtime.ID)
 	endpoint := findCondition(result.Conditions, mcpServerURLCondition)
 	require.NotNil(t, endpoint)
 	assert.Equal(t, v1alpha1.ConditionTrue, endpoint.Status)
@@ -272,16 +264,15 @@ func TestApplyPropagatesKagentError(t *testing.T) {
 }
 
 func removeInput(metadata map[string]string) types.RemoveInput {
-	deployment := &v1alpha1.Deployment{
+	deployment := &types.DeploymentRecord{Deployment: &v1alpha1.Deployment{
 		Metadata: v1alpha1.ObjectMeta{Name: "my-deploy"},
 		Spec: v1alpha1.DeploymentSpec{
 			TargetRef: v1alpha1.ResourceRef{Kind: v1alpha1.KindAgent, Name: "My Agent"},
 		},
-	}
+	}}
 	if metadata != nil {
-		if err := deployment.Status.SetDetailsKey(runtimeDetailsKey, metadata); err != nil {
-			panic(err)
-		}
+		deployment.InternalMeta.RuntimeID = metadata["remoteId"]
+		deployment.InternalMeta.RuntimeNamespace = metadata["namespace"]
 	}
 	return types.RemoveInput{
 		Deployment: deployment,
@@ -353,7 +344,7 @@ func TestLogsReturnsPersistedFailure(t *testing.T) {
 	_, err := adapter.Logs(context.Background(), types.LogsInput{})
 	require.Error(t, err)
 
-	deployment := &v1alpha1.Deployment{}
+	deployment := &types.DeploymentRecord{Deployment: &v1alpha1.Deployment{}}
 	lines, err := adapter.Logs(context.Background(), types.LogsInput{Deployment: deployment})
 	require.NoError(t, err)
 	_, open := <-lines

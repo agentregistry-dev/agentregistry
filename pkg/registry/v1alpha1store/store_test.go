@@ -14,6 +14,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	registrytypes "github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
 const testTable = "agents"
@@ -209,6 +210,63 @@ func TestStore_PatchStatusNotFound(t *testing.T) {
 
 	err := store.PatchStatus(ctx, testNS, "nope", "1", v1alpha1.StatusPatcher(func(*v1alpha1.Status) {}))
 	require.ErrorIs(t, err, pkgdb.ErrNotFound)
+}
+
+func TestStore_PatchInternalMeta(t *testing.T) {
+	pool := NewTestPool(t)
+	store := NewMutableObjectStore(pool, TestSchema(), "deployments", WithInternalMeta())
+	ctx := context.Background()
+
+	_, err := store.Upsert(ctx, &v1alpha1.Deployment{
+		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "internal-meta"},
+		Spec: v1alpha1.DeploymentSpec{
+			TargetRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindAgent, Name: "agent"},
+			RuntimeRef: v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "runtime"},
+		},
+	})
+	require.NoError(t, err)
+
+	meta := registrytypes.DeploymentInternalMeta{RuntimeID: "runtime-1"}
+	require.NoError(t, store.PatchInternalMeta(ctx, testNS, "internal-meta", meta))
+
+	object, err := store.Get(ctx, testNS, "internal-meta", "")
+	require.NoError(t, err)
+	require.JSONEq(t, `{"runtimeId":"runtime-1"}`, string(object.InternalMeta))
+	require.JSONEq(t, `{}`, string(object.Status))
+}
+
+func TestStore_PatchStatusAndMeta(t *testing.T) {
+	pool := NewTestPool(t)
+	store := NewMutableObjectStore(pool, TestSchema(), "runtimes", WithInternalMeta())
+	ctx := context.Background()
+
+	_, err := store.Upsert(ctx, &v1alpha1.Runtime{
+		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "combined-patch"},
+		Spec:     v1alpha1.RuntimeSpec{Type: "Test"},
+	})
+	require.NoError(t, err)
+
+	meta := struct {
+		Value string `json:"value"`
+	}{Value: "runtime-meta"}
+	err = store.PatchStatusAndMeta(ctx, testNS, "combined-patch", v1alpha1.StatusPatcher(func(status *v1alpha1.Status) {
+		status.SetCondition(v1alpha1.Condition{Type: "Ready", Status: v1alpha1.ConditionTrue})
+	}), meta)
+	require.NoError(t, err)
+
+	object, err := store.Get(ctx, testNS, "combined-patch", "")
+	require.NoError(t, err)
+	require.JSONEq(t, `{"value":"runtime-meta"}`, string(object.InternalMeta))
+	var status v1alpha1.Status
+	require.NoError(t, v1alpha1.UnmarshalStatusFromStorage(object.Status, &status))
+	require.Equal(t, v1alpha1.ConditionTrue, status.GetCondition("Ready").Status)
+
+	require.NoError(t, store.PatchStatus(ctx, testNS, "combined-patch", "", v1alpha1.StatusPatcher(func(status *v1alpha1.Status) {
+		status.SetCondition(v1alpha1.Condition{Type: "Ready", Status: v1alpha1.ConditionFalse})
+	})))
+	object, err = store.Get(ctx, testNS, "combined-patch", "")
+	require.NoError(t, err)
+	require.JSONEq(t, `{"value":"runtime-meta"}`, string(object.InternalMeta))
 }
 
 // TestStore_ApplyPatchSkipsUnchangedWrites verifies that re-asserting the
