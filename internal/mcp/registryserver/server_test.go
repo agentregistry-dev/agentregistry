@@ -15,15 +15,13 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
 
-// A populated status.details is the trigger for the RawMessage schema
-// bug: default inference described json.RawMessage as a byte array, so
-// the JSON object it marshals to failed the SDK's output validation and
-// every list/get on such an envelope errored out.
-func TestOutputSchemaFor_AcceptsPopulatedRawMessage(t *testing.T) {
+func TestOutputSchemaFor_AcceptsDeploymentRuntimeStatus(t *testing.T) {
 	d := &v1alpha1.Deployment{
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "test-deployment"},
+		Status: v1alpha1.DeploymentStatus{
+			Runtime: &v1alpha1.DeploymentRuntimeStatus{ID: "runtime-1", Name: "test-runtime"},
+		},
 	}
-	require.NoError(t, d.Status.SetDetailsKey("runtimeMetadata", map[string]any{"state": "ready"}))
 
 	cases := map[string]struct {
 		schema *jsonschema.Schema

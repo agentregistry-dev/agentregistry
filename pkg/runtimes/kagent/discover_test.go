@@ -30,12 +30,9 @@ func TestDiscover(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, []types.DiscoveryResult{{
-		TargetKind: v1alpha1.KindAgent,
-		Name:       "found-agent",
-		RuntimeMetadata: map[string]string{
-			types.RuntimeMetadataRemoteIDKey: "found-agent",
-			"namespace":                      "kagent",
-		},
+		TargetKind:   v1alpha1.KindAgent,
+		Name:         "found-agent",
+		InternalMeta: types.DeploymentInternalMeta{RuntimeID: "found-agent", RuntimeName: "found-agent"},
 	}}, got)
 }
 
@@ -86,12 +83,9 @@ func TestDiscoverSurvivesRealAgentIDFormat(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, []types.DiscoveryResult{{
-		TargetKind: v1alpha1.KindAgent,
-		Name:       "smoke-byo-agent",
-		RuntimeMetadata: map[string]string{
-			types.RuntimeMetadataRemoteIDKey: "smoke-byo-agent",
-			"namespace":                      "kagent",
-		},
+		TargetKind:   v1alpha1.KindAgent,
+		Name:         "smoke-byo-agent",
+		InternalMeta: types.DeploymentInternalMeta{RuntimeID: "smoke-byo-agent", RuntimeName: "smoke-byo-agent"},
 	}}, got)
 }
 
@@ -115,11 +109,8 @@ func TestDiscoverFiltersToConfiguredNamespace(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, []types.DiscoveryResult{{
-		TargetKind: v1alpha1.KindAgent,
-		Name:       "in-ns-agent",
-		RuntimeMetadata: map[string]string{
-			types.RuntimeMetadataRemoteIDKey: "in-ns-agent",
-			"namespace":                      "kagent",
-		},
+		TargetKind:   v1alpha1.KindAgent,
+		Name:         "in-ns-agent",
+		InternalMeta: types.DeploymentInternalMeta{RuntimeID: "in-ns-agent", RuntimeName: "in-ns-agent"},
 	}}, got)
 }
