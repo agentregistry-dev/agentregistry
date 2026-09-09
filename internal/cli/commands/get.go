@@ -23,8 +23,8 @@ func NewGetCmd(deps cliruntime.Deps) *cobra.Command {
 	supportedTypes := supportedKindNames(kindRegistry(deps))
 	cmd := &cobra.Command{
 		Use:   "get TYPE [NAME]",
-		Short: "List or retrieve registry resources",
-		Long: `List or retrieve registry resources by type.
+		Short: "List or retrieve registry resources by type",
+		Long: `List every resource of a type, or fetch a single one by name.
 
 Supported types: ` + supportedTypes + `.
 Type names are case-insensitive; singular, plural, and registered aliases are accepted.

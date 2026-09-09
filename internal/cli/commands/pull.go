@@ -18,7 +18,7 @@ func NewPullCmd(deps cliruntime.Deps) *cobra.Command {
 	var tag string
 	cmd := &cobra.Command{
 		Use:   cliruntime.CommandPull + " TYPE NAME [DIRECTORY]",
-		Short: "Fetch a registry resource's source repo to local",
+		Short: "Fetch a registry resource's source repo to a local directory",
 		Long: `Fetch a registry resource's source repository to a local directory.
 
 Supported types: agent, mcp, skill. Reads the resource's

@@ -18,8 +18,8 @@ func NewDeleteCmd(deps cliruntime.Deps) *cobra.Command {
 	supportedTypes := supportedKindNames(kindRegistry(deps))
 	cmd := &cobra.Command{
 		Use:   cliruntime.CommandDelete + " (TYPE NAME | -f FILE)",
-		Short: "Delete a registry resource",
-		Long: `Delete a registry resource.
+		Short: "Delete a registry resource by type and name, or from a file",
+		Long: `Delete a registry resource by type and name, or from a YAML file.
 
 File mode: read resources from FILE and delete them declaratively.
   arctl delete -f agent.yaml

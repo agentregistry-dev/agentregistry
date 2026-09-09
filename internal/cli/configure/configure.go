@@ -23,7 +23,7 @@ var clientConfigurers = map[string]ClientConfigurer{
 func NewCommand(_ cliruntime.Deps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   cliruntime.CommandConfigure,
-		Short: "Configure a client",
+		Short: "Write the JSON config a client needs to connect to arctl",
 		Long:  `Creates the .json configuration for each client, so it can connect to arctl.`,
 	}
 
@@ -40,7 +40,17 @@ func newClientCommand(clientName string, configurer ClientConfigurer) *cobra.Com
 	cmd := &cobra.Command{
 		Use:   clientName,
 		Short: "Configure " + configurer.GetClientName(),
-		Args:  cobra.NoArgs,
+		Long: fmt.Sprintf(`Write the MCP server entry that %s reads, so it can reach this registry.
+
+The entry is merged into the client's existing configuration file rather than
+replacing it, and the file is created if it does not exist yet.
+
+The endpoint defaults to http://localhost:%s/mcp. Override the port with --port,
+or the whole URL with --url. Clients that support OAuth authenticate
+interactively; for static or direct access, pass --token-env with the name of
+the environment variable holding the MCP bearer token. Only that name is written
+into the config, never the token itself.`, configurer.GetClientName(), common.DefaultAgentGatewayPort),
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			url := fmt.Sprintf("http://localhost:%s/mcp", configurePort)
 			if configureURL != "" {
