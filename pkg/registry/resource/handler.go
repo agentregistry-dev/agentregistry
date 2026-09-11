@@ -664,7 +664,7 @@ func mapApplyErrorToHuma(ae *applyError, kind, ns, name, tag string) error {
 		return huma.Error400BadRequest("refs: " + ae.Err.Error())
 	case stageRegistries:
 		return huma.Error400BadRequest("registries: " + ae.Err.Error())
-	case stageAdmission:
+	case stagePrepare, stageAdmission:
 		return ae.Err
 	case stageMarshal:
 		return huma.Error400BadRequest("marshal spec: " + ae.Err.Error())
