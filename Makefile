@@ -40,7 +40,7 @@ endif
 ifndef VERSION
 VERSION := $(shell git describe --tags --always 2>/dev/null | grep v || echo "v0.0.0-g$(GIT_COMMIT)")
 endif
-KAGENT_VERSION ?= v0.10.0-rc3
+KAGENT_VERSION ?= v0.10.1
 ifndef KAGENT_HELM_VERSION
 KAGENT_HELM_VERSION := $(shell echo $(KAGENT_VERSION) | sed 's/^v//')
 endif

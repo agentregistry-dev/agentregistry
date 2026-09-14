@@ -655,8 +655,8 @@ func runDelete[T v1alpha1.Object](ctx context.Context, cfg Config, newObj func()
 // policy that used to be inlined in each closure.
 func mapApplyErrorToHuma(ae *applyError, kind, ns, name, tag string) error {
 	switch ae.Stage {
-	case stageAuth:
-		// Auth callbacks already return huma errors; propagate.
+	case stageAuth, stagePrepare, stageAdmission:
+		// Preserve the HTTP status chosen by these hooks.
 		return ae.Err
 	case stageValidation:
 		return huma.Error400BadRequest("validation: " + ae.Err.Error())
@@ -664,8 +664,6 @@ func mapApplyErrorToHuma(ae *applyError, kind, ns, name, tag string) error {
 		return huma.Error400BadRequest("refs: " + ae.Err.Error())
 	case stageRegistries:
 		return huma.Error400BadRequest("registries: " + ae.Err.Error())
-	case stageAdmission:
-		return ae.Err
 	case stageMarshal:
 		return huma.Error400BadRequest("marshal spec: " + ae.Err.Error())
 	case stageUpsert:

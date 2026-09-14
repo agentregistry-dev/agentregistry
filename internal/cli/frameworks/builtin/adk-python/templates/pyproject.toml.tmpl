@@ -4,25 +4,28 @@ version = "0.1"
 description = "{{.Name}} agent"
 readme = "README.md"
 dependencies = [
-  # google-adk 1.25.1 bundles LiteLLM directly; later versions split it into
-  # the [extensions] extra which the kagent-adk:0.8.0-beta6 base image's
-  # uv-managed venv can't pick up via `pip install`. Pin to match the
-  # solo-io/agentregistry-dev-samples reference template.
-  "google-adk==1.25.1",
+  # Match the Google ADK version supplied by the Kagent base image.
+  "google-adk==1.38.0",
+{{- if or (eq .ModelProvider "openai") (eq .ModelProvider "anthropic") (eq .ModelProvider "azureopenai")}}
+  # Use Google ADK's supported LiteLLM range without unrelated extensions.
+  "litellm>=1.83.7,<=1.83.14",
+{{- end}}
 {{- if eq .ModelProvider "bedrock"}}
   # Bedrock uses anthropic.AnthropicBedrock directly (see bedrock_model.py)
   # rather than LiteLLM, because LiteLLM's bedrock path drops tool
   # descriptions which the Bedrock API rejects.
   "anthropic[bedrock]>=0.40",
 {{- end}}
-{{- if eq .ModelProvider "agentgateway"}}
-  "kagent-adk=={{.KagentADKPyVersion}}",
-{{- end}}
 ]
-# <3.14: google-adk's opentelemetry-resourcedetector-gcp transitive has no 3.14 wheels.
+# Match the Python interpreter supplied by the Kagent base image.
 requires-python = ">=3.13,<3.14"
 
 [tool.uv]
-# google-adk 1.25.1 needs opentelemetry-resourcedetector-gcp from a pre-release-only
-# range; pin the known-good alpha so a live resolve can't randomly break the build.
-constraint-dependencies = ["opentelemetry-resourcedetector-gcp==1.12.0a0"]
+# Keep the tested resource detector version stable across builds.
+constraint-dependencies = ["opentelemetry-resourcedetector-gcp==1.14.0"]
+{{if eq .ModelProvider "agentgateway"}}
+# The container supplies Kagent; host development installs it through uv sync.
+# Match the image's A2A SDK; Kagent 0.10.1 uses the 0.3.x API.
+[dependency-groups]
+dev = ["kagent-adk==0.10.1", "a2a-sdk==0.3.26"]
+{{end -}}
