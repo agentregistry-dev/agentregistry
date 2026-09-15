@@ -178,6 +178,11 @@ arctl get prompts
 arctl delete prompt summarizer-system-prompt --tag stable
 ```
 
+The default table output for `arctl get skills` and `arctl get plugins` includes
+`READY` and `REASON` columns. These show the status (`True`, `False`, or `Unknown`)
+and reason of the resource's `Ready` condition. If no `Ready` condition has been
+recorded, both columns show `<none>`. An empty reason also appears as `<none>`.
+
 ## Pulling Resources
 
 Fetch a registered resource's source back to a local directory:

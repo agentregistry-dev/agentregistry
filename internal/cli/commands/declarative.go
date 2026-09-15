@@ -64,7 +64,7 @@ func init() {
 	registerKind[*v1alpha1.Skill](
 		"skill", "", nil,
 		[]scheme.Column{
-			{Header: "NAME"}, {Header: "TAG"}, {Header: "DESCRIPTION"},
+			{Header: "NAME"}, {Header: "TAG"}, {Header: "READY"}, {Header: "REASON"}, {Header: "DESCRIPTION"},
 		},
 		v1alpha1.KindSkill,
 		skillRow,
@@ -77,7 +77,7 @@ func init() {
 	)
 	registerKind[*v1alpha1.Plugin](
 		"plugin", "", nil,
-		[]scheme.Column{{Header: "NAME"}, {Header: "TAG"}, {Header: "DESCRIPTION"}},
+		[]scheme.Column{{Header: "NAME"}, {Header: "TAG"}, {Header: "READY"}, {Header: "REASON"}, {Header: "DESCRIPTION"}},
 		v1alpha1.KindPlugin,
 		pluginRow,
 	)

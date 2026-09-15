@@ -178,9 +178,12 @@ func skillRow(skill *v1alpha1.Skill) []string {
 	if skill == nil {
 		return []string{"<invalid>"}
 	}
+	ready, reason := readinessColumns(skill.Status.GetCondition(statusapi.ConditionTypeReady))
 	return []string{
 		printer.TruncateString(skill.Metadata.Name, 40),
 		skill.Metadata.Tag,
+		ready,
+		reason,
 		printer.TruncateString(printer.EmptyValueOrDefault(skill.Spec.Description, "<none>"), 60),
 	}
 }
@@ -200,11 +203,21 @@ func pluginRow(plugin *v1alpha1.Plugin) []string {
 	if plugin == nil {
 		return []string{"<invalid>"}
 	}
+	ready, reason := readinessColumns(plugin.Status.GetCondition(statusapi.ConditionTypeReady))
 	return []string{
 		printer.TruncateString(plugin.Metadata.Name, 40),
 		plugin.Metadata.Tag,
+		ready,
+		reason,
 		printer.TruncateString(printer.EmptyValueOrDefault(plugin.Spec.Description, "<none>"), 60),
 	}
+}
+
+func readinessColumns(ready *v1alpha1.Condition) (string, string) {
+	if ready == nil {
+		return "<none>", "<none>"
+	}
+	return string(ready.Status), printer.EmptyValueOrDefault(ready.Reason, "<none>")
 }
 
 func runtimeRow(runtime *v1alpha1.Runtime) []string {
