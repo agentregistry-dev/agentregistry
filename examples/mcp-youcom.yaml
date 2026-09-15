@@ -1,0 +1,27 @@
+# mcp-youcom.yaml
+#
+# You.com remote MCP server: web search (you-search) and URL content
+# extraction (you-contents) for agents that need current web sources.
+# Docs: https://you.com/docs / https://github.com/youdotcom-oss/agent-skills
+#
+# Apply with: arctl apply -f mcp-youcom.yaml
+apiVersion: ar.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: youcom
+spec:
+  title: You.com Search
+  description: "Web search and URL content extraction from You.com"
+  remote:
+    type: streamable-http
+    url: https://api.you.com/mcp
+    # Authenticated endpoint: set a Bearer token header.
+    # Get an API key at https://you.com/platform/api-keys and export it
+    # (e.g. YDC_API_KEY), then uncomment:
+    # headers:
+    #   - name: Authorization
+    #     value: Bearer ${YDC_API_KEY}
+    #
+    # Keyless alternative: the free profile exposes the basic you-search
+    # tool without auth — use this URL instead and drop the header:
+    #   url: https://api.you.com/mcp?profile=free
