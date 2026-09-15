@@ -197,6 +197,11 @@ arctl apply -f full-stack.yaml
 
 # List all resource types at once
 arctl get all
+
+# Remote MCP servers need no build step — apply the manifest and the
+# registry configures routing. Example with the You.com search server:
+arctl apply -f examples/mcp-youcom.yaml
+arctl get mcp youcom
 ```
 
-See [`examples/`](../examples/) for ready-to-use YAML, including [`full-stack.yaml`](../examples/full-stack.yaml) — an agent and all its dependencies in one file.
+See [`examples/`](../examples/) for ready-to-use YAML, including [`full-stack.yaml`](../examples/full-stack.yaml) — an agent and all its dependencies in one file. For remote HTTP MCP servers, see [`mcp-youcom.yaml`](../examples/mcp-youcom.yaml) (You.com web search, with an authenticated and a keyless variant); for skills sourced from a git repository, see [`skill-youcom.yaml`](../examples/skill-youcom.yaml).

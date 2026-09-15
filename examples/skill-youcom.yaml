@@ -1,0 +1,19 @@
+# skill-youcom.yaml
+#
+# You.com web-search skill: a SKILL.md that routes agents through the
+# You.com MCP tools (you-search / you-contents) with a search, read, and
+# cite-from-sources pipeline.
+# Source repo: https://github.com/youdotcom-oss/agent-skills
+#
+# Apply with: arctl apply -f skill-youcom.yaml
+apiVersion: ar.dev/v1alpha1
+kind: Skill
+metadata:
+  name: youcom-web-search
+spec:
+  title: You.com Web Search
+  description: "Web search and URL reading with cited sources, via the You.com MCP tools"
+  source:
+    repository:
+      url: https://github.com/youdotcom-oss/agent-skills
+      subfolder: skills/you-web
