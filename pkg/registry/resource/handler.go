@@ -31,6 +31,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
@@ -64,9 +65,11 @@ type Config struct {
 	// `/{plural}/{name}/{tag}`; namespace is
 	// carried as a query param (`?namespace={ns}`, default "default").
 	BasePrefix string
-	// Store is the v1alpha1store.Store bound to this kind's table. Callers
-	// construct one Store per kind; this package does not create them.
-	Store *v1alpha1store.Store
+	// Store persists this kind. Callers construct one store per kind; this
+	// package does not create them. *v1alpha1store.Store is the production
+	// implementation; see ObjectStore for the contract an extension kind
+	// may satisfy with its own store.
+	Store ObjectStore
 	// Resolver is optional; when set, the apply handler calls
 	// obj.ResolveRefs with it so dangling references surface as 400
 	// errors. Leave nil to skip ref resolution (e.g. for kinds with no
@@ -456,6 +459,9 @@ func registerListTags[T v1alpha1.Object](api huma.API, cfg Config, newObj func()
 		}
 		rows, err := cfg.Store.ListTags(ctx, ns, name)
 		if err != nil {
+			if accessErr := mapAccessError(err); accessErr != nil {
+				return nil, accessErr
+			}
 			return nil, huma.Error500InternalServerError("list tags "+kind, err)
 		}
 		items := make([]T, 0, len(rows))
@@ -667,6 +673,9 @@ func mapApplyErrorToHuma(ae *applyError, kind, ns, name, tag string) error {
 	case stageMarshal:
 		return huma.Error400BadRequest("marshal spec: " + ae.Err.Error())
 	case stageUpsert:
+		if accessErr := mapAccessError(ae.Err); accessErr != nil {
+			return accessErr
+		}
 		if ae.Terminating {
 			return huma.Error409Conflict(fmt.Sprintf(
 				"%s %s/%s/%s is terminating; delete + re-apply once GC purges the row",
@@ -676,6 +685,9 @@ func mapApplyErrorToHuma(ae *applyError, kind, ns, name, tag string) error {
 	case stagePostUpsert:
 		return huma.Error500InternalServerError(kind+" post-upsert", ae.Err)
 	case stageDelete:
+		if accessErr := mapAccessError(ae.Err); accessErr != nil {
+			return accessErr
+		}
 		if ae.NotFound {
 			return mapNotFound(ae.Err, kind, ns, name, tag)
 		}
@@ -762,6 +774,9 @@ func runList[T v1alpha1.Object](
 		if errors.Is(err, v1alpha1store.ErrInvalidCursor) {
 			return nil, huma.Error400BadRequest("invalid cursor")
 		}
+		if accessErr := mapAccessError(err); accessErr != nil {
+			return nil, accessErr
+		}
 		return nil, huma.Error500InternalServerError("list "+cfg.Kind, err)
 	}
 	items := make([]T, 0, len(rows))
@@ -811,8 +826,12 @@ func appendExtraWhere(opts *v1alpha1store.ListOpts, predicateFormat string, arg 
 }
 
 // mapNotFound converts a pkgdb.ErrNotFound error into a Huma 404 with a
-// consistent message. Other errors fall through as 500.
+// consistent message and a store-level access denial into 401 / 403.
+// Other errors fall through as 500.
 func mapNotFound(err error, kind, namespace, name, tag string) error {
+	if accessErr := mapAccessError(err); accessErr != nil {
+		return accessErr
+	}
 	if errors.Is(err, pkgdb.ErrNotFound) {
 		if tag == "" {
 			return huma.Error404NotFound(fmt.Sprintf("%s %q/%q not found", kind, namespace, name))
@@ -820,6 +839,20 @@ func mapNotFound(err error, kind, namespace, name, tag string) error {
 		return huma.Error404NotFound(fmt.Sprintf("%s %q/%q@%q not found", kind, namespace, name, tag))
 	}
 	return huma.Error500InternalServerError("fetch "+kind, err)
+}
+
+// mapAccessError translates a store-level auth.ErrForbidden /
+// auth.ErrUnauthenticated into the huma error the Authorize hook would have
+// produced, so a store that authorizes inside its own transaction surfaces
+// the same status codes. Returns nil for every other error.
+func mapAccessError(err error) error {
+	switch {
+	case errors.Is(err, auth.ErrForbidden):
+		return huma.Error403Forbidden(err.Error())
+	case errors.Is(err, auth.ErrUnauthenticated):
+		return huma.Error401Unauthorized(err.Error())
+	}
+	return nil
 }
 
 // parseLabelSelector decodes "key=value,key2=value2" into a map. Values

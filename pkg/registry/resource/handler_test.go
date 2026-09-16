@@ -48,7 +48,7 @@ func registerAgent(api huma.API, store *v1alpha1store.Store) {
 
 	resource.RegisterApply(api, resource.ApplyConfig{
 		BasePrefix: "/v0",
-		Stores:     map[string]*v1alpha1store.Store{v1alpha1.KindAgent: store},
+		Stores:     map[string]resource.ObjectStore{v1alpha1.KindAgent: store},
 	})
 }
 
@@ -636,7 +636,7 @@ func TestResourceRegister_ResolverDetectsDanglingRef(t *testing.T) {
 	_, api := humatest.New(t)
 	resource.RegisterApply(api, resource.ApplyConfig{
 		BasePrefix: "/v0",
-		Stores: map[string]*v1alpha1store.Store{
+		Stores: map[string]resource.ObjectStore{
 			v1alpha1.KindAgent:     agentStore,
 			v1alpha1.KindMCPServer: mcpStore,
 		},
@@ -749,7 +749,7 @@ func TestResourceRegister_PostUpsertFailureLeavesPersistedRow(t *testing.T) {
 	}, func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
 	resource.RegisterApply(api, resource.ApplyConfig{
 		BasePrefix:  "/v0",
-		Stores:      map[string]*v1alpha1store.Store{v1alpha1.KindAgent: store},
+		Stores:      map[string]resource.ObjectStore{v1alpha1.KindAgent: store},
 		PostUpserts: map[string]func(context.Context, v1alpha1.Object) error{v1alpha1.KindAgent: hook},
 	})
 

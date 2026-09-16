@@ -314,6 +314,17 @@ type AppOptions struct {
 	// content artifacts.
 	V1Alpha1MutableStoreKinds map[string]bool
 
+	// V1Alpha1Stores supplies a caller-owned store for an extension kind,
+	// keyed by Kind. Each value must implement
+	// pkg/registry/resource.ObjectStore; it is typed any because this
+	// package cannot import that one, and the app checks it at boot and
+	// refuses to start otherwise. A kind listed here reaches the batch
+	// apply endpoint through its own store and replaces any
+	// V1Alpha1StoreTables entry for the same kind. The caller still
+	// registers the kind in the scheme and wires its CRUD routes
+	// (ExtraRoutes + resource.Register).
+	V1Alpha1Stores map[string]any
+
 	// RegistryValidator overrides the per-package registry
 	// validator (the dispatcher consulted on apply to confirm
 	// each declared package — npm / pypi / oci — exists

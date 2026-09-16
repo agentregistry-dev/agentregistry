@@ -25,7 +25,7 @@ func TestModelCRUD(t *testing.T) {
 	stores := v1alpha1store.NewStores(pool, v1alpha1store.TestSchemaRegistry())
 	_, api := humatest.New(t)
 	crud.Register(api, "/v0", stores, nil, nil, crud.PerKindHooks{}, nil)
-	resource.RegisterApply(api, resource.ApplyConfig{BasePrefix: "/v0", Stores: stores})
+	resource.RegisterApply(api, resource.ApplyConfig{BasePrefix: "/v0", Stores: applyStores(stores)})
 
 	applyModel := func(model v1alpha1.Model) arv0.ApplyResult {
 		t.Helper()
@@ -145,4 +145,12 @@ func TestRuntimeCRUDShowsTerminatingRuntime(t *testing.T) {
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &list))
 	require.Len(t, list.Items, 1)
 	require.NotNil(t, list.Items[0].Metadata.DeletionTimestamp)
+}
+
+func applyStores(stores map[string]*v1alpha1store.Store) map[string]resource.ObjectStore {
+	out := make(map[string]resource.ObjectStore, len(stores))
+	for kind, store := range stores {
+		out[kind] = store
+	}
+	return out
 }

@@ -40,6 +40,7 @@ func TestDeploymentListFiltersPersistedDiscoveredRows(t *testing.T) {
 		"/v0",
 		stores,
 		nil,
+		nil,
 		crud.PerKindHooks{},
 		nil,
 		nil,

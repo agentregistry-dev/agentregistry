@@ -34,7 +34,7 @@ func TestClient_V1Alpha1RoundTrip(t *testing.T) {
 	crud.Register(api, "/v0", stores, nil, nil, crud.PerKindHooks{}, nil)
 	resource.RegisterApply(api, resource.ApplyConfig{
 		BasePrefix: "/v0",
-		Stores:     stores,
+		Stores:     applyStores(stores),
 	})
 
 	ts := httptest.NewServer(mux)
@@ -110,7 +110,7 @@ func TestClient_V1Alpha1_ApplyInvalid(t *testing.T) {
 	api := humago.New(mux, huma.DefaultConfig("test", "v1"))
 	resource.RegisterApply(api, resource.ApplyConfig{
 		BasePrefix: "/v0",
-		Stores:     stores,
+		Stores:     applyStores(stores),
 	})
 
 	ts := httptest.NewServer(mux)
@@ -153,4 +153,12 @@ func TestClient_V1Alpha1_NotFound(t *testing.T) {
 	_, err := c.Get(context.Background(), v1alpha1.KindAgent, "default", "does-not-exist", "latest")
 	require.Error(t, err)
 	require.True(t, errors.Is(err, client.ErrNotFound))
+}
+
+func applyStores(stores map[string]*v1alpha1store.Store) map[string]resource.ObjectStore {
+	out := make(map[string]resource.ObjectStore, len(stores))
+	for kind, store := range stores {
+		out[kind] = store
+	}
+	return out
 }

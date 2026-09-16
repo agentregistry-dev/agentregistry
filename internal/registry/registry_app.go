@@ -198,7 +198,11 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 
 	perKindHooks := crudPerKindHooks(options)
 	wireSecretService(&perKindHooks, stores, secretStore)
-	routeOpts := buildRouteOptions(options, stores, deploymentAdapters, perKindHooks)
+	extraStores, err := extensionStores(options.V1Alpha1Stores)
+	if err != nil {
+		return err
+	}
+	routeOpts := buildRouteOptions(options, stores, deploymentAdapters, perKindHooks, extraStores)
 
 	// Initialize HTTP server
 	baseServer, err := api.NewServer(cfg, metrics, versionInfo, options.UIHandler, authnProvider, routeOpts, options.OpenAPISchemaNamer)
@@ -598,10 +602,12 @@ func buildRouteOptions(
 	stores map[string]*v1alpha1store.Store,
 	adapters map[string]types.DeploymentAdapter,
 	perKindHooks crud.PerKindHooks,
+	extraStores map[string]resource.ObjectStore,
 ) *router.RouteOptions {
 	routeOpts := &router.RouteOptions{
 		ExtraRoutes:         options.ExtraRoutes,
 		Stores:              stores,
+		ExtraStores:         extraStores,
 		PerKindHooks:        perKindHooks,
 		RegistryValidator:   options.RegistryValidator,
 		Admission:           options.Admission,
@@ -894,4 +900,22 @@ func setupLogging(levelStr string) {
 	}
 	// set all loggers to the specified level
 	logging.Reset(level)
+}
+
+// extensionStores checks AppOptions.V1Alpha1Stores at boot so a store that
+// does not satisfy resource.ObjectStore fails the start instead of surfacing
+// as a missing kind on the first batch apply.
+func extensionStores(supplied map[string]any) (map[string]resource.ObjectStore, error) {
+	if len(supplied) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]resource.ObjectStore, len(supplied))
+	for kind, raw := range supplied {
+		store, ok := raw.(resource.ObjectStore)
+		if kind == "" || !ok || store == nil {
+			return nil, fmt.Errorf("v1alpha1 store for kind %q must implement resource.ObjectStore, got %T", kind, raw)
+		}
+		out[kind] = store
+	}
+	return out, nil
 }

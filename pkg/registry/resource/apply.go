@@ -2,6 +2,7 @@ package resource
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -9,12 +10,12 @@ import (
 
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
-	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
 // ApplyConfig is the per-server configuration for the multi-doc apply
-// endpoints. Stores maps a v1alpha1 Kind to the matching v1alpha1store.Store.
+// endpoints. Stores maps a v1alpha1 Kind to the ObjectStore that persists it.
 // Resolver optionally checks cross-kind ResourceRef existence; when nil
 // ResolveRefs is skipped.
 type ApplyConfig struct {
@@ -22,8 +23,9 @@ type ApplyConfig struct {
 	// handler (e.g. "/v0"). The apply endpoint mounts at
 	// "{BasePrefix}/apply".
 	BasePrefix string
-	// Stores maps Kind ("Agent", "MCPServer", etc.) to its Store.
-	Stores map[string]*v1alpha1store.Store
+	// Stores maps Kind ("Agent", "MCPServer", etc.) to its store: the
+	// production *v1alpha1store.Store or an extension kind's own ObjectStore.
+	Stores map[string]ObjectStore
 	// Resolver is forwarded to each decoded object's ResolveRefs.
 	Resolver v1alpha1.ResolverFunc
 	// RegistryValidator is forwarded to each decoded object's
@@ -265,7 +267,7 @@ func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun
 // the namespace-defaulted view (caller must SetMetadata if needed —
 // applyCore re-reads metadata after authorize so the defaulting is
 // enough as long as we mutate the obj here too).
-func resolveBatchTarget(cfg ApplyConfig, obj v1alpha1.Object, verb string) (*v1alpha1store.Store, v1alpha1.ObjectMeta, *applyError) {
+func resolveBatchTarget(cfg ApplyConfig, obj v1alpha1.Object, verb string) (ObjectStore, v1alpha1.ObjectMeta, *applyError) {
 	kind := obj.GetKind()
 	meta := obj.GetMetadata()
 
@@ -321,20 +323,32 @@ func failResult(res arv0.ApplyResult, ae *applyError) arv0.ApplyResult {
 	case stageAuth:
 		res.Error = "forbidden: " + ae.Err.Error()
 	case stageUpsert:
-		if ae.Terminating {
+		switch {
+		case isAccessError(ae.Err):
+			res.Error = "forbidden: " + ae.Err.Error()
+		case ae.Terminating:
 			res.Error = fmt.Sprintf("object %s/%s is terminating; delete + re-apply once GC purges the row",
 				res.Namespace, res.Name)
-		} else {
+		default:
 			res.Error = "upsert: " + ae.Err.Error()
 		}
 	case stageDelete:
-		if ae.NotFound {
+		switch {
+		case isAccessError(ae.Err):
+			res.Error = "forbidden: " + ae.Err.Error()
+		case ae.NotFound:
 			res.Error = fmt.Sprintf("not found: %s/%s", res.Namespace, res.Name)
-		} else {
+		default:
 			res.Error = "delete: " + ae.Err.Error()
 		}
 	default:
 		res.Error = ae.Error()
 	}
 	return res
+}
+
+// isAccessError reports whether a store surfaced an access denial, which the
+// batch result labels like an Authorize-hook denial.
+func isAccessError(err error) bool {
+	return errors.Is(err, auth.ErrForbidden) || errors.Is(err, auth.ErrUnauthenticated)
 }

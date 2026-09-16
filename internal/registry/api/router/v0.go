@@ -4,6 +4,7 @@ package router
 import (
 	"context"
 	"errors"
+	"maps"
 
 	"github.com/danielgtaylor/huma/v2"
 
@@ -47,6 +48,12 @@ type RouteOptions struct {
 	// namespace.
 	// REQUIRED — RegisterRoutes errors when this is nil/empty.
 	Stores Stores
+
+	// ExtraStores adds caller-owned stores for extension kinds to the batch
+	// apply endpoint (see types.AppOptions.V1Alpha1Stores). A kind present
+	// here wins over the same kind in Stores. The caller registers the
+	// kind's CRUD routes itself.
+	ExtraStores map[string]resource.ObjectStore
 
 	// DeploymentLogResolver supports the Deployment logs subresource. Adapter
 	// Apply/Remove side effects are owned by the Deployment controller, not by
@@ -126,6 +133,7 @@ func RegisterRoutes(
 		api,
 		pathPrefix,
 		opts.Stores,
+		opts.ExtraStores,
 		opts.DeploymentLogResolver,
 		opts.PerKindHooks,
 		opts.RegistryValidator,
@@ -201,6 +209,7 @@ func registerKindRoutes(
 	api huma.API,
 	basePrefix string,
 	stores Stores,
+	extraStores map[string]resource.ObjectStore,
 	logResolver deploymentlogs.LogResolver,
 	perKind crud.PerKindHooks,
 	registryValidator v1alpha1.RegistryValidatorFunc,
@@ -248,9 +257,16 @@ func registerKindRoutes(
 			return nil
 		}
 	}
+	// The batch endpoint serves the built-in stores plus any caller-owned
+	// extension stores; a caller-owned store wins for its kind.
+	applyStores := make(map[string]resource.ObjectStore, len(stores)+len(extraStores))
+	for kind, store := range stores {
+		applyStores[kind] = store
+	}
+	maps.Copy(applyStores, extraStores)
 	applyCfg := resource.ApplyConfig{
 		BasePrefix:        basePrefix,
-		Stores:            stores,
+		Stores:            applyStores,
 		Resolver:          resolver,
 		RegistryValidator: registryValidator,
 		Authorizers:       perKind.Authorizers,

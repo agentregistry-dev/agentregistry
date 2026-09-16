@@ -29,7 +29,7 @@ func TestRegisterApply_MultiDocRoundTrip(t *testing.T) {
 	_, api := humatest.New(t)
 	resource.RegisterApply(api, resource.ApplyConfig{
 		BasePrefix: "/v0",
-		Stores: map[string]*v1alpha1store.Store{
+		Stores: map[string]resource.ObjectStore{
 			v1alpha1.KindAgent:     agents,
 			v1alpha1.KindMCPServer: mcps,
 		},
@@ -86,7 +86,7 @@ func TestRegisterApply_PerDocFailureDoesntAbortBatch(t *testing.T) {
 	_, api := humatest.New(t)
 	resource.RegisterApply(api, resource.ApplyConfig{
 		BasePrefix: "/v0",
-		Stores: map[string]*v1alpha1store.Store{
+		Stores: map[string]resource.ObjectStore{
 			v1alpha1.KindAgent: agents,
 		},
 	})
@@ -130,7 +130,7 @@ func TestRegisterApply_AdmissionCanStageInsteadOfProductionUpsert(t *testing.T) 
 	_, api := humatest.New(t)
 	resource.RegisterApply(api, resource.ApplyConfig{
 		BasePrefix: "/v0",
-		Stores: map[string]*v1alpha1store.Store{
+		Stores: map[string]resource.ObjectStore{
 			v1alpha1.KindAgent: agents,
 		},
 		PostUpserts: map[string]func(context.Context, v1alpha1.Object) error{
@@ -190,7 +190,7 @@ func TestRegisterApply_DeleteAdmissionCanStageInsteadOfProductionDelete(t *testi
 	_, api := humatest.New(t)
 	resource.RegisterApply(api, resource.ApplyConfig{
 		BasePrefix: "/v0",
-		Stores: map[string]*v1alpha1store.Store{
+		Stores: map[string]resource.ObjectStore{
 			v1alpha1.KindAgent: agents,
 		},
 		PostDeletes: map[string]func(context.Context, v1alpha1.Object) error{
@@ -252,7 +252,7 @@ func TestApplyObject_ReusesProductionApplyPath(t *testing.T) {
 		Spec: v1alpha1.AgentSpec{Title: "Replayed Agent"},
 	}
 	res := resource.ApplyObject(t.Context(), resource.ApplyConfig{
-		Stores: map[string]*v1alpha1store.Store{
+		Stores: map[string]resource.ObjectStore{
 			v1alpha1.KindAgent: agents,
 		},
 	}, obj, false)
@@ -272,7 +272,7 @@ func TestApplyObject_CompensatesPrepareWhenAdmissionFails(t *testing.T) {
 	}
 	compensated := false
 	res := resource.ApplyObject(t.Context(), resource.ApplyConfig{
-		Stores: map[string]*v1alpha1store.Store{v1alpha1.KindAgent: {}},
+		Stores: map[string]resource.ObjectStore{v1alpha1.KindAgent: &v1alpha1store.Store{}},
 		Admission: func(context.Context, types.AdmissionInput) (types.AdmissionResult, error) {
 			return types.AdmissionResult{}, errors.New("admission failed")
 		},
@@ -296,7 +296,7 @@ func TestRegisterApply_MutableObjectResultsDoNotExposeVersion(t *testing.T) {
 	_, api := humatest.New(t)
 	resource.RegisterApply(api, resource.ApplyConfig{
 		BasePrefix: "/v0",
-		Stores: map[string]*v1alpha1store.Store{
+		Stores: map[string]resource.ObjectStore{
 			v1alpha1.KindRuntime:    runtimes,
 			v1alpha1.KindDeployment: deployments,
 		},
@@ -365,7 +365,7 @@ func TestRegisterDeleteApply_OmittedTagDeletesAllTags(t *testing.T) {
 	_, api := humatest.New(t)
 	resource.RegisterApply(api, resource.ApplyConfig{
 		BasePrefix: "/v0",
-		Stores:     map[string]*v1alpha1store.Store{v1alpha1.KindAgent: agents},
+		Stores:     map[string]resource.ObjectStore{v1alpha1.KindAgent: agents},
 	})
 
 	_, err := agents.Upsert(t.Context(), &v1alpha1.Agent{
@@ -410,7 +410,7 @@ func TestRegisterDeleteApply_TagDeletesOnlyExactTag(t *testing.T) {
 	_, api := humatest.New(t)
 	resource.RegisterApply(api, resource.ApplyConfig{
 		BasePrefix: "/v0",
-		Stores:     map[string]*v1alpha1store.Store{v1alpha1.KindAgent: agents},
+		Stores:     map[string]resource.ObjectStore{v1alpha1.KindAgent: agents},
 	})
 
 	_, err := agents.Upsert(t.Context(), &v1alpha1.Agent{
@@ -466,7 +466,7 @@ func TestRegisterApply_DefaultsRemoteMCPServerTagBeforeAuthorize(t *testing.T) {
 	_, api := humatest.New(t)
 	resource.RegisterApply(api, resource.ApplyConfig{
 		BasePrefix: "/v0",
-		Stores: map[string]*v1alpha1store.Store{
+		Stores: map[string]resource.ObjectStore{
 			v1alpha1.KindMCPServer: mcpServers,
 		},
 		Authorizers: map[string]func(context.Context, resource.AuthorizeInput) error{
@@ -523,7 +523,7 @@ func TestRegisterApply_DeniesKindWithNoAuthorizer(t *testing.T) {
 	_, api := humatest.New(t)
 	resource.RegisterApply(api, resource.ApplyConfig{
 		BasePrefix: "/v0",
-		Stores: map[string]*v1alpha1store.Store{
+		Stores: map[string]resource.ObjectStore{
 			v1alpha1.KindAgent:     agents,
 			v1alpha1.KindMCPServer: mcps,
 		},

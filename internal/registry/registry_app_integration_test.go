@@ -56,10 +56,14 @@ func TestBuildStores_ExtensionKindAppliesThroughBatchEndpoint(t *testing.T) {
 	scheme := v1alpha1.NewScheme()
 	scheme.MustRegister(extensionApplyKind, extensionApplySpec{}, func() any { return &extensionApplyObject{} })
 
+	applyStores := make(map[string]resource.ObjectStore, len(stores))
+	for kind, store := range stores {
+		applyStores[kind] = store
+	}
 	_, api := humatest.New(t)
 	resource.RegisterApply(api, resource.ApplyConfig{
 		BasePrefix: "/v0",
-		Stores:     stores,
+		Stores:     applyStores,
 		Scheme:     scheme,
 	})
 

@@ -76,7 +76,7 @@ func (e *applyError) Error() string {
 // Store.Upsert + PostUpsert. Returns a stage-tagged applyError on failure.
 func applyCore(
 	ctx context.Context,
-	store *v1alpha1store.Store,
+	store ObjectStore,
 	obj v1alpha1.Object,
 	opts applyOpts,
 	dryRun bool,
@@ -187,7 +187,7 @@ func ProductionAdmission(ctx context.Context, in types.AdmissionInput) (types.Ad
 	if in.DryRun {
 		return types.AdmissionResult{Status: arv0.ApplyStatusDryRun, Tag: in.Tag}, nil
 	}
-	store, ok := in.Store.(*v1alpha1store.Store)
+	store, ok := in.Store.(ObjectStore)
 	if !ok || store == nil {
 		return types.AdmissionResult{}, errors.New("production store is required")
 	}
@@ -257,7 +257,7 @@ type deleteOpts struct {
 // to 404 (single PUT) or "not found" Result (batch).
 func deleteCore(
 	ctx context.Context,
-	store *v1alpha1store.Store,
+	store ObjectStore,
 	kind, namespace, name, tag string,
 	opts deleteOpts,
 	dryRun bool,
@@ -308,7 +308,7 @@ func ProductionDeleteAdmission(ctx context.Context, in types.DeleteAdmissionInpu
 	if in.DryRun {
 		return types.DeleteAdmissionResult{Status: arv0.ApplyStatusDryRun, Tag: in.Tag}, nil
 	}
-	store, ok := in.Store.(*v1alpha1store.Store)
+	store, ok := in.Store.(ObjectStore)
 	if !ok || store == nil {
 		return types.DeleteAdmissionResult{}, errors.New("production store is required")
 	}
