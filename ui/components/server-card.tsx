@@ -138,17 +138,6 @@ export function ServerCard({ server, onDelete, onDeploy, showDelete = false, sho
               </Tooltip>
             )
           )}
-          {showExternalLinks && serverData.source?.repository?.url && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={(e) => { e.stopPropagation(); window.open(serverData.source?.repository?.url || '', '_blank') }}
-              aria-label="View repository"
-            >
-              <Github className="h-3.5 w-3.5" aria-hidden="true" />
-            </Button>
-          )}
           {showDelete && onDelete && (
             <Button
               variant="ghost"

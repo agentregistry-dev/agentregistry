@@ -39,7 +39,6 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [tag, setTag] = useState("latest")
-  const [repositoryUrl, setRepositoryUrl] = useState("")
 
   // Schema collapsed to a single package per server. The dialog mirrors
   // the new polymorphic MCPPackage shape: origin.type drives which
@@ -54,7 +53,6 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
     setTitle("")
     setDescription("")
     setTag("latest")
-    setRepositoryUrl("")
     setPkg(null)
   }
 
@@ -93,11 +91,6 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
       }
 
       const source: NonNullable<ServerJson['source']> = {}
-      if (repositoryUrl.trim()) {
-        source.repository = {
-          url: repositoryUrl.trim(),
-        }
-      }
       // OCI carries its version in the image ref tag (identifier); npm
       // and pypi need a separate version. Validate accordingly.
       if (pkg && pkg.identifier.trim() && (pkg.originType === 'oci' || pkg.version.trim())) {
@@ -129,7 +122,7 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
           transport,
         }
       }
-      if (source.repository || source.package) {
+      if (source.package) {
         server.source = source
       }
 
@@ -234,22 +227,6 @@ export function AddServerDialog({ open, onOpenChange, onServerAdded }: AddServer
               rows={3}
               disabled={loading}
             />
-          </div>
-
-          <div className="grid grid-cols-1 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="repositoryUrl">Repository URL</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="repositoryUrl"
-                  placeholder="https://github.com/user/repo"
-                  value={repositoryUrl}
-                  onChange={(e) => setRepositoryUrl(e.target.value)}
-                  disabled={loading}
-                  className="flex-1"
-                />
-              </div>
-            </div>
           </div>
 
           {/* Package — only one is published per MCPServer. */}

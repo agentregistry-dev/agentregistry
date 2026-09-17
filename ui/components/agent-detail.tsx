@@ -127,38 +127,9 @@ export function AgentDetail({ agent, allTags: allTagsProp }: AgentDetailProps) {
               </section>
             )}
 
-            {source?.repository?.url && (
-              <section>
-                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2">Repository</h3>
-                <a
-                  href={source.repository.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 text-sm text-primary hover:underline"
-                >
-                  <Github className="h-3.5 w-3.5" />
-                  {source.repository.url}
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-              </section>
-            )}
           </TabsContent>
 
           <TabsContent value="technical" className="space-y-6">
-            {source?.repository?.url && (
-              <section>
-                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2">Source Repository</h3>
-                <a
-                  href={source.repository.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 text-sm text-primary hover:underline font-mono"
-                >
-                  {source.repository.url}
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-              </section>
-            )}
 
             {source?.image && (
               <section>

@@ -43,11 +43,8 @@ type ListMetadata struct {
 // ServerResponse is one entry in a list (or the body of a single-server GET):
 // the server detail plus the registry-managed `_meta` block.
 //
-// Nested document types (ServerRepository, ServerPackage, ...) carry a
-// disambiguating prefix rather than the bare spec names (Repository, Package,
-// ...) because Huma derives OpenAPI component names from the bare Go type
-// name; the bare names would collide with the v1alpha1 schemas registered on
-// the same API.
+// Nested document types carry disambiguating prefixes because Huma derives
+// OpenAPI component names from their Go type names.
 type ServerResponse struct {
 	Server ServerDetail  `json:"server"`
 	Meta   *ResponseMeta `json:"_meta,omitempty"`

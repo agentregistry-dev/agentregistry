@@ -30,8 +30,6 @@ components:
           - HTTP
           - OpenAIResponses
           type: string
-        repository:
-          $ref: '#/components/schemas/Repository'
       type: object
     AgentSpec:
       additionalProperties: false
@@ -804,8 +802,6 @@ components:
       properties:
         package:
           $ref: '#/components/schemas/MCPPackage'
-        repository:
-          $ref: '#/components/schemas/Repository'
       type: object
     MCPServerSpec:
       additionalProperties: false
@@ -1571,8 +1567,6 @@ components:
           type:
           - array
           - "null"
-        repository:
-          $ref: '#/components/schemas/ServerRepository'
         title:
           type: string
         version:
@@ -1651,20 +1645,6 @@ components:
       - identifier
       - version
       - transport
-      type: object
-    ServerRepository:
-      additionalProperties: false
-      properties:
-        id:
-          type: string
-        source:
-          type: string
-        subfolder:
-          type: string
-        url:
-          type: string
-      required:
-      - url
       type: object
     ServerResponse:
       additionalProperties: false

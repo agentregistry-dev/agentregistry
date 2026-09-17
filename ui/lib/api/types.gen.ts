@@ -732,7 +732,6 @@ export type ServerDetail = {
     name: string;
     packages?: Array<ServerPackage> | null;
     remotes?: Array<ServerTransport> | null;
-    repository?: ServerRepository;
     title?: string;
     version: string;
     websiteUrl?: string;
@@ -760,13 +759,6 @@ export type ServerPackage = {
     runtimeHint?: string;
     transport: ServerTransport;
     version: string;
-};
-
-export type ServerRepository = {
-    id?: string;
-    source?: string;
-    subfolder?: string;
-    url: string;
 };
 
 export type ServerResponse = {
