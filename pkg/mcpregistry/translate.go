@@ -53,9 +53,6 @@ func FromMCPServer(s *v1alpha1.MCPServer) ServerResponse {
 		Version:     versionOf(s),
 	}
 	if src := s.Spec.Source; src != nil {
-		if src.Repository != nil {
-			detail.Repository = repositoryOf(src.Repository)
-		}
 		if src.Package != nil {
 			detail.Packages = []ServerPackage{packageOf(src.Package)}
 		}
@@ -130,31 +127,6 @@ func ociVersionFromIdentifier(identifier string) string {
 		return lastSegment[colon+1:]
 	}
 	return ""
-}
-
-// repositoryOf maps the source repository, inferring the well-known `source`
-// host from the URL. Branch/commit have no v0.1 representation and are dropped.
-func repositoryOf(r *v1alpha1.Repository) *ServerRepository {
-	return &ServerRepository{
-		URL:       r.URL,
-		Source:    sourceFromURL(r.URL),
-		Subfolder: r.Subfolder,
-	}
-}
-
-// sourceFromURL maps a repository URL to the upstream `source` enum value for
-// the common forges. Unknown hosts yield "" (the field is optional).
-func sourceFromURL(url string) string {
-	switch {
-	case strings.Contains(url, "github.com"):
-		return "github"
-	case strings.Contains(url, "gitlab.com"):
-		return "gitlab"
-	case strings.Contains(url, "bitbucket.org"):
-		return "bitbucket"
-	default:
-		return ""
-	}
 }
 
 // packageOf maps a v1alpha1 MCPPackage (Origin/Launch/Transport) onto the

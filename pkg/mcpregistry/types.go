@@ -76,18 +76,9 @@ type ServerDetail struct {
 	Description string            `json:"description"`
 	Title       string            `json:"title,omitempty"`
 	Version     string            `json:"version"`
-	Repository  *ServerRepository `json:"repository,omitempty"`
 	WebsiteURL  string            `json:"websiteUrl,omitempty"`
 	Packages    []ServerPackage   `json:"packages,omitempty"`
 	Remotes     []ServerTransport `json:"remotes,omitempty"`
-}
-
-// ServerRepository links a server to its source code.
-type ServerRepository struct {
-	URL       string `json:"url"`
-	Source    string `json:"source,omitempty"`
-	ID        string `json:"id,omitempty"`
-	Subfolder string `json:"subfolder,omitempty"`
 }
 
 // ServerPackage describes one runnable distribution of the server

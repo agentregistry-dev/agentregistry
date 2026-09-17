@@ -206,25 +206,6 @@ func TestFromMCPServer(t *testing.T) {
 			},
 		},
 		{
-			name: "repository infers github source and keeps subfolder",
-			mutate: func(s *v1alpha1.MCPServer) {
-				s.Spec.Description = "repo"
-				s.Spec.Source = &v1alpha1.MCPServerSource{
-					Repository: &v1alpha1.Repository{
-						URL:       "https://github.com/acme/weather",
-						Branch:    "main",
-						Subfolder: "servers/weather",
-					},
-				}
-			},
-			check: func(t *testing.T, r mcpregistry.ServerResponse) {
-				require.NotNil(t, r.Server.Repository)
-				assert.Equal(t, "https://github.com/acme/weather", r.Server.Repository.URL)
-				assert.Equal(t, "github", r.Server.Repository.Source)
-				assert.Equal(t, "servers/weather", r.Server.Repository.Subfolder)
-			},
-		},
-		{
 			name: "empty description falls back to title",
 			mutate: func(s *v1alpha1.MCPServer) {
 				s.Spec.Title = "Fallback Title"
