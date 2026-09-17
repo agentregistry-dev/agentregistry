@@ -1606,48 +1606,6 @@ spec:
 	}
 }
 
-// TestMCPServer_RepositoryShape verifies apply → get round-trip for an
-// MCPServer with spec.source.repository (git-bundled — built + deployed
-// from source by the provider adapter at deploy time).
-func TestMCPServer_RepositoryShape(t *testing.T) {
-	regURL := RegistryURL(t)
-	tmpDir := t.TempDir()
-	serverName := UniqueNameWithPrefix("e2etest-repo")
-	tag := defaultArtifactTag
-
-	t.Cleanup(func() {
-		RunArctl(t, tmpDir, "delete", "mcp", serverName, "--tag", tag, "--registry-url", regURL)
-	})
-
-	yaml := fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
-kind: MCPServer
-metadata:
-  name: %s
-spec:
-  title: e2e-repository
-  description: "repository-shape round-trip test"
-  source:
-    repository:
-      url: https://github.com/agentregistry-dev/testmcpserver
-`, serverName)
-
-	path := writeDeclarativeYAML(t, tmpDir, "mcp-repo.yaml", yaml)
-	result := RunArctl(t, tmpDir, "apply", "-f", path, "--registry-url", regURL)
-	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "MCPServer/"+serverName)
-
-	result = RunArctl(t, tmpDir, "get", "mcp", serverName, "-o", "yaml", "--registry-url", regURL)
-	RequireSuccess(t, result)
-	RequireOutputContains(t, result, "repository:")
-	RequireOutputContains(t, result, "github.com/agentregistry-dev/testmcpserver")
-	if strings.Contains(result.Stdout, "package:") {
-		t.Errorf("repository-shape MCP unexpectedly has package block:\n%s", result.Stdout)
-	}
-	if strings.Contains(result.Stdout, "remotes:") {
-		t.Errorf("repository-shape MCP unexpectedly has remotes block:\n%s", result.Stdout)
-	}
-}
-
 // TestPrompt_MultipleTags applies two prompt tags with distinct content,
 // asserts both are queryable by tag, and deleting one leaves the other intact.
 func TestPrompt_MultipleTags(t *testing.T) {

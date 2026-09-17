@@ -66,9 +66,6 @@ func validateAgentSpec(s *AgentSpec) FieldErrors {
 	errs.Append("spec.title", validateTitle(s.Title))
 	errs.Append("spec.iconUrl", validateIconURL(s.IconURL))
 	if s.Source != nil {
-		for _, e := range validateRepository(s.Source.Repository) {
-			errs.Append("spec.source."+e.Path, e.Cause)
-		}
 		if s.Source.Protocol != nil {
 			protocol := ptr.Deref(s.Source.Protocol, AgentProtocol(""))
 			switch protocol {

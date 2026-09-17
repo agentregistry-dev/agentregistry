@@ -31,15 +31,6 @@ func TestAgentDisplayMode(t *testing.T) {
 			want: "source",
 		},
 		{
-			name: "repository source",
-			spec: v1alpha1.AgentSpec{
-				Source: &v1alpha1.AgentSource{
-					Repository: &v1alpha1.Repository{URL: "https://github.com/example/agent"},
-				},
-			},
-			want: "source",
-		},
-		{
 			name: "harness compatibility",
 			spec: v1alpha1.AgentSpec{
 				CompatibleHarnesses: []v1alpha1.HarnessCompatibility{{Type: "claude-code"}},

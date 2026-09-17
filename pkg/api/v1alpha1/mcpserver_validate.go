@@ -68,9 +68,6 @@ func validateMCPServerRemote(t *MCPRemote) FieldErrors {
 
 func validateMCPServerSource(src *MCPServerSource) FieldErrors {
 	var errs FieldErrors
-	for _, e := range validateRepository(src.Repository) {
-		errs.Append("spec.source."+e.Path, e.Cause)
-	}
 	pkg := src.Package
 	if pkg == nil {
 		return errs

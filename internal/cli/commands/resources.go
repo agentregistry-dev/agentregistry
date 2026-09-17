@@ -149,7 +149,7 @@ func agentRow(agent *v1alpha1.Agent) []string {
 }
 
 func agentDisplayMode(spec v1alpha1.AgentSpec) string {
-	hasSource := spec.Source != nil && (spec.Source.Image != "" || spec.Source.Repository != nil)
+	hasSource := spec.Source != nil && spec.Source.Image != ""
 	hasHarness := len(spec.CompatibleHarnesses) > 0
 	switch {
 	case hasSource && hasHarness:

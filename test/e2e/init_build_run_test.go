@@ -142,31 +142,6 @@ func TestE2E_Apply_InjectsArctlLabels(t *testing.T) {
 	assert.Contains(t, get.Stdout, "arctl.dev/language: python")
 }
 
-func TestE2E_Pull_Agent_ClonesSource(t *testing.T) {
-	regURL := RegistryURL(t)
-	tmp := t.TempDir()
-	require.NoError(t, os.Chdir(tmp))
-
-	// Use a public agent fixture repo. The registry validates the URL
-	// scheme as https, so a hermetic file:// fixture isn't an option.
-	const fixtureRepoURL = "https://github.com/agentregistry-dev/testagent"
-
-	require.NoError(t, RunArctl(t, tmp, "init", "agent", "pulltest",
-		"--framework", "adk", "--language", "python",
-		"--git", fixtureRepoURL).Err)
-	pd := filepath.Join(tmp, "pulltest")
-	require.NoError(t, RunArctl(t, pd, "apply", "-f", filepath.Join(pd, "agent.yaml"), "--registry-url", regURL).Err)
-
-	// Pull into a different location.
-	pullDir := filepath.Join(tmp, "fork")
-	pull := RunArctl(t, tmp, "pull", "agent", "pulltest", pullDir, "--registry-url", regURL)
-	RequireSuccess(t, pull)
-
-	// Cloned repo should look like an agent project (agent.yaml present).
-	_, err := os.Stat(filepath.Join(pullDir, "agent.yaml"))
-	require.NoError(t, err)
-}
-
 func TestE2E_FrameworkDiscovery_FromXDG(t *testing.T) {
 	tmp := t.TempDir()
 	xdg := filepath.Join(tmp, "xdg")

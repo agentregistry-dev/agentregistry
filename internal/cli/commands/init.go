@@ -135,9 +135,6 @@ func newInitAgentCmd(deps cliruntime.Deps) *cobra.Command {
 		initFramework     string
 		initLanguage      string
 		initImage         string
-		initGit           string
-		initGitBranch     string
-		initGitCommit     string
 		initMCPs          []string
 		initLocalMCPs     []string
 	)
@@ -336,8 +333,7 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 			// Skills/Prompts/Language/Framework removed from AgentSpec (Phase 11);
 			// language/framework now live in arctl.yaml only. The declarative
 			// agent.yaml carries only canonical AgentSpec fields.
-			if err := writeDeclarativeAgentYAML(projectDir, name, image,
-				initDescription, initGit, initGitBranch, initGitCommit, initMCPs); err != nil {
+			if err := writeDeclarativeAgentYAML(projectDir, name, image, initDescription, initMCPs); err != nil {
 				return fmt.Errorf("write agent.yaml: %w", err)
 			}
 
@@ -361,9 +357,6 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 	cmd.Flags().StringVar(&initModelProvider, "model-provider", "", "Model provider")
 	cmd.Flags().StringVar(&initModelName, "model-name", "", "Model name")
 	cmd.Flags().StringVar(&initImage, "image", "", "Image tag override")
-	cmd.Flags().StringVar(&initGit, "git", "", "Git repository URL")
-	cmd.Flags().StringVar(&initGitBranch, "git-branch", "", "Git branch to record on the agent's source repository")
-	cmd.Flags().StringVar(&initGitCommit, "git-commit", "", "Git commit SHA to pin the agent's source repository to")
 	cmd.Flags().StringSliceVar(&initMCPs, "mcp", nil, "Registry MCP server ref (name@version). Repeatable.")
 	cmd.Flags().StringSliceVar(&initLocalMCPs, "local-mcp", nil, "Path to a sibling MCP project; wires it into .env so the local agent can reach it. Repeatable.")
 	return cmd
@@ -571,7 +564,7 @@ func parseNameVersion(s string) (string, string) {
 // metadata.tag is intentionally omitted — tagging is a publish-time concern.
 // The server stores untagged applies as the literal "latest"; users who want
 // a deterministic tag set it on the YAML by hand before `arctl apply`.
-func writeDeclarativeAgentYAML(projectDir, name, image, description, gitURL, gitBranch, gitCommit string, mcps []string) error {
+func writeDeclarativeAgentYAML(projectDir, name, image, description string, mcps []string) error {
 	desc := description
 	if desc == "" {
 		desc = fmt.Sprintf("%s agent", name)
@@ -591,14 +584,6 @@ func writeDeclarativeAgentYAML(projectDir, name, image, description, gitURL, git
 				Image: image,
 			},
 		},
-	}
-
-	if gitURL != "" {
-		agent.Spec.Source.Repository = &v1alpha1.Repository{
-			URL:    gitURL,
-			Branch: gitBranch,
-			Commit: gitCommit,
-		}
 	}
 
 	for _, raw := range mcps {

@@ -36,8 +36,7 @@ type AgentSpec struct {
 	ModelProvider string `json:"modelProvider,omitempty" yaml:"modelProvider,omitempty" deprecated:"true"`
 	ModelName     string `json:"modelName,omitempty" yaml:"modelName,omitempty" deprecated:"true"`
 
-	// Source declares where the agent comes from — Image (the runtime
-	// container) and/or Repository (the source code).
+	// Source declares the runnable agent container and its protocol.
 	Source *AgentSource `json:"source,omitempty" yaml:"source,omitempty"`
 
 	// CompatibleHarnesses declares which coding harnesses this Agent can run
@@ -67,19 +66,14 @@ func (s AgentSpec) HasLegacyModelConfiguration() bool {
 	return s.ModelProvider != "" || s.ModelName != ""
 }
 
-// AgentSource is the distribution origin of a bring-your-own container/source
-// agent. Harness-based deployments select a compatible harness from
-// AgentSpec.CompatibleHarnesses at Deployment time.
+// AgentSource is the distribution origin of a bring-your-own container agent.
+// Harness-based deployments select a compatible harness at Deployment time.
 type AgentSource struct {
 	// Image is the OCI container image reference that runs the agent.
 	// Format: <registry>/<name>:<tag> (e.g. ghcr.io/owner/agent:1.0.0).
 	Image string `json:"image,omitempty" yaml:"image,omitempty"`
 
-	// Repository links to the source code the image was built from.
-	Repository *Repository `json:"repository,omitempty" yaml:"repository,omitempty"`
-
-	// Protocol is the application protocol spoken by every runnable form of the
-	// agent, whether built from Repository or supplied as Image. When omitted,
+	// Protocol is the application protocol spoken by the image. When omitted,
 	// A2A is inferred as the default.
 	Protocol *AgentProtocol `json:"protocol,omitempty" yaml:"protocol,omitempty" enum:"A2A,HTTP,OpenAIResponses"`
 }
