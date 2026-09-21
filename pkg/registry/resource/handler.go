@@ -579,28 +579,25 @@ func registerDelete[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T
 }
 
 func runDeleteLatest[T v1alpha1.Object](ctx context.Context, cfg Config, newObj func() T, kind, ns, name string) (*deleteOutput, error) {
-	// Use the terminating-aware lookup so a repeated DELETE on a row that's
-	// already mid-teardown stays idempotent. Without this the second call
-	// 404s the moment deletion_timestamp lands (GetLatest filters those
-	// out), which contradicts LIST for kinds that opt into
-	// IncludeTerminatingByDefault, and breaks scripts that retry DELETE
-	// expecting the same response shape. Store.Delete is already a no-op
-	// on terminating rows (see v1alpha1store.deleteMutable), and the
-	// PostDelete re-fire mirrors PostUpsert's operator-friendly retry path
-	// for transient runtime-adapter failures.
-	row, err := cfg.Store.GetLatestIncludingTerminating(ctx, ns, name)
-	if err != nil {
-		return nil, mapNotFound(err, kind, ns, name, "")
-	}
-	obj, err := v1alpha1.EnvelopeFromRaw(newObj, row, kind)
-	if err != nil {
-		return nil, huma.Error500InternalServerError("decode "+kind, err)
-	}
 	dopts := deleteOpts{Authorize: cfg.Authorize}
 	if cfg.PostDelete != nil {
 		dopts.PostDelete = cfg.PostDelete
 	}
+	// Only load the object when a delete callback needs it. Otherwise
+	// deleteCore must authorize before store I/O, and deletion must not
+	// depend on decoding an unused spec.
 	if cfg.DeleteAdmission != nil || dopts.PostDelete != nil {
+		// Use the terminating-aware lookup so repeated DELETE stays idempotent.
+		// Store.Delete is a no-op on terminating rows, while PostDelete re-fires
+		// to allow retries after transient callback failures.
+		row, err := cfg.Store.GetLatestIncludingTerminating(ctx, ns, name)
+		if err != nil {
+			return nil, mapNotFound(err, kind, ns, name, "")
+		}
+		obj, err := v1alpha1.EnvelopeFromRaw(newObj, row, kind)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("decode "+kind, err)
+		}
 		dopts.PreDeleteObject = obj
 	}
 	dopts.DeleteAdmission = cfg.DeleteAdmission
