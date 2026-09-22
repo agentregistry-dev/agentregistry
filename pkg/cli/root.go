@@ -9,12 +9,12 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/commands"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/configure"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
-	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/cli/db"
 	"github.com/agentregistry-dev/agentregistry/pkg/cli/db/migrate"
 	cliruntime "github.com/agentregistry-dev/agentregistry/pkg/cli/runtime"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database/legacymigrate"
+	"github.com/agentregistry-dev/agentregistry/pkg/version"
 )
 
 const (

@@ -15,7 +15,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common/docker"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/frameworks"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
-	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	cliruntime "github.com/agentregistry-dev/agentregistry/pkg/cli/runtime"
 )
@@ -119,11 +118,7 @@ func findDeclarativeResource(projectDir string) (v1alpha1.Object, string, error)
 
 // defaultImage returns registry/name:latest as a fallback image tag.
 func defaultImage(name string) string {
-	registry := strings.TrimSuffix(version.DockerRegistry, "/")
-	if registry == "" {
-		registry = "localhost:5001"
-	}
-	return fmt.Sprintf("%s/%s:latest", registry, name)
+	return fmt.Sprintf("%s/%s:latest", common.DefaultDockerRegistry, name)
 }
 
 // resolveImage returns the image to use, in priority order:

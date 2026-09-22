@@ -7,9 +7,9 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/mod/semver"
 
-	"github.com/agentregistry-dev/agentregistry/internal/version"
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	cliruntime "github.com/agentregistry-dev/agentregistry/pkg/cli/runtime"
+	"github.com/agentregistry-dev/agentregistry/pkg/version"
 )
 
 func NewVersionCommand(deps cliruntime.Deps) *cobra.Command {

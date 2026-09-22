@@ -36,7 +36,6 @@ import (
 	microsoftruntime "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/microsoft"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
-	"github.com/agentregistry-dev/agentregistry/internal/version"
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/logging"
@@ -49,6 +48,7 @@ import (
 	secretdatabase "github.com/agentregistry-dev/agentregistry/pkg/secret/database"
 	secretkubernetes "github.com/agentregistry-dev/agentregistry/pkg/secret/kubernetes"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
+	"github.com/agentregistry-dev/agentregistry/pkg/version"
 )
 
 func App(ctx context.Context, opts ...types.AppOptions) error {

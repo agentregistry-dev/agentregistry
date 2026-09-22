@@ -18,7 +18,6 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/cli/frameworks"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
 	skilltemplates "github.com/agentregistry-dev/agentregistry/internal/cli/skill/templates"
-	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	cliruntime "github.com/agentregistry-dev/agentregistry/pkg/cli/runtime"
 	"github.com/agentregistry-dev/agentregistry/pkg/validators"
@@ -234,11 +233,7 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 
 			image := initImage
 			if image == "" {
-				registry := strings.TrimSuffix(version.DockerRegistry, "/")
-				if registry == "" {
-					registry = "localhost:5001"
-				}
-				image = fmt.Sprintf("%s/%s:latest", registry, name)
+				image = fmt.Sprintf("%s/%s:latest", common.DefaultDockerRegistry, name)
 			}
 
 			// Resolve provider + model name once for source-template generation.
@@ -694,11 +689,7 @@ Picks a framework + language interactively (or via --framework / --language).`,
 
 			image := initImage
 			if image == "" {
-				registry := strings.TrimSuffix(version.DockerRegistry, "/")
-				if registry == "" {
-					registry = "localhost:5001"
-				}
-				image = fmt.Sprintf("%s/%s:latest", registry, projectName)
+				image = fmt.Sprintf("%s/%s:latest", common.DefaultDockerRegistry, projectName)
 			}
 
 			vars := mcpTemplateVars(name, projectName, initDescription, image, framework.SourceDir, projectDir, initPort)
