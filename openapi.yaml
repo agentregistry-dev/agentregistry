@@ -34,12 +34,6 @@ components:
     AgentSpec:
       additionalProperties: false
       properties:
-        compatibleHarnesses:
-          items:
-            $ref: '#/components/schemas/HarnessCompatibility'
-          type:
-          - array
-          - "null"
         description:
           type: string
         iconUrl:
@@ -316,14 +310,6 @@ components:
           type: string
       required:
       - name
-      type: object
-    HarnessCompatibility:
-      additionalProperties: false
-      properties:
-        type:
-          type: string
-      required:
-      - type
       type: object
     HealthBody:
       additionalProperties: false
@@ -1315,12 +1301,6 @@ components:
       properties:
         description:
           type: string
-        harnesses:
-          items:
-            type: string
-          type:
-          - array
-          - "null"
         iconUrl:
           type: string
         source:

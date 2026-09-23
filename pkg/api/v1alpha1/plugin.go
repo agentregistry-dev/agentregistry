@@ -35,11 +35,6 @@ type PluginSpec struct {
 	// absolute https:// URL or a root-relative path served by the UI.
 	IconURL string `json:"iconUrl,omitempty" yaml:"iconUrl,omitempty"`
 
-	// Harnesses lists the harness formats this bundle carries native manifests
-	// for (e.g. "claude-code", "codex"). It is informational in this phase;
-	// deploy-time adapters decide which harnesses they can consume.
-	Harnesses []string `json:"harnesses,omitempty" yaml:"harnesses,omitempty"`
-
 	// Source is where the bundle is ingested from, pinned (git commit / OCI
 	// digest) so a published tag is reproducible.
 	Source *PluginSource `json:"source,omitempty" yaml:"source,omitempty"`

@@ -49,7 +49,7 @@ func TestPluginValidate(t *testing.T) {
 	}{
 		{
 			name: "valid git source",
-			spec: PluginSpec{Title: "My Plugin", Harnesses: []string{"claude-code"}, Source: gitPinned},
+			spec: PluginSpec{Title: "My Plugin", Source: gitPinned},
 		},
 		{
 			name: "valid oci digest source",

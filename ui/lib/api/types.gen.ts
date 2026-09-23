@@ -18,7 +18,6 @@ export type AgentSource = {
 };
 
 export type AgentSpec = {
-    compatibleHarnesses?: Array<HarnessCompatibility> | null;
     description?: string;
     iconUrl?: string;
     instructions?: ResourceRef;
@@ -165,10 +164,6 @@ export type ErrorModel = {
 export type HttpHeader = {
     name: string;
     value?: string;
-};
-
-export type HarnessCompatibility = {
-    type: string;
 };
 
 export type HealthBody = {
@@ -613,7 +608,6 @@ export type PluginSourceOci = {
 
 export type PluginSpec = {
     description?: string;
-    harnesses?: Array<string> | null;
     iconUrl?: string;
     source?: PluginSource;
     title?: string;
