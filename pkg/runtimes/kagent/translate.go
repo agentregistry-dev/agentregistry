@@ -2,6 +2,7 @@ package kagent
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,6 +27,9 @@ var (
 const (
 	mcpServersConfigEnv   = "MCP_SERVERS_CONFIG"
 	mcpServerURLCondition = "MCPServerURL"
+	// Deployment resource attributes associate agent traces with their AR Deployment.
+	deploymentNameAttribute      = "agentregistry.deployment.name"
+	deploymentNamespaceAttribute = "agentregistry.deployment.namespace"
 )
 
 type mcpRuntimeConfig struct {
@@ -47,6 +51,20 @@ func WorkloadName(s string) string {
 		return "resource"
 	}
 	return name
+}
+
+// DeploymentWorkloadName keeps existing remote identities and distinguishes new tenant Deployments.
+func DeploymentWorkloadName(deployment *types.DeploymentRecord) string {
+	if name := deploymentRuntimeID(deployment); name != "" {
+		return name
+	}
+	identity := deployment.Metadata.NamespaceOrDefault() + "/" + deployment.Metadata.Name
+	digest := sha256.Sum256([]byte(identity))
+	prefix := WorkloadName(deployment.Metadata.Name)
+	if len(prefix) > 50 {
+		prefix = strings.TrimRight(prefix[:50], "-")
+	}
+	return fmt.Sprintf("%s-%x", prefix, digest[:6])
 }
 
 func targetNamespace(rcfg runtimeConfig) string {
@@ -105,7 +123,7 @@ func buildBYOAgent(
 	if agent.Spec.Source.Protocol != nil && *agent.Spec.Source.Protocol != v1alpha1.AgentProtocolA2A {
 		return nil, fmt.Errorf("%w: kagent BYO agents require protocol %q", errUnsupported, v1alpha1.AgentProtocolA2A)
 	}
-	workloadName := WorkloadName(agent.Metadata.Name)
+	workloadName := DeploymentWorkloadName(in.Deployment)
 	workloadNamespace := targetNamespace(rcfg)
 	env, err := agentWorkloadEnv(
 		ctx,
@@ -151,8 +169,21 @@ func agentWorkloadEnv(
 		env = append(env, corev1.EnvVar{Name: "HOST", Value: "0.0.0.0"})
 	}
 	env = setEnvVar(env, "KAGENT_NAMESPACE", workloadNamespace)
-	env = setEnvVar(env, "KAGENT_NAME", agent.Metadata.Name)
+	env = setEnvVar(env, "KAGENT_NAME", DeploymentWorkloadName(in.Deployment))
 	env = setEnvVar(env, "KAGENT_URL", rcfg.URL)
+	var attributes []string
+	for item := range strings.SplitSeq(in.Deployment.Spec.Env["OTEL_RESOURCE_ATTRIBUTES"], ",") {
+		key, _, _ := strings.Cut(strings.TrimSpace(item), "=")
+		if key != "" && key != deploymentNameAttribute && key != deploymentNamespaceAttribute {
+			attributes = append(attributes, item)
+		}
+	}
+	attributes = append(attributes, deploymentNameAttribute+"="+in.Deployment.Metadata.Name, deploymentNamespaceAttribute+"="+in.Deployment.Metadata.NamespaceOrDefault())
+	env = setEnvVar(env, "OTEL_RESOURCE_ATTRIBUTES", strings.Join(attributes, ","))
+	if endpoint := in.Runtime.Spec.TelemetryEndpoint; endpoint != "" && !hasEnvVar(env, "OTEL_EXPORTER_OTLP_ENDPOINT") {
+		env = append(env, corev1.EnvVar{Name: "OTEL_EXPORTER_OTLP_ENDPOINT", Value: endpoint})
+	}
+
 	provider, model, err := resolveAgentModel(ctx, in)
 	if err != nil {
 		return nil, err
@@ -491,7 +522,7 @@ func buildToolServer(in types.ApplyInput, rcfg runtimeConfig, dcfg deployConfig)
 		return nil, fmt.Errorf("build kagent tool server: target is %T, want *v1alpha1.MCPServer", in.Target)
 	}
 	meta := metav1.ObjectMeta{
-		Name:      WorkloadName(server.Metadata.Name),
+		Name:      DeploymentWorkloadName(in.Deployment),
 		Namespace: targetNamespace(rcfg),
 	}
 

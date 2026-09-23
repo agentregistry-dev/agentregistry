@@ -244,10 +244,7 @@ func (a *adapter) Remove(
 		return nil, fmt.Errorf("build kagent client: %w", err)
 	}
 
-	name := deploymentRuntimeID(input.Deployment)
-	if name == "" {
-		name = WorkloadName(input.Deployment.Spec.TargetRef.Name)
-	}
+	name := DeploymentWorkloadName(input.Deployment)
 	namespace := deploymentRuntimeNamespace(input.Deployment)
 	if namespace == "" {
 		namespace = targetNamespace(runtimeConfig)

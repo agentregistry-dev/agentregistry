@@ -162,6 +162,7 @@ func TestDesiredFingerprintWaitsForAutomaticMCPDeploymentEndpoint(t *testing.T) 
 func TestApplyMCPServerUsesEstablishedRuntimeMetadata(t *testing.T) {
 	client := newFakeClient()
 	input := withRuntimeConfig(mcpApplyInput())
+	input.Deployment.InternalMeta = types.DeploymentInternalMeta{RuntimeID: "gh-mcp", RuntimeNamespace: "kagent"}
 
 	result, err := testAdapter(client).Apply(context.Background(), input)
 	require.NoError(t, err)
@@ -216,7 +217,7 @@ func TestApplyUsesRuntimeLabelsForPodBackedResources(t *testing.T) {
 
 		_, err := testAdapter(client).Apply(context.Background(), withLabels(input))
 		require.NoError(t, err)
-		server := client.toolServers["kagent/source-tools"].MCP
+		server := client.toolServers["kagent/"+DeploymentWorkloadName(input.Deployment)].MCP
 		assert.Equal(t, "true", server.Labels[labelKey])
 		assert.Equal(t, "true", server.Spec.Deployment.Labels[labelKey])
 	})
@@ -226,7 +227,7 @@ func TestApplyUsesRuntimeLabelsForPodBackedResources(t *testing.T) {
 
 		_, err := testAdapter(client).Apply(context.Background(), withLabels(mcpApplyInput()))
 		require.NoError(t, err)
-		server := client.toolServers["kagent/gh-mcp"].Remote
+		server := client.toolServers["kagent/"+DeploymentWorkloadName(mcpApplyInput().Deployment)].Remote
 		assert.NotContains(t, server.Labels, labelKey)
 	})
 }
@@ -301,12 +302,12 @@ func TestRemoveDerivesIdentityWhenDeploymentWasNotMaterialized(t *testing.T) {
 	client := newFakeClient()
 	_, err := testAdapter(client).Remove(context.Background(), removeInput(nil))
 	require.NoError(t, err)
-	assert.Equal(t, []string{"Agent:kagent/my-agent"}, client.deleted)
+	assert.Equal(t, []string{"Agent:kagent/my-deploy-b1e349716edf"}, client.deleted)
 }
 
 func TestRemoveTreatsMissingRuntimeResourceAsSuccess(t *testing.T) {
 	client := newFakeClient()
-	client.errs["deleteAgent:kagent/my-agent"] = errNotFound
+	client.errs["deleteAgent:kagent/my-deploy-b1e349716edf"] = errNotFound
 	_, err := testAdapter(client).Remove(context.Background(), removeInput(nil))
 	assert.NoError(t, err)
 }
@@ -403,7 +404,63 @@ func TestTokenSourceFactoryReceivesRuntime(t *testing.T) {
 
 func TestRemovePropagatesDeleteFailure(t *testing.T) {
 	client := newFakeClient()
-	client.errs["deleteAgent:kagent/my-agent"] = errors.New("delete failed")
+	client.errs["deleteAgent:kagent/my-deploy-b1e349716edf"] = errors.New("delete failed")
 	_, err := testAdapter(client).Remove(context.Background(), removeInput(nil))
 	require.ErrorContains(t, err, "delete failed")
+}
+
+// TestIndependentDeployments checks apply, reconcile, and removal for a shared catalog Agent.
+func TestIndependentDeployments(t *testing.T) {
+	client := newFakeClient()
+	adapter := testAdapter(client)
+	var inputs []types.ApplyInput
+	for _, name := range []string{"billing-prod", "billing-test"} {
+		in := withRuntimeConfig(byoApplyInput())
+		in.Deployment.InternalMeta = types.DeploymentInternalMeta{}
+		in.Deployment.Metadata.Name = name
+		result, err := adapter.Apply(t.Context(), in)
+		require.NoError(t, err)
+		in.Deployment.InternalMeta = *result.InternalMeta
+		inputs = append(inputs, in)
+	}
+	require.Len(t, client.agents, 2)
+	require.NotEqual(t, inputs[0].Deployment.InternalMeta.RuntimeID, inputs[1].Deployment.InternalMeta.RuntimeID)
+	for _, in := range inputs {
+		result, err := adapter.Apply(t.Context(), in)
+		require.NoError(t, err)
+		require.Equal(t, "kagent", result.InternalMeta.RuntimeNamespace)
+	}
+	require.Len(t, client.agents, 2)
+	_, err := adapter.Remove(t.Context(), types.RemoveInput{Deployment: inputs[0].Deployment, Runtime: inputs[0].Runtime})
+	require.NoError(t, err)
+	require.Len(t, client.agents, 1)
+	require.Contains(t, client.agents, "kagent/"+inputs[1].Deployment.InternalMeta.RuntimeID)
+}
+
+// TestIndependentMCPDeployments verifies separate workloads and deletion without a recorded ID.
+func TestIndependentMCPDeployments(t *testing.T) {
+	client := newFakeClient()
+	adapter := testAdapter(client)
+	var inputs []types.ApplyInput
+	for _, name := range []string{"tools-prod", "tools-test"} {
+		in := withRuntimeConfig(mcpApplyInput())
+		in.Deployment.Metadata.Name = name
+		result, err := adapter.Apply(t.Context(), in)
+		require.NoError(t, err)
+		in.Deployment.InternalMeta = *result.InternalMeta
+		inputs = append(inputs, in)
+	}
+	require.Len(t, client.toolServers, 2)
+	require.NotEqual(t, inputs[0].Deployment.InternalMeta.RuntimeID, inputs[1].Deployment.InternalMeta.RuntimeID)
+	for _, in := range inputs {
+		result, err := adapter.Apply(t.Context(), in)
+		require.NoError(t, err)
+		require.Equal(t, "kagent", result.InternalMeta.RuntimeNamespace)
+	}
+	require.Len(t, client.toolServers, 2)
+	inputs[0].Deployment.InternalMeta.RuntimeID = ""
+	_, err := adapter.Remove(t.Context(), types.RemoveInput{Deployment: inputs[0].Deployment, Runtime: inputs[0].Runtime})
+	require.NoError(t, err)
+	require.Len(t, client.toolServers, 1)
+	require.Contains(t, client.toolServers, "kagent/"+inputs[1].Deployment.InternalMeta.RuntimeID)
 }

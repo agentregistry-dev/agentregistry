@@ -17,7 +17,7 @@ import (
 
 func byoApplyInput() types.ApplyInput {
 	return types.ApplyInput{
-		Deployment: &types.DeploymentRecord{Deployment: &v1alpha1.Deployment{
+		Deployment: &types.DeploymentRecord{InternalMeta: types.DeploymentInternalMeta{RuntimeID: "my-agent"}, Deployment: &v1alpha1.Deployment{
 			Metadata: v1alpha1.ObjectMeta{Name: "my-deploy", Namespace: "default"},
 			Spec: v1alpha1.DeploymentSpec{
 				TargetRef: v1alpha1.ResourceRef{Kind: v1alpha1.KindAgent, Name: "My Agent"},
@@ -90,8 +90,10 @@ func TestBuildBYOAgent(t *testing.T) {
 					{Name: "FOO", Value: "bar"},
 					{Name: "HOST", Value: "0.0.0.0"},
 					{Name: "KAGENT_NAMESPACE", Value: "kagent"},
-					{Name: "KAGENT_NAME", Value: "My Agent"},
+					{Name: "KAGENT_NAME", Value: "my-agent"},
 					{Name: "KAGENT_URL", Value: "https://kagent.example.com"},
+					{Name: "OTEL_RESOURCE_ATTRIBUTES", Value: "agentregistry.deployment.name=my-deploy,agentregistry.deployment.namespace=default"},
+					{Name: "OTEL_EXPORTER_OTLP_ENDPOINT", Value: "http://otel:4317"},
 				},
 			},
 		},
@@ -433,7 +435,7 @@ func TestBuildBYOAgentOverridesAdapterManagedEnvWithoutDuplicates(t *testing.T) 
 	env := got.Spec.BYO.Deployment.Env
 	assertEnvValueOnce(t, env, "HOST", "127.0.0.1")
 	assertEnvValueOnce(t, env, "KAGENT_NAMESPACE", "kagent")
-	assertEnvValueOnce(t, env, "KAGENT_NAME", in.Target.GetMetadata().Name)
+	assertEnvValueOnce(t, env, "KAGENT_NAME", "my-agent")
 	assertEnvValueOnce(t, env, "KAGENT_URL", "https://kagent.example.com")
 	assertEnvValueOnce(t, env, "MODEL_PROVIDER", "openai")
 	assertEnvValueOnce(t, env, "MODEL_NAME", "gpt-5")
@@ -501,12 +503,12 @@ func TestBuildToolServerRemoteStreamableHTTPWithHeader(t *testing.T) {
 	got, err := buildToolServer(in, runtimeConfig{Namespace: "kagent"}, deployConfig{})
 	require.NoError(t, err)
 	assert.Equal(t, "RemoteMCPServer", got.Kind)
-	assert.Equal(t, WorkloadName(in.Target.GetMetadata().Name), got.Name())
+	assert.Equal(t, DeploymentWorkloadName(in.Deployment), got.Name())
 	assert.Equal(t, "kagent", got.Namespace())
 	require.NotNil(t, got.Remote)
 	assert.Equal(t, remoteMCPProtocolStreamableHTTP, got.Remote.Spec.Protocol)
 	assert.Equal(t, "https://mcp.example.com/mcp", got.Remote.Spec.URL)
-	assert.Equal(t, WorkloadName(in.Target.GetMetadata().Name), got.Remote.Spec.Description)
+	assert.Equal(t, DeploymentWorkloadName(in.Deployment), got.Remote.Spec.Description)
 }
 
 func TestBuildToolServerRemoteUsesKagentStreamableHTTPProtocol(t *testing.T) {
@@ -892,4 +894,25 @@ func TestRuntimeNamespace(t *testing.T) {
 	assert.Equal(t, "kagent", RuntimeNamespace(map[string]any{"kagentUrl": "http://kagent"}))
 	assert.Equal(t, "tools", RuntimeNamespace(map[string]any{"kagentUrl": "http://kagent", "namespace": "tools"}))
 	assert.Equal(t, "kagent", RuntimeNamespace(map[string]any{"namespace": 42}))
+}
+
+func TestDeploymentTraceIdentity(t *testing.T) {
+	names := map[string]bool{}
+	for _, identity := range [][2]string{{"payments", "billing-prod"}, {"payments", "billing-test"}, {"other", "billing-prod"}} {
+		in := byoApplyInput()
+		in.Deployment.InternalMeta = types.DeploymentInternalMeta{}
+		in.Deployment.Metadata.Namespace, in.Deployment.Metadata.Name = identity[0], identity[1]
+		in.Deployment.Spec.Env["OTEL_RESOURCE_ATTRIBUTES"] = "team=finance,agentregistry.deployment.name=wrong"
+		agent, err := buildTestBYOAgent(t.Context(), in, runtimeConfig{})
+		require.NoError(t, err)
+		require.False(t, names[agent.Name], "Deployments must not share workloads")
+		names[agent.Name] = true
+		require.LessOrEqual(t, len(agent.Name), 63)
+		assertEnvValueOnce(t, agent.Spec.BYO.Deployment.Env, "KAGENT_NAME", agent.Name)
+		assertEnvValueOnce(t, agent.Spec.BYO.Deployment.Env, "OTEL_RESOURCE_ATTRIBUTES", "team=finance,agentregistry.deployment.name="+identity[1]+",agentregistry.deployment.namespace="+identity[0])
+		in.Deployment.InternalMeta.RuntimeID = agent.Name
+		again, err := buildTestBYOAgent(t.Context(), in, runtimeConfig{})
+		require.NoError(t, err)
+		require.Equal(t, agent.Name, again.Name)
+	}
 }

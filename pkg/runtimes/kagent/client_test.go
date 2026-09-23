@@ -167,8 +167,10 @@ func TestEnsureAgentPostsExpectedPayload(t *testing.T) {
 					{"name": "FOO", "value": "bar"},
 					{"name": "HOST", "value": "0.0.0.0"},
 					{"name": "KAGENT_NAMESPACE", "value": "kagent"},
-					{"name": "KAGENT_NAME", "value": "My Agent"},
-					{"name": "KAGENT_URL", "value": "https://kagent.example.com"}
+					{"name": "KAGENT_NAME", "value": "my-agent"},
+					{"name": "KAGENT_URL", "value": "https://kagent.example.com"},
+					{"name": "OTEL_RESOURCE_ATTRIBUTES", "value": "agentregistry.deployment.name=my-deploy,agentregistry.deployment.namespace=default"},
+					{"name": "OTEL_EXPORTER_OTLP_ENDPOINT", "value": "http://otel:4317"}
 				]
 			}},
 			"description": "my-agent"
@@ -280,7 +282,7 @@ func TestEnsureRemoteToolServerPostsExpectedPayload(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	in := byoApplyInput()
+	in := mcpApplyInput()
 	in.Target = &v1alpha1.MCPServer{
 		Metadata: v1alpha1.ObjectMeta{Name: "remote-tools", Namespace: "default"},
 		Spec: v1alpha1.MCPServerSpec{Remote: &v1alpha1.MCPRemote{
@@ -298,9 +300,9 @@ func TestEnsureRemoteToolServerPostsExpectedPayload(t *testing.T) {
 	assert.JSONEq(t, `{
 		"type": "RemoteMCPServer",
 		"remoteMCPServer": {
-			"metadata": {"name": "remote-tools", "namespace": "kagent"},
+			"metadata": {"name": "my-deploy-b1e349716edf", "namespace": "kagent"},
 			"spec": {
-				"description": "remote-tools",
+				"description": "my-deploy-b1e349716edf",
 				"protocol": "STREAMABLE_HTTP",
 				"url": "https://mcp.example.com/mcp"
 			},
@@ -320,7 +322,7 @@ func TestEnsureSourceToolServerPostsExpectedPayload(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	in := byoApplyInput()
+	in := mcpApplyInput()
 	in.Deployment.Spec.Env = nil
 	in.Target = &v1alpha1.MCPServer{
 		Metadata: v1alpha1.ObjectMeta{Name: "source-tools", Namespace: "default"},
@@ -342,7 +344,7 @@ func TestEnsureSourceToolServerPostsExpectedPayload(t *testing.T) {
 	assert.JSONEq(t, `{
 		"type": "MCPServer",
 		"mcpServer": {
-			"metadata": {"name": "source-tools", "namespace": "kagent"},
+			"metadata": {"name": "my-deploy-b1e349716edf", "namespace": "kagent"},
 			"spec": {
 				"deployment": {
 					"image": "node:24-alpine3.21",

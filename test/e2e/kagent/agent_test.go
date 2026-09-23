@@ -18,13 +18,14 @@ func TestKagentAgent(t *testing.T) {
 	modelName := "e2e-" + id + "-model"
 	agentName := "e2e-" + id + "-agent"
 	deploymentName := "e2e-" + id + "-deployment"
+	workloadName := kagentDeploymentWorkloadName(deploymentName)
 	docs := newKagentScenarioDocs(
 		t,
 		"agent",
 		"Kagent Agent E2E scenario",
 		id,
 	)
-	registerKagentObjectCleanup(t, "agents.kagent.dev", agentName)
+	registerKagentObjectCleanup(t, "agents.kagent.dev", workloadName)
 	registerKagentResourceCleanup(t, env, [][]string{
 		{"delete", "deployment", deploymentName},
 		{"delete", "agent", agentName},
@@ -42,25 +43,25 @@ func TestKagentAgent(t *testing.T) {
 	docs.Apply(kagentAgentManifest(modelName, agentName, ""))
 	docs.Apply(kagentAgentDeploymentManifest(deploymentName, agentName, runtimeName, modelName))
 	waitForKagentDeploymentReady(t, env.workDir, env.registryURL, deploymentName)
-	waitForKagentResourceCreated(t, "agents.kagent.dev", agentName)
-	workload := waitForKagentWorkloadCreated(t, agentName)
+	waitForKagentResourceCreated(t, "agents.kagent.dev", workloadName)
+	workload := waitForKagentWorkloadCreated(t, workloadName)
 	assertContainerEnvironment(t, workload, "MODEL_PROVIDER", "bedrock")
 	assertContainerEnvironment(t, workload, "MODEL_NAME", "anthropic.claude-3-5-sonnet-20241022-v2:0")
-	assertKagentDeploymentRemoteID(t, env, deploymentName, agentName)
+	assertKagentDeploymentRemoteID(t, env, deploymentName, workloadName)
 
 	docs.Step("Reapply the Deployment", "Reapply the unchanged Deployment and verify Kagent does not replace the Agent.")
-	metadata := kagentResourceMetadata(t, "agents.kagent.dev", agentName)
+	metadata := kagentResourceMetadata(t, "agents.kagent.dev", workloadName)
 	env.Apply("agent-deployment.yaml", kagentAgentDeploymentManifest(deploymentName, agentName, runtimeName, modelName))
 	docs.Apply(kagentAgentDeploymentManifest(deploymentName, agentName, runtimeName, modelName))
-	assertKagentResourceStable(t, "agents.kagent.dev", agentName, metadata, 10*time.Second)
+	assertKagentResourceStable(t, "agents.kagent.dev", workloadName, metadata, 10*time.Second)
 
 	docs.Step("Remove the Agent Deployment", "Delete the AgentRegistry Deployment and verify Kagent removes the Agent workload.")
 	docs.Command("arctl delete deployment " + deploymentName)
-	docs.Command("kubectl --context kind-${KIND_CLUSTER_NAME} -n \"${KAGENT_NAMESPACE}\" wait --for=delete agent/" + agentName + " --timeout=2m")
+	docs.Command("kubectl --context kind-${KIND_CLUSTER_NAME} -n \"${KAGENT_NAMESPACE}\" wait --for=delete agent/" + workloadName + " --timeout=2m")
 	docs.Command("arctl delete agent " + agentName)
 	docs.Command("arctl delete model " + modelName + " --tag e2e")
 	docs.Command("arctl delete -f - <<EOF\n" + kagentRuntimeManifest(secretName, runtimeName) + "\nEOF")
 	env.DeleteDeployment(deploymentName)
-	waitForKagentResourceDeleted(t, "agents.kagent.dev", agentName)
-	waitForKagentWorkloadDeleted(t, agentName)
+	waitForKagentResourceDeleted(t, "agents.kagent.dev", workloadName)
+	waitForKagentWorkloadDeleted(t, workloadName)
 }
