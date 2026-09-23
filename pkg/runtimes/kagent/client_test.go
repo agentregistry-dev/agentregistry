@@ -85,59 +85,106 @@ func TestAuthTransportDefaultsUserID(t *testing.T) {
 	assert.Equal(t, "admin@kagent.dev", got.Get("X-User-ID"))
 }
 
-func TestEnsureAgentConflictFallsBackToUpdate(t *testing.T) {
-	var updateCalled bool
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodPost:
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(`{"error":"Failed to create Agent in Kubernetes: agents.kagent.dev \"foo\" already exists"}`))
-		case http.MethodPut:
-			updateCalled = true
-			w.Write([]byte(`{"error":false,"data":{}}`))
-		default:
-			t.Fatalf("unexpected method %s", r.Method)
-		}
-	}))
-	defer srv.Close()
+func TestEnsureAgentRouting(t *testing.T) {
+	// kagent's create handler reports conflicts as an opaque 500; existence
+	// must come from a GET probe, not the error text.
+	tests := []struct {
+		name       string
+		probeCode  int
+		probeBody  string
+		writeCode  int
+		writeBody  string
+		wantMethod string // "" means no write may happen
+		wantErr    string
+	}{
+		{
+			name:       "creates when absent",
+			probeCode:  http.StatusNotFound,
+			probeBody:  `{"error":"Agent not found"}`,
+			writeCode:  http.StatusCreated,
+			writeBody:  `{"error":false,"data":{}}`,
+			wantMethod: http.MethodPost,
+		},
+		{
+			name:       "updates when present",
+			probeCode:  http.StatusOK,
+			probeBody:  `{"error":false,"data":{"agent":{"metadata":{"name":"foo","namespace":"ns"}}}}`,
+			writeCode:  http.StatusOK,
+			writeBody:  `{"error":false,"data":{}}`,
+			wantMethod: http.MethodPut,
+		},
+		{
+			name:       "create error surfaces",
+			probeCode:  http.StatusNotFound,
+			probeBody:  `{"error":"Agent not found"}`,
+			writeCode:  http.StatusInternalServerError,
+			writeBody:  `{"error":"boom"}`,
+			wantMethod: http.MethodPost,
+			wantErr:    "boom",
+		},
+		{
+			name:      "probe error envelope blocks writes",
+			probeCode: http.StatusOK,
+			probeBody: `{"error":true,"message":"db down"}`,
+			wantErr:   "check existing kagent agent ns/foo: kagent returned error: db down",
+		},
+		{
+			name:      "probe error blocks writes",
+			probeCode: http.StatusServiceUnavailable,
+			probeBody: "unavailable",
+			wantErr:   "check existing kagent agent",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotMethod, gotPath, gotUserID string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == http.MethodGet {
+					assert.Equal(t, "/api/agents/ns/foo", r.URL.Path)
+					w.WriteHeader(tc.probeCode)
+					w.Write([]byte(tc.probeBody))
+					return
+				}
+				if tc.wantMethod == "" {
+					t.Errorf("unexpected write %s after failed probe", r.Method)
+					return
+				}
+				gotMethod = r.Method
+				gotPath = r.URL.Path
+				gotUserID = r.Header.Get("X-User-ID")
+				w.WriteHeader(tc.writeCode)
+				w.Write([]byte(tc.writeBody))
+			}))
+			defer srv.Close()
 
-	c, err := newRESTClient(runtimeConfig{URL: srv.URL}, nil)
-	require.NoError(t, err)
-	agent := &agentPayload{}
-	agent.Namespace, agent.Name = "ns", "foo"
-	require.NoError(t, c.ensureAgent(context.Background(), agent))
-	assert.True(t, updateCalled, "expected update fallback on already-exists conflict")
-}
-
-func TestEnsureAgentOtherErrorNotSwallowed(t *testing.T) {
-	var updateCalled bool
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodPost:
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(`{"error":"boom"}`))
-		case http.MethodPut:
-			updateCalled = true
-			w.Write([]byte(`{"error":false,"data":{}}`))
-		default:
-			t.Fatalf("unexpected method %s", r.Method)
-		}
-	}))
-	defer srv.Close()
-
-	c, err := newRESTClient(runtimeConfig{URL: srv.URL}, nil)
-	require.NoError(t, err)
-	agent := &agentPayload{}
-	agent.Namespace, agent.Name = "ns", "foo"
-	err = c.ensureAgent(context.Background(), agent)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "boom")
-	assert.False(t, updateCalled, "must not fall back to update on a non-conflict create error")
+			c, err := newRESTClient(runtimeConfig{URL: srv.URL, Auth: authConfig{UserID: "ar"}}, nil)
+			require.NoError(t, err)
+			agent := &agentPayload{}
+			agent.Namespace, agent.Name = "ns", "foo"
+			err = c.ensureAgent(context.Background(), agent)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+			if tc.wantMethod != "" {
+				assert.Equal(t, tc.wantMethod, gotMethod)
+				assert.Equal(t, "/api/agents", gotPath)
+				assert.Equal(t, "ar", gotUserID)
+			}
+		})
+	}
 }
 
 func TestEnsureAgentPostsExpectedPayload(t *testing.T) {
 	var gotBody string
+	var gotMethod string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			http.Error(w, `{"error":"Agent not found"}`, http.StatusNotFound)
+			return
+		}
+		gotMethod = r.Method
 		body, err := io.ReadAll(r.Body)
 		assert.NoError(t, err)
 		gotBody = string(body)
@@ -157,6 +204,7 @@ func TestEnsureAgentPostsExpectedPayload(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, c.ensureAgent(context.Background(), agent))
 
+	assert.Equal(t, http.MethodPost, gotMethod)
 	assert.JSONEq(t, `{
 		"metadata": {"name": "my-agent", "namespace": "kagent"},
 		"spec": {
@@ -192,21 +240,22 @@ func testRemoteToolServerSpec(namespace, name string) *toolServerSpec {
 func TestEnsureToolServerAlreadyExistsIsReplaced(t *testing.T) {
 	requests := []string{}
 	createCalls := 0
+	listCalls := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests = append(requests, r.Method+" "+r.URL.Path)
 		switch r.Method {
 		case http.MethodPost:
 			createCalls++
-			if createCalls == 1 {
-				w.WriteHeader(http.StatusInternalServerError)
-				w.Write([]byte(`{"error":"Failed to create RemoteMCPServer in Kubernetes: remotemcpservers.kagent.dev \"foo\" already exists"}`))
-				return
-			}
 			w.WriteHeader(http.StatusCreated)
 			w.Write([]byte(`{"error":false,"data":{}}`))
 		case http.MethodDelete:
 			w.Write([]byte(`{"error":false,"data":{}}`))
 		case http.MethodGet:
+			listCalls++
+			if listCalls == 1 {
+				w.Write([]byte(`{"error":false,"data":[{"ref":"ns/foo"}]}`))
+				return
+			}
 			w.Write([]byte(`{"error":false,"data":[]}`))
 		default:
 			t.Fatalf("unexpected method %s", r.Method)
@@ -218,11 +267,12 @@ func TestEnsureToolServerAlreadyExistsIsReplaced(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, c.ensureToolServer(context.Background(), testRemoteToolServerSpec("ns", "foo")))
 	assert.Equal(t, []string{
-		"POST /api/toolservers",
+		"GET /api/toolservers",
 		"DELETE /api/toolservers/ns/foo",
 		"GET /api/toolservers",
 		"POST /api/toolservers",
 	}, requests)
+	assert.Equal(t, 1, createCalls)
 }
 
 func TestEnsureToolServerReplacementReportsLastCheckError(t *testing.T) {
@@ -232,14 +282,17 @@ func TestEnsureToolServerReplacementReportsLastCheckError(t *testing.T) {
 		toolDeleteTimeout, toolDeletePoll = oldTimeout, oldPoll
 	})
 
+	listCalls := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
-		case http.MethodPost:
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(`{"error":"resource already exists"}`))
 		case http.MethodDelete:
 			w.Write([]byte(`{"error":false,"data":{}}`))
 		case http.MethodGet:
+			listCalls++
+			if listCalls == 1 {
+				w.Write([]byte(`{"error":false,"data":[{"ref":"ns/foo"}]}`))
+				return
+			}
 			http.Error(w, "unavailable", http.StatusServiceUnavailable)
 		}
 	}))
@@ -255,8 +308,28 @@ func TestEnsureToolServerReplacementReportsLastCheckError(t *testing.T) {
 	require.ErrorContains(t, err, "unavailable")
 }
 
+func TestEnsureToolServerProbeErrorFailsWithoutWrite(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Errorf("unexpected write %s after failed probe", r.Method)
+			return
+		}
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	c, err := newRESTClient(runtimeConfig{URL: srv.URL}, nil)
+	require.NoError(t, err)
+	err = c.ensureToolServer(context.Background(), testRemoteToolServerSpec("ns", "foo"))
+	require.ErrorContains(t, err, "check existing kagent tool server ns/foo")
+}
+
 func TestEnsureToolServerOtherErrorNotSwallowed(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			w.Write([]byte(`{"error":false,"data":[]}`))
+			return
+		}
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(`{"error":"boom"}`))
 	}))
@@ -272,6 +345,10 @@ func TestEnsureToolServerOtherErrorNotSwallowed(t *testing.T) {
 func TestEnsureRemoteToolServerPostsExpectedPayload(t *testing.T) {
 	var gotPath, gotUserID, gotBody string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			w.Write([]byte(`{"error":false,"data":[]}`))
+			return
+		}
 		gotPath = r.URL.Path
 		gotUserID = r.Header.Get("X-User-ID")
 		body, err := io.ReadAll(r.Body)
@@ -314,6 +391,10 @@ func TestEnsureRemoteToolServerPostsExpectedPayload(t *testing.T) {
 func TestEnsureSourceToolServerPostsExpectedPayload(t *testing.T) {
 	var gotBody string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			w.Write([]byte(`{"error":false,"data":[]}`))
+			return
+		}
 		body, err := io.ReadAll(r.Body)
 		assert.NoError(t, err)
 		gotBody = string(body)
@@ -419,37 +500,6 @@ func TestListAgentsSkipsEntriesMissingAgentObject(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, workloads, 1)
 	assert.Equal(t, remoteWorkload{Kind: v1alpha1.KindAgent, Namespace: "kagent", Name: "ok"}, workloads[0])
-}
-
-func TestUpdateAgentPutsFlatAgentsPath(t *testing.T) {
-	var putPath string
-	var putUserID string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodPost:
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(`{"error":"Failed to create Agent in Kubernetes: agents.kagent.dev \"foo\" already exists"}`))
-		case http.MethodPut:
-			if r.URL.Path != "/api/agents" {
-				http.Error(w, "not found", http.StatusMethodNotAllowed)
-				return
-			}
-			putPath = r.URL.Path
-			putUserID = r.Header.Get("X-User-ID")
-			w.Write([]byte(`{"error":false,"data":{}}`))
-		default:
-			t.Fatalf("unexpected method %s", r.Method)
-		}
-	}))
-	defer srv.Close()
-
-	c, err := newRESTClient(runtimeConfig{URL: srv.URL, Auth: authConfig{UserID: "ar"}}, nil)
-	require.NoError(t, err)
-	agent := &agentPayload{}
-	agent.Namespace, agent.Name = "ns", "foo"
-	require.NoError(t, c.ensureAgent(context.Background(), agent))
-	assert.Equal(t, "/api/agents", putPath)
-	assert.Equal(t, "ar", putUserID)
 }
 
 func TestNewKagentHTTPClientSetsTimeout(t *testing.T) {

@@ -124,6 +124,47 @@ spec:
 EOF
 ```
 
+## Move the Deployment to another Model
+
+Point the Deployment at a different Model and verify the update reaches the Kagent Agent.
+
+```shell
+arctl apply -f - <<EOF
+apiVersion: ar.dev/v1alpha1
+kind: Model
+metadata:
+  name: e2e-${E2E_ID}-model-b
+  tag: e2e
+spec:
+  title: Kagent E2E model
+  provider: bedrock
+  model: anthropic.claude-3-5-haiku-20241022-v1:0
+  auth:
+    strategy: runtime
+  endpoint:
+    region: us-west-2
+EOF
+```
+
+```shell
+arctl apply -f - <<EOF
+apiVersion: ar.dev/v1alpha1
+kind: Deployment
+metadata:
+  name: e2e-${E2E_ID}-deployment
+spec:
+  targetRef:
+    kind: Agent
+    name: e2e-${E2E_ID}-agent
+  runtimeRef:
+    kind: Runtime
+    name: e2e-${E2E_ID}-runtime
+  modelRef:
+    name: e2e-${E2E_ID}-model-b
+    tag: e2e
+EOF
+```
+
 ## Remove the Agent Deployment
 
 Delete the AgentRegistry Deployment and verify Kagent removes the Agent workload.
