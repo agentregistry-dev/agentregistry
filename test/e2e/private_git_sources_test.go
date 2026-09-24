@@ -63,6 +63,8 @@ func TestPrivateGitCatalogSources(t *testing.T) {
 	require.Len(t, plugin.Status.ResolvedSource.Commit, 40)
 	require.NotNil(t, plugin.Status.Manifest)
 	assert.Equal(t, "private-plugin", plugin.Status.Manifest.Name)
+	assert.Equal(t, []v1alpha1.PluginFormat{v1alpha1.PluginFormatClaudePlugin}, plugin.Status.Formats)
+	assert.Equal(t, v1alpha1.PluginScanVersion, plugin.Status.ScanVersion)
 
 	t.Logf("Verifying authenticated Skill %q resolves the private source", skillAuthName)
 	skill, skillRaw := waitForSkillReady(t, regURL, skillAuthName, v1alpha1.ConditionTrue)

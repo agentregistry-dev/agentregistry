@@ -1317,12 +1317,21 @@ components:
           type:
           - array
           - "null"
+        formats:
+          items:
+            type: string
+          type:
+          - array
+          - "null"
         inventory:
           $ref: '#/components/schemas/PluginInventory'
         manifest:
           $ref: '#/components/schemas/PluginManifest'
         resolvedSource:
           $ref: '#/components/schemas/PluginResolvedSource'
+        scanVersion:
+          format: int64
+          type: integer
       type: object
     PluginUserConfigField:
       additionalProperties: false

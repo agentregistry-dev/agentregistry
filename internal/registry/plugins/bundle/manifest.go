@@ -16,18 +16,18 @@ import (
 // ManifestPath is the canonical location of the plugin manifest within a bundle.
 const ManifestPath = ".claude-plugin/plugin.json"
 
-// ParseManifest parses the bundle's real .claude-plugin/plugin.json into the
-// typed, faithful PluginManifest (the canonical lingua-franca manifest).
-// Returns (nil, nil) when the bundle ships no manifest, or (nil, err) when the
+// ParseManifest parses the bundle's manifest at path (the Claude manifest or
+// the root Agent Plugins plugin.json) into the typed, faithful PluginManifest.
+// Returns (nil, nil) when the bundle has no file at path, or (nil, err) when the
 // manifest is present but malformed (the caller decides whether to fail).
-func ParseManifest(b *CanonicalBundle) (*v1alpha1.PluginManifest, error) {
-	data, ok := b.Files[ManifestPath]
+func ParseManifest(b *CanonicalBundle, path string) (*v1alpha1.PluginManifest, error) {
+	data, ok := b.Files[path]
 	if !ok {
 		return nil, nil
 	}
 	var m v1alpha1.PluginManifest
 	if err := json.Unmarshal(data, &m); err != nil {
-		return nil, fmt.Errorf("%w: parse %s: %v", ErrInvalidBundle, ManifestPath, err)
+		return nil, fmt.Errorf("%w: parse %s: %v", ErrInvalidBundle, path, err)
 	}
 	return &m, nil
 }
@@ -56,9 +56,7 @@ func BuildInventory(b *CanonicalBundle) *v1alpha1.PluginInventory {
 			m.Executables = append(m.Executables, strings.TrimPrefix(p, "bin/"))
 		}
 	}
-	if data, ok := b.Files[".mcp.json"]; ok {
-		m.MCPServers = parseMCPServers(data)
-	}
+	m.MCPServers = parseMCPServers(b.Files[".mcp.json"], b.Files["mcp.json"])
 	if data, ok := b.Files["hooks/hooks.json"]; ok {
 		m.Hooks = parseHooks(data)
 	}
@@ -87,20 +85,23 @@ func parseSkillFrontmatter(content []byte) (name, desc string) {
 	return meta.Name, meta.Description
 }
 
-// parseMCPServers returns the sorted server names declared in a .mcp.json file.
-func parseMCPServers(data []byte) []string {
-	var doc struct {
-		MCPServers map[string]json.RawMessage `json:"mcpServers"`
-	}
-	if err := json.Unmarshal(data, &doc); err != nil {
-		return nil
-	}
-	names := make([]string, 0, len(doc.MCPServers))
-	for k := range doc.MCPServers {
-		names = append(names, k)
+// parseMCPServers returns the sorted, deduplicated server names declared in
+// .mcp.json (Claude) and mcp.json (Agent Plugins). Absent or malformed files add none.
+func parseMCPServers(files ...[]byte) []string {
+	var names []string
+	for _, data := range files {
+		var doc struct {
+			MCPServers map[string]json.RawMessage `json:"mcpServers"`
+		}
+		if err := json.Unmarshal(data, &doc); err != nil {
+			continue
+		}
+		for k := range doc.MCPServers {
+			names = append(names, k)
+		}
 	}
 	slices.Sort(names)
-	return names
+	return slices.Compact(names)
 }
 
 // parseHooks flattens a hooks.json ({hooks:{<Event>:[{hooks:[{type}]}]}}) into

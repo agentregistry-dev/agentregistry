@@ -60,25 +60,46 @@ func TestBuildInventoryBestEffortOnMalformed(t *testing.T) {
 	}
 }
 
+func TestBuildInventoryReadsBothMCPFiles(t *testing.T) {
+	b := &CanonicalBundle{Files: map[string][]byte{
+		".mcp.json": []byte(`{"mcpServers":{"db":{},"api":{}}}`),
+		"mcp.json":  []byte(`{"$schema":"https://agent-plugins.org/schemas/1.0.0/mcp.schema.json","mcpServers":{"search":{},"db":{}}}`),
+	}}
+	if got := BuildInventory(b).MCPServers; !reflect.DeepEqual(got, []string{"api", "db", "search"}) {
+		t.Fatalf("mcpServers = %v, want sorted, deduplicated [api db search]", got)
+	}
+}
+
 func TestParseManifest(t *testing.T) {
 	// Absent manifest -> nil, no error.
-	if m, err := ParseManifest(&CanonicalBundle{Files: map[string][]byte{"SKILL.md": []byte("x")}}); err != nil || m != nil {
+	if m, err := ParseManifest(&CanonicalBundle{Files: map[string][]byte{"SKILL.md": []byte("x")}}, ManifestPath); err != nil || m != nil {
 		t.Fatalf("absent manifest: got (%v, %v), want (nil, nil)", m, err)
 	}
 	// Real plugin.json -> typed manifest.
 	b := &CanonicalBundle{Files: map[string][]byte{
 		ManifestPath: []byte(`{"name":"company-deploy","version":"1.2.0","author":{"name":"Maya"},"keywords":["deploy"]}`),
 	}}
-	m, err := ParseManifest(b)
+	m, err := ParseManifest(b, ManifestPath)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
 	if m == nil || m.Name != "company-deploy" || m.Version != "1.2.0" || m.Author == nil || m.Author.Name != "Maya" {
 		t.Fatalf("typed manifest not parsed: %+v", m)
 	}
+	// Root Agent Plugins plugin.json -> same typed manifest, extensions in Extras.
+	agent := &CanonicalBundle{Files: map[string][]byte{
+		"plugin.json": []byte(`{"$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json","name":"acme.test","description":"Tools","extensions":{"x":1}}`),
+	}}
+	m, err = ParseManifest(agent, "plugin.json")
+	if err != nil {
+		t.Fatalf("parse agent-plugins manifest: %v", err)
+	}
+	if m == nil || m.Name != "acme.test" || m.Description != "Tools" || string(m.Extras["extensions"]) != `{"x":1}` {
+		t.Fatalf("agent-plugins manifest not parsed: %+v", m)
+	}
 	// Malformed manifest -> error (fail closed).
 	bad := &CanonicalBundle{Files: map[string][]byte{ManifestPath: []byte("{not json")}}
-	if _, err := ParseManifest(bad); err == nil {
+	if _, err := ParseManifest(bad, ManifestPath); err == nil {
 		t.Fatal("expected error for malformed manifest")
 	}
 }

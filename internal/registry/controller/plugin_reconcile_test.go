@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -92,6 +93,36 @@ func TestEnqueueAllSkipsUndecodableRow(t *testing.T) {
 	}
 }
 
+// TestEnqueueAllRescansStaleScanVersion guards the rescan gate: a plugin whose
+// generation is caught up but whose scan version is stale must be enqueued.
+func TestEnqueueAllRescansStaleScanVersion(t *testing.T) {
+	rawOf := func(name, status string) *v1alpha1.RawObject {
+		return &v1alpha1.RawObject{
+			TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindPlugin},
+			Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: name, Tag: "v1", Generation: 2},
+			Spec:     json.RawMessage(`{"source":{"type":"git"}}`),
+			Status:   json.RawMessage(status),
+		}
+	}
+	store := newFakePluginStore()
+	store.listRows = []*v1alpha1.RawObject{
+		rawOf("stale", `{"observedGeneration":2}`),
+		rawOf("current", fmt.Sprintf(`{"observedGeneration":2,"scanVersion":%d}`, v1alpha1.PluginScanVersion)),
+	}
+	c := &PluginController{Store: store}
+
+	if err := c.enqueueAll(context.Background()); err != nil {
+		t.Fatalf("enqueueAll: %v", err)
+	}
+	queue := c.workQueue()
+	if n := queue.Len(); n != 1 {
+		t.Fatalf("expected only the stale plugin enqueued, queue len = %d", n)
+	}
+	if key, _ := queue.Get(); key.Name != "stale" {
+		t.Fatalf("enqueued %q, want stale", key.Name)
+	}
+}
+
 // TestPluginReconcile drives reconcile against a real (anonymous) git source.
 // Every case is chosen to fail before any network call: an unsupported source
 // type never reaches git, a non-GitHub host is rejected at URL parse, and an
@@ -127,6 +158,9 @@ func TestPluginReconcile(t *testing.T) {
 		if got.Status.ObservedGeneration != 3 {
 			t.Errorf("terminal must bump observedGeneration, got %d", got.Status.ObservedGeneration)
 		}
+		if got.Status.ScanVersion != v1alpha1.PluginScanVersion {
+			t.Errorf("terminal must record the scan version, got %d", got.Status.ScanVersion)
+		}
 		if got.Status.IsConditionTrue(pluginReadyCondition) {
 			t.Error("must not be Ready")
 		}
@@ -143,6 +177,9 @@ func TestPluginReconcile(t *testing.T) {
 		got := store.plugin(t, ns, name, tag)
 		if got.Status.ObservedGeneration != 0 {
 			t.Errorf("retryable must NOT bump observedGeneration, got %d", got.Status.ObservedGeneration)
+		}
+		if got.Status.ScanVersion != 0 {
+			t.Errorf("retryable must NOT record a scan version, got %d", got.Status.ScanVersion)
 		}
 		if r := readyReason(got); r != "SourceUnresolvable" {
 			t.Errorf("ready reason = %q, want SourceUnresolvable", r)
@@ -164,8 +201,8 @@ func TestPluginReconcile(t *testing.T) {
 		if outcome != "failed" || reason != "SourceUnsupported" {
 			t.Fatalf("got (%q, %q), want (failed, SourceUnsupported)", outcome, reason)
 		}
-		if got := store.plugin(t, ns, name, tag); got.Status.ObservedGeneration != 5 {
-			t.Errorf("observedGeneration = %d, want 5", got.Status.ObservedGeneration)
+		if got := store.plugin(t, ns, name, tag); got.Status.ObservedGeneration != 5 || got.Status.ScanVersion != v1alpha1.PluginScanVersion {
+			t.Errorf("observedGeneration, scanVersion = %d, %d, want 5, %d", got.Status.ObservedGeneration, got.Status.ScanVersion, v1alpha1.PluginScanVersion)
 		}
 	})
 }
