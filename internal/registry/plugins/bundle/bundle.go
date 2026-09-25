@@ -1,6 +1,7 @@
 // Package bundle is the in-memory representation of a plugin's portable core:
-// a flat, path-keyed set of files (SKILL.md, AGENTS.md, .mcp.json, hooks/*,
-// commands/*, agents/*, bin/*, and the real .claude-plugin/plugin.json). It is
+// a flat, path-keyed set of files (SKILL.md, AGENTS.md, .mcp.json, mcp.json,
+// hooks/*, commands/*, agents/*, bin/*, and the real plugin.json or
+// .claude-plugin/plugin.json manifest) plus every directory path. It is
 // loaded from a checked-out source tree (FromDir), scanned to derive the typed
 // manifest (ParseManifest) and the governance inventory (BuildInventory), and
 // translated into a harness's on-disk layout at deploy time.
@@ -44,13 +45,27 @@ const (
 // Paths are clean, relative, forward-slash separated (no leading "/" or "..").
 type CanonicalBundle struct {
 	Files map[string][]byte
+	// Dirs holds every directory path, even one that holds no kept file.
+	Dirs map[string]bool
+}
+
+// HasDir reports whether dir is a directory in b.
+func (b *CanonicalBundle) HasDir(dir string) bool {
+	if b.Dirs[dir] {
+		return true
+	}
+	for p := range b.Files {
+		if strings.HasPrefix(p, dir+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // FromDir reads a checked-out plugin source tree rooted at dir into a
-// CanonicalBundle. Directories, symlinks, and the .git directory are skipped;
-// every regular-file path is normalized to forward slashes and
-// traversal-checked. It is the bridge from a freshly-cloned source directory
-// to the in-memory bundle the controller scans and records in status.
+// CanonicalBundle. It skips symlinks and the .git directory, and records every
+// directory in Dirs. Every file path is normalized to forward slashes and
+// traversal-checked.
 func FromDir(dir string) (*CanonicalBundle, error) {
 	return fromDir(dir, MaxBundleFiles, MaxBundleBytes)
 }
@@ -58,61 +73,94 @@ func FromDir(dir string) (*CanonicalBundle, error) {
 // fromDir is FromDir with explicit limits, so tests can exercise the ceilings
 // without materializing huge trees.
 func fromDir(dir string, maxFiles int, maxBytes int64) (*CanonicalBundle, error) {
-	files := map[string][]byte{}
-	var totalBytes int64
-	walkErr := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			if d.Name() == ".git" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		// Skip symlinks (and any other irregular files) to avoid traversal out
-		// of the source tree via a malicious link.
-		if d.Type()&os.ModeSymlink != 0 || !d.Type().IsRegular() {
-			return nil
-		}
-		rel, err := filepath.Rel(dir, p)
-		if err != nil {
-			return err
-		}
-		rel = filepath.ToSlash(rel)
-		if err := validateBundlePath(rel); err != nil {
-			return err
-		}
-		// Bound file count and cumulative size before reading, so a hostile or
-		// runaway repo cannot exhaust memory. Check size from the dir entry
-		// first to avoid reading an oversized file at all.
-		if len(files) >= maxFiles {
-			return fmt.Errorf("%w: too many files (limit %d)", ErrInvalidBundle, maxFiles)
-		}
-		info, err := d.Info()
-		if err != nil {
-			return err
-		}
-		if totalBytes+info.Size() > maxBytes {
-			return fmt.Errorf("%w: bundle exceeds %d bytes", ErrInvalidBundle, maxBytes)
-		}
-		data, err := os.ReadFile(p)
-		if err != nil {
-			return err
-		}
-		totalBytes += int64(len(data))
-		files[rel] = data
-		return nil
-	})
-	if walkErr != nil {
+	w := &treeWalker{root: dir, maxFiles: maxFiles, maxBytes: maxBytes,
+		bundle: &CanonicalBundle{Files: map[string][]byte{}, Dirs: map[string]bool{}}}
+	if err := filepath.WalkDir(dir, w.visit); err != nil {
 		// Preserve a wrapped ErrInvalidBundle (size/traversal) as terminal;
 		// wrap any other walk/IO error so the caller sees a bundle error.
-		if errors.Is(walkErr, ErrInvalidBundle) {
-			return nil, walkErr
+		if errors.Is(err, ErrInvalidBundle) {
+			return nil, err
 		}
-		return nil, fmt.Errorf("%w: read source tree: %v", ErrInvalidBundle, walkErr)
+		return nil, fmt.Errorf("%w: read source tree: %w", ErrInvalidBundle, err)
 	}
-	return &CanonicalBundle{Files: files}, nil
+	return w.bundle, nil
+}
+
+// treeWalker loads one source tree into a bundle within the size limits.
+type treeWalker struct {
+	root       string
+	maxFiles   int
+	maxBytes   int64
+	totalBytes int64
+	bundle     *CanonicalBundle
+}
+
+func (w *treeWalker) visit(p string, d fs.DirEntry, err error) error {
+	if err != nil {
+		return err
+	}
+	rel, err := filepath.Rel(w.root, p)
+	if err != nil {
+		return err
+	}
+	rel = filepath.ToSlash(rel)
+	if d.IsDir() {
+		return w.visitDir(rel, d)
+	}
+	// Skip symlinks (and any other irregular files) to avoid traversal out
+	// of the source tree via a malicious link.
+	if d.Type()&os.ModeSymlink != 0 || !d.Type().IsRegular() {
+		return nil
+	}
+	return w.visitFile(rel, d)
+}
+
+// visitDir records a directory. It skips .git and the root.
+func (w *treeWalker) visitDir(rel string, d fs.DirEntry) error {
+	if d.Name() == ".git" {
+		return filepath.SkipDir
+	}
+	if rel == "." {
+		return nil
+	}
+	if err := validateBundlePath(rel); err != nil {
+		return err
+	}
+	w.bundle.Dirs[rel] = true
+	return nil
+}
+
+func (w *treeWalker) visitFile(rel string, d fs.DirEntry) error {
+	if err := validateBundlePath(rel); err != nil {
+		return err
+	}
+	if err := w.checkLimits(d); err != nil {
+		return err
+	}
+	data, err := os.ReadFile(filepath.Join(w.root, filepath.FromSlash(rel)))
+	if err != nil {
+		return err
+	}
+	w.totalBytes += int64(len(data))
+	w.bundle.Files[rel] = data
+	return nil
+}
+
+// checkLimits bounds file count and cumulative size before reading, so a
+// hostile or runaway repo cannot exhaust memory. It checks the size from the
+// dir entry, so an oversized file is never read.
+func (w *treeWalker) checkLimits(d fs.DirEntry) error {
+	if len(w.bundle.Files) >= w.maxFiles {
+		return fmt.Errorf("%w: too many files (limit %d)", ErrInvalidBundle, w.maxFiles)
+	}
+	info, err := d.Info()
+	if err != nil {
+		return err
+	}
+	if w.totalBytes+info.Size() > w.maxBytes {
+		return fmt.Errorf("%w: bundle exceeds %d bytes", ErrInvalidBundle, w.maxBytes)
+	}
+	return nil
 }
 
 // validateBundlePath rejects empty, absolute, non-clean, backslash, and

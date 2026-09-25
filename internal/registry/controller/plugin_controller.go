@@ -13,6 +13,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/common/gitutil"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/plugins/bundle"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/plugins/format"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/plugins/source"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
@@ -266,14 +267,12 @@ func (c *PluginController) enqueueAll(ctx context.Context) error {
 
 const pluginReadyCondition = "Ready"
 
-// pluginReconciled reports whether the controller has already acted on the
-// plugin's current generation. It gates on ObservedGeneration ALONE (not
-// Ready), because both success and terminal failure advance ObservedGeneration
-// — a terminally-failed plugin must NOT be re-resolved on every resync tick.
-// Retryable failures intentionally leave ObservedGeneration behind so they are
-// re-enqueued (and the workqueue rate-limiter backs them off).
+// pluginReconciled reports whether the current generation was scanned with
+// the current rules. Retryable failures record neither, so they retry. Any
+// other scan version rescans, including a newer one after a rollback.
 func pluginReconciled(p *v1alpha1.Plugin) bool {
-	return p.Metadata.Generation > 0 && p.Status.ObservedGeneration >= p.Metadata.Generation
+	return p.Metadata.Generation > 0 && p.Status.ObservedGeneration >= p.Metadata.Generation &&
+		p.Status.ScanVersion == v1alpha1.PluginScanVersion
 }
 
 func (c *PluginController) reconcileKey(ctx context.Context, key pluginQueueKey) (outcome, message string, err error) {
@@ -320,33 +319,49 @@ func (c *PluginController) reconcile(ctx context.Context, p *v1alpha1.Plugin) (s
 	resolved, b, err := source.Resolve(ctx, p, c.Git)
 	if err != nil {
 		reason, terminal := classifyResolveErr(err)
-		bump := int64(0)
 		if terminal {
-			bump = gen
+			return "failed", reason, c.patchStatus(ctx, ns, name, tag, gen, terminalStatus(reason, err))
 		}
-		patchErr := c.patchStatus(ctx, ns, name, tag, bump, func(st *v1alpha1.PluginStatus) {
+		_ = c.patchStatus(ctx, ns, name, tag, 0, func(st *v1alpha1.PluginStatus) {
 			setReady(st, v1alpha1.ConditionFalse, reason, err.Error())
 		})
-		if terminal {
-			return "failed", reason, patchErr
-		}
 		return "", "", err // retryable
 	}
 
-	manifest, err := bundle.ParseManifest(b)
+	resolvedPatch, err := scanStatus(resolved, b)
 	if err != nil {
-		return "failed", "SourceInvalid", c.patchStatus(ctx, ns, name, tag, gen, func(st *v1alpha1.PluginStatus) {
-			setReady(st, v1alpha1.ConditionFalse, "SourceInvalid", err.Error())
-		})
+		return "failed", "SourceInvalid", c.patchStatus(ctx, ns, name, tag, gen, terminalStatus("SourceInvalid", err))
+	}
+	return "resolved", "", c.patchStatus(ctx, ns, name, tag, gen, resolvedPatch)
+}
+
+// scanStatus scans a resolved bundle and returns the Ready=True status to
+// record. Errors wrap bundle.ErrInvalidBundle.
+func scanStatus(resolved *v1alpha1.PluginResolvedSource, b *bundle.CanonicalBundle) (func(*v1alpha1.PluginStatus), error) {
+	pluginFormat, manifestPath, err := format.Detect(b)
+	if err != nil {
+		return nil, err
+	}
+	manifest, err := bundle.ParseManifest(b, manifestPath)
+	if err != nil {
+		return nil, err
 	}
 	inventory := bundle.BuildInventory(b)
-
-	return "resolved", "", c.patchStatus(ctx, ns, name, tag, gen, func(st *v1alpha1.PluginStatus) {
-		st.ResolvedSource = resolved
-		st.Manifest = manifest
-		st.Inventory = inventory
+	return func(st *v1alpha1.PluginStatus) {
+		st.ResolvedSource, st.Manifest, st.Inventory = resolved, manifest, inventory
+		st.Format, st.ScanVersion = pluginFormat, v1alpha1.PluginScanVersion
 		setReady(st, v1alpha1.ConditionTrue, "Resolved", "")
-	})
+	}, nil
+}
+
+// terminalStatus records a terminal failure at the current scan version. It
+// keeps ResolvedSource, because Deployment fingerprints read it.
+func terminalStatus(reason string, err error) func(*v1alpha1.PluginStatus) {
+	return func(st *v1alpha1.PluginStatus) {
+		st.Manifest, st.Inventory = nil, nil
+		st.Format, st.ScanVersion = "", v1alpha1.PluginScanVersion
+		setReady(st, v1alpha1.ConditionFalse, reason, err.Error())
+	}
 }
 
 // classifyResolveErr maps a resolver error to a status reason and whether it is

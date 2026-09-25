@@ -615,9 +615,11 @@ export type PluginSpec = {
 
 export type PluginStatus = {
     conditions?: Array<Condition> | null;
+    format?: string;
     inventory?: PluginInventory;
     manifest?: PluginManifest;
     resolvedSource?: PluginResolvedSource;
+    scanVersion?: number;
 };
 
 export type PluginUserConfigField = {

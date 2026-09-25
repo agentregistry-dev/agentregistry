@@ -16,20 +16,38 @@ import (
 // ManifestPath is the canonical location of the plugin manifest within a bundle.
 const ManifestPath = ".claude-plugin/plugin.json"
 
-// ParseManifest parses the bundle's real .claude-plugin/plugin.json into the
-// typed, faithful PluginManifest (the canonical lingua-franca manifest).
-// Returns (nil, nil) when the bundle ships no manifest, or (nil, err) when the
-// manifest is present but malformed (the caller decides whether to fail).
-func ParseManifest(b *CanonicalBundle) (*v1alpha1.PluginManifest, error) {
-	data, ok := b.Files[ManifestPath]
+// ParseManifest parses the manifest at path into the typed PluginManifest. It
+// drops each key the type cannot parse, because the format rules skip it. It
+// returns (nil, nil) when path has no file.
+func ParseManifest(b *CanonicalBundle, path string) (*v1alpha1.PluginManifest, error) {
+	data, ok := b.Files[path]
 	if !ok {
 		return nil, nil
 	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, fmt.Errorf("%w: parse %s: %w", ErrInvalidBundle, path, err)
+	}
+	dropUnparsableKeys(fields)
+	parsable, err := json.Marshal(fields)
+	if err != nil {
+		return nil, fmt.Errorf("%w: parse %s: %w", ErrInvalidBundle, path, err)
+	}
 	var m v1alpha1.PluginManifest
-	if err := json.Unmarshal(data, &m); err != nil {
-		return nil, fmt.Errorf("%w: parse %s: %v", ErrInvalidBundle, ManifestPath, err)
+	if err := json.Unmarshal(parsable, &m); err != nil {
+		return nil, fmt.Errorf("%w: parse %s: %w", ErrInvalidBundle, path, err)
 	}
 	return &m, nil
+}
+
+// dropUnparsableKeys deletes each key whose value the typed manifest rejects.
+func dropUnparsableKeys(fields map[string]json.RawMessage) {
+	for key, value := range fields {
+		single, err := json.Marshal(map[string]json.RawMessage{key: value})
+		if err != nil || json.Unmarshal(single, &v1alpha1.PluginManifest{}) != nil {
+			delete(fields, key)
+		}
+	}
 }
 
 // BuildInventory indexes a canonical bundle into a PluginInventory: the skills,
