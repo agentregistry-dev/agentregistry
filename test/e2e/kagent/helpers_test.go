@@ -141,11 +141,7 @@ spec:
 `, secretName, runtimeName, kagentControllerURL, kagentNamespace, secretName)
 }
 
-func kagentAgentManifest(modelName, agentName, mcpName string) string {
-	mcpServers := ""
-	if mcpName != "" {
-		mcpServers = fmt.Sprintf("  mcpServers:\n  - name: %s\n", mcpName)
-	}
+func kagentModelManifest(modelName, model string) string {
 	return fmt.Sprintf(`apiVersion: ar.dev/v1alpha1
 kind: Model
 metadata:
@@ -154,12 +150,20 @@ metadata:
 spec:
   title: Kagent E2E model
   provider: bedrock
-  model: anthropic.claude-3-5-sonnet-20241022-v2:0
+  model: %s
   auth:
     strategy: runtime
   endpoint:
     region: us-west-2
----
+`, modelName, model)
+}
+
+func kagentAgentManifest(modelName, agentName, mcpName string) string {
+	mcpServers := ""
+	if mcpName != "" {
+		mcpServers = fmt.Sprintf("  mcpServers:\n  - name: %s\n", mcpName)
+	}
+	return kagentModelManifest(modelName, "anthropic.claude-3-5-sonnet-20241022-v2:0") + fmt.Sprintf(`---
 apiVersion: ar.dev/v1alpha1
 kind: Agent
 metadata:
@@ -168,7 +172,7 @@ spec:
   source:
     image: registry.k8s.io/pause:3.10
     protocol: A2A
-%s`, modelName, agentName, mcpServers)
+%s`, agentName, mcpServers)
 }
 
 func kagentAgentDeploymentManifest(deploymentName, agentName, runtimeName, modelName string) string {
@@ -625,6 +629,47 @@ func waitForKagentWorkloadCreated(t *testing.T, name string) *appsv1.Deployment 
 		deployment = current
 	}, 2*time.Minute, 2*time.Second)
 	return &deployment
+}
+
+func waitForKagentResourceGeneration(t *testing.T, resource, name string, above int64) {
+	t.Helper()
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		output, err := exec.Command(
+			"kubectl",
+			"--context", e2e.KubeContext,
+			"--namespace", kagentNamespace,
+			"get", resource, name,
+			"--output", "json",
+		).CombinedOutput()
+		if !assert.NoError(c, err, strings.TrimSpace(string(output))) {
+			return
+		}
+		var got metav1.PartialObjectMetadata
+		if !assert.NoError(c, json.Unmarshal(output, &got)) {
+			return
+		}
+		assert.Greater(c, got.GetGeneration(), above)
+	}, 2*time.Minute, 2*time.Second)
+}
+
+func waitForKagentWorkloadEnvironment(t *testing.T, name, envName, want string) {
+	t.Helper()
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		deployment, err := getKagentWorkload(name)
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotEmpty(c, deployment.Spec.Template.Spec.Containers) {
+			return
+		}
+		got := ""
+		for _, variable := range deployment.Spec.Template.Spec.Containers[0].Env {
+			if variable.Name == envName {
+				got = variable.Value
+			}
+		}
+		assert.Equal(c, want, got)
+	}, 2*time.Minute, 2*time.Second)
 }
 
 func waitForKagentWorkloadDeleted(t *testing.T, name string) {

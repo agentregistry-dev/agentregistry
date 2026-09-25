@@ -10,12 +10,15 @@ import (
 	e2e "github.com/agentregistry-dev/agentregistry/test/e2e"
 )
 
+const updatedModel = "anthropic.claude-3-5-haiku-20241022-v1:0"
+
 func TestKagentAgent(t *testing.T) {
 	env := newKagentTestEnvironment(t)
 	id := e2e.UniqueNameWithPrefix("kagent-agent")
 	secretName := "e2e-" + id + "-secret"
 	runtimeName := "e2e-" + id + "-runtime"
 	modelName := "e2e-" + id + "-model"
+	modelBName := "e2e-" + id + "-model-b"
 	agentName := "e2e-" + id + "-agent"
 	deploymentName := "e2e-" + id + "-deployment"
 	workloadName := kagentDeploymentWorkloadName(deploymentName)
@@ -30,6 +33,7 @@ func TestKagentAgent(t *testing.T) {
 		{"delete", "deployment", deploymentName},
 		{"delete", "agent", agentName},
 		{"delete", "model", modelName, "--tag", "e2e"},
+		{"delete", "model", modelBName, "--tag", "e2e"},
 		{"delete", "-f", filepath.Join(env.workDir, "runtime.yaml")},
 	})
 
@@ -55,11 +59,22 @@ func TestKagentAgent(t *testing.T) {
 	docs.Apply(kagentAgentDeploymentManifest(deploymentName, agentName, runtimeName, modelName))
 	assertKagentResourceStable(t, "agents.kagent.dev", workloadName, metadata, 10*time.Second)
 
+	docs.Step("Move the Deployment to another Model", "Point the Deployment at a different Model and verify the update reaches the Kagent Agent.")
+	env.Apply("model-b.yaml", kagentModelManifest(modelBName, updatedModel))
+	docs.Apply(kagentModelManifest(modelBName, updatedModel))
+	updated := kagentAgentDeploymentManifest(deploymentName, agentName, runtimeName, modelBName)
+	env.Apply("agent-deployment.yaml", updated)
+	docs.Apply(updated)
+	waitForKagentDeploymentReady(t, env.workDir, env.registryURL, deploymentName)
+	waitForKagentResourceGeneration(t, "agents.kagent.dev", workloadName, metadata.GetGeneration())
+	waitForKagentWorkloadEnvironment(t, workloadName, "MODEL_NAME", updatedModel)
+
 	docs.Step("Remove the Agent Deployment", "Delete the AgentRegistry Deployment and verify Kagent removes the Agent workload.")
 	docs.Command("arctl delete deployment " + deploymentName)
 	docs.Command("kubectl --context kind-${KIND_CLUSTER_NAME} -n \"${KAGENT_NAMESPACE}\" wait --for=delete agent/" + workloadName + " --timeout=2m")
 	docs.Command("arctl delete agent " + agentName)
 	docs.Command("arctl delete model " + modelName + " --tag e2e")
+	docs.Command("arctl delete model " + modelBName + " --tag e2e")
 	docs.Command("arctl delete -f - <<EOF\n" + kagentRuntimeManifest(secretName, runtimeName) + "\nEOF")
 	env.DeleteDeployment(deploymentName)
 	waitForKagentResourceDeleted(t, "agents.kagent.dev", workloadName)
