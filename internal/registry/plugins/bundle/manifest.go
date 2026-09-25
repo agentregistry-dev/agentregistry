@@ -1,6 +1,7 @@
 package bundle
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -15,6 +16,9 @@ import (
 
 // ManifestPath is the canonical location of the plugin manifest within a bundle.
 const ManifestPath = ".claude-plugin/plugin.json"
+
+// agentPluginsMCPSchema is the $schema an Agent Plugins mcp.json must declare.
+const agentPluginsMCPSchema = "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json"
 
 // mcpConfigPaths maps each format to the MCP config file its harnesses read.
 var mcpConfigPaths = map[v1alpha1.PluginFormat]string{
@@ -43,9 +47,12 @@ func ParseManifest(b *CanonicalBundle, path string) (*v1alpha1.PluginManifest, e
 // ships — the legible governance risk surface, derived by scanning bundle files
 // (not the author-supplied manifest). Best-effort: a malformed declarative file
 // is skipped rather than failing the resolve. Output is deterministic (sorted).
-// MCP servers come only from the MCP config file of each of formats.
-func BuildInventory(b *CanonicalBundle, formats []v1alpha1.PluginFormat) *v1alpha1.PluginInventory {
+// MCP servers come only from the MCP config file of format. Sub-agents,
+// commands, and hooks are listed only for claude-plugin: Agent Plugins v1
+// defines only skills and MCP servers, so kagent ignores the rest.
+func BuildInventory(b *CanonicalBundle, format v1alpha1.PluginFormat) *v1alpha1.PluginInventory {
 	m := &v1alpha1.PluginInventory{}
+	claudeFormat := format == v1alpha1.PluginFormatClaudePlugin
 
 	for _, p := range slices.Sorted(maps.Keys(b.Files)) {
 		switch {
@@ -55,17 +62,17 @@ func BuildInventory(b *CanonicalBundle, formats []v1alpha1.PluginFormat) *v1alph
 				name = skillNameFromPath(p)
 			}
 			m.Skills = append(m.Skills, v1alpha1.PluginSkill{Name: name, Description: desc})
-		case strings.HasPrefix(p, "agents/") && strings.HasSuffix(p, ".md"):
+		case claudeFormat && strings.HasPrefix(p, "agents/") && strings.HasSuffix(p, ".md"):
 			m.Agents = append(m.Agents, baseNameNoExt(p))
-		case strings.HasPrefix(p, "commands/") && strings.HasSuffix(p, ".md"):
+		case claudeFormat && strings.HasPrefix(p, "commands/") && strings.HasSuffix(p, ".md"):
 			m.Commands = append(m.Commands, baseNameNoExt(p))
 		case strings.HasPrefix(p, "bin/") && p != "bin/":
 			m.Executables = append(m.Executables, strings.TrimPrefix(p, "bin/"))
 		}
 	}
-	m.MCPServers = parseMCPServers(b, formats)
-	if data, ok := b.Files["hooks/hooks.json"]; ok {
-		m.Hooks = parseHooks(data)
+	m.MCPServers = parseMCPServers(b, format)
+	if claudeFormat {
+		m.Hooks = parseHooks(b.Files["hooks/hooks.json"])
 	}
 	return m
 }
@@ -92,23 +99,34 @@ func parseSkillFrontmatter(content []byte) (name, desc string) {
 	return meta.Name, meta.Description
 }
 
-// parseMCPServers returns the sorted, deduplicated server names declared in
-// the MCP config file of each format. Absent or malformed files add none.
-func parseMCPServers(b *CanonicalBundle, formats []v1alpha1.PluginFormat) []string {
-	var names []string
-	for _, format := range formats {
-		var doc struct {
-			MCPServers map[string]json.RawMessage `json:"mcpServers"`
-		}
-		if err := json.Unmarshal(b.Files[mcpConfigPaths[format]], &doc); err != nil {
-			continue
-		}
-		for k := range doc.MCPServers {
-			names = append(names, k)
-		}
+// parseMCPServers returns the sorted server names declared in the MCP config
+// file of format. An absent or malformed file adds none.
+func parseMCPServers(b *CanonicalBundle, format v1alpha1.PluginFormat) []string {
+	config, ok := decodeMCPConfig(b.Files[mcpConfigPaths[format]], format)
+	if !ok {
+		return nil
 	}
-	slices.Sort(names)
-	return slices.Compact(names)
+	return slices.Sorted(maps.Keys(config.MCPServers))
+}
+
+// mcpConfig is an MCP config file. Only an Agent Plugins mcp.json sets Schema.
+type mcpConfig struct {
+	Schema     string                     `json:"$schema"`
+	MCPServers map[string]json.RawMessage `json:"mcpServers"`
+}
+
+// decodeMCPConfig decodes an MCP config file of format. An Agent Plugins
+// mcp.json must also pass the spec's whole-file rules (§7.2.1), because kagent
+// starts none of its servers when it fails them.
+func decodeMCPConfig(data []byte, format v1alpha1.PluginFormat) (mcpConfig, bool) {
+	var config mcpConfig
+	if format != v1alpha1.PluginFormatAgentPlugins {
+		return config, json.Unmarshal(data, &config) == nil
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	err := decoder.Decode(&config)
+	return config, err == nil && config.Schema == agentPluginsMCPSchema && config.MCPServers != nil
 }
 
 // parseHooks flattens a hooks.json ({hooks:{<Event>:[{hooks:[{type}]}]}}) into

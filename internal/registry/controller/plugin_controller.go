@@ -342,7 +342,7 @@ func (c *PluginController) reconcile(ctx context.Context, p *v1alpha1.Plugin) (s
 // scanStatus applies the format rules to a resolved bundle and returns the
 // Ready=True status mutation to record. Errors wrap bundle.ErrInvalidBundle.
 func scanStatus(resolved *v1alpha1.PluginResolvedSource, b *bundle.CanonicalBundle) (func(*v1alpha1.PluginStatus), error) {
-	formats, manifestPath, err := format.Detect(b)
+	pluginFormat, manifestPath, err := format.Detect(b)
 	if err != nil {
 		return nil, err
 	}
@@ -350,10 +350,10 @@ func scanStatus(resolved *v1alpha1.PluginResolvedSource, b *bundle.CanonicalBund
 	if err != nil {
 		return nil, err
 	}
-	inventory := bundle.BuildInventory(b, formats)
+	inventory := bundle.BuildInventory(b, pluginFormat)
 	return func(st *v1alpha1.PluginStatus) {
 		st.ResolvedSource, st.Manifest, st.Inventory = resolved, manifest, inventory
-		st.Formats, st.ScanVersion = formats, v1alpha1.PluginScanVersion
+		st.Formats, st.ScanVersion = []v1alpha1.PluginFormat{pluginFormat}, v1alpha1.PluginScanVersion
 		setReady(st, v1alpha1.ConditionTrue, "Resolved", "")
 	}, nil
 }

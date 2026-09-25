@@ -52,17 +52,17 @@ type manifestAuthor struct {
 	URL   string `json:"url,omitempty"`
 }
 
-// Detect returns the formats of b and the path of the manifest the rules
+// Detect returns the format of b and the path of the manifest the rules
 // selected. Every rejection wraps bundle.ErrInvalidBundle.
-func Detect(b *bundle.CanonicalBundle) ([]v1alpha1.PluginFormat, string, error) {
+func Detect(b *bundle.CanonicalBundle) (v1alpha1.PluginFormat, string, error) {
 	path, format, err := selectManifest(b)
 	if err != nil {
-		return nil, "", err
+		return "", "", err
 	}
 	if err := checkManifest(b.Files[path], format); err != nil {
-		return nil, "", fmt.Errorf("%w: %s: %v", bundle.ErrInvalidBundle, path, err)
+		return "", "", fmt.Errorf("%w: %s: %v", bundle.ErrInvalidBundle, path, err)
 	}
-	return []v1alpha1.PluginFormat{format}, path, nil
+	return format, path, nil
 }
 
 // selectManifest picks the root plugin.json when present, and the Claude

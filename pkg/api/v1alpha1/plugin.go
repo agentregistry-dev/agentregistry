@@ -61,8 +61,8 @@ type PluginStatus struct {
 	Manifest *PluginManifest `json:"manifest,omitempty" yaml:"manifest,omitempty"`
 	// Inventory is the server-derived risk surface / search index.
 	Inventory *PluginInventory `json:"inventory,omitempty" yaml:"inventory,omitempty"`
-	// Formats lists every layout the source scan detected. It is empty when the
-	// scan rejected the bundle.
+	// Formats holds the one layout kagent loads the bundle as. It is empty when
+	// the scan rejected the bundle.
 	Formats []PluginFormat `json:"formats,omitempty" yaml:"formats,omitempty"`
 	// ScanVersion is the PluginScanVersion of the rules that produced Formats.
 	ScanVersion int64 `json:"scanVersion,omitempty" yaml:"scanVersion,omitempty"`

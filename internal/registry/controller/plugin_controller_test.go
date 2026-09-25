@@ -67,7 +67,7 @@ func TestScanStatus(t *testing.T) {
 	resolved := &v1alpha1.PluginResolvedSource{Type: v1alpha1.PluginSourceTypeGit, Commit: "abc123"}
 	agentPlugins := &bundle.CanonicalBundle{Files: map[string][]byte{
 		"plugin.json":            []byte(`{"$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json","name":"acme.test","version":"1.0.0"}`),
-		"mcp.json":               []byte(`{"mcpServers":{"search":{"url":"https://example.com/mcp"}}}`),
+		"mcp.json":               []byte(`{"$schema":"https://agent-plugins.org/schemas/1.0.0/mcp.schema.json","mcpServers":{"search":{"type":"streamable-http","url":"https://example.com/mcp"}}}`),
 		".mcp.json":              []byte(`{"mcpServers":{"claude-only":{"url":"https://example.com/mcp"}}}`),
 		"skills/review/SKILL.md": []byte("---\nname: review\n---\n"),
 	}}
