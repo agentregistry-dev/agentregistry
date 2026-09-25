@@ -350,7 +350,7 @@ func scanStatus(resolved *v1alpha1.PluginResolvedSource, b *bundle.CanonicalBund
 	if err != nil {
 		return nil, err
 	}
-	inventory := bundle.BuildInventory(b)
+	inventory := bundle.BuildInventory(b, formats)
 	return func(st *v1alpha1.PluginStatus) {
 		st.ResolvedSource, st.Manifest, st.Inventory = resolved, manifest, inventory
 		st.Formats, st.ScanVersion = formats, v1alpha1.PluginScanVersion

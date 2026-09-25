@@ -18,7 +18,7 @@ func TestBuildInventory(t *testing.T) {
 		"hooks/hooks.json":       []byte(`{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command"}]}],"PostToolUse":[{"hooks":[{"type":"command"},{"type":"http"}]}]}}`),
 	}}
 
-	m := BuildInventory(b)
+	m := BuildInventory(b, []v1alpha1.PluginFormat{v1alpha1.PluginFormatClaudePlugin})
 
 	wantSkills := []v1alpha1.PluginSkill{
 		{Name: "root-skill"},                            // top-level SKILL.md (sorts before "skills/...")
@@ -54,19 +54,33 @@ func TestBuildInventoryBestEffortOnMalformed(t *testing.T) {
 		".mcp.json":        []byte("not json"),
 		"hooks/hooks.json": []byte("{bad"),
 	}}
-	m := BuildInventory(b) // must not panic
+	m := BuildInventory(b, []v1alpha1.PluginFormat{v1alpha1.PluginFormatClaudePlugin}) // must not panic
 	if len(m.MCPServers) != 0 || len(m.Hooks) != 0 {
 		t.Fatalf("expected empty index for malformed files, got %+v", m)
 	}
 }
 
-func TestBuildInventoryReadsBothMCPFiles(t *testing.T) {
+func TestBuildInventoryReadsMCPFileOfFormat(t *testing.T) {
 	b := &CanonicalBundle{Files: map[string][]byte{
 		".mcp.json": []byte(`{"mcpServers":{"db":{},"api":{}}}`),
 		"mcp.json":  []byte(`{"$schema":"https://agent-plugins.org/schemas/1.0.0/mcp.schema.json","mcpServers":{"search":{},"db":{}}}`),
 	}}
-	if got := BuildInventory(b).MCPServers; !reflect.DeepEqual(got, []string{"api", "db", "search"}) {
-		t.Fatalf("mcpServers = %v, want sorted, deduplicated [api db search]", got)
+	tests := []struct {
+		name    string
+		formats []v1alpha1.PluginFormat
+		want    []string
+	}{
+		{"claude-plugin reads .mcp.json", []v1alpha1.PluginFormat{v1alpha1.PluginFormatClaudePlugin}, []string{"api", "db"}},
+		{"agent-plugins reads mcp.json", []v1alpha1.PluginFormat{v1alpha1.PluginFormatAgentPlugins}, []string{"db", "search"}},
+		{"both formats merge and deduplicate", []v1alpha1.PluginFormat{v1alpha1.PluginFormatClaudePlugin, v1alpha1.PluginFormatAgentPlugins}, []string{"api", "db", "search"}},
+		{"no formats reads nothing", nil, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := BuildInventory(b, tt.formats).MCPServers; !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("mcpServers = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 

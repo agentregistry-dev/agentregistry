@@ -16,6 +16,12 @@ import (
 // ManifestPath is the canonical location of the plugin manifest within a bundle.
 const ManifestPath = ".claude-plugin/plugin.json"
 
+// mcpConfigPaths maps each format to the MCP config file its harnesses read.
+var mcpConfigPaths = map[v1alpha1.PluginFormat]string{
+	v1alpha1.PluginFormatClaudePlugin: ".mcp.json",
+	v1alpha1.PluginFormatAgentPlugins: "mcp.json",
+}
+
 // ParseManifest parses the bundle's manifest at path (the Claude manifest or
 // the root Agent Plugins plugin.json) into the typed, faithful PluginManifest.
 // Returns (nil, nil) when the bundle has no file at path, or (nil, err) when the
@@ -37,7 +43,8 @@ func ParseManifest(b *CanonicalBundle, path string) (*v1alpha1.PluginManifest, e
 // ships — the legible governance risk surface, derived by scanning bundle files
 // (not the author-supplied manifest). Best-effort: a malformed declarative file
 // is skipped rather than failing the resolve. Output is deterministic (sorted).
-func BuildInventory(b *CanonicalBundle) *v1alpha1.PluginInventory {
+// MCP servers come only from the MCP config file of each of formats.
+func BuildInventory(b *CanonicalBundle, formats []v1alpha1.PluginFormat) *v1alpha1.PluginInventory {
 	m := &v1alpha1.PluginInventory{}
 
 	for _, p := range slices.Sorted(maps.Keys(b.Files)) {
@@ -56,7 +63,7 @@ func BuildInventory(b *CanonicalBundle) *v1alpha1.PluginInventory {
 			m.Executables = append(m.Executables, strings.TrimPrefix(p, "bin/"))
 		}
 	}
-	m.MCPServers = parseMCPServers(b.Files[".mcp.json"], b.Files["mcp.json"])
+	m.MCPServers = parseMCPServers(b, formats)
 	if data, ok := b.Files["hooks/hooks.json"]; ok {
 		m.Hooks = parseHooks(data)
 	}
@@ -86,14 +93,14 @@ func parseSkillFrontmatter(content []byte) (name, desc string) {
 }
 
 // parseMCPServers returns the sorted, deduplicated server names declared in
-// .mcp.json (Claude) and mcp.json (Agent Plugins). Absent or malformed files add none.
-func parseMCPServers(files ...[]byte) []string {
+// the MCP config file of each format. Absent or malformed files add none.
+func parseMCPServers(b *CanonicalBundle, formats []v1alpha1.PluginFormat) []string {
 	var names []string
-	for _, data := range files {
+	for _, format := range formats {
 		var doc struct {
 			MCPServers map[string]json.RawMessage `json:"mcpServers"`
 		}
-		if err := json.Unmarshal(data, &doc); err != nil {
+		if err := json.Unmarshal(b.Files[mcpConfigPaths[format]], &doc); err != nil {
 			continue
 		}
 		for k := range doc.MCPServers {
