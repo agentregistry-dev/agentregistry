@@ -1,6 +1,7 @@
 package bundle
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -50,37 +51,55 @@ func dropUnparsableKeys(fields map[string]json.RawMessage) {
 	}
 }
 
-// BuildInventory indexes a canonical bundle into a PluginInventory: the skills,
-// sub-agents, commands, MCP servers, hooks, and bin/ executables it actually
-// ships — the legible governance risk surface, derived by scanning bundle files
-// (not the author-supplied manifest). Best-effort: a malformed declarative file
-// is skipped rather than failing the resolve. Output is deterministic (sorted).
-func BuildInventory(b *CanonicalBundle) *v1alpha1.PluginInventory {
-	m := &v1alpha1.PluginInventory{}
+// BuildInventory lists the skills, agents, commands, MCP servers, hooks, and
+// bin/ executables that format loads. A malformed file is skipped. Output is sorted.
+func BuildInventory(b *CanonicalBundle, format v1alpha1.PluginFormat) *v1alpha1.PluginInventory {
+	if format == v1alpha1.PluginFormatClaudePlugin {
+		return newClaudePlugin(b).inventory()
+	}
+	return agentPluginsInventory(b)
+}
 
+// skills lists each SKILL.md that isSkill matches, in path order.
+func skills(b *CanonicalBundle, isSkill func(string) bool) []v1alpha1.PluginSkill {
+	var out []v1alpha1.PluginSkill
 	for _, p := range slices.Sorted(maps.Keys(b.Files)) {
-		switch {
-		case p == "SKILL.md" || (strings.HasPrefix(p, "skills/") && strings.HasSuffix(p, "/SKILL.md")):
-			name, desc := parseSkillFrontmatter(b.Files[p])
-			if name == "" {
-				name = skillNameFromPath(p)
-			}
-			m.Skills = append(m.Skills, v1alpha1.PluginSkill{Name: name, Description: desc})
-		case strings.HasPrefix(p, "agents/") && strings.HasSuffix(p, ".md"):
-			m.Agents = append(m.Agents, baseNameNoExt(p))
-		case strings.HasPrefix(p, "commands/") && strings.HasSuffix(p, ".md"):
-			m.Commands = append(m.Commands, baseNameNoExt(p))
-		case strings.HasPrefix(p, "bin/") && p != "bin/":
-			m.Executables = append(m.Executables, strings.TrimPrefix(p, "bin/"))
+		if isSkill(p) {
+			out = append(out, skillAt(b, p))
 		}
 	}
-	if data, ok := b.Files[".mcp.json"]; ok {
-		m.MCPServers = parseMCPServers(data)
+	return out
+}
+
+// skillAt names the skill at p by its frontmatter, else by its directory.
+func skillAt(b *CanonicalBundle, p string) v1alpha1.PluginSkill {
+	name, desc := parseSkillFrontmatter(b.Files[p])
+	if name == "" {
+		name = skillNameFromPath(p)
 	}
-	if data, ok := b.Files["hooks/hooks.json"]; ok {
-		m.Hooks = parseHooks(data)
+	return v1alpha1.PluginSkill{Name: name, Description: desc}
+}
+
+// markdownNames lists the base name of each .md file that matches, in path
+// order.
+func markdownNames(b *CanonicalBundle, matches func(string) bool) []string {
+	var out []string
+	for _, p := range slices.Sorted(maps.Keys(b.Files)) {
+		if strings.HasSuffix(p, ".md") && matches(p) {
+			out = append(out, baseNameNoExt(p))
+		}
 	}
-	return m
+	return out
+}
+
+func executables(b *CanonicalBundle) []string {
+	var out []string
+	for _, p := range slices.Sorted(maps.Keys(b.Files)) {
+		if name, ok := strings.CutPrefix(p, "bin/"); ok {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 // parseSkillFrontmatter extracts name/description from a SKILL.md YAML
@@ -105,58 +124,52 @@ func parseSkillFrontmatter(content []byte) (name, desc string) {
 	return meta.Name, meta.Description
 }
 
-// parseMCPServers returns the sorted server names declared in a .mcp.json file.
-func parseMCPServers(data []byte) []string {
-	var doc struct {
-		MCPServers map[string]json.RawMessage `json:"mcpServers"`
-	}
-	if err := json.Unmarshal(data, &doc); err != nil {
-		return nil
-	}
-	names := make([]string, 0, len(doc.MCPServers))
-	for k := range doc.MCPServers {
-		names = append(names, k)
-	}
-	slices.Sort(names)
-	return names
+// hookEvents is a hooks config: each event's matcher groups.
+type hookEvents map[string][]hookGroup
+
+// hookGroup is one matcher group and its handlers.
+type hookGroup struct {
+	Hooks []struct {
+		Type string `json:"type"`
+	} `json:"hooks"`
 }
 
-// parseHooks flattens a hooks.json ({hooks:{<Event>:[{hooks:[{type}]}]}}) into
-// a deduplicated, sorted list of (event, handler-type) pairs.
-func parseHooks(data []byte) []v1alpha1.PluginHook {
+// hookFileEvents reads a hooks file ({hooks:{<Event>:[{hooks:[{type}]}]}}).
+// An absent or malformed file has none.
+func hookFileEvents(data []byte) hookEvents {
 	var doc struct {
-		Hooks map[string][]struct {
-			Hooks []struct {
-				Type string `json:"type"`
-			} `json:"hooks"`
-		} `json:"hooks"`
+		Hooks hookEvents `json:"hooks"`
 	}
-	if err := json.Unmarshal(data, &doc); err != nil {
+	if json.Unmarshal(data, &doc) != nil {
 		return nil
 	}
-	events := make([]string, 0, len(doc.Hooks))
-	for ev := range doc.Hooks {
-		events = append(events, ev)
-	}
-	slices.Sort(events)
+	return doc.Hooks
+}
 
-	seen := map[string]bool{}
+// flattenHooks lists each (event, handler type) pair once, sorted.
+func flattenHooks(configs []hookEvents) []v1alpha1.PluginHook {
 	var out []v1alpha1.PluginHook
-	for _, ev := range events {
-		for _, matcher := range doc.Hooks[ev] {
-			if len(matcher.Hooks) == 0 {
-				if key := ev + "|"; !seen[key] {
-					seen[key] = true
-					out = append(out, v1alpha1.PluginHook{Event: ev})
-				}
-				continue
-			}
-			for _, h := range matcher.Hooks {
-				if key := ev + "|" + h.Type; !seen[key] {
-					seen[key] = true
-					out = append(out, v1alpha1.PluginHook{Event: ev, Type: h.Type})
-				}
-			}
+	for _, config := range configs {
+		for event, groups := range config {
+			out = append(out, eventHooks(event, groups)...)
+		}
+	}
+	slices.SortFunc(out, func(a, b v1alpha1.PluginHook) int {
+		return cmp.Or(cmp.Compare(a.Event, b.Event), cmp.Compare(a.Type, b.Type))
+	})
+	return slices.Compact(out)
+}
+
+// eventHooks lists the handler types of one event. A matcher group with no
+// handlers lists the event alone.
+func eventHooks(event string, groups []hookGroup) []v1alpha1.PluginHook {
+	var out []v1alpha1.PluginHook
+	for _, group := range groups {
+		if len(group.Hooks) == 0 {
+			out = append(out, v1alpha1.PluginHook{Event: event})
+		}
+		for _, h := range group.Hooks {
+			out = append(out, v1alpha1.PluginHook{Event: event, Type: h.Type})
 		}
 	}
 	return out
@@ -167,13 +180,17 @@ func baseNameNoExt(p string) string {
 	return strings.TrimSuffix(b, path.Ext(b))
 }
 
+// isSkillsChild reports whether p is skills/<name>/SKILL.md. Agent Plugins
+// §7.1 forbids searching deeper, and Claude Code does not either.
+func isSkillsChild(p string) bool {
+	return path.Base(p) == "SKILL.md" && path.Dir(path.Dir(p)) == "skills"
+}
+
+// skillNameFromPath names a skill by the directory that holds its SKILL.md.
+// A root SKILL.md has no such name.
 func skillNameFromPath(p string) string {
-	if strings.HasPrefix(p, "skills/") && strings.HasSuffix(p, "/SKILL.md") {
-		mid := strings.TrimSuffix(strings.TrimPrefix(p, "skills/"), "/SKILL.md")
-		if name, _, ok := strings.Cut(mid, "/"); ok {
-			return name
-		}
-		return mid
+	if dir := path.Dir(p); dir != "." {
+		return path.Base(dir)
 	}
 	return ""
 }

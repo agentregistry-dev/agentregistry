@@ -70,7 +70,7 @@ func TestPrivateGitCatalogSources(t *testing.T) {
 	assert.Equal(t, v1alpha1.PluginFormatClaudePlugin, plugin.Status.Format)
 	assert.Equal(t, v1alpha1.PluginScanVersion, plugin.Status.ScanVersion)
 
-	t.Logf("Verifying Agent Plugins bundle %q records the root manifest", pluginAgentPluginsName)
+	t.Logf("Verifying Agent Plugins bundle %q records the root manifest and mcp.json", pluginAgentPluginsName)
 	agentPlugins, _ := waitForPluginReady(t, regURL, pluginAgentPluginsName, v1alpha1.ConditionTrue)
 	assertAgentPluginsBundleStatus(t, agentPlugins)
 
@@ -107,7 +107,7 @@ func TestPrivateGitCatalogSources(t *testing.T) {
 }
 
 // assertAgentPluginsBundleStatus checks the fixture's agent-plugin bundle: the
-// root manifest wins and the ignored "hooks" key is dropped.
+// root manifest wins, only mcp.json counts, and the ignored "hooks" key is dropped.
 func assertAgentPluginsBundleStatus(t *testing.T, plugin *v1alpha1.Plugin) {
 	t.Helper()
 	assert.Equal(t, v1alpha1.PluginFormatAgentPlugins, plugin.Status.Format)
@@ -115,6 +115,8 @@ func assertAgentPluginsBundleStatus(t *testing.T, plugin *v1alpha1.Plugin) {
 	require.NotNil(t, plugin.Status.Manifest)
 	assert.Equal(t, "agent-plugin", plugin.Status.Manifest.Name)
 	assert.Nil(t, plugin.Status.Manifest.Hooks)
+	require.NotNil(t, plugin.Status.Inventory)
+	assert.Equal(t, []string{"search"}, plugin.Status.Inventory.MCPServers)
 }
 
 func renderPrivateGitSources(t *testing.T, outputDir string, data map[string]string) string {
