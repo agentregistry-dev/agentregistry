@@ -44,12 +44,15 @@ const (
 // Paths are clean, relative, forward-slash separated (no leading "/" or "..").
 type CanonicalBundle struct {
 	Files map[string][]byte
+	// Dirs holds every directory path, so a rule can see a directory that
+	// holds no regular file (empty, or only skipped symlinks).
+	Dirs map[string]bool
 }
 
 // FromDir reads a checked-out plugin source tree rooted at dir into a
-// CanonicalBundle. Directories, symlinks, and the .git directory are skipped;
-// every regular-file path is normalized to forward slashes and
-// traversal-checked. It is the bridge from a freshly-cloned source directory
+// CanonicalBundle. Symlinks and the .git directory are skipped, directories
+// are recorded in Dirs, and every regular-file path is normalized to forward
+// slashes and traversal-checked. It is the bridge from a freshly-cloned source directory
 // to the in-memory bundle the controller scans and records in status.
 func FromDir(dir string) (*CanonicalBundle, error) {
 	return fromDir(dir, MaxBundleFiles, MaxBundleBytes)
@@ -58,15 +61,23 @@ func FromDir(dir string) (*CanonicalBundle, error) {
 // fromDir is FromDir with explicit limits, so tests can exercise the ceilings
 // without materializing huge trees.
 func fromDir(dir string, maxFiles int, maxBytes int64) (*CanonicalBundle, error) {
-	files := map[string][]byte{}
+	files, dirs := map[string][]byte{}, map[string]bool{}
 	var totalBytes int64
 	walkErr := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
+		rel, err := filepath.Rel(dir, p)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
 		if d.IsDir() {
 			if d.Name() == ".git" {
 				return filepath.SkipDir
+			}
+			if rel != "." {
+				dirs[rel] = true
 			}
 			return nil
 		}
@@ -75,11 +86,6 @@ func fromDir(dir string, maxFiles int, maxBytes int64) (*CanonicalBundle, error)
 		if d.Type()&os.ModeSymlink != 0 || !d.Type().IsRegular() {
 			return nil
 		}
-		rel, err := filepath.Rel(dir, p)
-		if err != nil {
-			return err
-		}
-		rel = filepath.ToSlash(rel)
 		if err := validateBundlePath(rel); err != nil {
 			return err
 		}
@@ -112,7 +118,7 @@ func fromDir(dir string, maxFiles int, maxBytes int64) (*CanonicalBundle, error)
 		}
 		return nil, fmt.Errorf("%w: read source tree: %v", ErrInvalidBundle, walkErr)
 	}
-	return &CanonicalBundle{Files: files}, nil
+	return &CanonicalBundle{Files: files, Dirs: dirs}, nil
 }
 
 // validateBundlePath rejects empty, absolute, non-clean, backslash, and

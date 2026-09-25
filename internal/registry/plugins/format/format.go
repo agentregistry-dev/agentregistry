@@ -80,8 +80,12 @@ func selectManifest(b *bundle.CanonicalBundle) (string, v1alpha1.PluginFormat, e
 	return "", "", fmt.Errorf("%w: no %s or %s manifest", bundle.ErrInvalidBundle, agentPluginsManifest, bundle.ManifestPath)
 }
 
-// isDirectory reports whether b holds any file under dir.
+// isDirectory reports whether dir is a directory in b, even one that holds
+// no file the bundle kept.
 func isDirectory(b *bundle.CanonicalBundle, dir string) bool {
+	if b.Dirs[dir] {
+		return true
+	}
 	for p := range b.Files {
 		if strings.HasPrefix(p, dir+"/") {
 			return true

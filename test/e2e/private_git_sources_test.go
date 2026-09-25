@@ -37,18 +37,22 @@ func TestPrivateGitCatalogSources(t *testing.T) {
 	pluginAuthName := UniqueNameWithPrefix("e2e-plugin-auth")
 	pluginInvalidAuthName := UniqueNameWithPrefix("e2e-plugin-invalid-auth")
 	pluginAnonName := UniqueNameWithPrefix("e2e-plugin-anon")
+	pluginAgentPluginsName := UniqueNameWithPrefix("e2e-plugin-agent-plugins")
+	pluginManifestDirName := UniqueNameWithPrefix("e2e-plugin-manifest-dir")
 	skillAuthName := UniqueNameWithPrefix("e2e-skill-auth")
 	skillAnonName := UniqueNameWithPrefix("e2e-skill-anon")
 
 	path := renderPrivateGitSources(t, tmpDir, map[string]string{
-		"Namespace":             RegistryNamespace,
-		"SecretName":            secretName,
-		"InvalidSecretName":     invalidSecretName,
-		"PluginAuthName":        pluginAuthName,
-		"PluginInvalidAuthName": pluginInvalidAuthName,
-		"PluginAnonName":        pluginAnonName,
-		"SkillAuthName":         skillAuthName,
-		"SkillAnonName":         skillAnonName,
+		"Namespace":              RegistryNamespace,
+		"SecretName":             secretName,
+		"InvalidSecretName":      invalidSecretName,
+		"PluginAuthName":         pluginAuthName,
+		"PluginInvalidAuthName":  pluginInvalidAuthName,
+		"PluginAnonName":         pluginAnonName,
+		"PluginAgentPluginsName": pluginAgentPluginsName,
+		"PluginManifestDirName":  pluginManifestDirName,
+		"SkillAuthName":          skillAuthName,
+		"SkillAnonName":          skillAnonName,
 	})
 	t.Cleanup(func() {
 		t.Logf("Deleting private Git catalog resources from %s", path)
@@ -65,6 +69,15 @@ func TestPrivateGitCatalogSources(t *testing.T) {
 	assert.Equal(t, "private-plugin", plugin.Status.Manifest.Name)
 	assert.Equal(t, []v1alpha1.PluginFormat{v1alpha1.PluginFormatClaudePlugin}, plugin.Status.Formats)
 	assert.Equal(t, v1alpha1.PluginScanVersion, plugin.Status.ScanVersion)
+
+	t.Logf("Verifying Agent Plugins bundle %q records the root manifest and mcp.json", pluginAgentPluginsName)
+	agentPlugins, _ := waitForPluginReady(t, regURL, pluginAgentPluginsName, v1alpha1.ConditionTrue)
+	assertAgentPluginsBundleStatus(t, agentPlugins)
+
+	t.Logf("Verifying Plugin %q with a plugin.json directory is rejected", pluginManifestDirName)
+	manifestDir, _ := waitForPluginReady(t, regURL, pluginManifestDirName, v1alpha1.ConditionFalse)
+	assert.Equal(t, "SourceInvalid", manifestDir.Status.GetCondition("Ready").Reason)
+	assert.Contains(t, manifestDir.Status.GetCondition("Ready").Message, "plugin.json is a directory")
 
 	t.Logf("Verifying authenticated Skill %q resolves the private source", skillAuthName)
 	skill, skillRaw := waitForSkillReady(t, regURL, skillAuthName, v1alpha1.ConditionTrue)
@@ -91,6 +104,19 @@ func TestPrivateGitCatalogSources(t *testing.T) {
 	assert.Contains(t, strings.ToLower(invalidAuthCondition.Message), "authentication failed")
 	assert.NotContains(t, pluginInvalidAuthRaw, privateGitInvalidPassword)
 	assert.Contains(t, pluginInvalidAuthRaw, "xxxxx")
+}
+
+// assertAgentPluginsBundleStatus checks the fixture's agent-plugin bundle: the
+// root manifest wins, only mcp.json counts, and the ignored "hooks" key is dropped.
+func assertAgentPluginsBundleStatus(t *testing.T, plugin *v1alpha1.Plugin) {
+	t.Helper()
+	assert.Equal(t, []v1alpha1.PluginFormat{v1alpha1.PluginFormatAgentPlugins}, plugin.Status.Formats)
+	assert.Equal(t, v1alpha1.PluginScanVersion, plugin.Status.ScanVersion)
+	require.NotNil(t, plugin.Status.Manifest)
+	assert.Equal(t, "agent-plugin", plugin.Status.Manifest.Name)
+	assert.Nil(t, plugin.Status.Manifest.Hooks)
+	require.NotNil(t, plugin.Status.Inventory)
+	assert.Equal(t, []string{"search"}, plugin.Status.Inventory.MCPServers)
 }
 
 func renderPrivateGitSources(t *testing.T, outputDir string, data map[string]string) string {

@@ -33,33 +33,34 @@ func TestClassifyResolveErr(t *testing.T) {
 	}
 }
 
+// TestPluginReconciled checks the gate on ObservedGeneration and ScanVersion.
+// Ready true/false is irrelevant: a terminal failure must NOT re-resolve every tick.
 func TestPluginReconciled(t *testing.T) {
-	plugin := func(observed, gen int64, ready v1alpha1.ConditionStatus) *v1alpha1.Plugin {
-		p := &v1alpha1.Plugin{}
-		p.Metadata.Generation = gen
-		p.Status.ObservedGeneration = observed
-		p.Status.ScanVersion = v1alpha1.PluginScanVersion
-		p.Status.SetCondition(v1alpha1.Condition{Type: pluginReadyCondition, Status: ready, Reason: "x"})
-		return p
+	const current = v1alpha1.PluginScanVersion
+	tests := []struct {
+		name                              string
+		observed, generation, scanVersion int64
+		ready                             v1alpha1.ConditionStatus
+		want                              bool
+	}{
+		{"success at current generation", 3, 3, current, v1alpha1.ConditionTrue, true},
+		{"terminal failure at current generation", 3, 3, current, v1alpha1.ConditionFalse, true},
+		{"retryable or pending", 2, 3, current, v1alpha1.ConditionFalse, false},
+		{"fresh plugin with generation 0", 0, 0, 0, "", false},
+		{"older scan version rescans", 3, 3, current - 1, v1alpha1.ConditionTrue, false},
+		{"newer scan version after a rollback rescans", 3, 3, current + 1, v1alpha1.ConditionTrue, false},
 	}
-
-	// Gates on ObservedGeneration and ScanVersion; Ready true/false is irrelevant.
-	if !pluginReconciled(plugin(3, 3, v1alpha1.ConditionTrue)) {
-		t.Fatal("observed==gen (success) should be reconciled")
-	}
-	if !pluginReconciled(plugin(3, 3, v1alpha1.ConditionFalse)) {
-		t.Fatal("observed==gen (terminal failure) should be reconciled — must NOT re-resolve every tick")
-	}
-	if pluginReconciled(plugin(2, 3, v1alpha1.ConditionFalse)) {
-		t.Fatal("observed<gen (retryable / pending) should NOT be reconciled")
-	}
-	if pluginReconciled(&v1alpha1.Plugin{}) {
-		t.Fatal("a fresh plugin (generation 0 in this zero value) should NOT be reconciled")
-	}
-	stale := plugin(3, 3, v1alpha1.ConditionTrue)
-	stale.Status.ScanVersion = v1alpha1.PluginScanVersion - 1
-	if pluginReconciled(stale) {
-		t.Fatal("observed==gen with a stale scan version should NOT be reconciled — it must rescan")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &v1alpha1.Plugin{}
+			p.Metadata.Generation = tt.generation
+			p.Status.ObservedGeneration = tt.observed
+			p.Status.ScanVersion = tt.scanVersion
+			p.Status.SetCondition(v1alpha1.Condition{Type: pluginReadyCondition, Status: tt.ready, Reason: "x"})
+			if got := pluginReconciled(p); got != tt.want {
+				t.Fatalf("pluginReconciled = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 
@@ -87,13 +88,13 @@ func TestScanStatus(t *testing.T) {
 	want.SetCondition(v1alpha1.Condition{Type: pluginReadyCondition, Status: v1alpha1.ConditionTrue, Reason: "Resolved"})
 	assertStatusEqual(t, want, got)
 
-	for name, files := range map[string]map[string][]byte{
-		"rules reject":           {"SKILL.md": []byte("x")},
-		"manifest parse rejects": {bundle.ManifestPath: []byte(`{"name":"a","hooks":5}`)},
-	} {
-		if _, err := scanStatus(resolved, &bundle.CanonicalBundle{Files: files}); !errors.Is(err, bundle.ErrInvalidBundle) {
-			t.Errorf("%s: err = %v, want ErrInvalidBundle", name, err)
-		}
+	if _, err := scanStatus(resolved, &bundle.CanonicalBundle{Files: map[string][]byte{"SKILL.md": []byte("x")}}); !errors.Is(err, bundle.ErrInvalidBundle) {
+		t.Errorf("rules reject: err = %v, want ErrInvalidBundle", err)
+	}
+	// kagent ignores a key its rules do not check, so the scan must too.
+	ignoredKey := &bundle.CanonicalBundle{Files: map[string][]byte{bundle.ManifestPath: []byte(`{"name":"a","hooks":5}`)}}
+	if _, err := scanStatus(resolved, ignoredKey); err != nil {
+		t.Errorf("unparsable ignored key: err = %v, want nil", err)
 	}
 }
 

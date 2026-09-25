@@ -28,18 +28,38 @@ var mcpConfigPaths = map[v1alpha1.PluginFormat]string{
 
 // ParseManifest parses the bundle's manifest at path (the Claude manifest or
 // the root Agent Plugins plugin.json) into the typed, faithful PluginManifest.
-// Returns (nil, nil) when the bundle has no file at path, or (nil, err) when the
-// manifest is present but malformed (the caller decides whether to fail).
+// It drops every key the typed manifest cannot parse, because kagent ignores
+// every key its format rules do not check. Returns (nil, nil) when the bundle
+// has no file at path, or (nil, err) when the manifest is not a JSON object.
 func ParseManifest(b *CanonicalBundle, path string) (*v1alpha1.PluginManifest, error) {
 	data, ok := b.Files[path]
 	if !ok {
 		return nil, nil
 	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, fmt.Errorf("%w: parse %s: %v", ErrInvalidBundle, path, err)
+	}
+	dropUnparsableKeys(fields)
+	parsable, err := json.Marshal(fields)
+	if err != nil {
+		return nil, fmt.Errorf("%w: parse %s: %v", ErrInvalidBundle, path, err)
+	}
 	var m v1alpha1.PluginManifest
-	if err := json.Unmarshal(data, &m); err != nil {
+	if err := json.Unmarshal(parsable, &m); err != nil {
 		return nil, fmt.Errorf("%w: parse %s: %v", ErrInvalidBundle, path, err)
 	}
 	return &m, nil
+}
+
+// dropUnparsableKeys deletes each key whose value the typed manifest rejects.
+func dropUnparsableKeys(fields map[string]json.RawMessage) {
+	for key, value := range fields {
+		single, err := json.Marshal(map[string]json.RawMessage{key: value})
+		if err != nil || json.Unmarshal(single, &v1alpha1.PluginManifest{}) != nil {
+			delete(fields, key)
+		}
+	}
 }
 
 // BuildInventory indexes a canonical bundle into a PluginInventory: the skills,

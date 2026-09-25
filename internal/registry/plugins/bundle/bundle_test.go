@@ -16,6 +16,10 @@ func TestFromDir(t *testing.T) {
 	writeFile(t, root, "bin/tool", "#!/bin/sh\n")
 	// A .git directory must be skipped wholesale.
 	writeFile(t, root, ".git/config", "[core]\n")
+	// An empty directory holds no file, so only Dirs can show it.
+	if err := os.Mkdir(filepath.Join(root, "empty"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	b, err := FromDir(root)
 	if err != nil {
@@ -29,6 +33,10 @@ func TestFromDir(t *testing.T) {
 	}
 	if !reflect.DeepEqual(b.Files, want) {
 		t.Fatalf("FromDir files mismatch:\n got  %v\n want %v", b.Files, want)
+	}
+	wantDirs := map[string]bool{".claude-plugin": true, "skills": true, "skills/deploy": true, "bin": true, "empty": true}
+	if !reflect.DeepEqual(b.Dirs, wantDirs) {
+		t.Fatalf("FromDir dirs mismatch:\n got  %v\n want %v", b.Dirs, wantDirs)
 	}
 }
 

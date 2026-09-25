@@ -273,10 +273,12 @@ const pluginReadyCondition = "Ready"
 // terminal failure advance them — a terminally-failed plugin must NOT be
 // re-resolved on every resync tick. Retryable failures intentionally leave
 // them behind so they are re-enqueued (and the workqueue rate-limiter backs
-// them off). A stale ScanVersion re-enqueues a plugin after a rules change.
+// them off). Any other ScanVersion re-enqueues a plugin: an older one after a
+// rules change, and a newer one after a rollback, which the deployment check
+// would otherwise refuse forever.
 func pluginReconciled(p *v1alpha1.Plugin) bool {
 	return p.Metadata.Generation > 0 && p.Status.ObservedGeneration >= p.Metadata.Generation &&
-		p.Status.ScanVersion >= v1alpha1.PluginScanVersion
+		p.Status.ScanVersion == v1alpha1.PluginScanVersion
 }
 
 func (c *PluginController) reconcileKey(ctx context.Context, key pluginQueueKey) (outcome, message string, err error) {

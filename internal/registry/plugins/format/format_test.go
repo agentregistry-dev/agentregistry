@@ -2,6 +2,8 @@ package format
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -14,6 +16,7 @@ const agentPluginsJSON = `{"$schema":"https://agent-plugins.org/schemas/1.0.0/pl
 var detectCases = []struct {
 	name       string
 	files      map[string]string
+	dirs       map[string]bool
 	wantFormat v1alpha1.PluginFormat
 	wantPath   string
 	wantErr    string
@@ -55,13 +58,16 @@ var detectCases = []struct {
 	{name: "unknown author key", files: map[string]string{".claude-plugin/plugin.json": `{"name":"a","author":{"name":"x","team":"y"}}`}, wantErr: "unknown field"},
 	{name: "keywords not strings", files: map[string]string{".claude-plugin/plugin.json": `{"name":"a","keywords":[1]}`}, wantErr: "cannot unmarshal number"},
 	{name: "plugin.json directory", files: map[string]string{"plugin.json/x.json": "{}", ".claude-plugin/plugin.json": `{"name":"a"}`}, wantErr: "plugin.json is a directory"},
+	{name: "empty plugin.json directory", files: map[string]string{".claude-plugin/plugin.json": `{"name":"a"}`}, dirs: map[string]bool{"plugin.json": true}, wantErr: "plugin.json is a directory"},
 	{name: "malformed JSON", files: map[string]string{".claude-plugin/plugin.json": `{bad`}, wantErr: "invalid character"},
 }
 
 func TestDetect(t *testing.T) {
 	for _, tt := range detectCases {
 		t.Run(tt.name, func(t *testing.T) {
-			format, path, err := Detect(bundleOf(tt.files))
+			b := bundleOf(tt.files)
+			b.Dirs = tt.dirs
+			format, path, err := Detect(b)
 			if tt.wantErr != "" {
 				if !errors.Is(err, bundle.ErrInvalidBundle) || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("err = %v, want ErrInvalidBundle containing %q", err, tt.wantErr)
@@ -75,6 +81,32 @@ func TestDetect(t *testing.T) {
 				t.Fatalf("Detect = (%q, %q), want (%q, %q)", format, path, tt.wantFormat, tt.wantPath)
 			}
 		})
+	}
+}
+
+// TestDetectRejectsPluginJSONDirectoryOfLinks runs the loader too: it skips a
+// symlink, so a plugin.json directory holding only links looks empty.
+func TestDetectRejectsPluginJSONDirectoryOfLinks(t *testing.T) {
+	root := t.TempDir()
+	claudeManifest := filepath.Join(root, filepath.FromSlash(bundle.ManifestPath))
+	if err := os.MkdirAll(filepath.Dir(claudeManifest), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(claudeManifest, []byte(`{"name":"a"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(root, "plugin.json"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(claudeManifest, filepath.Join(root, "plugin.json", "link.json")); err != nil {
+		t.Skipf("symlink unsupported: %v", err)
+	}
+	b, err := bundle.FromDir(root)
+	if err != nil {
+		t.Fatalf("FromDir: %v", err)
+	}
+	if _, _, err := Detect(b); !errors.Is(err, bundle.ErrInvalidBundle) || !strings.Contains(err.Error(), "plugin.json is a directory") {
+		t.Fatalf("err = %v, want ErrInvalidBundle for a plugin.json directory", err)
 	}
 }
 

@@ -146,6 +146,17 @@ func TestParseManifest(t *testing.T) {
 	if m == nil || m.Name != "acme.test" || m.Description != "Tools" || string(m.Extras["extensions"]) != `{"x":1}` {
 		t.Fatalf("agent-plugins manifest not parsed: %+v", m)
 	}
+	// A key the typed manifest cannot parse is dropped; the other keys stay.
+	ignored := &CanonicalBundle{Files: map[string][]byte{
+		ManifestPath: []byte(`{"name":"a","hooks":5,"commands":"./cmds"}`),
+	}}
+	m, err = ParseManifest(ignored, ManifestPath)
+	if err != nil {
+		t.Fatalf("parse manifest with unparsable key: %v", err)
+	}
+	if m == nil || m.Name != "a" || m.Hooks != nil || m.Commands == nil {
+		t.Fatalf("unparsable key not dropped alone: %+v", m)
+	}
 	// Malformed manifest -> error (fail closed).
 	bad := &CanonicalBundle{Files: map[string][]byte{ManifestPath: []byte("{not json")}}
 	if _, err := ParseManifest(bad, ManifestPath); err == nil {
