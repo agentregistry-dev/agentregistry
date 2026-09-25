@@ -71,13 +71,13 @@ func selectManifest(b *bundle.CanonicalBundle) (string, v1alpha1.PluginFormat, e
 	if _, ok := b.Files[agentPluginsManifest]; ok {
 		return agentPluginsManifest, v1alpha1.PluginFormatAgentPlugins, nil
 	}
-	if isDirectory(b, agentPluginsManifest) {
+	if b.HasDir(agentPluginsManifest) {
 		return "", "", manifestDirectoryError(agentPluginsManifest)
 	}
 	if _, ok := b.Files[bundle.ManifestPath]; ok {
 		return bundle.ManifestPath, v1alpha1.PluginFormatClaudePlugin, nil
 	}
-	if isDirectory(b, bundle.ManifestPath) {
+	if b.HasDir(bundle.ManifestPath) {
 		return "", "", manifestDirectoryError(bundle.ManifestPath)
 	}
 	return "", "", fmt.Errorf("%w: no %s or %s manifest", bundle.ErrInvalidBundle, agentPluginsManifest, bundle.ManifestPath)
@@ -85,20 +85,6 @@ func selectManifest(b *bundle.CanonicalBundle) (string, v1alpha1.PluginFormat, e
 
 func manifestDirectoryError(path string) error {
 	return fmt.Errorf("%w: %s is a directory", bundle.ErrInvalidBundle, path)
-}
-
-// isDirectory reports whether dir is a directory in b, even one that holds
-// no file the bundle kept.
-func isDirectory(b *bundle.CanonicalBundle, dir string) bool {
-	if b.Dirs[dir] {
-		return true
-	}
-	for p := range b.Files {
-		if strings.HasPrefix(p, dir+"/") {
-			return true
-		}
-	}
-	return false
 }
 
 // checkManifest applies the schema and name rules to the selected manifest.

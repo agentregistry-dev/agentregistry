@@ -1,7 +1,7 @@
 package bundle
 
 import (
-	"bytes"
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -16,15 +16,6 @@ import (
 
 // ManifestPath is the canonical location of the plugin manifest within a bundle.
 const ManifestPath = ".claude-plugin/plugin.json"
-
-// agentPluginsMCPSchema is the $schema an Agent Plugins mcp.json must declare.
-const agentPluginsMCPSchema = "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json"
-
-// mcpConfigPaths maps each format to the MCP config file its harnesses read.
-var mcpConfigPaths = map[v1alpha1.PluginFormat]string{
-	v1alpha1.PluginFormatClaudePlugin: ".mcp.json",
-	v1alpha1.PluginFormatAgentPlugins: "mcp.json",
-}
 
 // ParseManifest parses the bundle's manifest at path (the Claude manifest or
 // the root Agent Plugins plugin.json) into the typed, faithful PluginManifest.
@@ -64,39 +55,56 @@ func dropUnparsableKeys(fields map[string]json.RawMessage) {
 
 // BuildInventory indexes a canonical bundle into a PluginInventory: the skills,
 // sub-agents, commands, MCP servers, hooks, and bin/ executables that format
-// loads — the legible governance risk surface, derived by scanning bundle files
-// (not the author-supplied manifest). Best-effort: a malformed declarative file
-// is skipped rather than failing the resolve. Output is deterministic (sorted).
-// MCP servers come only from the MCP config file of format. Skills come from
-// skills/<name>/SKILL.md, never deeper. A root SKILL.md, sub-agents, commands,
-// and hooks are listed only for claude-plugin: kagent loads an Agent Plugins
-// bundle's skills only from skills/<name>/, and Agent Plugins v1 defines only
-// skills and MCP servers.
+// loads — the legible governance risk surface. Best-effort: a malformed
+// declarative file is skipped rather than failing the resolve. Output is
+// deterministic (sorted).
 func BuildInventory(b *CanonicalBundle, format v1alpha1.PluginFormat) *v1alpha1.PluginInventory {
-	m := &v1alpha1.PluginInventory{}
-	claudeFormat := format == v1alpha1.PluginFormatClaudePlugin
+	if format == v1alpha1.PluginFormatClaudePlugin {
+		return newClaudePlugin(b).inventory()
+	}
+	return agentPluginsInventory(b)
+}
 
+// skills lists each SKILL.md that isSkill matches, in path order.
+func skills(b *CanonicalBundle, isSkill func(string) bool) []v1alpha1.PluginSkill {
+	var out []v1alpha1.PluginSkill
 	for _, p := range slices.Sorted(maps.Keys(b.Files)) {
-		switch {
-		case (claudeFormat && p == "SKILL.md") || isSkillsChild(p):
-			name, desc := parseSkillFrontmatter(b.Files[p])
-			if name == "" {
-				name = skillNameFromPath(p)
-			}
-			m.Skills = append(m.Skills, v1alpha1.PluginSkill{Name: name, Description: desc})
-		case claudeFormat && strings.HasPrefix(p, "agents/") && strings.HasSuffix(p, ".md"):
-			m.Agents = append(m.Agents, baseNameNoExt(p))
-		case claudeFormat && strings.HasPrefix(p, "commands/") && strings.HasSuffix(p, ".md"):
-			m.Commands = append(m.Commands, baseNameNoExt(p))
-		case strings.HasPrefix(p, "bin/") && p != "bin/":
-			m.Executables = append(m.Executables, strings.TrimPrefix(p, "bin/"))
+		if isSkill(p) {
+			out = append(out, skillAt(b, p))
 		}
 	}
-	m.MCPServers = parseMCPServers(b, format)
-	if claudeFormat {
-		m.Hooks = parseHooks(b.Files["hooks/hooks.json"])
+	return out
+}
+
+// skillAt names the skill at p by its frontmatter, else by its directory.
+func skillAt(b *CanonicalBundle, p string) v1alpha1.PluginSkill {
+	name, desc := parseSkillFrontmatter(b.Files[p])
+	if name == "" {
+		name = skillNameFromPath(p)
 	}
-	return m
+	return v1alpha1.PluginSkill{Name: name, Description: desc}
+}
+
+// markdownNames lists the base name of each .md file that matches, in path
+// order.
+func markdownNames(b *CanonicalBundle, matches func(string) bool) []string {
+	var out []string
+	for _, p := range slices.Sorted(maps.Keys(b.Files)) {
+		if strings.HasSuffix(p, ".md") && matches(p) {
+			out = append(out, baseNameNoExt(p))
+		}
+	}
+	return out
+}
+
+func executables(b *CanonicalBundle) []string {
+	var out []string
+	for _, p := range slices.Sorted(maps.Keys(b.Files)) {
+		if name, ok := strings.CutPrefix(p, "bin/"); ok {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 // parseSkillFrontmatter extracts name/description from a SKILL.md YAML
@@ -121,78 +129,52 @@ func parseSkillFrontmatter(content []byte) (name, desc string) {
 	return meta.Name, meta.Description
 }
 
-// parseMCPServers returns the sorted server names declared in the MCP config
-// file of format. An absent or malformed file adds none. An Agent Plugins
-// server entry that kagent would skip is left out.
-func parseMCPServers(b *CanonicalBundle, format v1alpha1.PluginFormat) []string {
-	config, ok := decodeMCPConfig(b.Files[mcpConfigPaths[format]], format)
-	if !ok {
-		return nil
-	}
-	if format == v1alpha1.PluginFormatAgentPlugins {
-		maps.DeleteFunc(config.MCPServers, func(_ string, raw json.RawMessage) bool {
-			return !validAgentPluginsServer(raw)
-		})
-	}
-	return slices.Sorted(maps.Keys(config.MCPServers))
+// hookEvents is a hooks config: each event's matcher groups.
+type hookEvents map[string][]hookGroup
+
+// hookGroup is one matcher group and its handlers.
+type hookGroup struct {
+	Hooks []struct {
+		Type string `json:"type"`
+	} `json:"hooks"`
 }
 
-// mcpConfig is an MCP config file. Only an Agent Plugins mcp.json sets Schema.
-type mcpConfig struct {
-	Schema     string                     `json:"$schema"`
-	MCPServers map[string]json.RawMessage `json:"mcpServers"`
-}
-
-// decodeMCPConfig decodes an MCP config file of format. An Agent Plugins
-// mcp.json must also pass the spec's whole-file rules (§7.2.1), because kagent
-// starts none of its servers when it fails them.
-func decodeMCPConfig(data []byte, format v1alpha1.PluginFormat) (mcpConfig, bool) {
-	var config mcpConfig
-	if format != v1alpha1.PluginFormatAgentPlugins {
-		return config, json.Unmarshal(data, &config) == nil
-	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	err := decoder.Decode(&config)
-	return config, err == nil && config.Schema == agentPluginsMCPSchema && config.MCPServers != nil
-}
-
-// parseHooks flattens a hooks.json ({hooks:{<Event>:[{hooks:[{type}]}]}}) into
-// a deduplicated, sorted list of (event, handler-type) pairs.
-func parseHooks(data []byte) []v1alpha1.PluginHook {
+// hookFileEvents reads a hooks file ({hooks:{<Event>:[{hooks:[{type}]}]}}).
+// An absent or malformed file has none.
+func hookFileEvents(data []byte) hookEvents {
 	var doc struct {
-		Hooks map[string][]struct {
-			Hooks []struct {
-				Type string `json:"type"`
-			} `json:"hooks"`
-		} `json:"hooks"`
+		Hooks hookEvents `json:"hooks"`
 	}
-	if err := json.Unmarshal(data, &doc); err != nil {
+	if json.Unmarshal(data, &doc) != nil {
 		return nil
 	}
-	events := make([]string, 0, len(doc.Hooks))
-	for ev := range doc.Hooks {
-		events = append(events, ev)
-	}
-	slices.Sort(events)
+	return doc.Hooks
+}
 
-	seen := map[string]bool{}
+// flattenHooks lists each (event, handler type) pair once, sorted.
+func flattenHooks(configs []hookEvents) []v1alpha1.PluginHook {
 	var out []v1alpha1.PluginHook
-	for _, ev := range events {
-		for _, matcher := range doc.Hooks[ev] {
-			if len(matcher.Hooks) == 0 {
-				if key := ev + "|"; !seen[key] {
-					seen[key] = true
-					out = append(out, v1alpha1.PluginHook{Event: ev})
-				}
-				continue
-			}
-			for _, h := range matcher.Hooks {
-				if key := ev + "|" + h.Type; !seen[key] {
-					seen[key] = true
-					out = append(out, v1alpha1.PluginHook{Event: ev, Type: h.Type})
-				}
-			}
+	for _, config := range configs {
+		for event, groups := range config {
+			out = append(out, eventHooks(event, groups)...)
+		}
+	}
+	slices.SortFunc(out, func(a, b v1alpha1.PluginHook) int {
+		return cmp.Or(cmp.Compare(a.Event, b.Event), cmp.Compare(a.Type, b.Type))
+	})
+	return slices.Compact(out)
+}
+
+// eventHooks lists the handler types of one event. A matcher group with no
+// handlers lists the event alone.
+func eventHooks(event string, groups []hookGroup) []v1alpha1.PluginHook {
+	var out []v1alpha1.PluginHook
+	for _, group := range groups {
+		if len(group.Hooks) == 0 {
+			out = append(out, v1alpha1.PluginHook{Event: event})
+		}
+		for _, h := range group.Hooks {
+			out = append(out, v1alpha1.PluginHook{Event: event, Type: h.Type})
 		}
 	}
 	return out
@@ -204,14 +186,16 @@ func baseNameNoExt(p string) string {
 }
 
 // isSkillsChild reports whether p is skills/<name>/SKILL.md. Agent Plugins
-// §7.1 forbids searching deeper.
+// §7.1 forbids searching deeper, and Claude Code does not either.
 func isSkillsChild(p string) bool {
 	return path.Base(p) == "SKILL.md" && path.Dir(path.Dir(p)) == "skills"
 }
 
+// skillNameFromPath names a skill by the directory that holds its SKILL.md.
+// A root SKILL.md has no such name.
 func skillNameFromPath(p string) string {
-	if !isSkillsChild(p) {
-		return ""
+	if dir := path.Dir(p); dir != "." {
+		return path.Base(dir)
 	}
-	return path.Base(path.Dir(p))
+	return ""
 }

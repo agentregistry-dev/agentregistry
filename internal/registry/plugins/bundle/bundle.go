@@ -50,6 +50,20 @@ type CanonicalBundle struct {
 	Dirs map[string]bool
 }
 
+// HasDir reports whether dir is a directory in b, even one that holds no file
+// the bundle kept.
+func (b *CanonicalBundle) HasDir(dir string) bool {
+	if b.Dirs[dir] {
+		return true
+	}
+	for p := range b.Files {
+		if strings.HasPrefix(p, dir+"/") {
+			return true
+		}
+	}
+	return false
+}
+
 // FromDir reads a checked-out plugin source tree rooted at dir into a
 // CanonicalBundle. Symlinks and the .git directory are skipped, directories
 // are recorded in Dirs, and every regular-file path is normalized to forward

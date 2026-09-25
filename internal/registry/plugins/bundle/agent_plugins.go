@@ -3,12 +3,59 @@ package bundle
 import (
 	"bytes"
 	"encoding/json"
+	"maps"
 	"net"
 	"net/url"
 	"path"
 	"slices"
 	"strings"
+
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
+
+// agentPluginsInventory lists what kagent loads from an Agent Plugins bundle:
+// skills at skills/<name>/SKILL.md, the mcp.json servers it starts, and bin/.
+// Agent Plugins v1 defines only skills and MCP servers.
+func agentPluginsInventory(b *CanonicalBundle) *v1alpha1.PluginInventory {
+	return &v1alpha1.PluginInventory{
+		Skills:      skills(b, isSkillsChild),
+		MCPServers:  agentPluginsMCPServers(b),
+		Executables: executables(b),
+	}
+}
+
+// agentPluginsMCPSchema is the $schema an Agent Plugins mcp.json must declare.
+const agentPluginsMCPSchema = "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json"
+
+// agentPluginsMCP is an Agent Plugins mcp.json.
+type agentPluginsMCP struct {
+	Schema     string                     `json:"$schema"`
+	MCPServers map[string]json.RawMessage `json:"mcpServers"`
+}
+
+// agentPluginsMCPServers returns the sorted names of the mcp.json servers that
+// the kagent ADK runtime starts.
+func agentPluginsMCPServers(b *CanonicalBundle) []string {
+	config, ok := decodeAgentPluginsMCP(b.Files["mcp.json"])
+	if !ok {
+		return nil
+	}
+	maps.DeleteFunc(config.MCPServers, func(_ string, raw json.RawMessage) bool {
+		return !validAgentPluginsServer(raw)
+	})
+	return slices.Sorted(maps.Keys(config.MCPServers))
+}
+
+// decodeAgentPluginsMCP decodes mcp.json. ok is false when the file breaks the
+// spec's whole-file rules (§7.2.1), because kagent then starts none of its
+// servers. An absent file is not ok either.
+func decodeAgentPluginsMCP(data []byte) (agentPluginsMCP, bool) {
+	var config agentPluginsMCP
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	err := decoder.Decode(&config)
+	return config, err == nil && config.Schema == agentPluginsMCPSchema && config.MCPServers != nil
+}
 
 // agentPluginsServer is one Agent Plugins mcp.json server entry, with the
 // fields and JSON types kagent accepts.

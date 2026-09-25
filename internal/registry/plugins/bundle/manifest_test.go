@@ -25,10 +25,8 @@ func everyPartBundle() *CanonicalBundle {
 func TestBuildInventory(t *testing.T) {
 	m := BuildInventory(everyPartBundle(), v1alpha1.PluginFormatClaudePlugin)
 
-	wantSkills := []v1alpha1.PluginSkill{
-		{Name: "root-skill"},                            // top-level SKILL.md (sorts before "skills/...")
-		{Name: "deploy", Description: "Deploys things"}, // skills/deploy/SKILL.md
-	}
+	// Claude Code skips a root SKILL.md when skills/ exists.
+	wantSkills := []v1alpha1.PluginSkill{{Name: "deploy", Description: "Deploys things"}}
 	if !reflect.DeepEqual(m.Skills, wantSkills) {
 		t.Fatalf("skills = %+v, want %+v", m.Skills, wantSkills)
 	}
