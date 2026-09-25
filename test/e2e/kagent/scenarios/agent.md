@@ -186,6 +186,10 @@ arctl delete model e2e-${E2E_ID}-model --tag e2e
 ```
 
 ```shell
+arctl delete model e2e-${E2E_ID}-model-b --tag e2e
+```
+
+```shell
 arctl delete -f - <<EOF
 apiVersion: ar.dev/v1alpha1
 kind: Secret

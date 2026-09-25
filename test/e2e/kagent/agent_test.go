@@ -74,6 +74,7 @@ func TestKagentAgent(t *testing.T) {
 	docs.Command("kubectl --context kind-${KIND_CLUSTER_NAME} -n \"${KAGENT_NAMESPACE}\" wait --for=delete agent/" + workloadName + " --timeout=2m")
 	docs.Command("arctl delete agent " + agentName)
 	docs.Command("arctl delete model " + modelName + " --tag e2e")
+	docs.Command("arctl delete model " + modelBName + " --tag e2e")
 	docs.Command("arctl delete -f - <<EOF\n" + kagentRuntimeManifest(secretName, runtimeName) + "\nEOF")
 	env.DeleteDeployment(deploymentName)
 	waitForKagentResourceDeleted(t, "agents.kagent.dev", workloadName)
