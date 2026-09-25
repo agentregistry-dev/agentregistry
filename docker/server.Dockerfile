@@ -35,11 +35,13 @@ ARG TARGETPLATFORM
 ARG LDFLAGS
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -ldflags "$LDFLAGS" -o bin/arctl-server cmd/server/main.go
 
-FROM ubuntu:22.04 AS runtime
+# The -dev variant keeps sh, sed, mkdir and bash, which docker-compose.yml uses.
+FROM cgr.dev/chainguard/git:latest-dev@sha256:fb1c3aeb26c4c066a001a6718eaead758bbfe63a49ad8fd8e91fd4d8e60b51be AS runtime
 
-RUN apt-get update && apt-get install -y \
-    git \
-    && rm -rf /var/lib/apt/lists/*
+# Match the previous image: run as root from /, with no git entrypoint.
+USER root
+WORKDIR /
+ENTRYPOINT []
 
 COPY --from=builder /app/bin/arctl-server /app/bin/arctl-server
 
