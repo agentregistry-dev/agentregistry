@@ -187,7 +187,7 @@ func (p *Plugin) UnmarshalSpec(data json.RawMessage) error {
 
 // MarshalStatus serializes the typed PluginStatus: the embedded Status via the
 // storage codec, with the server-determined ResolvedSource/Manifest/Inventory/
-// Formats/ScanVersion spliced onto the same object. Empty custom fields are
+// Format/ScanVersion spliced onto the same object. Empty custom fields are
 // omitted (no stray nulls) so the store's patch-skip byte comparison stays stable.
 func (p *Plugin) MarshalStatus() (json.RawMessage, error) {
 	base, err := MarshalStatusForStorage(p.Status.Status)
@@ -213,8 +213,8 @@ func (p *Plugin) MarshalStatus() (json.RawMessage, error) {
 			return nil, err
 		}
 	}
-	if len(p.Status.Formats) > 0 {
-		if m["formats"], err = json.Marshal(p.Status.Formats); err != nil {
+	if p.Status.Format != "" {
+		if m["format"], err = json.Marshal(p.Status.Format); err != nil {
 			return nil, err
 		}
 	}
@@ -238,14 +238,14 @@ func (p *Plugin) UnmarshalStatus(data json.RawMessage) error {
 		ResolvedSource *PluginResolvedSource `json:"resolvedSource"`
 		Manifest       *PluginManifest       `json:"manifest"`
 		Inventory      *PluginInventory      `json:"inventory"`
-		Formats        []PluginFormat        `json:"formats"`
+		Format         PluginFormat          `json:"format"`
 		ScanVersion    int64                 `json:"scanVersion"`
 	}
 	if err := json.Unmarshal(data, &custom); err != nil {
 		return err
 	}
 	p.Status.ResolvedSource, p.Status.Manifest, p.Status.Inventory = custom.ResolvedSource, custom.Manifest, custom.Inventory
-	p.Status.Formats, p.Status.ScanVersion = custom.Formats, custom.ScanVersion
+	p.Status.Format, p.Status.ScanVersion = custom.Format, custom.ScanVersion
 	return nil
 }
 

@@ -349,7 +349,7 @@ func scanStatus(resolved *v1alpha1.PluginResolvedSource, b *bundle.CanonicalBund
 	inventory := bundle.BuildInventory(b)
 	return func(st *v1alpha1.PluginStatus) {
 		st.ResolvedSource, st.Manifest, st.Inventory = resolved, manifest, inventory
-		st.Formats, st.ScanVersion = []v1alpha1.PluginFormat{pluginFormat}, v1alpha1.PluginScanVersion
+		st.Format, st.ScanVersion = pluginFormat, v1alpha1.PluginScanVersion
 		setReady(st, v1alpha1.ConditionTrue, "Resolved", "")
 	}, nil
 }
@@ -359,7 +359,7 @@ func scanStatus(resolved *v1alpha1.PluginResolvedSource, b *bundle.CanonicalBund
 func terminalStatus(reason string, err error) func(*v1alpha1.PluginStatus) {
 	return func(st *v1alpha1.PluginStatus) {
 		st.Manifest, st.Inventory = nil, nil
-		st.Formats, st.ScanVersion = nil, v1alpha1.PluginScanVersion
+		st.Format, st.ScanVersion = "", v1alpha1.PluginScanVersion
 		setReady(st, v1alpha1.ConditionFalse, reason, err.Error())
 	}
 }

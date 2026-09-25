@@ -61,10 +61,10 @@ type PluginStatus struct {
 	Manifest *PluginManifest `json:"manifest,omitempty" yaml:"manifest,omitempty"`
 	// Inventory is the server-derived risk surface / search index.
 	Inventory *PluginInventory `json:"inventory,omitempty" yaml:"inventory,omitempty"`
-	// Formats holds the detected bundle layout. It is empty when the scan
+	// Format is the detected bundle layout. It is empty when the scan
 	// rejected the bundle.
-	Formats []PluginFormat `json:"formats,omitempty" yaml:"formats,omitempty"`
-	// ScanVersion is the PluginScanVersion of the rules that produced Formats.
+	Format PluginFormat `json:"format,omitempty" yaml:"format,omitempty"`
+	// ScanVersion is the PluginScanVersion of the rules that produced Format.
 	ScanVersion int64 `json:"scanVersion,omitempty" yaml:"scanVersion,omitempty"`
 }
 

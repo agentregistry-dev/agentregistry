@@ -12,7 +12,7 @@ func TestPluginStatusRoundTrip(t *testing.T) {
 	in.Status.ResolvedSource = &PluginResolvedSource{Type: PluginSourceTypeGit, Commit: "abc123"}
 	in.Status.Manifest = &PluginManifest{Name: "deploy", Version: "1.2.0"}
 	in.Status.Inventory = &PluginInventory{Skills: []PluginSkill{{Name: "deploy", Description: "Deploys"}}}
-	in.Status.Formats = []PluginFormat{PluginFormatAgentPlugins}
+	in.Status.Format = PluginFormatAgentPlugins
 	in.Status.ScanVersion = PluginScanVersion
 
 	raw, err := in.MarshalStatus()
@@ -40,8 +40,8 @@ func TestPluginStatusRoundTrip(t *testing.T) {
 	if out.Status.Inventory == nil || len(out.Status.Inventory.Skills) != 1 || out.Status.Inventory.Skills[0].Name != "deploy" {
 		t.Errorf("inventory did not round-trip: %+v", out.Status.Inventory)
 	}
-	if len(out.Status.Formats) != 1 || out.Status.Formats[0] != PluginFormatAgentPlugins || out.Status.ScanVersion != PluginScanVersion {
-		t.Errorf("formats/scanVersion did not round-trip: %v, %d", out.Status.Formats, out.Status.ScanVersion)
+	if out.Status.Format != PluginFormatAgentPlugins || out.Status.ScanVersion != PluginScanVersion {
+		t.Errorf("format/scanVersion did not round-trip: %q, %d", out.Status.Format, out.Status.ScanVersion)
 	}
 }
 
@@ -50,7 +50,6 @@ func TestPluginStatusRoundTrip(t *testing.T) {
 func TestPluginStatusOmitsNilCustomFields(t *testing.T) {
 	p := &Plugin{}
 	p.Status.SetCondition(Condition{Type: "Ready", Status: ConditionFalse, Reason: "Progressing"})
-	p.Status.Formats = []PluginFormat{} // empty, not nil: still omitted
 
 	raw, err := p.MarshalStatus()
 	if err != nil {
@@ -60,7 +59,7 @@ func TestPluginStatusOmitsNilCustomFields(t *testing.T) {
 	if err := json.Unmarshal(raw, &m); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	for _, k := range []string{"resolvedSource", "manifest", "inventory", "formats", "scanVersion"} {
+	for _, k := range []string{"resolvedSource", "manifest", "inventory", "format", "scanVersion"} {
 		if _, ok := m[k]; ok {
 			t.Errorf("nil %q must be omitted, got key in %s", k, string(raw))
 		}

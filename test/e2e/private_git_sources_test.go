@@ -67,7 +67,7 @@ func TestPrivateGitCatalogSources(t *testing.T) {
 	require.Len(t, plugin.Status.ResolvedSource.Commit, 40)
 	require.NotNil(t, plugin.Status.Manifest)
 	assert.Equal(t, "private-plugin", plugin.Status.Manifest.Name)
-	assert.Equal(t, []v1alpha1.PluginFormat{v1alpha1.PluginFormatClaudePlugin}, plugin.Status.Formats)
+	assert.Equal(t, v1alpha1.PluginFormatClaudePlugin, plugin.Status.Format)
 	assert.Equal(t, v1alpha1.PluginScanVersion, plugin.Status.ScanVersion)
 
 	t.Logf("Verifying Agent Plugins bundle %q records the root manifest", pluginAgentPluginsName)
@@ -110,7 +110,7 @@ func TestPrivateGitCatalogSources(t *testing.T) {
 // root manifest wins and the ignored "hooks" key is dropped.
 func assertAgentPluginsBundleStatus(t *testing.T, plugin *v1alpha1.Plugin) {
 	t.Helper()
-	assert.Equal(t, []v1alpha1.PluginFormat{v1alpha1.PluginFormatAgentPlugins}, plugin.Status.Formats)
+	assert.Equal(t, v1alpha1.PluginFormatAgentPlugins, plugin.Status.Format)
 	assert.Equal(t, v1alpha1.PluginScanVersion, plugin.Status.ScanVersion)
 	require.NotNil(t, plugin.Status.Manifest)
 	assert.Equal(t, "agent-plugin", plugin.Status.Manifest.Name)

@@ -76,13 +76,13 @@ func TestScanStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("scanStatus: %v", err)
 	}
-	got := v1alpha1.PluginStatus{Formats: []v1alpha1.PluginFormat{v1alpha1.PluginFormatClaudePlugin}}
+	got := v1alpha1.PluginStatus{Format: v1alpha1.PluginFormatClaudePlugin}
 	mutate(&got)
 	want := v1alpha1.PluginStatus{
 		ResolvedSource: resolved,
 		Manifest:       &v1alpha1.PluginManifest{Schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json", Name: "acme.test", Version: "1.0.0"},
 		Inventory:      &v1alpha1.PluginInventory{Skills: []v1alpha1.PluginSkill{{Name: "review"}}, MCPServers: []string{"claude-only"}},
-		Formats:        []v1alpha1.PluginFormat{v1alpha1.PluginFormatAgentPlugins},
+		Format:         v1alpha1.PluginFormatAgentPlugins,
 		ScanVersion:    v1alpha1.PluginScanVersion,
 	}
 	want.SetCondition(v1alpha1.Condition{Type: pluginReadyCondition, Status: v1alpha1.ConditionTrue, Reason: "Resolved"})
@@ -106,7 +106,7 @@ func TestTerminalStatus(t *testing.T) {
 		ResolvedSource: resolved,
 		Manifest:       &v1alpha1.PluginManifest{Name: "old"},
 		Inventory:      &v1alpha1.PluginInventory{MCPServers: []string{"old"}},
-		Formats:        []v1alpha1.PluginFormat{v1alpha1.PluginFormatClaudePlugin},
+		Format:         v1alpha1.PluginFormatClaudePlugin,
 	}
 	got.ObservedGeneration = 3
 	got.SetCondition(v1alpha1.Condition{Type: pluginReadyCondition, Status: v1alpha1.ConditionTrue, Reason: "Resolved"})

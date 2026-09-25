@@ -1317,12 +1317,8 @@ components:
           type:
           - array
           - "null"
-        formats:
-          items:
-            type: string
-          type:
-          - array
-          - "null"
+        format:
+          type: string
         inventory:
           $ref: '#/components/schemas/PluginInventory'
         manifest:
