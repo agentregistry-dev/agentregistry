@@ -90,9 +90,9 @@ func resolveGit(ctx context.Context, namespace string, g *v1alpha1.PluginSourceG
 func classifyGitErr(err error, context string) error {
 	switch {
 	case errors.Is(err, gitutil.ErrUnsupportedHost):
-		return fmt.Errorf("%w: %v", ErrUnsupportedSource, err)
+		return fmt.Errorf("%w: %w", ErrUnsupportedSource, err)
 	case errors.Is(err, gitutil.ErrRefNotFound):
-		return fmt.Errorf("%w: %v", ErrSourceNotFound, err)
+		return fmt.Errorf("%w: %w", ErrSourceNotFound, err)
 	default:
 		return fmt.Errorf("%s: %w", context, err) // retryable
 	}

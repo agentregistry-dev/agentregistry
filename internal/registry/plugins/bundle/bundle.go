@@ -77,9 +77,13 @@ func fromDir(dir string, maxFiles int, maxBytes int64) (*CanonicalBundle, error)
 			if d.Name() == ".git" {
 				return filepath.SkipDir
 			}
-			if rel != "." {
-				dirs[rel] = true
+			if rel == "." {
+				return nil
 			}
+			if err := validateBundlePath(rel); err != nil {
+				return err
+			}
+			dirs[rel] = true
 			return nil
 		}
 		// Skip symlinks (and any other irregular files) to avoid traversal out
@@ -117,7 +121,7 @@ func fromDir(dir string, maxFiles int, maxBytes int64) (*CanonicalBundle, error)
 		if errors.Is(walkErr, ErrInvalidBundle) {
 			return nil, walkErr
 		}
-		return nil, fmt.Errorf("%w: read source tree: %v", ErrInvalidBundle, walkErr)
+		return nil, fmt.Errorf("%w: read source tree: %w", ErrInvalidBundle, walkErr)
 	}
 	return &CanonicalBundle{Files: files, Dirs: dirs}, nil
 }

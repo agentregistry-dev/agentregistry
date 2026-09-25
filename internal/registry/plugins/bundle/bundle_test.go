@@ -59,6 +59,16 @@ func TestFromDirSkipsSymlinks(t *testing.T) {
 	}
 }
 
+func TestFromDirRejectsBackslashDirectory(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, `a\b`), 0o755); err != nil {
+		t.Skipf("backslash directory name unsupported: %v", err)
+	}
+	if _, err := FromDir(root); !errors.Is(err, ErrInvalidBundle) {
+		t.Fatalf("expected ErrInvalidBundle, got %v", err)
+	}
+}
+
 func TestValidateBundlePathTraversal(t *testing.T) {
 	for _, p := range []string{"", "../evil", "/abs", "a/../../b", "a\\b", "a/./b"} {
 		if err := validateBundlePath(p); !errors.Is(err, ErrInvalidBundle) {

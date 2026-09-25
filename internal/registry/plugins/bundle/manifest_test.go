@@ -10,12 +10,15 @@ import (
 func everyPartBundle() *CanonicalBundle {
 	return &CanonicalBundle{Files: map[string][]byte{
 		"skills/deploy/SKILL.md": []byte("---\nname: deploy\ndescription: Deploys things\n---\nbody\n"),
-		"SKILL.md":               []byte("---\nname: root-skill\n---\n"),
-		"agents/reviewer.md":     []byte("you are a reviewer"),
-		"commands/status.md":     []byte("status"),
-		"bin/mytool":             []byte("#!/bin/sh"),
-		".mcp.json":              []byte(`{"mcpServers":{"db":{"command":"x"},"api":{"url":"y"}}}`),
-		"hooks/hooks.json":       []byte(`{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command"}]}],"PostToolUse":[{"hooks":[{"type":"command"},{"type":"http"}]}]}}`),
+		// Too deep: skills live only at skills/<name>/SKILL.md.
+		"skills/deploy/refs/SKILL.md": []byte("---\nname: nested\n---\n"),
+		"skills/orphan/deep/SKILL.md": []byte("x"),
+		"SKILL.md":                    []byte("---\nname: root-skill\n---\n"),
+		"agents/reviewer.md":          []byte("you are a reviewer"),
+		"commands/status.md":          []byte("status"),
+		"bin/mytool":                  []byte("#!/bin/sh"),
+		".mcp.json":                   []byte(`{"mcpServers":{"db":{"command":"x"},"api":{"url":"y"}}}`),
+		"hooks/hooks.json":            []byte(`{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command"}]}],"PostToolUse":[{"hooks":[{"type":"command"},{"type":"http"}]}]}}`),
 	}}
 }
 
@@ -78,7 +81,7 @@ func TestBuildInventoryBestEffortOnMalformed(t *testing.T) {
 func TestBuildInventoryReadsMCPFileOfFormat(t *testing.T) {
 	b := &CanonicalBundle{Files: map[string][]byte{
 		".mcp.json": []byte(`{"mcpServers":{"db":{},"api":{}}}`),
-		"mcp.json":  []byte(`{"$schema":"https://agent-plugins.org/schemas/1.0.0/mcp.schema.json","mcpServers":{"search":{},"db":{}}}`),
+		"mcp.json":  []byte(`{"$schema":"https://agent-plugins.org/schemas/1.0.0/mcp.schema.json","mcpServers":{"search":{"type":"stdio","command":"search"},"db":{"type":"stdio","command":"db"}}}`),
 	}}
 	tests := []struct {
 		name   string
@@ -104,7 +107,8 @@ func TestBuildInventoryAppliesAgentPluginsMCPFileRules(t *testing.T) {
 		mcpJSON string
 		want    []string
 	}{
-		{"valid file", `{` + schema + `,"mcpServers":{"search":{}}}`, []string{"search"}},
+		{"valid file", `{` + schema + `,"mcpServers":{"search":{"type":"stdio","command":"search"}}}`, []string{"search"}},
+		{"invalid server beside a valid one", `{` + schema + `,"mcpServers":{"bad":{},"search":{"type":"stdio","command":"search"}}}`, []string{"search"}},
 		{"missing $schema", `{"mcpServers":{"search":{}}}`, nil},
 		{"other $schema", `{"$schema":"https://example.com/mcp.json","mcpServers":{"search":{}}}`, nil},
 		{"extra top-level key", `{` + schema + `,"mcpServers":{"search":{}},"extra":1}`, nil},

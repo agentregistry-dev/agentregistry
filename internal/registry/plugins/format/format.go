@@ -60,7 +60,7 @@ func Detect(b *bundle.CanonicalBundle) (v1alpha1.PluginFormat, string, error) {
 		return "", "", err
 	}
 	if err := checkManifest(b.Files[path], format); err != nil {
-		return "", "", fmt.Errorf("%w: %s: %v", bundle.ErrInvalidBundle, path, err)
+		return "", "", fmt.Errorf("%w: %s: %w", bundle.ErrInvalidBundle, path, err)
 	}
 	return format, path, nil
 }

@@ -38,16 +38,16 @@ func ParseManifest(b *CanonicalBundle, path string) (*v1alpha1.PluginManifest, e
 	}
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(data, &fields); err != nil {
-		return nil, fmt.Errorf("%w: parse %s: %v", ErrInvalidBundle, path, err)
+		return nil, fmt.Errorf("%w: parse %s: %w", ErrInvalidBundle, path, err)
 	}
 	dropUnparsableKeys(fields)
 	parsable, err := json.Marshal(fields)
 	if err != nil {
-		return nil, fmt.Errorf("%w: parse %s: %v", ErrInvalidBundle, path, err)
+		return nil, fmt.Errorf("%w: parse %s: %w", ErrInvalidBundle, path, err)
 	}
 	var m v1alpha1.PluginManifest
 	if err := json.Unmarshal(parsable, &m); err != nil {
-		return nil, fmt.Errorf("%w: parse %s: %v", ErrInvalidBundle, path, err)
+		return nil, fmt.Errorf("%w: parse %s: %w", ErrInvalidBundle, path, err)
 	}
 	return &m, nil
 }
@@ -67,17 +67,18 @@ func dropUnparsableKeys(fields map[string]json.RawMessage) {
 // loads — the legible governance risk surface, derived by scanning bundle files
 // (not the author-supplied manifest). Best-effort: a malformed declarative file
 // is skipped rather than failing the resolve. Output is deterministic (sorted).
-// MCP servers come only from the MCP config file of format. A root SKILL.md,
-// sub-agents, commands, and hooks are listed only for claude-plugin: kagent
-// loads an Agent Plugins bundle's skills only from skills/<name>/, and Agent
-// Plugins v1 defines only skills and MCP servers.
+// MCP servers come only from the MCP config file of format. Skills come from
+// skills/<name>/SKILL.md, never deeper. A root SKILL.md, sub-agents, commands,
+// and hooks are listed only for claude-plugin: kagent loads an Agent Plugins
+// bundle's skills only from skills/<name>/, and Agent Plugins v1 defines only
+// skills and MCP servers.
 func BuildInventory(b *CanonicalBundle, format v1alpha1.PluginFormat) *v1alpha1.PluginInventory {
 	m := &v1alpha1.PluginInventory{}
 	claudeFormat := format == v1alpha1.PluginFormatClaudePlugin
 
 	for _, p := range slices.Sorted(maps.Keys(b.Files)) {
 		switch {
-		case (claudeFormat && p == "SKILL.md") || (strings.HasPrefix(p, "skills/") && strings.HasSuffix(p, "/SKILL.md")):
+		case (claudeFormat && p == "SKILL.md") || isSkillsChild(p):
 			name, desc := parseSkillFrontmatter(b.Files[p])
 			if name == "" {
 				name = skillNameFromPath(p)
@@ -121,11 +122,17 @@ func parseSkillFrontmatter(content []byte) (name, desc string) {
 }
 
 // parseMCPServers returns the sorted server names declared in the MCP config
-// file of format. An absent or malformed file adds none.
+// file of format. An absent or malformed file adds none. An Agent Plugins
+// server entry that kagent would skip is left out.
 func parseMCPServers(b *CanonicalBundle, format v1alpha1.PluginFormat) []string {
 	config, ok := decodeMCPConfig(b.Files[mcpConfigPaths[format]], format)
 	if !ok {
 		return nil
+	}
+	if format == v1alpha1.PluginFormatAgentPlugins {
+		maps.DeleteFunc(config.MCPServers, func(_ string, raw json.RawMessage) bool {
+			return !validAgentPluginsServer(raw)
+		})
 	}
 	return slices.Sorted(maps.Keys(config.MCPServers))
 }
@@ -196,13 +203,15 @@ func baseNameNoExt(p string) string {
 	return strings.TrimSuffix(b, path.Ext(b))
 }
 
+// isSkillsChild reports whether p is skills/<name>/SKILL.md. Agent Plugins
+// §7.1 forbids searching deeper.
+func isSkillsChild(p string) bool {
+	return path.Base(p) == "SKILL.md" && path.Dir(path.Dir(p)) == "skills"
+}
+
 func skillNameFromPath(p string) string {
-	if strings.HasPrefix(p, "skills/") && strings.HasSuffix(p, "/SKILL.md") {
-		mid := strings.TrimSuffix(strings.TrimPrefix(p, "skills/"), "/SKILL.md")
-		if name, _, ok := strings.Cut(mid, "/"); ok {
-			return name
-		}
-		return mid
+	if !isSkillsChild(p) {
+		return ""
 	}
-	return ""
+	return path.Base(path.Dir(p))
 }
