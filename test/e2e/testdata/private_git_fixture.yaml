@@ -33,8 +33,8 @@ data:
     mkdir -p plugin/.claude-plugin skill
     printf '{"name":"private-plugin","version":"1.0.0"}\n' > plugin/.claude-plugin/plugin.json
     printf '%s\n' '---' 'name: private-skill' 'description: E2E private skill' '---' > skill/SKILL.md
-    # Agent Plugins bundle: the root manifest wins over the Claude one, and an
-    # unchecked manifest key must not reject it.
+    # Agent Plugins bundle: the root manifest wins over the Claude one, only
+    # mcp.json counts, and an unchecked manifest key must not reject it.
     mkdir -p agent-plugin/.claude-plugin agent-plugin/skills/review
     printf '%s\n' '{"$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json","name":"agent-plugin","hooks":5}' > agent-plugin/plugin.json
     printf '{"name":"claude-name"}\n' > agent-plugin/.claude-plugin/plugin.json
