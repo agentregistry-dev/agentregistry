@@ -1,6 +1,7 @@
 // Package bundle is the in-memory representation of a plugin's portable core:
-// a flat, path-keyed set of files (SKILL.md, AGENTS.md, .mcp.json, hooks/*,
-// commands/*, agents/*, bin/*, and the real .claude-plugin/plugin.json). It is
+// a flat, path-keyed set of files (SKILL.md, AGENTS.md, .mcp.json, mcp.json,
+// hooks/*, commands/*, agents/*, bin/*, and the real plugin.json or
+// .claude-plugin/plugin.json manifest) plus every directory path. It is
 // loaded from a checked-out source tree (FromDir), scanned to derive the typed
 // manifest (ParseManifest) and the governance inventory (BuildInventory), and
 // translated into a harness's on-disk layout at deploy time.

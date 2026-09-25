@@ -98,15 +98,22 @@ func TestScanStatus(t *testing.T) {
 	}
 }
 
-// TestTerminalStatus guards the rescan gate: a terminal failure must clear the
-// formats and record the current scan version, or the Plugin rescans forever.
+// TestTerminalStatus guards the rescan gate: a terminal failure must record the
+// current scan version, or the Plugin rescans forever. It must also clear the
+// last scan's results but keep the pin that Deployment fingerprints read.
 func TestTerminalStatus(t *testing.T) {
-	got := v1alpha1.PluginStatus{Formats: []v1alpha1.PluginFormat{v1alpha1.PluginFormatClaudePlugin}}
+	resolved := &v1alpha1.PluginResolvedSource{Type: v1alpha1.PluginSourceTypeGit, Commit: "abc123"}
+	got := v1alpha1.PluginStatus{
+		ResolvedSource: resolved,
+		Manifest:       &v1alpha1.PluginManifest{Name: "old"},
+		Inventory:      &v1alpha1.PluginInventory{MCPServers: []string{"old"}},
+		Formats:        []v1alpha1.PluginFormat{v1alpha1.PluginFormatClaudePlugin},
+	}
 	got.ObservedGeneration = 3
 	got.SetCondition(v1alpha1.Condition{Type: pluginReadyCondition, Status: v1alpha1.ConditionTrue, Reason: "Resolved"})
 	terminalStatus("SourceInvalid", errors.New("no manifest"))(&got)
 
-	want := v1alpha1.PluginStatus{ScanVersion: v1alpha1.PluginScanVersion}
+	want := v1alpha1.PluginStatus{ResolvedSource: resolved, ScanVersion: v1alpha1.PluginScanVersion}
 	want.ObservedGeneration = 3
 	want.SetCondition(v1alpha1.Condition{Type: pluginReadyCondition, Status: v1alpha1.ConditionFalse, Reason: "SourceInvalid", Message: "no manifest"})
 	assertStatusEqual(t, want, got)

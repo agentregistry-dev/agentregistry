@@ -40,6 +40,24 @@ var detectCases = []struct {
 		wantPath:   "plugin.json",
 	},
 	{
+		name:       "both manifests: the Claude manifest is never read",
+		files:      map[string]string{"plugin.json": agentPluginsJSON, ".claude-plugin/plugin.json": `{bad`},
+		wantFormat: v1alpha1.PluginFormatAgentPlugins,
+		wantPath:   "plugin.json",
+	},
+	{
+		name:       "claude manifest with any $schema",
+		files:      map[string]string{".claude-plugin/plugin.json": `{"$schema":"https://json.schemastore.org/claude-code-plugin-manifest.json","name":"a"}`},
+		wantFormat: v1alpha1.PluginFormatClaudePlugin,
+		wantPath:   ".claude-plugin/plugin.json",
+	},
+	{
+		name:       "name of exactly 64 characters",
+		files:      map[string]string{".claude-plugin/plugin.json": `{"name":"` + strings.Repeat("a", 64) + `"}`},
+		wantFormat: v1alpha1.PluginFormatClaudePlugin,
+		wantPath:   ".claude-plugin/plugin.json",
+	},
+	{
 		name:       "unknown keys and non-object extensions are ignored",
 		files:      map[string]string{".claude-plugin/plugin.json": `{"name":"a","hooks":5,"interface":{},"extensions":"x"}`},
 		wantFormat: v1alpha1.PluginFormatClaudePlugin,
@@ -53,12 +71,15 @@ var detectCases = []struct {
 	{name: "double dash name", files: map[string]string{".claude-plugin/plugin.json": `{"name":"a--b"}`}, wantErr: "invalid plugin name"},
 	{name: "double dot name", files: map[string]string{"plugin.json": `{"$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json","name":"a..b"}`}, wantErr: "invalid plugin name"},
 	{name: "trailing dash name", files: map[string]string{".claude-plugin/plugin.json": `{"name":"a-"}`}, wantErr: "invalid plugin name"},
+	{name: "leading dash name", files: map[string]string{".claude-plugin/plugin.json": `{"name":"-a"}`}, wantErr: "invalid plugin name"},
+	{name: "leading dot name", files: map[string]string{".claude-plugin/plugin.json": `{"name":".a"}`}, wantErr: "invalid plugin name"},
 	{name: "name over 64 characters", files: map[string]string{".claude-plugin/plugin.json": `{"name":"` + strings.Repeat("a", 65) + `"}`}, wantErr: "invalid plugin name"},
 	{name: "string author", files: map[string]string{".claude-plugin/plugin.json": `{"name":"a","author":"x"}`}, wantErr: "cannot unmarshal string"},
 	{name: "unknown author key", files: map[string]string{".claude-plugin/plugin.json": `{"name":"a","author":{"name":"x","team":"y"}}`}, wantErr: "unknown field"},
 	{name: "keywords not strings", files: map[string]string{".claude-plugin/plugin.json": `{"name":"a","keywords":[1]}`}, wantErr: "cannot unmarshal number"},
 	{name: "plugin.json directory", files: map[string]string{"plugin.json/x.json": "{}", ".claude-plugin/plugin.json": `{"name":"a"}`}, wantErr: "plugin.json is a directory"},
 	{name: "empty plugin.json directory", files: map[string]string{".claude-plugin/plugin.json": `{"name":"a"}`}, dirs: map[string]bool{"plugin.json": true}, wantErr: "plugin.json is a directory"},
+	{name: "claude manifest directory", files: map[string]string{".claude-plugin/plugin.json/x.json": "{}"}, wantErr: ".claude-plugin/plugin.json is a directory"},
 	{name: "malformed JSON", files: map[string]string{".claude-plugin/plugin.json": `{bad`}, wantErr: "invalid character"},
 }
 
@@ -107,6 +128,36 @@ func TestDetectRejectsPluginJSONDirectoryOfLinks(t *testing.T) {
 	}
 	if _, _, err := Detect(b); !errors.Is(err, bundle.ErrInvalidBundle) || !strings.Contains(err.Error(), "plugin.json is a directory") {
 		t.Fatalf("err = %v, want ErrInvalidBundle for a plugin.json directory", err)
+	}
+}
+
+// TestDetectCannotSeeSymlinkedManifest pins a known gap: the loader skips a
+// symlinked root plugin.json, so Detect falls back to the Claude manifest.
+// kagent follows the link and loads the bundle as agent-plugins.
+func TestDetectCannotSeeSymlinkedManifest(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, filepath.FromSlash(bundle.ManifestPath)), `{"name":"a"}`)
+	writeTestFile(t, filepath.Join(root, "real.json"), agentPluginsJSON)
+	if err := os.Symlink("real.json", filepath.Join(root, "plugin.json")); err != nil {
+		t.Skipf("symlink unsupported: %v", err)
+	}
+	b, err := bundle.FromDir(root)
+	if err != nil {
+		t.Fatalf("FromDir: %v", err)
+	}
+	format, path, err := Detect(b)
+	if err != nil || format != v1alpha1.PluginFormatClaudePlugin || path != bundle.ManifestPath {
+		t.Fatalf("Detect = (%q, %q, %v), want the Claude manifest", format, path, err)
+	}
+}
+
+func writeTestFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 

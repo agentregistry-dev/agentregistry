@@ -66,18 +66,25 @@ func Detect(b *bundle.CanonicalBundle) (v1alpha1.PluginFormat, string, error) {
 }
 
 // selectManifest picks the root plugin.json when present, and the Claude
-// manifest only when it is absent. kagent refuses a plugin.json directory.
+// manifest only when it is absent. kagent refuses a manifest directory.
 func selectManifest(b *bundle.CanonicalBundle) (string, v1alpha1.PluginFormat, error) {
 	if _, ok := b.Files[agentPluginsManifest]; ok {
 		return agentPluginsManifest, v1alpha1.PluginFormatAgentPlugins, nil
 	}
 	if isDirectory(b, agentPluginsManifest) {
-		return "", "", fmt.Errorf("%w: %s is a directory", bundle.ErrInvalidBundle, agentPluginsManifest)
+		return "", "", manifestDirectoryError(agentPluginsManifest)
 	}
 	if _, ok := b.Files[bundle.ManifestPath]; ok {
 		return bundle.ManifestPath, v1alpha1.PluginFormatClaudePlugin, nil
 	}
+	if isDirectory(b, bundle.ManifestPath) {
+		return "", "", manifestDirectoryError(bundle.ManifestPath)
+	}
 	return "", "", fmt.Errorf("%w: no %s or %s manifest", bundle.ErrInvalidBundle, agentPluginsManifest, bundle.ManifestPath)
+}
+
+func manifestDirectoryError(path string) error {
+	return fmt.Errorf("%w: %s is a directory", bundle.ErrInvalidBundle, path)
 }
 
 // isDirectory reports whether dir is a directory in b, even one that holds

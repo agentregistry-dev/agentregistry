@@ -360,10 +360,13 @@ func scanStatus(resolved *v1alpha1.PluginResolvedSource, b *bundle.CanonicalBund
 	}, nil
 }
 
-// terminalStatus records a terminal failure with no formats and the current
-// scan version, so neither the resync pass nor the scan gate retries it.
+// terminalStatus records a terminal failure with no scan results and the
+// current scan version, so neither the resync pass nor the scan gate retries
+// it. ResolvedSource stays: Deployment fingerprints read it, so clearing it
+// would redeploy every Deployment that uses the Plugin.
 func terminalStatus(reason string, err error) func(*v1alpha1.PluginStatus) {
 	return func(st *v1alpha1.PluginStatus) {
+		st.Manifest, st.Inventory = nil, nil
 		st.Formats, st.ScanVersion = nil, v1alpha1.PluginScanVersion
 		setReady(st, v1alpha1.ConditionFalse, reason, err.Error())
 	}

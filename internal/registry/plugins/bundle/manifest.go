@@ -63,20 +63,21 @@ func dropUnparsableKeys(fields map[string]json.RawMessage) {
 }
 
 // BuildInventory indexes a canonical bundle into a PluginInventory: the skills,
-// sub-agents, commands, MCP servers, hooks, and bin/ executables it actually
-// ships — the legible governance risk surface, derived by scanning bundle files
+// sub-agents, commands, MCP servers, hooks, and bin/ executables that format
+// loads — the legible governance risk surface, derived by scanning bundle files
 // (not the author-supplied manifest). Best-effort: a malformed declarative file
 // is skipped rather than failing the resolve. Output is deterministic (sorted).
-// MCP servers come only from the MCP config file of format. Sub-agents,
-// commands, and hooks are listed only for claude-plugin: Agent Plugins v1
-// defines only skills and MCP servers, so kagent ignores the rest.
+// MCP servers come only from the MCP config file of format. A root SKILL.md,
+// sub-agents, commands, and hooks are listed only for claude-plugin: kagent
+// loads an Agent Plugins bundle's skills only from skills/<name>/, and Agent
+// Plugins v1 defines only skills and MCP servers.
 func BuildInventory(b *CanonicalBundle, format v1alpha1.PluginFormat) *v1alpha1.PluginInventory {
 	m := &v1alpha1.PluginInventory{}
 	claudeFormat := format == v1alpha1.PluginFormatClaudePlugin
 
 	for _, p := range slices.Sorted(maps.Keys(b.Files)) {
 		switch {
-		case p == "SKILL.md" || (strings.HasPrefix(p, "skills/") && strings.HasSuffix(p, "/SKILL.md")):
+		case (claudeFormat && p == "SKILL.md") || (strings.HasPrefix(p, "skills/") && strings.HasSuffix(p, "/SKILL.md")):
 			name, desc := parseSkillFrontmatter(b.Files[p])
 			if name == "" {
 				name = skillNameFromPath(p)

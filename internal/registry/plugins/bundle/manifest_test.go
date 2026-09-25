@@ -57,8 +57,10 @@ func TestBuildInventorySkipsClaudeOnlyPartsForAgentPlugins(t *testing.T) {
 	if m.Agents != nil || m.Commands != nil || m.Hooks != nil {
 		t.Fatalf("agents = %v, commands = %v, hooks = %v, want none", m.Agents, m.Commands, m.Hooks)
 	}
-	if len(m.Skills) != 2 || !reflect.DeepEqual(m.Executables, []string{"mytool"}) {
-		t.Fatalf("skills = %+v, executables = %v, want both kept", m.Skills, m.Executables)
+	// kagent loads an Agent Plugins skill only from skills/<name>/, never a root SKILL.md.
+	wantSkills := []v1alpha1.PluginSkill{{Name: "deploy", Description: "Deploys things"}}
+	if !reflect.DeepEqual(m.Skills, wantSkills) || !reflect.DeepEqual(m.Executables, []string{"mytool"}) {
+		t.Fatalf("skills = %+v, executables = %v, want %+v and [mytool]", m.Skills, m.Executables, wantSkills)
 	}
 }
 
