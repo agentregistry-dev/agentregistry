@@ -117,12 +117,9 @@ func TestSecretCredentialResolver(t *testing.T) {
 }
 
 func TestSourceUsesSecretCredentials(t *testing.T) {
-	installFakeGit(t, `if [ "$2" != "https://x-access-token:ghp-secret@github.com/org/private.git" ]; then
-  printf 'unexpected URL: %s\n' "$2" >&2
-  exit 1
-fi
-printf '0123456789abcdef0123456789abcdef01234567\trefs/heads/main\n'
-`)
+	repoURL, dir := serveGitRepo(t, "x-access-token", "ghp-secret")
+	writeAndCommit(t, dir, "private")
+	want := runGit(t, dir, "rev-parse", "HEAD")
 	resolver := &fakeSecretResolver{values: map[string]secret.SensitiveValue{
 		"username": secret.NewSensitiveValue([]byte("x-access-token")),
 		"password": secret.NewSensitiveValue([]byte("ghp-secret")),
@@ -130,15 +127,15 @@ printf '0123456789abcdef0123456789abcdef01234567\trefs/heads/main\n'
 	source := NewSource(NewSecretCredentialResolver(resolver))
 
 	got, err := source.Pin(t.Context(), "team-a", &v1alpha1.Repository{
-		URL:            "https://github.com/org/private.git",
+		URL:            repoURL,
 		Branch:         "main",
 		CredentialsRef: &v1alpha1.LocalSecretReference{Name: "github"},
 	})
 	if err != nil {
 		t.Fatalf("pin private repository: %v", err)
 	}
-	if got != "0123456789abcdef0123456789abcdef01234567" {
-		t.Fatalf("commit = %q, want fake Git commit", got)
+	if got != want {
+		t.Fatalf("commit = %q, want %q", got, want)
 	}
 	if resolver.ref != (v1alpha1.SecretRef{Namespace: "team-a", Name: "github"}) {
 		t.Fatalf("secret ref = %#v, want namespace-local reference", resolver.ref)

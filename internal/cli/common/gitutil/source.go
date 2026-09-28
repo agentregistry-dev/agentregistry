@@ -52,8 +52,7 @@ func (s *Source) Fetch(ctx context.Context, namespace string, repo *v1alpha1.Rep
 	if err != nil {
 		return "", err
 	}
-	// branch="" + commit=resolved => shallow-clone the default branch, then
-	// fetch+checkout the exact pinned commit (CloneAndCopyContext fetches by SHA).
+	// A full SHA skips the ref listing; CloneAndCopyContext fetches it by hash.
 	if err := CloneAndCopyContext(ctx, repo.URL, "", commit, repo.Subfolder, targetDir, false, auth); err != nil {
 		return "", err
 	}

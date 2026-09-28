@@ -3,17 +3,23 @@
 package gitutil
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/transport"
+	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
+	"github.com/go-git/go-git/v5/storage/memory"
 )
 
 const maxGitDiagnosticRunes = 4096
@@ -140,35 +146,26 @@ func parseGitLabStyleURL(u *url.URL, parts []string, marker int) (cloneURL, bran
 // are empty, the values parsed from the URL (e.g.
 // https://github.com/o/r/tree/<branch>/<sub>) are used. The URL-derived ref is
 // always treated as a branch; callers wanting to pin a commit SHA must set the
-// commit argument explicitly. branch is passed to `git clone --branch`; commit
-// triggers a fetch + checkout after the clone.
+// commit argument explicitly. commit wins over branch; either is resolved to a
+// commit SHA (see ResolveRefContext), which is then shallow-fetched by hash.
 //
-// A non-nil auth is spliced into the clone URL for a private repository.
+// A non-nil auth authenticates against a private repository.
 //
-// Every git invocation runs under ctx, so a caller can bound
-// clone/fetch/checkout time (and disk/CPU runaway) by passing a
-// context.WithTimeout. ctx cancellation kills the git child process.
+// ctx bounds the ref listing, fetch, and checkout, so a caller can cap
+// clone time (and disk/CPU runaway) by passing a context.WithTimeout.
 func CloneAndCopyContext(ctx context.Context, repoURL, branch, commit, subPath, targetDir string, verbose bool, auth *url.Userinfo) error {
-	cloneURL, urlBranch, urlSubPath, err := ParseGitURL(repoURL)
+	cloneURL, _, urlSubPath, err := ParseGitURL(repoURL)
 	if err != nil {
 		return fmt.Errorf("parse Git URL: %w", err)
-	}
-	if branch == "" {
-		branch = urlBranch
 	}
 	if subPath == "" {
 		subPath = urlSubPath
 	}
-	// Guard against argument injection: branch/commit are passed positionally to
-	// git, but a value starting with "-" would be parsed as an option.
-	if err := safeGitRef(branch); err != nil {
-		return err
+	ref := commit
+	if ref == "" {
+		ref = branch
 	}
-	if err := safeGitRef(commit); err != nil {
-		return err
-	}
-
-	cloneURL, safeURL, err := authenticate(cloneURL, auth)
+	sha, err := ResolveRefContext(ctx, repoURL, ref, auth)
 	if err != nil {
 		return err
 	}
@@ -179,56 +176,44 @@ func CloneAndCopyContext(ctx context.Context, repoURL, branch, commit, subPath, 
 	}
 	defer func() { _ = os.RemoveAll(tempDir) }()
 
-	cloneArgs := []string{"clone", "--depth", "1"}
-	if branch != "" {
-		cloneArgs = append(cloneArgs, "--branch", branch)
-	}
-	cloneArgs = append(cloneArgs, cloneURL, tempDir)
-
-	gitCmd := exec.CommandContext(ctx, "git", cloneArgs...)
-	output, err := runGitCommand(gitCmd, verbose)
+	repo, err := git.PlainInit(tempDir, false)
 	if err != nil {
-		return gitCommandError("clone repository "+safeURL, err, output, cloneURL, safeURL, auth)
+		return fmt.Errorf("init repository: %w", err)
 	}
-
-	if commit != "" {
-		fetchCmd := exec.CommandContext(ctx, "git", "-C", tempDir, "fetch", "--depth", "1", "origin", commit)
-		output, err := runGitCommand(fetchCmd, verbose)
-		if err != nil {
-			return gitCommandError("fetch commit "+commit, err, output, cloneURL, safeURL, auth)
-		}
-
-		checkoutCmd := exec.CommandContext(ctx, "git", "-C", tempDir, "checkout", "FETCH_HEAD")
-		output, err = runGitCommand(checkoutCmd, verbose)
-		if err != nil {
-			return gitCommandError("checkout commit "+commit, err, output, cloneURL, safeURL, auth)
-		}
+	remote, err := repo.CreateRemote(&config.RemoteConfig{Name: git.DefaultRemoteName, URLs: []string{cloneURL}})
+	if err != nil {
+		return fmt.Errorf("create remote: %w", err)
+	}
+	var progress io.Writer
+	if verbose {
+		progress = os.Stderr
+	}
+	err = remote.FetchContext(ctx, &git.FetchOptions{
+		RefSpecs: []config.RefSpec{config.RefSpec(sha + ":refs/heads/fetched")},
+		Depth:    1,
+		Tags:     git.NoTags,
+		Auth:     basicAuth(auth),
+		Progress: progress,
+	})
+	if err != nil {
+		return gitCommandError("fetch commit "+sha+" from "+cloneURL, err, auth)
+	}
+	worktree, err := repo.Worktree()
+	if err != nil {
+		return fmt.Errorf("open worktree: %w", err)
+	}
+	if err := worktree.Checkout(&git.CheckoutOptions{Hash: plumbing.NewHash(sha)}); err != nil {
+		return fmt.Errorf("checkout commit %s: %w", sha, err)
 	}
 
 	return CopyRepoContents(tempDir, subPath, targetDir)
 }
 
-func runGitCommand(cmd *exec.Cmd, verbose bool) ([]byte, error) {
-	if !verbose {
-		return cmd.CombinedOutput()
-	}
-	var output bytes.Buffer
-	cmd.Stdout = io.MultiWriter(os.Stdout, &output)
-	cmd.Stderr = io.MultiWriter(os.Stderr, &output)
-	err := cmd.Run()
-	return output.Bytes(), err
+func gitCommandError(action string, err error, auth *url.Userinfo) error {
+	return fmt.Errorf("%s: %s", action, sanitizeGitDiagnostic(err.Error(), auth))
 }
 
-func gitCommandError(action string, err error, output []byte, execURL, safeURL string, auth *url.Userinfo) error {
-	diagnostic := sanitizeGitDiagnostic(string(output), execURL, safeURL, auth)
-	if diagnostic == "" {
-		return fmt.Errorf("%s: %w", action, err)
-	}
-	return fmt.Errorf("%s: %w: %s", action, err, diagnostic)
-}
-
-func sanitizeGitDiagnostic(diagnostic, execURL, safeURL string, auth *url.Userinfo) string {
-	diagnostic = strings.ReplaceAll(diagnostic, execURL, safeURL)
+func sanitizeGitDiagnostic(diagnostic string, auth *url.Userinfo) string {
 	if auth != nil {
 		diagnostic = strings.ReplaceAll(diagnostic, auth.String(), "xxxxx")
 		if password, ok := auth.Password(); ok {
@@ -255,20 +240,14 @@ func redactCredential(value, credential string) string {
 	return value
 }
 
-// authenticate splices auth into a clone URL and returns it with a redacted
-// form; errors must use the redacted form because status persists them.
-func authenticate(cloneURL string, auth *url.Userinfo) (execURL, safeURL string, err error) {
+// basicAuth sends auth as an HTTP Authorization header so credentials stay out
+// of URLs; token-only auth is the username, as git sends URL userinfo.
+func basicAuth(auth *url.Userinfo) transport.AuthMethod {
 	if auth == nil {
-		return cloneURL, cloneURL, nil
+		return nil
 	}
-	u, err := url.Parse(cloneURL)
-	if err != nil {
-		return "", "", fmt.Errorf("invalid clone URL: %w", err)
-	}
-	u.User = auth
-	execURL = u.String()
-	u.User = url.User("xxxxx")
-	return execURL, u.String(), nil
+	password, _ := auth.Password()
+	return &githttp.BasicAuth{Username: auth.Username(), Password: password}
 }
 
 // safeGitRef rejects a ref/branch/commit that git could mis-parse as a
@@ -296,10 +275,10 @@ func isFullCommitSHA(s string) bool {
 }
 
 // ResolveRefContext resolves a branch, tag, or HEAD to a concrete commit SHA on
-// the remote WITHOUT cloning, using `git ls-remote`. A ref that is already a
-// full 40-char commit SHA is returned unchanged (lowercased). An empty ref
+// the remote WITHOUT cloning, by listing the remote's refs. A ref that is
+// already a full 40-char commit SHA is returned unchanged (lowercased). An empty ref
 // (after the URL-embedded branch is considered) resolves the remote's default
-// branch (HEAD). ctx bounds the ls-remote call. A ref that resolves to no
+// branch (HEAD). ctx bounds the ref listing. A ref that resolves to no
 // commit returns ErrRefNotFound (terminal).
 //
 // A non-nil auth authenticates against a private remote.
@@ -321,58 +300,56 @@ func ResolveRefContext(ctx context.Context, repoURL, ref string, auth *url.Useri
 	if err := safeGitRef(lsRef); err != nil {
 		return "", err
 	}
-	cloneURL, safeURL, err := authenticate(cloneURL, auth)
-	if err != nil {
-		return "", err
+	remote := git.NewRemote(memory.NewStorage(), &config.RemoteConfig{Name: git.DefaultRemoteName, URLs: []string{cloneURL}})
+	refs, err := remote.ListContext(ctx, &git.ListOptions{Auth: basicAuth(auth), PeelingOption: git.AppendPeeled})
+	// An empty remote has no refs; `git ls-remote` reported that as no match.
+	if err != nil && !errors.Is(err, transport.ErrEmptyRemoteRepository) {
+		return "", gitCommandError(fmt.Sprintf("list refs %s %q", cloneURL, lsRef), err, auth)
 	}
-	cmd := exec.CommandContext(ctx, "git", "ls-remote", cloneURL, lsRef)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		return "", gitCommandError(
-			fmt.Sprintf("git ls-remote %s %q", safeURL, lsRef),
-			err,
-			stderr.Bytes(),
-			cloneURL,
-			safeURL,
-			auth,
-		)
-	}
-	sha := firstLSRemoteSHA(string(out), lsRef)
+	sha := firstLSRemoteSHA(refs, lsRef)
 	if sha == "" {
-		return "", fmt.Errorf("%w: %q in %s", ErrRefNotFound, lsRef, safeURL)
+		return "", fmt.Errorf("%w: %q in %s", ErrRefNotFound, lsRef, cloneURL)
 	}
 	return sha, nil
 }
 
-// firstLSRemoteSHA selects the commit SHA from `git ls-remote` output (lines of
-// "<sha>\t<refname>") for the queried ref. Preference order makes an ambiguous
-// query (e.g. a name that is both a branch and a tag) deterministic, following
+// firstLSRemoteSHA selects the commit SHA for the queried ref from the remote's
+// refs, matching names the way `git ls-remote <url> <ref>` does (exact, or a
+// "/<ref>" suffix). Preference order makes an ambiguous query (e.g. a name
+// that is both a branch and a tag) deterministic, following
 // git's own ref precedence (tags before heads), and resolves annotated tags to
 // the commit they point at:
 //  1. the dereferenced commit of an exact refs/tags/<ref> ("…^{}"),
 //  2. an exact refs/tags/<ref>,
 //  3. an exact refs/heads/<ref>,
 //  4. any dereferenced commit ("…^{}"),
-//  5. the first SHA.
-func firstLSRemoteSHA(out, ref string) string {
+//  5. the first SHA in ref-name order.
+func firstLSRemoteSHA(refs []*plumbing.Reference, ref string) string {
+	// Symbolic refs (HEAD) carry no hash; ls-remote prints their target's.
+	hashes := make(map[string]string, len(refs))
+	for _, r := range refs {
+		if r.Type() == plumbing.HashReference {
+			hashes[r.Name().String()] = r.Hash().String()
+		}
+	}
+	for _, r := range refs {
+		if r.Type() == plumbing.SymbolicReference {
+			if sha, ok := hashes[r.Target().String()]; ok {
+				hashes[r.Name().String()] = sha
+			}
+		}
+	}
 	wantHead := "refs/heads/" + ref
 	wantTag := "refs/tags/" + ref
 	var first, anyDeref, tag, tagDeref, head string
-	for line := range strings.SplitSeq(out, "\n") {
-		fields := strings.Fields(strings.TrimSpace(line))
-		if len(fields) == 0 {
+	for _, name := range slices.Sorted(maps.Keys(hashes)) {
+		if base := strings.TrimSuffix(name, "^{}"); base != ref && !strings.HasSuffix(base, "/"+ref) {
 			continue
 		}
-		sha := fields[0]
+		sha := hashes[name]
 		if first == "" {
 			first = sha
 		}
-		if len(fields) < 2 {
-			continue
-		}
-		name := fields[1]
 		switch {
 		case name == wantTag+"^{}":
 			tagDeref = sha
