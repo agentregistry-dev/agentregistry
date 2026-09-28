@@ -11,10 +11,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"k8s.io/client-go/util/workqueue"
 
-	"github.com/agentregistry-dev/agentregistry/internal/cli/common/gitutil"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/plugins/bundle"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/plugins/source"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/gitutil"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
@@ -23,7 +23,7 @@ import (
 // plugin's git source and fetches the tree at that pin; it defaults to an
 // anonymous source when nil, which cannot read private repositories.
 type PluginControllerDeps struct {
-	Git *gitutil.Source
+	Git gitutil.Source
 }
 
 // pluginStore is the subset of *v1alpha1store.Store the controller uses,
@@ -55,7 +55,7 @@ type pluginQueueKey struct {
 // a separate one); there is no shared listen loop.
 type PluginController struct {
 	Store   pluginStore
-	Git     *gitutil.Source
+	Git     gitutil.Source
 	Wakeups <-chan struct{}
 
 	pool   *pgxpool.Pool
@@ -85,7 +85,7 @@ func NewPluginController(
 	}
 	git := deps.Git
 	if git == nil {
-		git = gitutil.NewSource(nil)
+		git = gitutil.NewSource(nil, gitutil.Limits{MaxBytes: bundle.MaxBundleBytes, MaxEntries: bundle.MaxBundleFiles})
 	}
 	return &PluginController{
 		Store:  store,

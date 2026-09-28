@@ -11,8 +11,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"k8s.io/client-go/util/workqueue"
 
-	"github.com/agentregistry-dev/agentregistry/internal/cli/common/gitutil"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/gitutil"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
@@ -21,7 +21,7 @@ import (
 // skill's git source ref to a commit; it defaults to an anonymous source when
 // nil, which cannot read private repositories.
 type SkillControllerDeps struct {
-	Git *gitutil.Source
+	Git gitutil.Source
 }
 
 const skillResolveTimeout = 2 * time.Minute
@@ -55,7 +55,7 @@ type skillQueueKey struct {
 // OWN control-plane LISTEN subscription.
 type SkillController struct {
 	Store   skillStore
-	Git     *gitutil.Source
+	Git     gitutil.Source
 	Wakeups <-chan struct{}
 
 	pool   *pgxpool.Pool
@@ -85,7 +85,7 @@ func NewSkillController(
 	}
 	git := deps.Git
 	if git == nil {
-		git = gitutil.NewSource(nil)
+		git = gitutil.NewSource(nil, gitutil.Limits{}) // skills only pin
 	}
 	return &SkillController{
 		Store:  store,

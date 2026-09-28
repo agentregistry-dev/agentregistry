@@ -8,10 +8,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/agentregistry-dev/agentregistry/internal/cli/common/gitutil"
 	"github.com/agentregistry-dev/agentregistry/internal/client"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/plugins/bundle"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	cliruntime "github.com/agentregistry-dev/agentregistry/pkg/cli/runtime"
+	"github.com/agentregistry-dev/agentregistry/pkg/gitutil"
 )
 
 func NewPullCmd(deps cliruntime.Deps) *cobra.Command {
@@ -84,7 +85,7 @@ func pullResource(ctx context.Context, deps cliruntime.Deps, typ, name, tag, out
 	default:
 		fmt.Printf("Cloning %s into %s\n", repo.URL, outDir)
 	}
-	if err := gitutil.CloneAndCopyContext(ctx, repo.URL, repo.Branch, repo.Commit, repo.Subfolder, outDir, false, nil); err != nil {
+	if _, err := gitutil.NewSource(nil, gitutil.Limits{MaxBytes: bundle.MaxBundleBytes, MaxEntries: bundle.MaxBundleFiles}).Fetch(ctx, "", repo, outDir); err != nil {
 		return err
 	}
 	if repo.Subfolder != "" {

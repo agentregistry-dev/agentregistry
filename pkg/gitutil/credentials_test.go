@@ -117,14 +117,12 @@ func TestSecretCredentialResolver(t *testing.T) {
 }
 
 func TestSourceUsesSecretCredentials(t *testing.T) {
-	repoURL, dir := serveGitRepo(t, "x-access-token", "ghp-secret")
-	writeAndCommit(t, dir, "private")
-	want := runGit(t, dir, "rev-parse", "HEAD")
+	repoURL, _, tip := serveFixture(t, true)
 	resolver := &fakeSecretResolver{values: map[string]secret.SensitiveValue{
 		"username": secret.NewSensitiveValue([]byte("x-access-token")),
 		"password": secret.NewSensitiveValue([]byte("ghp-secret")),
 	}}
-	source := NewSource(NewSecretCredentialResolver(resolver))
+	source := NewSource(NewSecretCredentialResolver(resolver), Limits{})
 
 	got, err := source.Pin(t.Context(), "team-a", &v1alpha1.Repository{
 		URL:            repoURL,
@@ -134,8 +132,8 @@ func TestSourceUsesSecretCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatalf("pin private repository: %v", err)
 	}
-	if got != want {
-		t.Fatalf("commit = %q, want %q", got, want)
+	if got != tip {
+		t.Fatalf("commit = %q, want %q", got, tip)
 	}
 	if resolver.ref != (v1alpha1.SecretRef{Namespace: "team-a", Name: "github"}) {
 		t.Fatalf("secret ref = %#v, want namespace-local reference", resolver.ref)

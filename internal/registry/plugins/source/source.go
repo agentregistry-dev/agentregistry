@@ -12,9 +12,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/agentregistry-dev/agentregistry/internal/cli/common/gitutil"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/plugins/bundle"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/gitutil"
 )
 
 // cloneTimeout bounds a single resolve (ls-remote + shallow clone) so a slow or
@@ -38,7 +38,7 @@ var (
 //
 // It shells out to system git, and only github.com is supported today (matching
 // existing skill/agent source behavior). OCI sources are not yet implemented.
-func Resolve(ctx context.Context, p *v1alpha1.Plugin, git *gitutil.Source) (*v1alpha1.PluginResolvedSource, *bundle.CanonicalBundle, error) {
+func Resolve(ctx context.Context, p *v1alpha1.Plugin, git gitutil.Source) (*v1alpha1.PluginResolvedSource, *bundle.CanonicalBundle, error) {
 	if p == nil || p.Spec.Source == nil {
 		return nil, nil, fmt.Errorf("%w: plugin has no source", ErrUnsupportedSource)
 	}
@@ -53,7 +53,7 @@ func Resolve(ctx context.Context, p *v1alpha1.Plugin, git *gitutil.Source) (*v1a
 	}
 }
 
-func resolveGit(ctx context.Context, namespace string, g *v1alpha1.PluginSourceGit, git *gitutil.Source) (*v1alpha1.PluginResolvedSource, *bundle.CanonicalBundle, error) {
+func resolveGit(ctx context.Context, namespace string, g *v1alpha1.PluginSourceGit, git gitutil.Source) (*v1alpha1.PluginResolvedSource, *bundle.CanonicalBundle, error) {
 	if g == nil || g.Repository == nil || g.Repository.URL == "" {
 		return nil, nil, fmt.Errorf("%w: git source missing repository url", ErrUnsupportedSource)
 	}
