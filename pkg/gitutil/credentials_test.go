@@ -117,7 +117,7 @@ func TestSecretCredentialResolver(t *testing.T) {
 }
 
 func TestSourceUsesSecretCredentials(t *testing.T) {
-	repoURL, _, tip := serveFixture(t, true)
+	repoURL, _, tip := serveFixture(t, true, true)
 	resolver := &fakeSecretResolver{values: map[string]secret.SensitiveValue{
 		"username": secret.NewSensitiveValue([]byte("x-access-token")),
 		"password": secret.NewSensitiveValue([]byte("ghp-secret")),

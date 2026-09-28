@@ -137,18 +137,25 @@ func fetchTree(ctx context.Context, dir, cloneURL, sha string, auth *url.Userinf
 		return nil, err
 	}
 	remote := git.NewRemote(repo.Storer, &config.RemoteConfig{Name: git.DefaultRemoteName, URLs: []string{cloneURL}})
-	err = remote.FetchContext(ctx, &git.FetchOptions{
+	opts := &git.FetchOptions{
 		RefSpecs: []config.RefSpec{config.RefSpec(sha + ":refs/heads/fetched")},
 		Depth:    1,
 		Tags:     git.NoTags,
 		Auth:     basicAuth(auth),
-	})
+	}
+	err = remote.FetchContext(ctx, opts)
+	if errors.Is(err, git.ErrExactSHA1NotSupported) {
+		// Servers without allow-reachable-sha1-in-want only serve advertised refs, so fetch their history.
+		opts.RefSpecs = []config.RefSpec{"+refs/heads/*:refs/heads/*", "+refs/tags/*:refs/tags/*"}
+		opts.Depth = 0
+		err = remote.FetchContext(ctx, opts)
+	}
 	if err != nil {
 		return nil, redact(fmt.Errorf("fetch %s from %s: %w", sha, cloneURL, err), auth)
 	}
 	commit, err := repo.CommitObject(plumbing.NewHash(sha))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: commit %s in %s", ErrRefNotFound, sha, cloneURL)
 	}
 	return commit.Tree()
 }
@@ -238,15 +245,19 @@ func basicAuth(auth *url.Userinfo) transport.AuthMethod {
 	return &githttp.BasicAuth{Username: auth.Username(), Password: password}
 }
 
-// redact masks credentials servers may echo and bounds err, since errors reach status.
+// redact masks the userinfo and secret servers may echo, and bounds err since errors reach status.
 func redact(err error, auth *url.Userinfo) error {
 	msg := err.Error()
 	if auth != nil {
-		password, _ := auth.Password()
-		for _, secret := range []string{password, auth.Username()} {
-			if secret != "" {
-				msg = strings.ReplaceAll(msg, secret, "xxxxx")
-			}
+		secret, hasPassword := auth.Password()
+		if !hasPassword {
+			secret = auth.Username()
+		}
+		if hasPassword {
+			msg = strings.ReplaceAll(msg, auth.String(), "xxxxx:xxxxx")
+		}
+		if secret != "" {
+			msg = strings.ReplaceAll(msg, secret, "xxxxx")
 		}
 	}
 	msg = strings.TrimSpace(msg)

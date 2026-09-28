@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -25,7 +26,7 @@ const fixturePassword = "ghp-secret"
 var fixtureAuth = url.UserPassword("x-access-token", fixturePassword)
 
 // serveFixture serves a repo over git http-backend whose tip adds hostile entries.
-func serveFixture(t *testing.T, populate bool) (repoURL, first, tip string) {
+func serveFixture(t *testing.T, populate, allowSHAWants bool) (repoURL, first, tip string) {
 	t.Helper()
 	gitPath, err := exec.LookPath("git")
 	if err != nil {
@@ -47,7 +48,7 @@ func serveFixture(t *testing.T, populate bool) (repoURL, first, tip string) {
 	git("config", "user.email", "test@example.com")
 	git("config", "user.name", "Test User")
 	// go-git only fetches by hash from servers advertising this capability.
-	git("config", "uploadpack.allowReachableSHA1InWant", "true")
+	git("config", "uploadpack.allowReachableSHA1InWant", strconv.FormatBool(allowSHAWants))
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if user, pass, _ := r.BasicAuth(); user != fixtureAuth.Username() || pass != fixturePassword {
 			http.Error(w, "authentication failed", http.StatusUnauthorized)
@@ -97,8 +98,8 @@ func serveFixture(t *testing.T, populate bool) (repoURL, first, tip string) {
 }
 
 func TestResolveRef(t *testing.T) {
-	repoURL, first, tip := serveFixture(t, true)
-	emptyURL, _, _ := serveFixture(t, false)
+	repoURL, first, tip := serveFixture(t, true, true)
+	emptyURL, _, _ := serveFixture(t, false, true)
 	wrong := url.UserPassword("x-access-token", "wrong")
 	for _, tt := range []struct {
 		url, ref, want, wantErr string
@@ -125,7 +126,14 @@ func TestResolveRef(t *testing.T) {
 }
 
 func TestFetch(t *testing.T) {
-	repoURL, first, tip := serveFixture(t, true)
+	// Servers without SHA wants take the fetch-all-refs fallback.
+	for _, allowSHAWants := range []bool{true, false} {
+		t.Run(fmt.Sprintf("allowSHAWants=%t", allowSHAWants), func(t *testing.T) { testFetch(t, allowSHAWants) })
+	}
+}
+
+func testFetch(t *testing.T, allowSHAWants bool) {
+	repoURL, first, tip := serveFixture(t, true, allowSHAWants)
 	skill := map[string]string{"SKILL.md": "644 skill", "run.sh": "755 run", "nested/deep.txt": "644 deep", "link.md": "-> SKILL.md"}
 	root := map[string]string{"README.md": "644 root"}
 	for rel, v := range skill {
@@ -206,6 +214,10 @@ func TestErrorsAreRedacted(t *testing.T) {
 	got := redact(errors.New(strings.Repeat("x", maxGitDiagnosticRunes+100)+" ghp_token"), url.User("ghp_token")).Error()
 	if strings.Contains(got, "ghp_token") || len([]rune(got)) != maxGitDiagnosticRunes+3 || !strings.HasPrefix(got, "...") {
 		t.Fatalf("redact = %q, want token masked and output bounded", got)
+	}
+	// A username with a password is not secret, so only the password is masked.
+	if got := redact(errors.New("fetch http://git-fixture/acme/private.git: pw"), url.UserPassword("git", "pw")).Error(); got != "fetch http://git-fixture/acme/private.git: xxxxx" {
+		t.Fatalf("redact = %q, want only the password masked", got)
 	}
 }
 
