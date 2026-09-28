@@ -155,7 +155,7 @@ func fetchTree(ctx context.Context, dir, cloneURL, sha string, auth *url.Userinf
 	}
 	commit, err := repo.CommitObject(plumbing.NewHash(sha))
 	if err != nil {
-		return nil, fmt.Errorf("%w: commit %s in %s", ErrRefNotFound, sha, cloneURL)
+		return nil, err
 	}
 	return commit.Tree()
 }
@@ -250,11 +250,10 @@ func redact(err error, auth *url.Userinfo) error {
 	msg := err.Error()
 	if auth != nil {
 		secret, hasPassword := auth.Password()
-		if !hasPassword {
-			secret = auth.Username()
-		}
 		if hasPassword {
 			msg = strings.ReplaceAll(msg, auth.String(), "xxxxx:xxxxx")
+		} else {
+			secret = auth.Username()
 		}
 		if secret != "" {
 			msg = strings.ReplaceAll(msg, secret, "xxxxx")
