@@ -7,7 +7,7 @@ This document provides guidelines for both AI coding assistants (Claude, Copilot
 AgentRegistry is a centralized registry for securely curating, discovering, deploying, and managing agentic infrastructure including MCP (Model Context Protocol) servers, agents, and skills.
 
 **Tech Stack:**
-- **Backend/CLI:** Go 1.26+
+- **Backend/CLI:** Go 1.27+
 - **Database:** PostgreSQL (accessed via pgx)
 - **Frontend:** Next.js 14 (App Router) with Tailwind CSS
 - **CLI Framework:** Cobra
@@ -60,6 +60,13 @@ Avoid introducing broad "translator" layers or catch-all shared packages when th
 ---
 
 ## Critical Rules
+
+### Go Version
+
+The root `go.mod` directive records the minimum supported toolchain. Use the
+initial stable patch (`1.N.0`) unless code or a dependency requires a later
+patch. Keep `docker/server.Dockerfile` on the same `1.N` image line so server
+builds pick up current patch releases.
 
 ### Database Access
 
