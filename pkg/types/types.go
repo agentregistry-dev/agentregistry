@@ -40,7 +40,8 @@ type AuthorizeInput struct {
 	Namespace string
 	// Name is the resource name; "" for list verbs.
 	Name string
-	// Tag is the resource tag for content kinds; "" for list/get-latest.
+	// Tag is the resource tag for content kinds; "" for list/get-latest. The tags list and a delete of
+	// every tag authorize each live tag; that delete sends "" only when no tag is live.
 	Tag string
 	// Object carries the resource document for hooks to inspect: nil for
 	// "get" and "list", the validated request body on "apply".

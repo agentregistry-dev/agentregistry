@@ -263,12 +263,29 @@ func deleteCore(
 	dryRun bool,
 ) (types.DeleteAdmissionResult, *applyError) {
 	if opts.Authorize != nil {
-		if err := opts.Authorize(ctx, AuthorizeInput{
-			Verb: "delete", Kind: kind,
-			Namespace: namespace, Name: name, Tag: tag,
-			Object: opts.PreDeleteObject,
-		}); err != nil {
-			return types.DeleteAdmissionResult{}, &applyError{Stage: stageAuth, Err: err}
+		tags := []string{tag}
+		// A tagged delete without a tag removes every tag, and each tag carries its own labels, so each live
+		// tag is authorized; with none live, the name alone is.
+		if tag == "" && v1alpha1.IsTaggedArtifactKind(kind) {
+			rows, err := store.ListTags(ctx, namespace, name)
+			if err != nil {
+				return types.DeleteAdmissionResult{}, &applyError{Stage: stageDelete, Err: err}
+			}
+			if len(rows) > 0 {
+				tags = make([]string, 0, len(rows))
+				for _, row := range rows {
+					tags = append(tags, row.Metadata.Tag)
+				}
+			}
+		}
+		for _, each := range tags {
+			if err := opts.Authorize(ctx, AuthorizeInput{
+				Verb: "delete", Kind: kind,
+				Namespace: namespace, Name: name, Tag: each,
+				Object: opts.PreDeleteObject,
+			}); err != nil {
+				return types.DeleteAdmissionResult{}, &applyError{Stage: stageAuth, Err: err}
+			}
 		}
 	}
 
