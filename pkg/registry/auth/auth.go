@@ -96,9 +96,9 @@ func WithSkipPaths(paths ...string) MiddlewareOption {
 	}
 }
 
-// WithPublicPaths marks path prefixes as public, bypassing credential authentication
-// and instead carry a PublicSession, so downstream authz hooks still see a session
-// and can scope what anonymous callers may access.
+// WithPublicPaths marks path prefixes as public: a request without credentials carries a
+// PublicSession, so downstream authz hooks can scope what anonymous callers may access,
+// while a request with credentials is authenticated like any other.
 func WithPublicPaths(prefixes ...string) MiddlewareOption {
 	return func(c *middlewareConfig) {
 		c.publicPrefixes = append(c.publicPrefixes, prefixes...)
@@ -124,12 +124,14 @@ func AuthnMiddleware(authn AuthnProvider, options ...MiddlewareOption) func(ctx 
 			return
 		}
 
-		// Public paths bypass credential authentication but carry a
-		// PublicSession so downstream authz hooks can scope anonymous access.
-		for _, prefix := range config.publicPrefixes {
-			if strings.HasPrefix(path, prefix) {
-				next(huma.WithContext(ctx, WithPublicContext(ctx.Context())))
-				return
+		// Public paths admit anonymous callers with a PublicSession. Presented credentials are
+		// authenticated instead, so a caller keeps its own permissions and a bad token is refused.
+		if ctx.Header("Authorization") == "" {
+			for _, prefix := range config.publicPrefixes {
+				if strings.HasPrefix(path, prefix) {
+					next(huma.WithContext(ctx, WithPublicContext(ctx.Context())))
+					return
+				}
 			}
 		}
 
