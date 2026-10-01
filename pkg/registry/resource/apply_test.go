@@ -403,6 +403,64 @@ metadata:
 	require.ErrorIs(t, err, pkgdb.ErrNotFound)
 }
 
+// TestRegisterDeleteApply_AllTagDeleteAuthorizesEachTag pins that a delete without a tag authorizes every
+// live tag on its own, that one denial deletes nothing, and that with no live tag the name alone is checked.
+func TestRegisterDeleteApply_AllTagDeleteAuthorizesEachTag(t *testing.T) {
+	pool := v1alpha1store.NewTestPool(t)
+	agents := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
+	for _, tag := range []string{"stable", v1alpha1store.DefaultTag()} {
+		_, err := agents.Upsert(t.Context(), &v1alpha1.Agent{
+			Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "alice", Tag: tag},
+			Spec:     v1alpha1.AgentSpec{Title: "Alice"},
+		})
+		require.NoError(t, err)
+	}
+	var seen []string
+	var deny string
+	_, api := humatest.New(t)
+	resource.RegisterApply(api, resource.ApplyConfig{
+		BasePrefix: "/v0",
+		Stores:     map[string]*v1alpha1store.Store{v1alpha1.KindAgent: agents},
+		Authorizers: map[string]func(context.Context, resource.AuthorizeInput) error{
+			v1alpha1.KindAgent: func(_ context.Context, in resource.AuthorizeInput) error {
+				seen = append(seen, in.Tag)
+				if in.Tag == deny {
+					return errors.New("denied")
+				}
+				return nil
+			},
+		},
+	})
+	deleteAll := func(t *testing.T) arv0.ApplyResult {
+		t.Helper()
+		seen = nil
+		resp := api.Do(http.MethodDelete, "/v0/apply", "Content-Type: application/yaml", strings.NewReader("apiVersion: ar.dev/v1alpha1\nkind: Agent\nmetadata:\n  namespace: default\n  name: alice\n"))
+		require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+		var out struct {
+			Results []arv0.ApplyResult `json:"results"`
+		}
+		require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+		require.Len(t, out.Results, 1)
+		return out.Results[0]
+	}
+	both := []string{"stable", v1alpha1store.DefaultTag()}
+
+	deny = "stable"
+	require.Equal(t, arv0.ApplyStatusFailed, deleteAll(t).Status)
+	require.Subset(t, seen, []string{"stable"}, "each live tag is authorized with its own tag")
+	for _, tag := range both {
+		_, err := agents.Get(t.Context(), "default", "alice", tag)
+		require.NoError(t, err, "one denial deletes no tag")
+	}
+
+	deny = "none"
+	require.Equal(t, arv0.ApplyStatusDeleted, deleteAll(t).Status)
+	require.ElementsMatch(t, both, seen)
+
+	deleteAll(t)
+	require.Equal(t, []string{""}, seen, "with no live tag the name alone is authorized")
+}
+
 func TestRegisterDeleteApply_TagDeletesOnlyExactTag(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
 	agents := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
