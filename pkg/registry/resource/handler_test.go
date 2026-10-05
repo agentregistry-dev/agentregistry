@@ -18,6 +18,7 @@ import (
 
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
@@ -198,6 +199,69 @@ spec:
 	require.Equal(t, http.StatusOK, resp.Code)
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &list))
 	require.Empty(t, list.Items)
+}
+
+// TestResourceRegister_ListTagsReturnsTheTagsTheCallerMayGet pins per-tag authorization on the tags list:
+// each tag is a get with its own tag, a denied tag is left out, and any other error fails the request.
+func TestResourceRegister_ListTagsReturnsTheTagsTheCallerMayGet(t *testing.T) {
+	pool := v1alpha1store.NewTestPool(t)
+	store := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
+	for _, tag := range []string{"v1", "v2"} {
+		_, err := store.Upsert(t.Context(), &v1alpha1.Agent{
+			Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "foo", Tag: tag},
+			Spec:     v1alpha1.AgentSpec{Title: tag},
+		})
+		require.NoError(t, err)
+	}
+	var seen []resource.AuthorizeInput
+	var denied map[string]error
+	_, api := humatest.New(t)
+	resource.Register[*v1alpha1.Agent](api, resource.Config{
+		Kind:       v1alpha1.KindAgent,
+		BasePrefix: "/v0",
+		Store:      store,
+		Authorize: func(_ context.Context, in resource.AuthorizeInput) error {
+			seen = append(seen, in)
+			return denied[in.Tag]
+		},
+	}, func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
+
+	for _, tc := range []struct {
+		name   string
+		denied map[string]error
+		want   int
+		tags   []string
+	}{
+		{"every tag readable", nil, http.StatusOK, []string{"v2", "v1"}},
+		{"a Huma 403 leaves that tag out", map[string]error{"v1": huma.Error403Forbidden("denied")}, http.StatusOK, []string{"v2"}},
+		{"the auth sentinel leaves that tag out", map[string]error{"v2": auth.ErrForbidden}, http.StatusOK, []string{"v1"}},
+		{"no readable tag is an empty list", map[string]error{"v1": auth.ErrForbidden, "v2": auth.ErrForbidden}, http.StatusOK, nil},
+		{"any other error fails the request", map[string]error{"v1": huma.Error401Unauthorized("no session")}, http.StatusUnauthorized, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			seen, denied = nil, tc.denied
+			resp := api.Get("/v0/agents/foo/tags")
+			require.Equal(t, tc.want, resp.Code, resp.Body.String())
+			for _, in := range seen {
+				require.Equal(t, "get", in.Verb, "a tag is read like any other object")
+				require.Equal(t, "foo", in.Name)
+				require.NotEmpty(t, in.Tag)
+				require.Nil(t, in.Object)
+			}
+			if tc.want != http.StatusOK {
+				return
+			}
+			var list struct {
+				Items []v1alpha1.Agent `json:"items"`
+			}
+			require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &list))
+			var tags []string
+			for _, item := range list.Items {
+				tags = append(tags, item.Metadata.Tag)
+			}
+			require.Equal(t, tc.tags, tags)
+		})
+	}
 }
 
 func TestResourceRegister_DeleteTaggedPassesTagToAuthorizer(t *testing.T) {
