@@ -81,7 +81,7 @@ func TestScanStatus(t *testing.T) {
 	want := v1alpha1.PluginStatus{
 		ResolvedSource: resolved,
 		Manifest:       &v1alpha1.PluginManifest{Schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json", Name: "acme.test", Version: "1.0.0"},
-		Inventory:      &v1alpha1.PluginInventory{Skills: []v1alpha1.PluginSkill{{Name: "review"}}, MCPServers: []string{"claude-only"}},
+		Inventory:      &v1alpha1.PluginInventory{Skills: []v1alpha1.PluginSkill{{Name: "review"}}, MCPServers: []string{"search"}},
 		Format:         v1alpha1.PluginFormatAgentPlugins,
 		ScanVersion:    v1alpha1.PluginScanVersion,
 	}

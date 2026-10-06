@@ -7,23 +7,26 @@ import (
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 )
 
-func TestBuildInventory(t *testing.T) {
-	b := &CanonicalBundle{Files: map[string][]byte{
+func everyPartBundle() *CanonicalBundle {
+	return &CanonicalBundle{Files: map[string][]byte{
 		"skills/deploy/SKILL.md": []byte("---\nname: deploy\ndescription: Deploys things\n---\nbody\n"),
-		"SKILL.md":               []byte("---\nname: root-skill\n---\n"),
-		"agents/reviewer.md":     []byte("you are a reviewer"),
-		"commands/status.md":     []byte("status"),
-		"bin/mytool":             []byte("#!/bin/sh"),
-		".mcp.json":              []byte(`{"mcpServers":{"db":{"command":"x"},"api":{"url":"y"}}}`),
-		"hooks/hooks.json":       []byte(`{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command"}]}],"PostToolUse":[{"hooks":[{"type":"command"},{"type":"http"}]}]}}`),
+		// Too deep: skills live only at skills/<name>/SKILL.md.
+		"skills/deploy/refs/SKILL.md": []byte("---\nname: nested\n---\n"),
+		"skills/orphan/deep/SKILL.md": []byte("x"),
+		"SKILL.md":                    []byte("---\nname: root-skill\n---\n"),
+		"agents/reviewer.md":          []byte("you are a reviewer"),
+		"commands/status.md":          []byte("status"),
+		"bin/mytool":                  []byte("#!/bin/sh"),
+		".mcp.json":                   []byte(`{"mcpServers":{"db":{"command":"x"},"api":{"url":"y"}}}`),
+		"hooks/hooks.json":            []byte(`{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command"}]}],"PostToolUse":[{"hooks":[{"type":"command"},{"type":"http"}]}]}}`),
 	}}
+}
 
-	m := BuildInventory(b)
+func TestBuildInventory(t *testing.T) {
+	m := BuildInventory(everyPartBundle(), v1alpha1.PluginFormatClaudePlugin)
 
-	wantSkills := []v1alpha1.PluginSkill{
-		{Name: "root-skill"},                            // top-level SKILL.md (sorts before "skills/...")
-		{Name: "deploy", Description: "Deploys things"}, // skills/deploy/SKILL.md
-	}
+	// Claude Code skips a root SKILL.md when skills/ exists.
+	wantSkills := []v1alpha1.PluginSkill{{Name: "deploy", Description: "Deploys things"}}
 	if !reflect.DeepEqual(m.Skills, wantSkills) {
 		t.Fatalf("skills = %+v, want %+v", m.Skills, wantSkills)
 	}
@@ -49,14 +52,74 @@ func TestBuildInventory(t *testing.T) {
 	}
 }
 
+func TestBuildInventorySkipsClaudeOnlyPartsForAgentPlugins(t *testing.T) {
+	m := BuildInventory(everyPartBundle(), v1alpha1.PluginFormatAgentPlugins)
+
+	if m.Agents != nil || m.Commands != nil || m.Hooks != nil {
+		t.Fatalf("agents = %v, commands = %v, hooks = %v, want none", m.Agents, m.Commands, m.Hooks)
+	}
+	// An Agent Plugins skill lives only at skills/<name>/, never at a root SKILL.md.
+	wantSkills := []v1alpha1.PluginSkill{{Name: "deploy", Description: "Deploys things"}}
+	if !reflect.DeepEqual(m.Skills, wantSkills) || !reflect.DeepEqual(m.Executables, []string{"mytool"}) {
+		t.Fatalf("skills = %+v, executables = %v, want %+v and [mytool]", m.Skills, m.Executables, wantSkills)
+	}
+}
+
 func TestBuildInventoryBestEffortOnMalformed(t *testing.T) {
 	b := &CanonicalBundle{Files: map[string][]byte{
 		".mcp.json":        []byte("not json"),
 		"hooks/hooks.json": []byte("{bad"),
 	}}
-	m := BuildInventory(b) // must not panic
+	m := BuildInventory(b, v1alpha1.PluginFormatClaudePlugin) // must not panic
 	if len(m.MCPServers) != 0 || len(m.Hooks) != 0 {
 		t.Fatalf("expected empty index for malformed files, got %+v", m)
+	}
+}
+
+func TestBuildInventoryReadsMCPFileOfFormat(t *testing.T) {
+	b := &CanonicalBundle{Files: map[string][]byte{
+		".mcp.json": []byte(`{"mcpServers":{"db":{},"api":{}}}`),
+		"mcp.json":  []byte(`{"$schema":"https://agent-plugins.org/schemas/1.0.0/mcp.schema.json","mcpServers":{"search":{"type":"stdio","command":"search"},"db":{"type":"stdio","command":"db"}}}`),
+	}}
+	tests := []struct {
+		name   string
+		format v1alpha1.PluginFormat
+		want   []string
+	}{
+		{"claude-plugin reads .mcp.json", v1alpha1.PluginFormatClaudePlugin, []string{"api", "db"}},
+		{"agent-plugins reads mcp.json", v1alpha1.PluginFormatAgentPlugins, []string{"db", "search"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := BuildInventory(b, tt.format).MCPServers; !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("mcpServers = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBuildInventoryAppliesAgentPluginsMCPFileRules(t *testing.T) {
+	const schema = `"$schema":"https://agent-plugins.org/schemas/1.0.0/mcp.schema.json"`
+	tests := []struct {
+		name    string
+		mcpJSON string
+		want    []string
+	}{
+		{"valid file", `{` + schema + `,"mcpServers":{"search":{"type":"stdio","command":"search"}}}`, []string{"search"}},
+		{"invalid server beside a valid one", `{` + schema + `,"mcpServers":{"bad":{},"search":{"type":"stdio","command":"search"}}}`, []string{"search"}},
+		{"missing $schema", `{"mcpServers":{"search":{}}}`, nil},
+		{"other $schema", `{"$schema":"https://example.com/mcp.json","mcpServers":{"search":{}}}`, nil},
+		{"extra top-level key", `{` + schema + `,"mcpServers":{"search":{}},"extra":1}`, nil},
+		{"missing mcpServers", `{` + schema + `}`, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := &CanonicalBundle{Files: map[string][]byte{"mcp.json": []byte(tt.mcpJSON)}}
+			got := BuildInventory(b, v1alpha1.PluginFormatAgentPlugins).MCPServers
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("mcpServers = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 
