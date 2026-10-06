@@ -41,6 +41,12 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
+# Run as an unprivileged user. The UID/GID match the Helm chart's
+# containerSecurityContext (charts/agentregistry/values.yaml). A numeric USER
+# lets Kubernetes verify runAsNonRoot, which it cannot do for a named user.
+RUN groupadd --gid 1001 arctl \
+    && useradd --uid 1001 --gid 1001 --create-home --home-dir /home/arctl --shell /usr/sbin/nologin arctl
+
 COPY --from=builder /app/bin/arctl-server /app/bin/arctl-server
 
 LABEL org.opencontainers.image.source=https://github.com/agentregistry-dev/agentregistry
@@ -51,5 +57,8 @@ LABEL org.opencontainers.image.authors="Agent Registry Creators 🤖"
 # As of 1.4.1 CORS protection has been changing in the mcp sdk a few times, so this is our safest bet
 # Ref: https://github.com/modelcontextprotocol/go-sdk/releases/tag/v1.6.1
 ENV MCPGODEBUG=disablecontenttypecheck=1
+
+USER 1001:1001
+WORKDIR /home/arctl
 
 CMD ["/app/bin/arctl-server"]
