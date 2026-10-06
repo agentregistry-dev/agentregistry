@@ -31,13 +31,14 @@ type byoAgentPayloadSpec struct {
 }
 
 type byoDeploymentPayload struct {
-	Image            string                        `json:"image,omitempty"`
-	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
-	Labels           map[string]string             `json:"labels,omitempty"`
-	Env              []corev1.EnvVar               `json:"env,omitempty"`
-	Tolerations      []corev1.Toleration           `json:"tolerations,omitempty"`
-	Affinity         *corev1.Affinity              `json:"affinity,omitempty"`
-	NodeSelector     map[string]string             `json:"nodeSelector,omitempty"`
+	Image              string                        `json:"image,omitempty"`
+	ImagePullSecrets   []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+	Labels             map[string]string             `json:"labels,omitempty"`
+	Env                []corev1.EnvVar               `json:"env,omitempty"`
+	Tolerations        []corev1.Toleration           `json:"tolerations,omitempty"`
+	Affinity           *corev1.Affinity              `json:"affinity,omitempty"`
+	NodeSelector       map[string]string             `json:"nodeSelector,omitempty"`
+	ServiceAccountName string                        `json:"serviceAccountName,omitempty"`
 }
 
 type remoteMCPServerPayload struct {
@@ -73,15 +74,16 @@ type httpTransportPayload struct {
 }
 
 type mcpServerDeploymentPayload struct {
-	Image            string                        `json:"image,omitempty"`
-	Port             uint16                        `json:"port,omitempty"`
-	Cmd              string                        `json:"cmd,omitempty"`
-	Args             []string                      `json:"args,omitempty"`
-	Env              map[string]string             `json:"env,omitempty"`
-	SecretRefs       []corev1.LocalObjectReference `json:"secretRefs,omitempty"`
-	Labels           map[string]string             `json:"labels,omitempty"`
-	Tolerations      []corev1.Toleration           `json:"tolerations,omitempty"`
-	Affinity         *corev1.Affinity              `json:"affinity,omitempty"`
-	NodeSelector     map[string]string             `json:"nodeSelector,omitempty"`
-	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+	Image              string                        `json:"image,omitempty"`
+	Port               uint16                        `json:"port,omitempty"`
+	Cmd                string                        `json:"cmd,omitempty"`
+	Args               []string                      `json:"args,omitempty"`
+	Env                map[string]string             `json:"env,omitempty"`
+	SecretRefs         []corev1.LocalObjectReference `json:"secretRefs,omitempty"`
+	Labels             map[string]string             `json:"labels,omitempty"`
+	Tolerations        []corev1.Toleration           `json:"tolerations,omitempty"`
+	Affinity           *corev1.Affinity              `json:"affinity,omitempty"`
+	NodeSelector       map[string]string             `json:"nodeSelector,omitempty"`
+	ImagePullSecrets   []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+	ServiceAccountName string                        `json:"serviceAccountName,omitempty"`
 }

@@ -232,6 +232,45 @@ func TestApplyUsesRuntimeLabelsForPodBackedResources(t *testing.T) {
 	})
 }
 
+func TestApplyForwardsServiceAccountName(t *testing.T) {
+	withServiceAccount := func(input types.ApplyInput) types.ApplyInput {
+		input = withRuntimeConfig(input)
+		input.Deployment.Spec.RuntimeConfig = map[string]any{"serviceAccountName": "shared-sa"}
+		return input
+	}
+
+	t.Run("agent", func(t *testing.T) {
+		client := newFakeClient()
+
+		_, err := testAdapter(client).Apply(context.Background(), withServiceAccount(byoApplyInput()))
+		require.NoError(t, err)
+		assert.Equal(t, "shared-sa", client.agents["kagent/my-agent"].Spec.BYO.Deployment.ServiceAccountName)
+	})
+
+	t.Run("source-backed MCP server", func(t *testing.T) {
+		client := newFakeClient()
+		input := mcpApplyInput()
+		input.Target = &v1alpha1.MCPServer{
+			Metadata: v1alpha1.ObjectMeta{Name: "source-tools", Namespace: "default"},
+			Spec: v1alpha1.MCPServerSpec{
+				Source: &v1alpha1.MCPServerSource{Package: &v1alpha1.MCPPackage{
+					Origin: v1alpha1.MCPPackageOrigin{
+						Type:       v1alpha1.MCPPackageOriginTypeNPM,
+						Identifier: "@acme/source-tools",
+						NPM:        &v1alpha1.MCPPackageOriginNPM{Version: "1.2.3"},
+					},
+					Transport: v1alpha1.MCPTransport{Type: "stdio"},
+				}},
+			},
+		}
+
+		_, err := testAdapter(client).Apply(context.Background(), withServiceAccount(input))
+		require.NoError(t, err)
+		server := client.toolServers["kagent/"+DeploymentWorkloadName(input.Deployment)].MCP
+		assert.Equal(t, "shared-sa", server.Spec.Deployment.ServiceAccountName)
+	})
+}
+
 func TestApplyUnsupportedHarnessReturnsFailedStatus(t *testing.T) {
 	input := withRuntimeConfig(byoApplyInput())
 	input.Deployment.Spec.Harness = &v1alpha1.DeploymentHarness{Type: "claude-code"}

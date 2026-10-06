@@ -556,15 +556,16 @@ func buildToolServer(in types.ApplyInput, rcfg runtimeConfig, dcfg deployConfig)
 			return nil, err
 		}
 		deployment := mcpServerDeploymentPayload{
-			Image:            image,
-			Cmd:              cmd,
-			Args:             args,
-			Env:              env,
-			SecretRefs:       localObjectRefs(dcfg.SecretRefs),
-			ImagePullSecrets: localObjectRefs(rcfg.ImagePullSecrets),
-			NodeSelector:     rcfg.Deployment.NodeSelector,
-			Tolerations:      rcfg.Deployment.Tolerations,
-			Affinity:         rcfg.Deployment.Affinity,
+			Image:              image,
+			Cmd:                cmd,
+			Args:               args,
+			Env:                env,
+			SecretRefs:         localObjectRefs(dcfg.SecretRefs),
+			ImagePullSecrets:   localObjectRefs(rcfg.ImagePullSecrets),
+			NodeSelector:       rcfg.Deployment.NodeSelector,
+			Tolerations:        rcfg.Deployment.Tolerations,
+			Affinity:           rcfg.Deployment.Affinity,
+			ServiceAccountName: dcfg.ServiceAccountName,
 		}
 		transportType := transportTypeStdio
 		stdioTransport := &stdioTransportPayload{}

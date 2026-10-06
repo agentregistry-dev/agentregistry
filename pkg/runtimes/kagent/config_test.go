@@ -197,6 +197,12 @@ func TestDecodeDeployConfig(t *testing.T) {
 			wantErr: "secretRefs is only supported for MCPServer"},
 		{name: "invalid secret name", in: map[string]any{"secretRefs": []any{"Bad_Name"}}, kind: v1alpha1.KindMCPServer,
 			wantErr: "not a valid Kubernetes Secret name"},
+		{name: "agent serviceAccountName", in: map[string]any{"serviceAccountName": "shared-sa"}, kind: v1alpha1.KindAgent,
+			want: deployConfig{ServiceAccountName: "shared-sa"}},
+		{name: "mcp serviceAccountName", in: map[string]any{"serviceAccountName": "shared-sa"}, kind: v1alpha1.KindMCPServer,
+			want: deployConfig{ServiceAccountName: "shared-sa"}},
+		{name: "invalid serviceAccountName", in: map[string]any{"serviceAccountName": "Bad_Name"}, kind: v1alpha1.KindAgent,
+			wantErr: "not a valid Kubernetes ServiceAccount name"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -209,4 +215,9 @@ func TestDecodeDeployConfig(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestDeploymentServiceAccountName(t *testing.T) {
+	assert.Equal(t, "shared-sa", DeploymentServiceAccountName(map[string]any{"serviceAccountName": "shared-sa"}))
+	assert.Empty(t, DeploymentServiceAccountName(nil))
 }
