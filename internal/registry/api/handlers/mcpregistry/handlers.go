@@ -150,7 +150,14 @@ func listServers(cfg Config) func(context.Context, *listServersInput) (*serverLi
 		// the leading args, so our own predicates number cleanly after it.
 		if cfg.ListFilter != nil {
 			frag, fargs, err := cfg.ListFilter(ctx, resource.AuthorizeInput{Verb: "list", Kind: v1alpha1.KindMCPServer})
-			if err != nil {
+			// A caller the filter cannot authorize gets an auth status, like the single-server reads.
+			switch {
+			case err == nil:
+			case errors.Is(err, auth.ErrUnauthenticated):
+				return nil, huma.Error401Unauthorized("authentication is required to list MCP servers")
+			case errors.Is(err, auth.ErrForbidden):
+				return nil, huma.Error403Forbidden("listing MCP servers is not permitted")
+			default:
 				return nil, huma.Error500InternalServerError("authz list filter", err)
 			}
 			if frag != "" {
