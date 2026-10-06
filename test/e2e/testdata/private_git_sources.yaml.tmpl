@@ -65,6 +65,38 @@ spec:
         subfolder: plugin
 ---
 apiVersion: ar.dev/v1alpha1
+kind: Plugin
+metadata:
+  name: {{ .PluginAgentPluginsName }}
+spec:
+  title: E2E Private Agent Plugins Bundle
+  source:
+    type: git
+    git:
+      repository:
+        url: http://git-fixture.{{ .Namespace }}.svc.cluster.local/acme/private.git
+        branch: main
+        subfolder: agent-plugin
+        credentialsRef:
+          name: {{ .SecretName }}
+---
+apiVersion: ar.dev/v1alpha1
+kind: Plugin
+metadata:
+  name: {{ .PluginManifestDirName }}
+spec:
+  title: E2E Private Plugin With A plugin.json Directory
+  source:
+    type: git
+    git:
+      repository:
+        url: http://git-fixture.{{ .Namespace }}.svc.cluster.local/acme/private.git
+        branch: main
+        subfolder: dir-plugin
+        credentialsRef:
+          name: {{ .SecretName }}
+---
+apiVersion: ar.dev/v1alpha1
 kind: Skill
 metadata:
   name: {{ .SkillAuthName }}

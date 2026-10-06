@@ -33,6 +33,18 @@ data:
     mkdir -p plugin/.claude-plugin skill
     printf '{"name":"private-plugin","version":"1.0.0"}\n' > plugin/.claude-plugin/plugin.json
     printf '%s\n' '---' 'name: private-skill' 'description: E2E private skill' '---' > skill/SKILL.md
+    # Agent Plugins bundle: the root manifest wins over the Claude one, and an
+    # unchecked manifest key must not reject it.
+    mkdir -p agent-plugin/.claude-plugin agent-plugin/skills/review
+    printf '%s\n' '{"$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json","name":"agent-plugin","hooks":5}' > agent-plugin/plugin.json
+    printf '{"name":"claude-name"}\n' > agent-plugin/.claude-plugin/plugin.json
+    printf '%s\n' '{"$schema":"https://agent-plugins.org/schemas/1.0.0/mcp.schema.json","mcpServers":{"search":{"type":"streamable-http","url":"https://example.com/mcp"}}}' > agent-plugin/mcp.json
+    printf '%s\n' '{"mcpServers":{"claude-only":{"url":"https://example.com/mcp"}}}' > agent-plugin/.mcp.json
+    printf '%s\n' '---' 'name: review' '---' > agent-plugin/skills/review/SKILL.md
+    # A plugin.json directory holding only a link must be rejected.
+    mkdir -p dir-plugin/.claude-plugin dir-plugin/plugin.json
+    printf '{"name":"dir-plugin"}\n' > dir-plugin/.claude-plugin/plugin.json
+    ln -s ../.claude-plugin/plugin.json dir-plugin/plugin.json/link.json
     git add -A
     git commit -qm "e2e private catalog sources"
     git branch -M main

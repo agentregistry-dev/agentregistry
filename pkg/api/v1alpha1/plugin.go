@@ -61,7 +61,26 @@ type PluginStatus struct {
 	Manifest *PluginManifest `json:"manifest,omitempty" yaml:"manifest,omitempty"`
 	// Inventory is the server-derived risk surface / search index.
 	Inventory *PluginInventory `json:"inventory,omitempty" yaml:"inventory,omitempty"`
+	// Format is the detected bundle layout. It is empty when the scan
+	// rejected the bundle.
+	Format PluginFormat `json:"format,omitempty" yaml:"format,omitempty"`
+	// ScanVersion is the PluginScanVersion of the rules that produced Format.
+	ScanVersion int64 `json:"scanVersion,omitempty" yaml:"scanVersion,omitempty"`
 }
+
+// PluginFormat names a plugin bundle layout, detected from its manifest files.
+type PluginFormat string
+
+const (
+	// PluginFormatClaudePlugin is a bundle with only .claude-plugin/plugin.json.
+	PluginFormatClaudePlugin PluginFormat = "claude-plugin"
+	// PluginFormatAgentPlugins is a bundle with a root plugin.json (agent-plugins.org).
+	PluginFormatAgentPlugins PluginFormat = "agent-plugins"
+)
+
+// PluginScanVersion is the version of the plugin format rules. Raise it with
+// any rules change so every stored Plugin is scanned again.
+const PluginScanVersion int64 = 1
 
 // PluginResolvedSource records the concrete, immutable revision the controller
 // pinned the user's source pointer to. Exactly one of Commit/Digest is set,
