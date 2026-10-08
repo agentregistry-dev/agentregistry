@@ -25,6 +25,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	registryv1alpha1 "github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	kagentruntime "github.com/agentregistry-dev/agentregistry/pkg/runtimes/kagent"
+	"github.com/agentregistry-dev/agentregistry/pkg/types"
 	e2e "github.com/agentregistry-dev/agentregistry/test/e2e"
 )
 
@@ -521,6 +523,15 @@ spec:
 		names.Runtime,
 		names.Model,
 	)
+}
+
+// kagentDeploymentWorkloadName returns the expected name for a new default-namespace Deployment.
+func kagentDeploymentWorkloadName(name string) string {
+	return kagentruntime.DeploymentWorkloadName(&types.DeploymentRecord{
+		Deployment: &registryv1alpha1.Deployment{
+			Metadata: registryv1alpha1.ObjectMeta{Name: name},
+		},
+	})
 }
 
 func waitForKagentResourceCreated(t *testing.T, resource, name string) {

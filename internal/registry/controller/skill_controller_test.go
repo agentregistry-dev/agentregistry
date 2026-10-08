@@ -8,8 +8,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/agentregistry-dev/agentregistry/internal/cli/common/gitutil"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/gitutil"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 )
@@ -151,7 +151,7 @@ func TestSkillReconcile(t *testing.T) {
 		s.Spec.Source = &v1alpha1.SkillSource{Repository: repo}
 		return s
 	}
-	git := gitutil.NewSource(nil)
+	git := gitutil.NewSource(nil, gitutil.Limits{})
 
 	t.Run("success transitions Progressing then Resolved and bumps observedGeneration", func(t *testing.T) {
 		store := newFakeSkillStore()

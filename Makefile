@@ -55,10 +55,9 @@ KAGENT_HELM_CHART ?= oci://ghcr.io/kagent-dev/kagent/helm/kagent
 
 LDFLAGS := \
 	-s -w \
-	-X 'github.com/agentregistry-dev/agentregistry/internal/version.Version=$(VERSION)' \
-	-X 'github.com/agentregistry-dev/agentregistry/internal/version.GitCommit=$(GIT_COMMIT)' \
-	-X 'github.com/agentregistry-dev/agentregistry/internal/version.BuildDate=$(BUILD_DATE)' \
-	-X 'github.com/agentregistry-dev/agentregistry/internal/version.DockerRegistry=$(DOCKER_REGISTRY)'
+	-X 'github.com/agentregistry-dev/agentregistry/pkg/version.Version=$(VERSION)' \
+	-X 'github.com/agentregistry-dev/agentregistry/pkg/version.GitCommit=$(GIT_COMMIT)' \
+	-X 'github.com/agentregistry-dev/agentregistry/pkg/version.BuildDate=$(BUILD_DATE)'
 
 # Local architecture detection to build for the current platform
 ifndef LOCALARCH

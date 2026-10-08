@@ -76,12 +76,10 @@ func validateAgentSpec(s *AgentSpec) FieldErrors {
 			}
 		}
 	}
-	errs = append(errs, validateHarnessCompatibility(s.CompatibleHarnesses)...)
 
 	// Composition refs default their Kind IN PLACE — the deploy-time resolver
 	// does no defaulting, so the persisted ref must carry the kind. MCPServers
-	// are available to any MCP-capable runtime; plugins/skills/instructions are
-	// harness composition inputs and are gated below.
+	// are available to any MCP-capable runtime.
 	errs = append(errs, validateResourceRefs("spec.mcpServers", s.MCPServers, KindMCPServer)...)
 	errs = append(errs, validateResourceRefs("spec.plugins", s.Plugins, KindPlugin)...)
 	errs = append(errs, validateResourceRefs("spec.skills", s.Skills, KindSkill)...)
@@ -92,31 +90,6 @@ func validateAgentSpec(s *AgentSpec) FieldErrors {
 		errs = append(errs, validateResourceRefs("spec.instructions", []ResourceRef{*s.Instructions}, KindPrompt)...)
 	}
 
-	// Plugins/skills/instructions only apply to harness-compatible agents — a
-	// prebuilt Image cannot consume injected files by itself.
-	if (len(s.Plugins) > 0 || len(s.Skills) > 0 || s.Instructions != nil) &&
-		len(s.CompatibleHarnesses) == 0 {
-		errs.Append("spec", fmt.Errorf("%w: plugins/skills/instructions require compatibleHarnesses", ErrInvalidFormat))
-	}
-
-	return errs
-}
-
-func validateHarnessCompatibility(harnesses []HarnessCompatibility) FieldErrors {
-	var errs FieldErrors
-	seen := map[string]struct{}{}
-	for i, harness := range harnesses {
-		path := fmt.Sprintf("spec.compatibleHarnesses[%d]", i)
-		if harness.Type == "" {
-			errs.Append(path+".type", fmt.Errorf("%w", ErrRequiredField))
-			continue
-		}
-		if _, ok := seen[harness.Type]; ok {
-			errs.Append(path+".type", fmt.Errorf("%w: duplicate harness type %q", ErrInvalidFormat, harness.Type))
-			continue
-		}
-		seen[harness.Type] = struct{}{}
-	}
 	return errs
 }
 

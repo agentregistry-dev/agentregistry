@@ -184,7 +184,6 @@ func TestDefaultApplyFingerprintIncludesAgentHarnessCompositionDependencies(t *t
 			Name:      "assistant",
 		},
 		Spec: v1alpha1.AgentSpec{
-			CompatibleHarnesses: []v1alpha1.HarnessCompatibility{{Type: "claude-code"}},
 			Plugins: []v1alpha1.ResourceRef{{
 				Name: "deploy-tools",
 			}},
@@ -253,10 +252,9 @@ func TestDefaultApplyFingerprintIgnoresHarnessCompositionWhenDeploymentDoesNotSe
 			Name:      "assistant",
 		},
 		Spec: v1alpha1.AgentSpec{
-			CompatibleHarnesses: []v1alpha1.HarnessCompatibility{{Type: "claude-code"}},
-			Plugins:             []v1alpha1.ResourceRef{{Name: "deploy-tools"}},
-			Skills:              []v1alpha1.ResourceRef{{Name: "weather"}},
-			Instructions:        &v1alpha1.ResourceRef{Name: "writer-instructions"},
+			Plugins:      []v1alpha1.ResourceRef{{Name: "deploy-tools"}},
+			Skills:       []v1alpha1.ResourceRef{{Name: "weather"}},
+			Instructions: &v1alpha1.ResourceRef{Name: "writer-instructions"},
 		},
 	}
 

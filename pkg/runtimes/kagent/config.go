@@ -67,6 +67,9 @@ type authConfig struct {
 
 type deployConfig struct {
 	SecretRefs []string `json:"secretRefs,omitempty"`
+	// ServiceAccountName runs the workload under an existing ServiceAccount
+	// instead of the one Kagent creates per workload.
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 }
 
 func decodeJSONMap(m map[string]any, target any) error {
@@ -240,5 +243,20 @@ func decodeDeployConfig(m map[string]any, targetKind string) (deployConfig, erro
 			return deployConfig{}, fmt.Errorf("secretRefs[%d] %q is not a valid Kubernetes Secret name: %s", i, name, strings.Join(problems, "; "))
 		}
 	}
+	if cfg.ServiceAccountName != "" {
+		if problems := k8svalidation.IsDNS1123Subdomain(cfg.ServiceAccountName); len(problems) > 0 {
+			return deployConfig{}, fmt.Errorf("serviceAccountName %q is not a valid Kubernetes ServiceAccount name: %s", cfg.ServiceAccountName, strings.Join(problems, "; "))
+		}
+	}
 	return cfg, nil
+}
+
+// DeploymentServiceAccountName returns the user-supplied ServiceAccount from a
+// Deployment's runtimeConfig, or "" when Kagent manages the ServiceAccount.
+func DeploymentServiceAccountName(config map[string]any) string {
+	var cfg deployConfig
+	if err := decodeJSONMap(config, &cfg); err != nil {
+		return ""
+	}
+	return cfg.ServiceAccountName
 }

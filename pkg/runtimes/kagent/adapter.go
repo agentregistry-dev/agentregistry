@@ -120,7 +120,7 @@ func (a *adapter) Apply(ctx context.Context, input types.ApplyInput) (*types.App
 	}
 	switch input.Target.(type) {
 	case *v1alpha1.Agent:
-		return a.applyAgent(ctx, input, runtimeConfig, now)
+		return a.applyAgent(ctx, input, runtimeConfig, deploymentConfig, now)
 	case *v1alpha1.MCPServer:
 		return a.applyMCPServer(ctx, input, runtimeConfig, deploymentConfig, now)
 	default:
@@ -137,6 +137,7 @@ func (a *adapter) applyAgent(
 	ctx context.Context,
 	input types.ApplyInput,
 	runtimeConfig runtimeConfig,
+	deploymentConfig deployConfig,
 	now time.Time,
 ) (*types.ApplyResult, error) {
 	agent, err := buildBYOAgent(
@@ -153,6 +154,7 @@ func (a *adapter) applyAgent(
 		agent.Spec.BYO.Deployment.Labels,
 		runtimeConfig.Deployment.Labels,
 	)
+	agent.Spec.BYO.Deployment.ServiceAccountName = deploymentConfig.ServiceAccountName
 	client, err := a.clientFor(ctx, input.Runtime, runtimeConfig)
 	if err != nil {
 		return nil, fmt.Errorf("build kagent client: %w", err)
@@ -244,10 +246,7 @@ func (a *adapter) Remove(
 		return nil, fmt.Errorf("build kagent client: %w", err)
 	}
 
-	name := deploymentRuntimeID(input.Deployment)
-	if name == "" {
-		name = WorkloadName(input.Deployment.Spec.TargetRef.Name)
-	}
+	name := DeploymentWorkloadName(input.Deployment)
 	namespace := deploymentRuntimeNamespace(input.Deployment)
 	if namespace == "" {
 		namespace = targetNamespace(runtimeConfig)

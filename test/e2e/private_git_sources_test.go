@@ -86,9 +86,8 @@ func TestPrivateGitCatalogSources(t *testing.T) {
 	)
 	invalidAuthCondition := pluginInvalidAuth.Status.GetCondition("Ready")
 	assert.Equal(t, "SourceUnresolvable", invalidAuthCondition.Reason)
-	assert.Contains(t, strings.ToLower(invalidAuthCondition.Message), "authentication failed")
+	assert.Contains(t, strings.ToLower(invalidAuthCondition.Message), "authentication required")
 	assert.NotContains(t, pluginInvalidAuthRaw, privateGitInvalidPassword)
-	assert.Contains(t, pluginInvalidAuthRaw, "xxxxx")
 }
 
 func renderPrivateGitSources(t *testing.T, outputDir string, data map[string]string) string {

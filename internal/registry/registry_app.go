@@ -25,7 +25,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
-	"github.com/agentregistry-dev/agentregistry/internal/cli/common/gitutil"
 	mcpregistry "github.com/agentregistry-dev/agentregistry/internal/mcp/registryserver"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/crud"
@@ -33,12 +32,13 @@ import (
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
 	controller "github.com/agentregistry-dev/agentregistry/internal/registry/controller"
 	internaldb "github.com/agentregistry-dev/agentregistry/internal/registry/database"
+	"github.com/agentregistry-dev/agentregistry/internal/registry/plugins/bundle"
 	microsoftruntime "github.com/agentregistry-dev/agentregistry/internal/registry/runtimes/microsoft"
 	deploymentsvc "github.com/agentregistry-dev/agentregistry/internal/registry/service/deployment"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/telemetry"
-	"github.com/agentregistry-dev/agentregistry/internal/version"
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/gitutil"
 	"github.com/agentregistry-dev/agentregistry/pkg/logging"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
@@ -49,6 +49,7 @@ import (
 	secretdatabase "github.com/agentregistry-dev/agentregistry/pkg/secret/database"
 	secretkubernetes "github.com/agentregistry-dev/agentregistry/pkg/secret/kubernetes"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
+	"github.com/agentregistry-dev/agentregistry/pkg/version"
 )
 
 func App(ctx context.Context, opts ...types.AppOptions) error {
@@ -150,7 +151,7 @@ func App(ctx context.Context, opts ...types.AppOptions) error {
 	if gitCredentials == nil && secretStore != nil {
 		gitCredentials = gitutil.NewSecretCredentialResolver(secretResolver)
 	}
-	gitSource := gitutil.NewSource(gitCredentials)
+	gitSource := gitutil.NewSource(gitCredentials, gitutil.Limits{MaxBytes: bundle.MaxBundleBytes, MaxEntries: bundle.MaxBundleFiles})
 	pluginController, err := controller.NewPluginController(pool, stores, controller.PluginControllerDeps{Git: gitSource})
 	if err != nil {
 		return fmt.Errorf("create plugin controller: %w", err)

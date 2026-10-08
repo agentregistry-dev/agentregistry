@@ -25,6 +25,8 @@ func TestKagentAgentMCP(t *testing.T) {
 	mcpName := "e2e-" + id + "-mcp"
 	mcpDeploymentName := "e2e-" + id + "-mcp-deployment"
 
+	agentWorkloadName := kagentDeploymentWorkloadName(agentDeploymentName)
+	mcpWorkloadName := kagentDeploymentWorkloadName(mcpDeploymentName)
 	names := kagentLifecycleNames{
 		Secret:        secretName,
 		Runtime:       runtimeName,
@@ -41,8 +43,8 @@ func TestKagentAgentMCP(t *testing.T) {
 		"Kagent Agent with MCP E2E scenario",
 		id,
 	)
-	registerKagentObjectCleanup(t, "agents.kagent.dev", agentName)
-	registerKagentObjectCleanup(t, "mcpservers.kagent.dev", mcpName)
+	registerKagentObjectCleanup(t, "agents.kagent.dev", agentWorkloadName)
+	registerKagentObjectCleanup(t, "mcpservers.kagent.dev", mcpWorkloadName)
 	docs.Step(
 		"Deploy an Agent with an MCPServer",
 		"Create a secret-backed Kagent Runtime, deploy a source-backed MCPServer, and deploy an Agent that references it without deploymentRefs.",
@@ -64,22 +66,22 @@ func TestKagentAgentMCP(t *testing.T) {
 	waitForKagentDeploymentReady(t, workDir, registryURL, mcpDeploymentName)
 	waitForKagentDeploymentReady(t, workDir, registryURL, agentDeploymentName)
 
-	waitForKagentResourceCreated(t, "agents.kagent.dev", agentName)
-	agentWorkload := waitForKagentWorkloadCreated(t, agentName)
+	waitForKagentResourceCreated(t, "agents.kagent.dev", agentWorkloadName)
+	agentWorkload := waitForKagentWorkloadCreated(t, agentWorkloadName)
 	assertContainerEnvironment(t, agentWorkload, "HOST", "0.0.0.0")
 	assertContainerEnvironment(t, agentWorkload, "KAGENT_NAMESPACE", kagentNamespace)
-	assertContainerEnvironment(t, agentWorkload, "KAGENT_NAME", agentName)
+	assertContainerEnvironment(t, agentWorkload, "KAGENT_NAME", agentWorkloadName)
 	assertContainerEnvironment(t, agentWorkload, "KAGENT_URL", kagentControllerURL)
 	assertContainerEnvironment(t, agentWorkload, "MODEL_PROVIDER", "bedrock")
 	assertContainerEnvironment(t, agentWorkload, "MODEL_NAME", "anthropic.claude-3-5-sonnet-20241022-v2:0")
 
-	waitForKagentResourceCreated(t, "mcpservers.kagent.dev", mcpName)
-	waitForKagentWorkloadAvailable(t, mcpName)
-	assert.Contains(t, listKagentMCPTools(t, mcpName), "create_entities")
+	waitForKagentResourceCreated(t, "mcpservers.kagent.dev", mcpWorkloadName)
+	waitForKagentWorkloadAvailable(t, mcpWorkloadName)
+	assert.Contains(t, listKagentMCPTools(t, mcpWorkloadName), "create_entities")
 
 	mcpConfig := containerEnvironment(t, agentWorkload, "MCP_SERVERS_CONFIG")
 	require.NotEmpty(t, mcpConfig)
-	assertKagentMCPConfig(t, mcpConfig, mcpDeploymentName, mcpName)
+	assertKagentMCPConfig(t, mcpConfig, mcpDeploymentName, mcpWorkloadName)
 
 	docs.Step(
 		"Remove the deployments",
@@ -87,16 +89,16 @@ func TestKagentAgentMCP(t *testing.T) {
 	)
 	docs.Command("arctl delete deployment " + agentDeploymentName)
 	docs.Command("arctl delete deployment " + mcpDeploymentName)
-	docs.Command("kubectl --context kind-${KIND_CLUSTER_NAME} -n \"${KAGENT_NAMESPACE}\" wait --for=delete agent/" + agentName + " --timeout=2m")
-	docs.Command("kubectl --context kind-${KIND_CLUSTER_NAME} -n \"${KAGENT_NAMESPACE}\" wait --for=delete mcpserver/" + mcpName + " --timeout=2m")
+	docs.Command("kubectl --context kind-${KIND_CLUSTER_NAME} -n \"${KAGENT_NAMESPACE}\" wait --for=delete agent/" + agentWorkloadName + " --timeout=2m")
+	docs.Command("kubectl --context kind-${KIND_CLUSTER_NAME} -n \"${KAGENT_NAMESPACE}\" wait --for=delete mcpserver/" + mcpWorkloadName + " --timeout=2m")
 	docs.Command("arctl delete agent " + agentName)
 	docs.Command("arctl delete mcpserver " + mcpName)
 	docs.Command("arctl delete model " + modelName + " --tag e2e")
 	docs.Command("arctl delete -f - <<EOF\n" + kagentRuntimeManifest(secretName, runtimeName) + "\nEOF")
 	e2e.RequireSuccess(t, e2e.RunArctl(t, workDir, "delete", "deployment", agentDeploymentName, "--registry-url", registryURL))
 	e2e.RequireSuccess(t, e2e.RunArctl(t, workDir, "delete", "deployment", mcpDeploymentName, "--registry-url", registryURL))
-	waitForKagentResourceDeleted(t, "agents.kagent.dev", agentName)
-	waitForKagentResourceDeleted(t, "mcpservers.kagent.dev", mcpName)
-	waitForKagentWorkloadDeleted(t, agentName)
-	waitForKagentWorkloadDeleted(t, mcpName)
+	waitForKagentResourceDeleted(t, "agents.kagent.dev", agentWorkloadName)
+	waitForKagentResourceDeleted(t, "mcpservers.kagent.dev", mcpWorkloadName)
+	waitForKagentWorkloadDeleted(t, agentWorkloadName)
+	waitForKagentWorkloadDeleted(t, mcpWorkloadName)
 }

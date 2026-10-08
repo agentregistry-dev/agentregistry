@@ -39,19 +39,12 @@ type AgentSpec struct {
 	// Source declares the runnable agent container and its protocol.
 	Source *AgentSource `json:"source,omitempty" yaml:"source,omitempty"`
 
-	// CompatibleHarnesses declares which coding harnesses this Agent can run
-	// under. The Deployment selects the concrete harness type for a
-	// rollout; Agent remains the portable compatibility contract.
-	CompatibleHarnesses []HarnessCompatibility `json:"compatibleHarnesses,omitempty" yaml:"compatibleHarnesses,omitempty"`
-
 	// Composition — top-level, harness-agnostic references to what the agent
 	// is assembled from. The selected Deployment harness materializes what it
-	// supports and drops-with-warning the rest (capability matrix). Plugins,
-	// Skills, and Instructions require compatibleHarnesses because a prebuilt
-	// Image cannot consume them by itself. MCPServers flow to harness runtimes
-	// and remain available to any other runtime that supports MCP. Each ref's
-	// Kind defaults to the field's resource kind; empty Tag means "resolve
-	// latest at reference time".
+	// supports and drops-with-warning the rest (capability matrix). MCPServers
+	// flow to harness runtimes and remain available to any other runtime that
+	// supports MCP. Each ref's Kind defaults to the field's resource kind; empty
+	// Tag means "resolve latest at reference time".
 	Plugins      []ResourceRef `json:"plugins,omitempty" yaml:"plugins,omitempty"`
 	Skills       []ResourceRef `json:"skills,omitempty" yaml:"skills,omitempty"`
 	Instructions *ResourceRef  `json:"instructions,omitempty" yaml:"instructions,omitempty"`
@@ -86,11 +79,3 @@ const (
 	AgentProtocolHTTP            AgentProtocol = "HTTP"
 	AgentProtocolOpenAIResponses AgentProtocol = "OpenAIResponses"
 )
-
-// HarnessCompatibility declares one harness family this Agent can run under.
-// Rollout policy selection lives on Deployment so the same Agent can be rolled
-// out with different compatible harnesses.
-type HarnessCompatibility struct {
-	// Type is the harness family, e.g. "claude-code", "codex", "opencode".
-	Type string `json:"type" yaml:"type"`
-}

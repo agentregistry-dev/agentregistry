@@ -9,13 +9,16 @@ import (
 	"golang.org/x/mod/semver"
 
 	"github.com/agentregistry-dev/agentregistry/internal/cli/mcp/manifest"
-	versionpkg "github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/printer"
+	versionpkg "github.com/agentregistry-dev/agentregistry/pkg/version"
 )
 
 const DefaultUserName = "user"
 
 const DefaultAgentGatewayPort = "21212"
+
+// DefaultDockerRegistry is the registry used for local image references.
+const DefaultDockerRegistry = "localhost:5001"
 
 // BuildLocalImageName constructs a local Docker image name from a project name and version.
 // Returns format: "kebab-case-name:version"

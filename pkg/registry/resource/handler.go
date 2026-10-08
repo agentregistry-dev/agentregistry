@@ -31,6 +31,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
@@ -449,17 +450,22 @@ func registerListTags[T v1alpha1.Object](api huma.API, cfg Config, newObj func()
 		if err != nil {
 			return nil, err
 		}
-		if cfg.Authorize != nil {
-			if err := cfg.Authorize(ctx, AuthorizeInput{Verb: "list", Kind: kind, Namespace: ns, Name: name}); err != nil {
-				return nil, err
-			}
-		}
 		rows, err := cfg.Store.ListTags(ctx, ns, name)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("list tags "+kind, err)
 		}
 		items := make([]T, 0, len(rows))
 		for _, row := range rows {
+			// Each tag is its own object with its own labels, so the response holds the tags the caller may get.
+			if cfg.Authorize != nil {
+				err := cfg.Authorize(ctx, AuthorizeInput{Verb: "get", Kind: kind, Namespace: ns, Name: name, Tag: row.Metadata.Tag})
+				if isForbidden(err) {
+					continue
+				}
+				if err != nil {
+					return nil, err
+				}
+			}
 			obj, err := v1alpha1.EnvelopeFromRaw(newObj, row, kind)
 			if err != nil {
 				return nil, huma.Error500InternalServerError("decode "+kind, err)
@@ -805,6 +811,12 @@ func appendExtraWhere(opts *v1alpha1store.ListOpts, predicateFormat string, arg 
 		return
 	}
 	opts.ExtraWhere = "(" + opts.ExtraWhere + ") AND (" + predicate + ")"
+}
+
+// isForbidden reports a denial, returned as the auth sentinel or a Huma 403, rather than a failure.
+func isForbidden(err error) bool {
+	var status huma.StatusError
+	return errors.Is(err, auth.ErrForbidden) || (errors.As(err, &status) && status.GetStatus() == http.StatusForbidden)
 }
 
 // mapNotFound converts a pkgdb.ErrNotFound error into a Huma 404 with a

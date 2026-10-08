@@ -13,7 +13,7 @@ These five kinds share the same endpoint shape. `{kind}` = `agent` | `server` | 
 | List | `GET /v0/{kind}s` | none | Filtering is delegated to the provider implementation; the list boundary intentionally skips checks. |
 | Get latest tag | `GET /v0/{kind}s/{name}` | `Read` on `{kind}:{name}` | Resolves the literal `latest` tag. |
 | Get exact tag | `GET /v0/{kind}s/{name}/{tag}` | `Read` on `{kind}:{name}` | |
-| List tags | `GET /v0/{kind}s/{name}/tags` | `Read` on `{kind}:{name}` | |
+| List tags | `GET /v0/{kind}s/{name}/tags` | `Read` on `{kind}:{name}`, per tag | Each tag is authorized as a get of that tag; the response holds the tags the caller may read. |
 | Apply | `POST /v0/apply` | `Read` + `Publish` or `Read` + `Edit` on `{kind}:{name}` | Creates or replaces `metadata.tag`; omitted tags resolve to literal `latest`. |
 | Delete latest tag | `DELETE /v0/{kind}s/{name}` | `Delete` on `{kind}:{name}` | Deletes the literal `latest` tag. |
 | Delete exact tag | `DELETE /v0/{kind}s/{name}/{tag}` | `Delete` on `{kind}:{name}` | |
@@ -37,10 +37,10 @@ Model is a tagged catalog kind. Each tag versions provider identity together wit
 | --- | --- | --- | --- |
 | List | `GET /v0/models` | none | Filtering is delegated to the provider implementation; the list boundary intentionally skips checks. |
 | Get latest | `GET /v0/models/{name}` | `Read` on `model:{name}` | Resolves the literal `latest` tag. |
-| List tags | `GET /v0/models/{name}/tags` | `Read` on `model:{name}` | |
+| List tags | `GET /v0/models/{name}/tags` | `Read` on `model:{name}`, per tag | Each tag is authorized as a get of that tag; the response holds the tags the caller may read. |
 | Get tag | `GET /v0/models/{name}/{tag}` | `Read` on `model:{name}` | |
 | Apply | `POST /v0/apply` | `Read` + `Publish` (new tag) or `Read` + `Edit` (existing tag) on `model:{name}` | Omitted `metadata.tag` defaults to `latest`. |
-| Delete tag | `DELETE /v0/models/{name}/{tag}` | `Delete` on `model:{name}` | Batch delete with an omitted tag deletes every tag for the name. |
+| Delete tag | `DELETE /v0/models/{name}/{tag}` | `Delete` on `model:{name}` | Batch delete with an omitted tag deletes every tag for the name, after authorizing each live tag. |
 
 ## Deployments
 
@@ -65,7 +65,7 @@ Agent deployments additionally invoke `Read` on each referenced `plugin:{ref}`, 
 | Operation | HTTP | Required permissions | Notes |
 | --- | --- | --- | --- |
 | Apply | `POST /v0/apply` | Per-document; depends on kind and whether the row already exists | Each document dispatches to its kind handler individually; partial failure is allowed. Artifacts (`agent`/`server`/`model`/`plugin`/`skill`/`prompt`): `Read` + `Publish` if the tag is new, `Read` + `Edit` if it already exists. `provider`: `Read` + `Edit` if it exists, `Read` + `Publish` if new. `deployment`: same as `PUT /v0/deployments/{name}?namespace={namespace}`. |
-| Delete | `DELETE /v0/apply` | Per-document; depends on kind | Artifacts and `model`: `Delete` on `{kind}:{name}`. `provider`: `Read` + `Delete` on `provider:{name}`. `deployment`: `Deploy` on target (see Deployments section). |
+| Delete | `DELETE /v0/apply` | Per-document; depends on kind | Artifacts and `model`: `Delete` on `{kind}:{name}`; an omitted tag deletes every tag and authorizes each live tag. `provider`: `Read` + `Delete` on `provider:{name}`. `deployment`: `Deploy` on target (see Deployments section). |
 
 ## Public
 
@@ -80,7 +80,7 @@ Agent deployments additionally invoke `Read` on each referenced `plugin:{ref}`, 
 
 ## MCP Registry v0.1 compatibility (read-only)
 
-The compatibility shim (`docs/mcp-registry-compatibility.md`) re-exposes MCPServer rows in the official `server.json` shape. It reuses the **same per-kind `ListFilter` + `Authorize` hooks as the native MCPServer read path** (`crud.PerKindHooks`): the list endpoint applies the kind's `ListFilter`, and the single-server reads apply its `Authorize` (a forbidden or unauthenticated read returns 404). In the public OSS build those hooks are absent, so the catalogue is unfiltered across all namespaces (matching the `List` boundary above); a downstream provider that gates MCPServer reads gates these endpoints identically. The routes are registered as authn **public paths**: where an authn provider is configured, requests under them bypass credential authentication and instead carry an `auth.PublicSession`, so the hooks still receive a session and decide what the public catalogue exposes (OSS configures no authn provider, so the routes are anonymous either way). Because enabling the shim makes these routes reachable without credentials, the feature is **off by default** — enable it (`AGENT_REGISTRY_MCP_REGISTRY_COMPAT_ENABLED=true`) only where a public catalogue, as scoped by your wired hooks, is acceptable.
+The compatibility shim (`docs/mcp-registry-compatibility.md`) re-exposes MCPServer rows in the official `server.json` shape. It reuses the **same per-kind `ListFilter` + `Authorize` hooks as the native MCPServer read path** (`crud.PerKindHooks`): the list endpoint applies the kind's `ListFilter`, and the single-server reads apply its `Authorize` (a forbidden or unauthenticated read returns 404). In the public OSS build those hooks are absent, so the catalogue is unfiltered across all namespaces (matching the `List` boundary above); a downstream provider that gates MCPServer reads gates these endpoints identically. The routes are registered as authn **public paths**: where an authn provider is configured, a request without credentials carries an `auth.PublicSession`, so the hooks still receive a session and decide what the public catalogue exposes, while a request with credentials is authenticated like any other and sees what its own grants allow; invalid credentials are rejected rather than treated as anonymous (OSS configures no authn provider, so the routes are anonymous either way). Because enabling the shim makes these routes reachable without credentials, the feature is **off by default** — enable it (`AGENT_REGISTRY_MCP_REGISTRY_COMPAT_ENABLED=true`) only where a public catalogue, as scoped by your wired hooks, is acceptable.
 
 | Operation | HTTP | Required permissions | Notes |
 | --- | --- | --- | --- |
