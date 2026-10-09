@@ -79,6 +79,89 @@ spec:
 	require.Equal(t, arv0.ApplyStatusUnchanged, out.Results[1].Status)
 }
 
+// TestRegisterApply_NamespaceSelection pins the ?namespace= rule for batch
+// writes: an omitted metadata.namespace takes the selection, a different one
+// fails without writing, no selection keeps the document's own namespace, and
+// "all" is rejected.
+func TestRegisterApply_NamespaceSelection(t *testing.T) {
+	agentDoc := func(namespace string) string {
+		doc := "apiVersion: ar.dev/v1alpha1\nkind: Agent\nmetadata:\n"
+		if namespace != "" {
+			doc += "  namespace: " + namespace + "\n"
+		}
+		return doc + "  name: alice\nspec:\n  title: Alice\n"
+	}
+
+	tests := []struct {
+		name          string
+		query         string
+		docNamespace  string
+		wantStatus    string
+		wantNamespace string
+		wantError     string
+	}{
+		{name: "omitted namespace takes selection", query: "?namespace=team-a", wantStatus: arv0.ApplyStatusCreated, wantNamespace: "team-a"},
+		{name: "matching namespace", query: "?namespace=team-a", docNamespace: "team-a", wantStatus: arv0.ApplyStatusCreated, wantNamespace: "team-a"},
+		{name: "conflicting namespace fails", query: "?namespace=team-a", docNamespace: "team-b", wantStatus: arv0.ApplyStatusFailed, wantNamespace: "team-b", wantError: `metadata.namespace "team-b" does not match ?namespace="team-a"`},
+		{name: "no selection keeps document namespace", docNamespace: "team-b", wantStatus: arv0.ApplyStatusCreated, wantNamespace: "team-b"},
+		{name: "no selection defaults", wantStatus: arv0.ApplyStatusCreated, wantNamespace: v1alpha1.DefaultNamespace},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pool := v1alpha1store.NewTestPool(t)
+			agents := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
+			_, api := humatest.New(t)
+			resource.RegisterApply(api, resource.ApplyConfig{
+				BasePrefix: "/v0",
+				Stores:     map[string]*v1alpha1store.Store{v1alpha1.KindAgent: agents},
+			})
+
+			resp := api.Post("/v0/apply"+tt.query, "Content-Type: application/yaml", strings.NewReader(agentDoc(tt.docNamespace)))
+			require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+			var out struct {
+				Results []arv0.ApplyResult `json:"results"`
+			}
+			require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+			require.Len(t, out.Results, 1)
+			require.Equal(t, tt.wantStatus, out.Results[0].Status, out.Results[0].Error)
+			require.Equal(t, tt.wantNamespace, out.Results[0].Namespace)
+			if tt.wantError != "" {
+				require.Contains(t, out.Results[0].Error, tt.wantError)
+				_, err := agents.GetLatest(t.Context(), tt.wantNamespace, "alice")
+				require.ErrorIs(t, err, pkgdb.ErrNotFound)
+				return
+			}
+			_, err := agents.GetLatest(t.Context(), tt.wantNamespace, "alice")
+			require.NoError(t, err)
+
+			// The same selection deletes what it applied.
+			resp = api.Do(http.MethodDelete, "/v0/apply"+tt.query, "Content-Type: application/yaml", strings.NewReader(agentDoc(tt.docNamespace)))
+			require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+			require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+			require.Len(t, out.Results, 1)
+			require.Equal(t, arv0.ApplyStatusDeleted, out.Results[0].Status, out.Results[0].Error)
+			require.Equal(t, tt.wantNamespace, out.Results[0].Namespace)
+		})
+	}
+
+	t.Run("all is rejected", func(t *testing.T) {
+		pool := v1alpha1store.NewTestPool(t)
+		agents := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
+		_, api := humatest.New(t)
+		resource.RegisterApply(api, resource.ApplyConfig{
+			BasePrefix: "/v0",
+			Stores:     map[string]*v1alpha1store.Store{v1alpha1.KindAgent: agents},
+		})
+		for _, method := range []string{http.MethodPost, http.MethodDelete} {
+			resp := api.Do(method, "/v0/apply?namespace=all", "Content-Type: application/yaml", strings.NewReader(agentDoc("")))
+			require.Equal(t, http.StatusBadRequest, resp.Code, method)
+			require.Contains(t, resp.Body.String(), "read-only", method)
+		}
+		_, err := agents.GetLatest(t.Context(), v1alpha1.DefaultNamespace, "alice")
+		require.ErrorIs(t, err, pkgdb.ErrNotFound)
+	})
+}
+
 func TestRegisterApply_PerDocFailureDoesntAbortBatch(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
 	agents := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")

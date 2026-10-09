@@ -26,6 +26,11 @@ func NewGetCmd(deps cliruntime.Deps) *cobra.Command {
 		Short: "List or retrieve registry resources by type",
 		Long: `List every resource of a type, or fetch a single one by name.
 
+Lists and NAME lookups use the namespace selected by --namespace/-n, else
+ARCTL_NAMESPACE, else "default". NAME may also be NAMESPACE/NAME; a namespace
+there must match the selected one. -A/--all-namespaces lists every namespace
+you can view.
+
 Supported types: ` + supportedTypes + `.
 Type names are case-insensitive; singular, plural, and registered aliases are accepted.
 
@@ -41,6 +46,9 @@ Examples:
   arctl get agent acme-summarizer -o yaml
   arctl get agent acme-summarizer --tag stable
   arctl get agent acme-summarizer --all-tags
+  arctl get agents -n team-a             # list rows in namespace team-a
+  arctl get agents -A                    # list rows in every namespace you can view
+  arctl get agent acme-summarizer -n team-a
   arctl get deployment team-a/acme-summarizer
   arctl get deployments --origin discovered  # list discovered (unmanaged) deployments
   arctl get deployments --origin all         # list managed and discovered
@@ -58,6 +66,7 @@ Examples:
 	cmd.Flags().Bool("latest", false, "Tagged kinds only: list rows with the literal 'latest' tag (equivalent to --tag latest).")
 	cmd.Flags().Bool("all-tags", false, "Tagged kinds only: list every tag of NAME")
 	cmd.Flags().String("origin", "", "Deployments only: filter provenance by managed, discovered, or all (defaults to managed when unset).")
+	cmd.Flags().BoolP("all-namespaces", "A", false, "List rows in every namespace you can view, with a NAMESPACE column. Lists only; overrides --namespace.")
 	return cmd
 }
 
@@ -69,6 +78,7 @@ func runGet(cmd *cobra.Command, deps cliruntime.Deps, args []string) error {
 	labels, _ := cmd.Flags().GetString("labels")
 	tag, _ := cmd.Flags().GetString("tag")
 	origin, _ := cmd.Flags().GetString("origin")
+	allNamespaces, _ := cmd.Flags().GetBool("all-namespaces")
 	allTagsFlag := "--all-tags"
 	tagFlag := "--tag"
 	latestFlag := "--latest"
@@ -85,6 +95,18 @@ func runGet(cmd *cobra.Command, deps cliruntime.Deps, args []string) error {
 	if latest && tag != "" {
 		return fmt.Errorf("%s and %s are mutually exclusive", tagFlag, latestFlag)
 	}
+	if allNamespaces && len(args) == 2 {
+		return fmt.Errorf("-A/--all-namespaces is a list option and cannot be combined with a resource NAME")
+	}
+
+	sel, err := selectedNamespace(deps)
+	if err != nil {
+		return err
+	}
+	targetNamespace := sel.Namespace
+	if allNamespaces {
+		targetNamespace = namespaceAll
+	}
 
 	originOpt, err := resolveOrigin(origin)
 	if err != nil {
@@ -96,10 +118,11 @@ func runGet(cmd *cobra.Command, deps cliruntime.Deps, args []string) error {
 			return fmt.Errorf("--origin cannot be used with `get all`")
 		}
 		return runGetAllArg(cmd, deps, kinds, outputFormat, getFlags{
-			allTags: allTags,
-			labels:  labels,
-			latest:  latest,
-			tag:     tag,
+			allTags:   allTags,
+			labels:    labels,
+			latest:    latest,
+			tag:       tag,
+			namespace: targetNamespace,
 		})
 	}
 
@@ -111,7 +134,7 @@ func runGet(cmd *cobra.Command, deps cliruntime.Deps, args []string) error {
 	}
 
 	if allTags {
-		return runGetAllTags(cmd, deps, k, args, outputFormat)
+		return runGetAllTags(cmd, deps, k, args, sel, outputFormat)
 	}
 
 	// --tag / --latest are only meaningful for tagged content-registry kinds.
@@ -147,35 +170,48 @@ func runGet(cmd *cobra.Command, deps cliruntime.Deps, args []string) error {
 	}
 
 	if len(args) == 2 {
-		name := args[1]
-		item, err := getItem(cmd.Context(), c, k, name, tag)
+		ref, err := resolveResourceRef(args[1], sel)
 		if err != nil {
-			return fmt.Errorf("getting %s %q: %w", k.Kind, name, err)
+			return err
+		}
+		item, err := getItem(cmd.Context(), c, k, ref, tag)
+		if err != nil {
+			return fmt.Errorf("getting %s %q: %w", k.Kind, ref, err)
 		}
 		if item == nil {
-			fmt.Fprintf(cmd.OutOrStdout(), "%s %q not found\n", k.Kind, name)
+			fmt.Fprintf(cmd.OutOrStdout(), "%s %q not found\n", k.Kind, ref)
 			return nil
 		}
 		return printItem(cmd, k, item, outputFormat)
 	}
 
-	listOpts := scheme.ListOpts{Labels: labels, Tag: tag, LatestOnly: latest, Origin: originOpt}
+	listOpts := scheme.ListOpts{Namespace: targetNamespace, Labels: labels, Tag: tag, LatestOnly: latest, Origin: originOpt}
 	items, err := listItems(cmd.Context(), c, k, listOpts)
 	if err != nil {
 		return fmt.Errorf("listing %s: %w", kindPlural(k), err)
 	}
 	if len(items) == 0 {
-		fmt.Fprintf(cmd.OutOrStdout(), "No %s found.\n", kindPlural(k))
+		fmt.Fprintf(cmd.OutOrStdout(), "No %s found%s.\n", kindPlural(k), inNamespaceSuffix(targetNamespace))
 		return nil
 	}
 	return printItems(cmd, k, items, outputFormat)
 }
 
 type getFlags struct {
-	allTags bool
-	labels  string
-	latest  bool
-	tag     string
+	allTags   bool
+	labels    string
+	latest    bool
+	tag       string
+	namespace string
+}
+
+// inNamespaceSuffix qualifies an empty-list message with the namespace when
+// it is neither the default namespace nor every namespace.
+func inNamespaceSuffix(namespace string) string {
+	if namespace == "" || namespace == v1alpha1.DefaultNamespace || namespace == namespaceAll {
+		return ""
+	}
+	return fmt.Sprintf(" in namespace %q", namespace)
 }
 
 // resolveOrigin validates the CLI --origin selector and normalizes it into
@@ -214,27 +250,30 @@ func runGetAllArg(cmd *cobra.Command, deps cliruntime.Deps, kinds *scheme.Regist
 	if err != nil {
 		return err
 	}
-	return runGetAll(cmd, kinds, c, outputFormat)
+	return runGetAll(cmd, kinds, c, flags.namespace, outputFormat)
 }
 
-func runGetAllTags(cmd *cobra.Command, deps cliruntime.Deps, k *scheme.Kind, args []string, outputFormat string) error {
+func runGetAllTags(cmd *cobra.Command, deps cliruntime.Deps, k *scheme.Kind, args []string, sel namespaceSelection, outputFormat string) error {
 	if len(args) != 2 {
 		return fmt.Errorf("--all-tags requires NAME")
 	}
 	if k.ListTags == nil {
 		return fmt.Errorf("--all-tags not supported for kind %q (resource is not taggable)", k.Kind)
 	}
+	ref, err := resolveResourceRef(args[1], sel)
+	if err != nil {
+		return err
+	}
 	c, err := registryClient(cmd, deps)
 	if err != nil {
 		return err
 	}
-	name := args[1]
-	items, err := listTags(cmd.Context(), c, k, name)
+	items, err := listTags(cmd.Context(), c, k, ref)
 	if err != nil {
-		return fmt.Errorf("listing tags of %s %q: %w", k.Kind, name, err)
+		return fmt.Errorf("listing tags of %s %q: %w", k.Kind, ref, err)
 	}
 	if len(items) == 0 {
-		fmt.Fprintf(cmd.OutOrStdout(), "No tags of %s %q found.\n", k.Kind, name)
+		fmt.Fprintf(cmd.OutOrStdout(), "No tags of %s %q found.\n", k.Kind, ref)
 		return nil
 	}
 	return printItems(cmd, k, items, outputFormat)
@@ -251,11 +290,11 @@ func registryClient(cmd *cobra.Command, deps cliruntime.Deps) (*client.Client, e
 	return c, nil
 }
 
-func runGetAll(cmd *cobra.Command, kinds *scheme.Registry, c *client.Client, outputFormat string) error {
+func runGetAll(cmd *cobra.Command, kinds *scheme.Registry, c *client.Client, namespace, outputFormat string) error {
 	allKinds := kinds.All()
 	first := true
 	for _, k := range allKinds {
-		opts := scheme.ListOpts{}
+		opts := scheme.ListOpts{Namespace: namespace}
 		if strings.EqualFold(k.Kind, v1alpha1.KindDeployment) {
 			opts.Origin = v1alpha1.DeploymentOriginManaged
 		}
@@ -280,7 +319,7 @@ func runGetAll(cmd *cobra.Command, kinds *scheme.Registry, c *client.Client, out
 		}
 	}
 	if first {
-		fmt.Fprintln(cmd.OutOrStdout(), "No resources found.")
+		fmt.Fprintf(cmd.OutOrStdout(), "No resources found%s.\n", inNamespaceSuffix(namespace))
 	}
 	return nil
 }
@@ -297,10 +336,10 @@ func printItem(cmd *cobra.Command, k *scheme.Kind, item any, outputFormat string
 	case "json":
 		return marshalJSON(cmd, item)
 	default:
-		showLabels, _ := cmd.Flags().GetBool("show-labels")
+		cols := tableOptionsFromFlags(cmd)
 		t := printer.NewTablePrinter(cmd.OutOrStdout())
-		t.SetHeaders(tableHeaders(k, showLabels)...)
-		t.AddRow(stringsToAny(tableRowWithLabels(k, item, showLabels))...)
+		t.SetHeaders(tableHeaders(k, cols)...)
+		t.AddRow(stringsToAny(tableRowWithExtras(k, item, cols))...)
 		return t.Render()
 	}
 }
@@ -325,34 +364,68 @@ func printItems(cmd *cobra.Command, k *scheme.Kind, items []any, outputFormat st
 	case "json":
 		return marshalJSON(cmd, items)
 	default:
-		showLabels, _ := cmd.Flags().GetBool("show-labels")
+		cols := tableOptionsFromFlags(cmd)
 		t := printer.NewTablePrinter(cmd.OutOrStdout())
-		t.SetHeaders(tableHeaders(k, showLabels)...)
+		t.SetHeaders(tableHeaders(k, cols)...)
 		for _, item := range items {
-			t.AddRow(stringsToAny(tableRowWithLabels(k, item, showLabels))...)
+			t.AddRow(stringsToAny(tableRowWithExtras(k, item, cols))...)
 		}
 		return t.Render()
 	}
 }
 
-// tableHeaders returns the kind's table columns, with a trailing LABELS
-// column appended when --show-labels is set.
-func tableHeaders(k *scheme.Kind, showLabels bool) []string {
+// tableOptions selects the generic columns added around a kind's own columns.
+type tableOptions struct {
+	// namespace prepends a NAMESPACE column (-A/--all-namespaces).
+	namespace bool
+	// labels appends a LABELS column (--show-labels).
+	labels bool
+}
+
+func tableOptionsFromFlags(cmd *cobra.Command) tableOptions {
+	allNamespaces, _ := cmd.Flags().GetBool("all-namespaces")
+	showLabels, _ := cmd.Flags().GetBool("show-labels")
+	return tableOptions{namespace: allNamespaces, labels: showLabels}
+}
+
+// tableHeaders returns the kind's table columns, with a leading NAMESPACE
+// column for -A and a trailing LABELS column for --show-labels.
+func tableHeaders(k *scheme.Kind, opts tableOptions) []string {
 	headers := tableColumns(k)
-	if showLabels {
+	if opts.namespace {
+		headers = append([]string{"NAMESPACE"}, headers...)
+	}
+	if opts.labels {
 		headers = append(headers, "LABELS")
 	}
 	return headers
 }
 
-// tableRowWithLabels returns the kind's row, with the item's labels appended
-// as a trailing column when --show-labels is set.
-func tableRowWithLabels(k *scheme.Kind, item any, showLabels bool) []string {
+// tableRowWithExtras returns the kind's row, with the item's namespace and
+// labels added to match tableHeaders.
+func tableRowWithExtras(k *scheme.Kind, item any, opts tableOptions) []string {
 	row := tableRow(k, item)
-	if showLabels {
+	if opts.namespace {
+		row = append([]string{formatNamespace(item)}, row...)
+	}
+	if opts.labels {
 		row = append(row, formatLabels(item))
 	}
 	return row
+}
+
+// formatNamespace renders an item's namespace; an omitted namespace is the
+// default namespace.
+func formatNamespace(item any) string {
+	obj, ok := item.(v1alpha1.Object)
+	if !ok {
+		return "<none>"
+	}
+	meta := obj.GetMetadata()
+	if meta == nil {
+		return "<none>"
+	}
+	return meta.NamespaceOrDefault()
 }
 
 // formatLabels renders an item's metadata labels as a sorted,

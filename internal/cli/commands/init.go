@@ -192,7 +192,7 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 			// files, so a registry failure leaves no partial state.
 			fetcher := mcpFetcherForTest
 			if fetcher == nil {
-				fetcher = registryClientMCPFetcher{cmd: cmd, runtime: deps.Runtime}
+				fetcher = registryClientMCPFetcher{cmd: cmd, deps: deps}
 			}
 			var remoteEntries []mcpEnvEntry
 			var resolvedRefs []*mcpresolve.ResolvedMCP

@@ -32,8 +32,14 @@ documents and applies them via POST /v0/apply.
 Each resource is applied atomically; the server reports per-resource status.
 Best-effort: per-resource errors are reported without aborting the batch.
 
+A namespace selected by --namespace/-n or ARCTL_NAMESPACE fills documents
+that omit metadata.namespace, and the server rejects documents whose
+metadata.namespace differs from it. Without a selection, each document keeps
+its own metadata.namespace, defaulting to "default".
+
 Examples:
   arctl apply -f agent.yaml
+  arctl apply -f agent.yaml -n team-a
   arctl apply -f stack.yaml --dry-run
   cat stack.yaml | arctl apply -f -`,
 		SilenceUsage: true,
@@ -83,6 +89,10 @@ func runApply(cmd *cobra.Command, deps cliruntime.Deps, dryRun bool) error {
 	if deps.Runtime == nil {
 		return fmt.Errorf("API client not initialized")
 	}
+	sel, err := selectedNamespace(deps)
+	if err != nil {
+		return err
+	}
 	c, err := deps.Runtime.RegistryClient(cmd.Context())
 	if err != nil {
 		return fmt.Errorf("API client not initialized")
@@ -92,7 +102,8 @@ func runApply(cmd *cobra.Command, deps cliruntime.Deps, dryRun bool) error {
 	var anyFailure bool
 	for i, data := range allData {
 		results, err := c.Apply(cmd.Context(), data, client.ApplyOpts{
-			DryRun: dryRun,
+			DryRun:    dryRun,
+			Namespace: applyNamespace(sel),
 		})
 		if err != nil {
 			// Request-level error (network, 4xx) — report and continue if multiple files.
@@ -276,7 +287,7 @@ func printResults(out io.Writer, results []arv0.ApplyResult, dryRun bool) {
 		if r.Status == arv0.ApplyStatusFailed {
 			mark = "✗"
 		}
-		fmt.Fprintf(out, "%s %s/%s", mark, r.Kind, r.Name)
+		fmt.Fprintf(out, "%s %s/%s", mark, r.Kind, resourceLookupRef{Namespace: r.Namespace, Name: r.Name})
 		if r.Tag != "" {
 			fmt.Fprintf(out, " (%s)", r.Tag)
 		}

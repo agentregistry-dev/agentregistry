@@ -24,13 +24,24 @@ func NewPullCmd(deps cliruntime.Deps) *cobra.Command {
 
 Supported type: skill. Reads the resource's
 Spec.Source.Repository.URL from the registry and clones it into DIRECTORY
-(defaults to NAME if omitted).`,
-		Example:      `  arctl pull skill myskill --tag stable`,
+(defaults to NAME if omitted). NAME resolves in the namespace selected by
+--namespace/-n, else ARCTL_NAMESPACE, else "default"; NAMESPACE/NAME is also
+accepted.`,
+		Example: `  arctl pull skill myskill --tag stable
+  arctl pull skill myskill -n team-a`,
 		SilenceUsage: true,
 		Args:         cobra.RangeArgs(2, 3),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			typ, name := args[0], args[1]
-			outDir := name
+			typ := args[0]
+			sel, err := selectedNamespace(deps)
+			if err != nil {
+				return err
+			}
+			ref, err := resolveResourceRef(args[1], sel)
+			if err != nil {
+				return err
+			}
+			outDir := ref.Name
 			if len(args) == 3 {
 				outDir = args[2]
 			}
@@ -38,14 +49,14 @@ Spec.Source.Repository.URL from the registry and clones it into DIRECTORY
 			if err != nil {
 				return err
 			}
-			return pullResource(cmd.Context(), deps, typ, name, tag, abs)
+			return pullResource(cmd.Context(), deps, typ, ref, tag, abs)
 		},
 	}
 	cmd.Flags().StringVar(&tag, "tag", "", "Specific tag to pull")
 	return cmd
 }
 
-func pullResource(ctx context.Context, deps cliruntime.Deps, typ, name, tag, outDir string) error {
+func pullResource(ctx context.Context, deps cliruntime.Deps, typ string, ref resourceLookupRef, tag, outDir string) error {
 	switch typ {
 	case "skill":
 	default:
@@ -63,13 +74,13 @@ func pullResource(ctx context.Context, deps cliruntime.Deps, typ, name, tag, out
 	var repo *v1alpha1.Repository
 	switch typ {
 	case "skill":
-		obj, err := client.GetTyped(ctx, c, v1alpha1.KindSkill, v1alpha1.DefaultNamespace, name, tag,
+		obj, err := client.GetTyped(ctx, c, v1alpha1.KindSkill, ref.Namespace, ref.Name, tag,
 			func() *v1alpha1.Skill { return &v1alpha1.Skill{} })
 		if err != nil || obj == nil {
-			return fmt.Errorf("fetch skill %q: %w", name, err)
+			return fmt.Errorf("fetch skill %q: %w", ref, err)
 		}
 		if obj.Spec.Source == nil || obj.Spec.Source.Repository == nil || obj.Spec.Source.Repository.URL == "" {
-			return fmt.Errorf("skill %q has no source repository URL set", name)
+			return fmt.Errorf("skill %q has no source repository URL set", ref)
 		}
 		repo = obj.Spec.Source.Repository
 	}
@@ -91,6 +102,6 @@ func pullResource(ctx context.Context, deps cliruntime.Deps, typ, name, tag, out
 	if repo.Subfolder != "" {
 		fmt.Printf("(subfolder hint: %s)\n", repo.Subfolder)
 	}
-	fmt.Printf("Pulled %s\n", name)
+	fmt.Printf("Pulled %s\n", ref)
 	return nil
 }

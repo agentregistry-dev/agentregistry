@@ -25,8 +25,11 @@ type Column struct {
 
 // ListOpts are CLI-facing filters forwarded to the per-kind ListFunc.
 // Empty fields mean "no filter" — the default `arctl get <plural>` lists
-// every row of the kind.
+// every row of the kind in the default namespace.
 type ListOpts struct {
+	// Namespace selects the namespace to list. Empty means the default
+	// namespace; "all" lists every namespace the caller can view.
+	Namespace string
 	// Labels is an equality selector forwarded to the registry API.
 	Labels string
 	// Tag, when set, restricts the list to rows with this tag value
@@ -46,21 +49,24 @@ type ListOpts struct {
 type ListFunc func(context.Context, *client.Client, ListOpts) ([]any, error)
 type RowFunc func(any) []string
 type ToYAMLFunc func(any) any
-type GetFunc func(ctx context.Context, c *client.Client, name, tag string) (any, error)
 
-// DeleteFunc deletes a single (name, tag) of the kind.
-type DeleteFunc func(ctx context.Context, c *client.Client, name, tag string) error
+// GetFunc fetches a single (namespace, name, tag) of the kind. The command
+// layer resolves NAMESPACE/NAME arguments, so namespace is never empty.
+type GetFunc func(ctx context.Context, c *client.Client, namespace, name, tag string) (any, error)
 
-// ListTagsFunc returns every live tag row for a single (name).
+// DeleteFunc deletes a single (namespace, name, tag) of the kind.
+type DeleteFunc func(ctx context.Context, c *client.Client, namespace, name, tag string) error
+
+// ListTagsFunc returns every live tag row for a single (namespace, name).
 // Set only on taggable artifact kinds (Agent, MCPServer, Skill, etc.).
 // Nil for kinds whose identity is not tagged (Deployment, Runtime) —
 // callers must check for nil and reject `--all-tags` cleanly.
-type ListTagsFunc func(ctx context.Context, c *client.Client, name string) ([]any, error)
+type ListTagsFunc func(ctx context.Context, c *client.Client, namespace, name string) ([]any, error)
 
-// DeleteAllTagsFunc soft-deletes every live tag of a single (name) in one
-// server round-trip. Set only on taggable artifact kinds. Nil for kinds whose
-// identity is not tagged.
-type DeleteAllTagsFunc func(ctx context.Context, c *client.Client, name string) error
+// DeleteAllTagsFunc soft-deletes every live tag of a single (namespace, name).
+// Set only on taggable artifact kinds. Nil for kinds whose identity is not
+// tagged.
+type DeleteAllTagsFunc func(ctx context.Context, c *client.Client, namespace, name string) error
 
 type Kind struct {
 	Kind          string

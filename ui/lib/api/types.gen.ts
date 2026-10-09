@@ -1148,6 +1148,10 @@ export type DeleteBatchData = {
          * Run validation without mutating the store. Defaults to false.
          */
         dryRun?: boolean;
+        /**
+         * Namespace for documents that omit metadata.namespace; documents naming a different namespace fail. Empty keeps each document's namespace (default 'default'). 'all' is rejected.
+         */
+        namespace?: string;
     };
     url: '/v0/apply';
 };
@@ -1178,6 +1182,10 @@ export type ApplyBatchData = {
          * Run validation without mutating the store. Defaults to false.
          */
         dryRun?: boolean;
+        /**
+         * Namespace for documents that omit metadata.namespace; documents naming a different namespace fail. Empty keeps each document's namespace (default 'default'). 'all' is rejected.
+         */
+        namespace?: string;
     };
     url: '/v0/apply';
 };

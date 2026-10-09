@@ -13,6 +13,7 @@ type Config struct {
 	Auth            AuthProvider
 	RegistryURL     *string
 	RegistryToken   *string
+	Namespace       *string
 	OnTokenResolved func(token string) error
 }
 

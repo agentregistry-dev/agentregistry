@@ -61,18 +61,14 @@ func NewExtensionKind(k ExtensionKind) *scheme.Kind {
 			meta := obj.GetMetadata()
 			return []string{meta.Name}
 		},
-		Get: func(ctx context.Context, c *client.Client, name, _ string) (any, error) {
-			ref, err := parseResourceLookupRef(name)
-			if err != nil {
-				return nil, err
-			}
-			return client.GetTyped(ctx, c, k.CanonicalKind, ref.Namespace, ref.Name, "", k.NewObject)
+		Get: func(ctx context.Context, c *client.Client, namespace, name, _ string) (any, error) {
+			return client.GetTyped(ctx, c, k.CanonicalKind, namespace, name, "", k.NewObject)
 		},
 		ListFunc: func(ctx context.Context, c *client.Client, opts scheme.ListOpts) ([]any, error) {
 			return listAny(ctx, c, k.CanonicalKind, opts, k.NewObject)
 		},
-		Delete: func(ctx context.Context, c *client.Client, name, tag string) error {
-			return deleteAny(ctx, c, k.CanonicalKind, name, tag, k.NewObject)
+		Delete: func(ctx context.Context, c *client.Client, namespace, name, tag string) error {
+			return deleteAny(ctx, c, k.CanonicalKind, namespace, name, tag, k.NewObject)
 		},
 	}
 }

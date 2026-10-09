@@ -2118,6 +2118,17 @@ paths:
         schema:
           description: Run validation without mutating the store. Defaults to false.
           type: boolean
+      - description: Namespace for documents that omit metadata.namespace; documents
+          naming a different namespace fail. Empty keeps each document's namespace
+          (default 'default'). 'all' is rejected.
+        explode: false
+        in: query
+        name: namespace
+        schema:
+          description: Namespace for documents that omit metadata.namespace; documents
+            naming a different namespace fail. Empty keeps each document's namespace
+            (default 'default'). 'all' is rejected.
+          type: string
       requestBody:
         content:
           application/yaml:
@@ -2150,6 +2161,17 @@ paths:
         schema:
           description: Run validation without mutating the store. Defaults to false.
           type: boolean
+      - description: Namespace for documents that omit metadata.namespace; documents
+          naming a different namespace fail. Empty keeps each document's namespace
+          (default 'default'). 'all' is rejected.
+        explode: false
+        in: query
+        name: namespace
+        schema:
+          description: Namespace for documents that omit metadata.namespace; documents
+            naming a different namespace fail. Empty keeps each document's namespace
+            (default 'default'). 'all' is rejected.
+          type: string
       requestBody:
         content:
           application/yaml:

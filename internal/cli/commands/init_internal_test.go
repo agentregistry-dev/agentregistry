@@ -2,7 +2,10 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -162,4 +165,31 @@ func TestInitAgent_MCP_RegistryFailure_NoPartialWrites(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "agent.yaml must not be written on registry failure")
 	_, err = os.Stat(filepath.Join(pd, ".env"))
 	assert.True(t, os.IsNotExist(err), ".env must not be written on registry failure")
+}
+
+func TestRegistryClientMCPFetcher_UsesSelectedNamespace(t *testing.T) {
+	var gotNamespace string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotNamespace = r.URL.Query().Get("namespace")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(v1alpha1.MCPServer{
+			TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindMCPServer},
+			Metadata: v1alpha1.ObjectMeta{Namespace: gotNamespace, Name: "tools", Tag: "latest"},
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	cfg := cliruntime.Config{Env: internalDeclarativeTestEnv{
+		"ARCTL_API_BASE_URL": srv.URL,
+		"ARCTL_NAMESPACE":    "team-a",
+	}}
+	fetcher := registryClientMCPFetcher{deps: cliruntime.Deps{Runtime: cliruntime.New(cfg)}}
+
+	server, err := fetcher.Fetch(context.Background(), "tools", "")
+	require.NoError(t, err)
+	assert.Equal(t, "team-a", gotNamespace)
+	assert.Equal(t, "tools", server.Metadata.Name)
+
+	_, err = fetcher.Fetch(context.Background(), "team-b/tools", "")
+	require.ErrorContains(t, err, `conflicts with selected namespace "team-a"`)
 }

@@ -35,15 +35,18 @@ func Root(cfg Config) *cobra.Command {
 	}
 	var registryURL string
 	var registryToken string
+	var namespace string
 	rt := cliruntime.New(cliruntime.Config{
 		Env:             cfg.Env,
 		Auth:            cfg.Auth,
 		RegistryURL:     &registryURL,
 		RegistryToken:   &registryToken,
+		Namespace:       &namespace,
 		OnTokenResolved: cfg.OnTokenResolved,
 	})
 	root.PersistentFlags().StringVar(&registryURL, "registry-url", cfg.Env.Getenv("ARCTL_API_BASE_URL"), "Registry URL (overrides ARCTL_API_BASE_URL env var; defaults to http://localhost:12121)")
 	root.PersistentFlags().StringVar(&registryToken, "registry-token", "", "Registry bearer token (defaults to value of ARCTL_API_TOKEN env var)")
+	root.PersistentFlags().StringVarP(&namespace, "namespace", "n", "", `Registry namespace to operate in (defaults to value of ARCTL_NAMESPACE env var, else "default")`)
 
 	kinds := scheme.NewRegistry(scheme.All()...)
 	for _, kind := range cfg.DeclarativeKinds {
