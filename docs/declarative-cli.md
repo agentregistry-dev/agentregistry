@@ -47,6 +47,25 @@ arctl run --dry-run   # print the command without executing
 npx -y @modelcontextprotocol/inspector --server-url <url>
 ```
 
+## Namespaces
+
+Every resource lives in one namespace. Commands use the namespace selected by `--namespace` (`-n`), else the `ARCTL_NAMESPACE` environment variable, else `default`.
+
+```bash
+arctl get agents -n team-a                  # list team-a
+arctl get agents -A                         # list every namespace you can view, with a NAMESPACE column
+arctl get agent summarizer -n team-a        # same as: arctl get agent team-a/summarizer
+arctl delete deployment summarizer -n team-a
+arctl apply -f summarizer/agent.yaml -n team-a
+
+export ARCTL_NAMESPACE=team-a               # select team-a for the rest of the session
+arctl get all
+```
+
+- `NAMESPACE/NAME` works anywhere a NAME does. When a namespace is selected, the namespace in `NAMESPACE/NAME` must match it.
+- `apply -f` and `delete -f` with a selected namespace place documents that omit `metadata.namespace` in that namespace. The server rejects a document whose `metadata.namespace` names a different one. Without a selection, each document keeps its own `metadata.namespace`, and a document without one goes to `default`.
+- `-A` (`--all-namespaces`) is for lists only. `all` is not a namespace, so `-n all` and `all/NAME` are rejected.
+
 ## Models and harness deployment defaults
 
 Models are admin-owned tagged resources containing provider identity together

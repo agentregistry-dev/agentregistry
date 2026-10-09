@@ -29,22 +29,67 @@ func kindRegistry(deps cliruntime.Deps) *scheme.Registry {
 	return scheme.NewRegistry(scheme.All()...)
 }
 
+// namespaceAll is the list-only selector for every namespace the caller can
+// view. It is never a namespace of its own.
+const namespaceAll = "all"
+
+// namespaceSelection is the namespace a command targets.
+type namespaceSelection struct {
+	// Namespace is never empty; without a selection it is the default namespace.
+	Namespace string
+	// Selected reports whether --namespace or ARCTL_NAMESPACE chose Namespace.
+	// A selected namespace must match every NAMESPACE/NAME argument and every
+	// metadata.namespace in an applied file.
+	Selected bool
+}
+
+// selectedNamespace reads the namespace selection from the runtime.
+func selectedNamespace(deps cliruntime.Deps) (namespaceSelection, error) {
+	if deps.Runtime == nil {
+		return namespaceSelection{Namespace: v1alpha1.DefaultNamespace}, nil
+	}
+	namespace, selected := deps.Runtime.Namespace()
+	if namespace == namespaceAll {
+		return namespaceSelection{}, fmt.Errorf("%q cannot be selected as a namespace; use -A/--all-namespaces to list every namespace", namespaceAll)
+	}
+	return namespaceSelection{Namespace: namespace, Selected: selected}, nil
+}
+
 type resourceLookupRef struct {
 	Namespace string
 	Name      string
 }
 
-func parseResourceLookupRef(arg string) (resourceLookupRef, error) {
+// String renders the reference as NAME in the default namespace and
+// NAMESPACE/NAME elsewhere, matching how users type it.
+func (r resourceLookupRef) String() string {
+	if r.Namespace == "" || r.Namespace == v1alpha1.DefaultNamespace {
+		return r.Name
+	}
+	return r.Namespace + "/" + r.Name
+}
+
+// resolveResourceRef resolves a NAME or NAMESPACE/NAME argument against the
+// selected namespace. NAME takes the selected namespace. NAMESPACE/NAME
+// overrides an unselected default but must match a selected namespace.
+func resolveResourceRef(arg string, sel namespaceSelection) (resourceLookupRef, error) {
 	if arg == "" {
 		return resourceLookupRef{}, fmt.Errorf("resource reference must be NAME or NAMESPACE/NAME")
 	}
-	if namespace, name, ok := strings.Cut(arg, "/"); ok {
-		if namespace == "" || name == "" || strings.Contains(name, "/") {
-			return resourceLookupRef{}, fmt.Errorf("resource reference must be NAME or NAMESPACE/NAME")
-		}
-		return resourceLookupRef{Namespace: namespace, Name: name}, nil
+	namespace, name, ok := strings.Cut(arg, "/")
+	if !ok {
+		return resourceLookupRef{Namespace: sel.Namespace, Name: arg}, nil
 	}
-	return resourceLookupRef{Namespace: v1alpha1.DefaultNamespace, Name: arg}, nil
+	if namespace == "" || name == "" || strings.Contains(name, "/") {
+		return resourceLookupRef{}, fmt.Errorf("resource reference must be NAME or NAMESPACE/NAME")
+	}
+	if namespace == namespaceAll {
+		return resourceLookupRef{}, fmt.Errorf("%q in %q is not a namespace; name one namespace", namespaceAll, arg)
+	}
+	if sel.Selected && namespace != sel.Namespace {
+		return resourceLookupRef{}, fmt.Errorf("namespace %q in %q conflicts with selected namespace %q (--namespace or ARCTL_NAMESPACE)", namespace, arg, sel.Namespace)
+	}
+	return resourceLookupRef{Namespace: namespace, Name: name}, nil
 }
 
 // listItems fetches items for the given kind using its registered ListFunc.
@@ -56,39 +101,40 @@ func listItems(ctx context.Context, c *client.Client, k *scheme.Kind, opts schem
 	return k.ListFunc(ctx, c, opts)
 }
 
-// getItem fetches a single item by name for the given kind. Empty tag resolves
-// the latest tag; non-empty tag selects an exact tag on taggable artifacts.
-func getItem(ctx context.Context, c *client.Client, k *scheme.Kind, name, tag string) (any, error) {
+// getItem fetches a single item by reference for the given kind. Empty tag
+// resolves the latest tag; non-empty tag selects an exact tag on taggable
+// artifacts.
+func getItem(ctx context.Context, c *client.Client, k *scheme.Kind, ref resourceLookupRef, tag string) (any, error) {
 	if k.Get == nil {
 		return nil, fmt.Errorf("get not supported for kind %q", k.Kind)
 	}
-	return k.Get(ctx, c, name, tag)
+	return k.Get(ctx, c, ref.Namespace, ref.Name, tag)
 }
 
-// deleteItem deletes a single item by (name, tag) for the given kind.
-func deleteItem(ctx context.Context, c *client.Client, k *scheme.Kind, name, tag string) error {
+// deleteItem deletes a single item by (reference, tag) for the given kind.
+func deleteItem(ctx context.Context, c *client.Client, k *scheme.Kind, ref resourceLookupRef, tag string) error {
 	if k.Delete == nil {
 		return fmt.Errorf("delete not supported for kind %q", k.Kind)
 	}
-	return k.Delete(ctx, c, name, tag)
+	return k.Delete(ctx, c, ref.Namespace, ref.Name, tag)
 }
 
-// listTags returns every live tag for (kind, name). Errors when the kind is not
-// a taggable artifact (e.g. mutable Deployment/Provider).
-func listTags(ctx context.Context, c *client.Client, k *scheme.Kind, name string) ([]any, error) {
+// listTags returns every live tag for (kind, reference). Errors when the kind
+// is not a taggable artifact (e.g. mutable Deployment/Provider).
+func listTags(ctx context.Context, c *client.Client, k *scheme.Kind, ref resourceLookupRef) ([]any, error) {
 	if k.ListTags == nil {
 		return nil, fmt.Errorf("--all-tags not supported for kind %q (resource is not taggable)", k.Kind)
 	}
-	return k.ListTags(ctx, c, name)
+	return k.ListTags(ctx, c, ref.Namespace, ref.Name)
 }
 
-// deleteAllTags soft-deletes every live tag for (kind, name). Errors when the
-// kind is not a taggable artifact.
-func deleteAllTags(ctx context.Context, c *client.Client, k *scheme.Kind, name string) error {
+// deleteAllTags soft-deletes every live tag for (kind, reference). Errors when
+// the kind is not a taggable artifact.
+func deleteAllTags(ctx context.Context, c *client.Client, k *scheme.Kind, ref resourceLookupRef) error {
 	if k.DeleteAllTags == nil {
 		return fmt.Errorf("--all-tags not supported for kind %q (resource is not taggable)", k.Kind)
 	}
-	return k.DeleteAllTags(ctx, c, name)
+	return k.DeleteAllTags(ctx, c, ref.Namespace, ref.Name)
 }
 
 // tableRow returns a []string row for the given item, matching the TableColumns

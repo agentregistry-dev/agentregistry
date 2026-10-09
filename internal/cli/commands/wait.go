@@ -38,6 +38,7 @@ Timeout regimes:
   --timeout=-1   wait forever`,
 		Example: `  arctl wait deployment aws-v1
   arctl wait deployment team-a/aws-v1
+  arctl wait deployment aws-v1 -n team-a
   arctl wait deployment aws-v1 --for=failed
   arctl wait deployment aws-v1 --for=delete --timeout=10m`,
 		Args:         cobra.ExactArgs(2),
@@ -53,11 +54,16 @@ Timeout regimes:
 }
 
 func runDeclarativeWait(cmd *cobra.Command, deps cliruntime.Deps, args []string) error {
-	typeName, name := args[0], args[1]
-	ref, err := parseResourceLookupRef(name)
+	typeName := args[0]
+	sel, err := selectedNamespace(deps)
 	if err != nil {
 		return err
 	}
+	ref, err := resolveResourceRef(args[1], sel)
+	if err != nil {
+		return err
+	}
+	name := ref.String()
 	k, err := kindRegistry(deps).Lookup(typeName)
 	if err != nil {
 		return err

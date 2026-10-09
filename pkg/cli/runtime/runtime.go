@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/agentregistry-dev/agentregistry/internal/client"
+	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
@@ -22,6 +23,10 @@ type RegistryTarget struct {
 type Runtime interface {
 	ResolveRegistryTarget(ctx context.Context) (RegistryTarget, error)
 	RegistryClient(ctx context.Context) (*client.Client, error)
+	// Namespace returns the registry namespace selected for this invocation:
+	// the --namespace flag, else ARCTL_NAMESPACE, else "default". selected
+	// reports whether the flag or the env var chose it.
+	Namespace() (namespace string, selected bool)
 }
 
 // runtime owns per-root mutable state: flags, env-backed defaults, auth, and
@@ -82,6 +87,22 @@ func (r *runtime) ResolveRegistryTarget(ctx context.Context) (RegistryTarget, er
 	}
 
 	return target, nil
+}
+
+// Namespace resolves the selected registry namespace. The flag takes
+// precedence over ARCTL_NAMESPACE; neither set means the default namespace.
+func (r *runtime) Namespace() (string, bool) {
+	var namespace string
+	if r.cfg.Namespace != nil {
+		namespace = strings.TrimSpace(*r.cfg.Namespace)
+	}
+	if namespace == "" {
+		namespace = strings.TrimSpace(r.cfg.Env.Getenv("ARCTL_NAMESPACE"))
+	}
+	if namespace == "" {
+		return v1alpha1.DefaultNamespace, false
+	}
+	return namespace, true
 }
 
 // RegistryClient returns the shared registry client for this CLI invocation.

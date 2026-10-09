@@ -184,3 +184,29 @@ func TestRegistryClientReturnsAuthProviderError(t *testing.T) {
 		t.Fatal("RegistryClient() returned client for auth error")
 	}
 }
+
+func TestNamespace(t *testing.T) {
+	tests := []struct {
+		name         string
+		flag         *string
+		env          envMap
+		want         string
+		wantSelected bool
+	}{
+		{name: "unset defaults", want: "default"},
+		{name: "empty flag defaults", flag: new(""), want: "default"},
+		{name: "env selects", env: envMap{"ARCTL_NAMESPACE": "team-a"}, want: "team-a", wantSelected: true},
+		{name: "flag selects", flag: new("team-b"), want: "team-b", wantSelected: true},
+		{name: "flag overrides env", flag: new("team-b"), env: envMap{"ARCTL_NAMESPACE": "team-a"}, want: "team-b", wantSelected: true},
+		{name: "blank values are ignored", flag: new("  "), env: envMap{"ARCTL_NAMESPACE": " "}, want: "default"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rt := New(Config{Env: tt.env, Namespace: tt.flag})
+			got, selected := rt.Namespace()
+			if got != tt.want || selected != tt.wantSelected {
+				t.Fatalf("Namespace() = (%q, %t), want (%q, %t)", got, selected, tt.want, tt.wantSelected)
+			}
+		})
+	}
+}

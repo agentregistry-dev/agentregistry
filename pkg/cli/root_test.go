@@ -91,3 +91,28 @@ func childCommand(parent *cobra.Command, name string) *cobra.Command {
 	}
 	return nil
 }
+
+// TestRootPersistentFlagsMergeIntoEveryCommand pins that no subcommand
+// redefines a shorthand of a root persistent flag such as -n/--namespace.
+// pflag panics on that collision when the command's flags are merged.
+func TestRootPersistentFlagsMergeIntoEveryCommand(t *testing.T) {
+	var walk func(cmd *cobra.Command)
+	walk = func(cmd *cobra.Command) {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("merging persistent flags into %q panicked: %v", cmd.CommandPath(), r)
+				}
+			}()
+			_ = cmd.InheritedFlags()
+		}()
+		for _, child := range cmd.Commands() {
+			walk(child)
+		}
+	}
+	walk(Root(DefaultConfig()))
+
+	if f := Root(DefaultConfig()).PersistentFlags().ShorthandLookup("n"); f == nil || f.Name != "namespace" {
+		t.Fatalf("-n shorthand = %v, want --namespace", f)
+	}
+}
