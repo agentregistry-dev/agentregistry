@@ -24,7 +24,6 @@ var ErrAuthExpired = errors.New("kagent authentication expired")
 
 var (
 	errNotFound       = errors.New("kagent resource not found")
-	errAlreadyExists  = errors.New("kagent resource already exists")
 	toolDeleteTimeout = 30 * time.Second
 	toolDeletePoll    = 500 * time.Millisecond
 )
@@ -102,15 +101,37 @@ func (c *restClient) ensureAgent(ctx context.Context, agent *agentPayload) error
 	if err != nil {
 		return fmt.Errorf("marshal kagent agent: %w", err)
 	}
-	var response standardResponse[agentResponse]
-	err = c.doJSON(ctx, http.MethodPost, "/api/agents", body, &response)
-	if errors.Is(err, errAlreadyExists) {
-		err = c.doJSON(ctx, http.MethodPut, "/api/agents", body, &response)
-	}
+	exists, err := c.agentExists(ctx, agent.Namespace, agent.Name)
 	if err != nil {
-		return fmt.Errorf("ensure kagent agent %s/%s: %w", agent.Namespace, agent.Name, err)
+		return err
 	}
-	return responseError("ensure kagent agent", response.Error, response.Message)
+	method, operation := http.MethodPost, "create kagent agent"
+	if exists {
+		method, operation = http.MethodPut, "update kagent agent"
+	}
+	operation = fmt.Sprintf("%s %s/%s", operation, agent.Namespace, agent.Name)
+	var response standardResponse[agentResponse]
+	if err := c.doJSON(ctx, method, "/api/agents", body, &response); err != nil {
+		return fmt.Errorf("%s: %w", operation, err)
+	}
+	return responseError(operation, response.Error, response.Message)
+}
+
+func (c *restClient) agentExists(ctx context.Context, namespace, name string) (bool, error) {
+	path := fmt.Sprintf("/api/agents/%s/%s", namespace, name)
+	var response standardResponse[agentResponse]
+	err := c.doJSON(ctx, http.MethodGet, path, nil, &response)
+	if errors.Is(err, errNotFound) {
+		return false, nil
+	}
+	operation := fmt.Sprintf("check existing kagent agent %s/%s", namespace, name)
+	if err != nil {
+		return false, fmt.Errorf("%s: %w", operation, err)
+	}
+	if err := responseError(operation, response.Error, response.Message); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (c *restClient) deleteAgent(ctx context.Context, namespace, name string) error {
@@ -131,15 +152,15 @@ func (c *restClient) ensureToolServer(ctx context.Context, server *toolServerSpe
 	if err != nil {
 		return fmt.Errorf("marshal kagent tool server: %w", err)
 	}
-	err = c.createToolServer(ctx, body)
-	if err == nil {
-		return nil
+	namespace, name := server.Namespace(), server.Name()
+	exists, err := c.toolServerExists(ctx, namespace, name)
+	if err != nil {
+		return fmt.Errorf("check existing kagent tool server %s/%s: %w", namespace, name, err)
 	}
-	if !errors.Is(err, errAlreadyExists) {
-		return err
+	if !exists {
+		return c.createToolServer(ctx, body)
 	}
 
-	namespace, name := server.Namespace(), server.Name()
 	if err := c.deleteToolServer(ctx, namespace, name); err != nil {
 		return fmt.Errorf("replace kagent tool server %s/%s: %w", namespace, name, err)
 	}
@@ -210,7 +231,7 @@ func (c *restClient) toolServerExists(
 ) (bool, error) {
 	servers, err := c.listToolServersRaw(ctx)
 	if err != nil {
-		return false, fmt.Errorf("check deleted kagent tool server: %w", err)
+		return false, err
 	}
 	for _, server := range servers {
 		serverNamespace, serverName := splitRef(server.Ref)
@@ -323,10 +344,6 @@ func (c *restClient) doJSON(
 	}
 	if httpResponse.StatusCode == http.StatusNotFound {
 		return fmt.Errorf("kagent %s %s: %w", method, path, errNotFound)
-	}
-	if httpResponse.StatusCode == http.StatusInternalServerError &&
-		strings.Contains(strings.ToLower(string(responseBody)), "already exists") {
-		return fmt.Errorf("kagent %s %s: %w", method, path, errAlreadyExists)
 	}
 	if httpResponse.StatusCode < http.StatusOK || httpResponse.StatusCode >= http.StatusMultipleChoices {
 		return fmt.Errorf(
