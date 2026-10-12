@@ -15,7 +15,7 @@ import (
 // catalog ref, return the MCPServer record. The concrete implementation
 // delegates to client.GetTyped with the root registry client.
 type Fetcher interface {
-	Fetch(ctx context.Context, name, tag string) (*v1alpha1.MCPServer, error)
+	Fetch(ctx context.Context, namespace, name, tag string) (*v1alpha1.MCPServer, error)
 }
 
 // ResolvedMCP carries the fields a caller needs to decide whether (and what)
@@ -24,20 +24,27 @@ type Fetcher interface {
 // pre-flattened to a plain map with empty-Value entries dropped, ready
 // to embed in MCP_SERVERS_CONFIG as JSON.
 type ResolvedMCP struct {
+	Namespace     string
 	Name          string
 	RemoteURL     string
 	RemoteHeaders map[string]string
 }
 
-// Resolve fetches the MCPServer at (name, tag) and returns a ResolvedMCP.
-// Errors are wrapped with the ref so callers can surface "--mcp <X>: <err>".
-func Resolve(ctx context.Context, f Fetcher, name, tag string) (*ResolvedMCP, error) {
-	server, err := f.Fetch(ctx, name, tag)
+// Resolve fetches the MCPServer at (namespace, name, tag) and returns a
+// ResolvedMCP. Errors are wrapped with the ref so callers can surface
+// "--mcp <X>: <err>".
+func Resolve(ctx context.Context, f Fetcher, namespace, name, tag string) (*ResolvedMCP, error) {
+	server, err := f.Fetch(ctx, namespace, name, tag)
 	if err != nil {
-		return nil, fmt.Errorf("--mcp %s: %w", name, err)
+		ref := name
+		if namespace != "" && namespace != v1alpha1.DefaultNamespace {
+			ref = namespace + "/" + name
+		}
+		return nil, fmt.Errorf("--mcp %s: %w", ref, err)
 	}
 	r := &ResolvedMCP{
-		Name: server.Metadata.Name,
+		Namespace: namespace,
+		Name:      server.Metadata.Name,
 	}
 	if server.Spec.Remote != nil {
 		r.RemoteURL = server.Spec.Remote.URL

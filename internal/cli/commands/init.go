@@ -192,20 +192,32 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 			// files, so a registry failure leaves no partial state.
 			fetcher := mcpFetcherForTest
 			if fetcher == nil {
-				fetcher = registryClientMCPFetcher{cmd: cmd, deps: deps}
+				fetcher = registryClientMCPFetcher{cmd: cmd, runtime: deps.Runtime}
 			}
 			var remoteEntries []mcpEnvEntry
 			var resolvedRefs []*mcpresolve.ResolvedMCP
+			var agentMCPs []v1alpha1.ResourceRef
+			var sel namespaceSelection
+			if len(initMCPs) > 0 {
+				if sel, err = selectedNamespace(deps); err != nil {
+					return err
+				}
+			}
 			for _, raw := range initMCPs {
 				if strings.TrimSpace(raw) == "" {
 					return fmt.Errorf("--mcp: empty ref (expected name or name@version)")
 				}
 				refName, tag := parseNameVersion(raw)
-				r, rerr := mcpresolve.Resolve(cmd.Context(), fetcher, refName, tag)
+				ref, rerr := resolveResourceRef(refName, sel)
+				if rerr != nil {
+					return fmt.Errorf("--mcp %s: %w", raw, rerr)
+				}
+				r, rerr := mcpresolve.Resolve(cmd.Context(), fetcher, ref.Namespace, ref.Name, tag)
 				if rerr != nil {
 					return rerr
 				}
 				resolvedRefs = append(resolvedRefs, r)
+				agentMCPs = append(agentMCPs, agentMCPServerRef(r, tag, sel.Selected || strings.Contains(refName, "/")))
 				if r.RemoteURL != "" {
 					remoteEntries = append(remoteEntries, mcpEnvEntry{
 						Name:    r.Name,
@@ -328,7 +340,7 @@ init and add an MCP_SERVERS_CONFIG entry, e.g.:
 			// Skills/Prompts/Language/Framework removed from AgentSpec (Phase 11);
 			// language/framework now live in arctl.yaml only. The declarative
 			// agent.yaml carries only canonical AgentSpec fields.
-			if err := writeDeclarativeAgentYAML(projectDir, name, image, initDescription, initMCPs); err != nil {
+			if err := writeDeclarativeAgentYAML(projectDir, name, image, initDescription, agentMCPs); err != nil {
 				return fmt.Errorf("write agent.yaml: %w", err)
 			}
 
@@ -554,12 +566,24 @@ func parseNameVersion(s string) (string, string) {
 	return s, "latest"
 }
 
+// agentMCPServerRef builds the Agent's reference to a resolved --mcp server. A
+// namespace the user chose, with --namespace/ARCTL_NAMESPACE or NAMESPACE/NAME,
+// is written explicitly; an unqualified ref without a selection stays blank so
+// it follows the Agent's own namespace.
+func agentMCPServerRef(r *mcpresolve.ResolvedMCP, tag string, explicitNamespace bool) v1alpha1.ResourceRef {
+	ref := v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: r.Name, Tag: tag}
+	if explicitNamespace {
+		ref.Namespace = r.Namespace
+	}
+	return ref
+}
+
 // writeDeclarativeAgentYAML writes agent.yaml in the ar.dev/v1alpha1 declarative format.
 //
 // metadata.tag is intentionally omitted — tagging is a publish-time concern.
 // The server stores untagged applies as the literal "latest"; users who want
 // a deterministic tag set it on the YAML by hand before `arctl apply`.
-func writeDeclarativeAgentYAML(projectDir, name, image, description string, mcps []string) error {
+func writeDeclarativeAgentYAML(projectDir, name, image, description string, mcps []v1alpha1.ResourceRef) error {
 	desc := description
 	if desc == "" {
 		desc = fmt.Sprintf("%s agent", name)
@@ -581,14 +605,7 @@ func writeDeclarativeAgentYAML(projectDir, name, image, description string, mcps
 		},
 	}
 
-	for _, raw := range mcps {
-		serverName, mcpVer := parseNameVersion(raw)
-		agent.Spec.MCPServers = append(agent.Spec.MCPServers, v1alpha1.ResourceRef{
-			Kind: v1alpha1.KindMCPServer,
-			Name: serverName,
-			Tag:  mcpVer,
-		})
-	}
+	agent.Spec.MCPServers = append(agent.Spec.MCPServers, mcps...)
 
 	b, err := yaml.Marshal(agent)
 	if err != nil {

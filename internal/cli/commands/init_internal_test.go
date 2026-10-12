@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"sigs.k8s.io/yaml"
 
 	"github.com/agentregistry-dev/agentregistry/internal/client"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
@@ -87,11 +88,11 @@ func TestWriteMCPServersConfig_ReplacesExisting(t *testing.T) {
 
 // fakeMCPFetcher implements mcpresolve.Fetcher for init-level tests.
 type fakeMCPFetcher struct {
-	servers map[string]*v1alpha1.MCPServer // key = "name@tag"
+	servers map[string]*v1alpha1.MCPServer // key = "namespace/name@tag"
 }
 
-func (f *fakeMCPFetcher) Fetch(_ context.Context, name, tag string) (*v1alpha1.MCPServer, error) {
-	key := name + "@" + tag
+func (f *fakeMCPFetcher) Fetch(_ context.Context, namespace, name, tag string) (*v1alpha1.MCPServer, error) {
+	key := namespace + "/" + name + "@" + tag
 	if s, ok := f.servers[key]; ok {
 		return s, nil
 	}
@@ -102,7 +103,7 @@ func TestInitAgent_MCP_RemoteRef_WritesEnv(t *testing.T) {
 	dir := t.TempDir()
 	prev := mcpFetcherForTest
 	mcpFetcherForTest = &fakeMCPFetcher{servers: map[string]*v1alpha1.MCPServer{
-		"acme-fetch@latest": {
+		"default/acme-fetch@latest": {
 			Metadata: v1alpha1.ObjectMeta{Name: "acme-fetch", Tag: "latest"},
 			Spec: v1alpha1.MCPServerSpec{
 				Remote: &v1alpha1.MCPRemote{Type: "streamable-http", URL: "https://mcp.acme.com/mcp"},
@@ -130,7 +131,7 @@ func TestInitAgent_MCP_SourceRef_NoEnvWrite(t *testing.T) {
 	dir := t.TempDir()
 	prev := mcpFetcherForTest
 	mcpFetcherForTest = &fakeMCPFetcher{servers: map[string]*v1alpha1.MCPServer{
-		"acme-source@latest": {
+		"default/acme-source@latest": {
 			Metadata: v1alpha1.ObjectMeta{Name: "acme-source", Tag: "latest"},
 			Spec:     v1alpha1.MCPServerSpec{Source: &v1alpha1.MCPServerSource{}},
 		},
@@ -167,7 +168,7 @@ func TestInitAgent_MCP_RegistryFailure_NoPartialWrites(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), ".env must not be written on registry failure")
 }
 
-func TestRegistryClientMCPFetcher_UsesSelectedNamespace(t *testing.T) {
+func TestRegistryClientMCPFetcher_FetchesNamespace(t *testing.T) {
 	var gotNamespace string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotNamespace = r.URL.Query().Get("namespace")
@@ -179,17 +180,70 @@ func TestRegistryClientMCPFetcher_UsesSelectedNamespace(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	cfg := cliruntime.Config{Env: internalDeclarativeTestEnv{
-		"ARCTL_API_BASE_URL": srv.URL,
-		"ARCTL_NAMESPACE":    "team-a",
-	}}
-	fetcher := registryClientMCPFetcher{deps: cliruntime.Deps{Runtime: cliruntime.New(cfg)}}
+	cfg := cliruntime.Config{Env: internalDeclarativeTestEnv{"ARCTL_API_BASE_URL": srv.URL}}
+	fetcher := registryClientMCPFetcher{runtime: cliruntime.New(cfg)}
 
-	server, err := fetcher.Fetch(context.Background(), "tools", "")
+	server, err := fetcher.Fetch(context.Background(), "team-a", "tools", "")
 	require.NoError(t, err)
 	assert.Equal(t, "team-a", gotNamespace)
 	assert.Equal(t, "tools", server.Metadata.Name)
+}
 
-	_, err = fetcher.Fetch(context.Background(), "team-b/tools", "")
-	require.ErrorContains(t, err, `conflicts with selected namespace "team-a"`)
+// TestInitAgent_MCP_NamespacedRefs pins that each --mcp ref is fetched and
+// written into agent.yaml with the namespace it resolved to.
+func TestInitAgent_MCP_NamespacedRefs(t *testing.T) {
+	server := func(namespace string) *v1alpha1.MCPServer {
+		return &v1alpha1.MCPServer{
+			Metadata: v1alpha1.ObjectMeta{Namespace: namespace, Name: "tools", Tag: "latest"},
+			Spec:     v1alpha1.MCPServerSpec{Source: &v1alpha1.MCPServerSource{}},
+		}
+	}
+	for _, tc := range []struct {
+		name      string
+		namespace string // ARCTL_NAMESPACE
+		mcp       string
+		want      v1alpha1.ResourceRef
+		wantErr   string
+	}{
+		{name: "unqualified without a selection follows the Agent", mcp: "tools",
+			want: v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "tools", Tag: "latest"}},
+		{name: "NAMESPACE/NAME", mcp: "team-a/tools",
+			want: v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Namespace: "team-a", Name: "tools", Tag: "latest"}},
+		{name: "selected namespace", namespace: "team-a", mcp: "tools@v1",
+			want: v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Namespace: "team-a", Name: "tools", Tag: "v1"}},
+		{name: "NAMESPACE/NAME matching the selection", namespace: "team-a", mcp: "team-a/tools",
+			want: v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Namespace: "team-a", Name: "tools", Tag: "latest"}},
+		{name: "NAMESPACE/NAME conflicting with the selection", namespace: "team-a", mcp: "team-b/tools",
+			wantErr: `--mcp team-b/tools: namespace "team-b" in "team-b/tools" conflicts with selected namespace "team-a"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			prev := mcpFetcherForTest
+			mcpFetcherForTest = &fakeMCPFetcher{servers: map[string]*v1alpha1.MCPServer{
+				"default/tools@latest": server("default"),
+				"team-a/tools@latest":  server("team-a"),
+				"team-a/tools@v1":      server("team-a"),
+			}}
+			t.Cleanup(func() { mcpFetcherForTest = prev })
+
+			cfg := cliruntime.Config{Env: internalDeclarativeTestEnv{"ARCTL_API_BASE_URL": "http://127.0.0.1:1", "ARCTL_NAMESPACE": tc.namespace}}
+			cmd := NewInitCmd(cliruntime.Deps{Runtime: cliruntime.New(cfg)})
+			cmd.SetArgs([]string{"agent", "myagent", "--framework", "adk", "--language", "python", "--mcp", tc.mcp, "--output-dir", dir})
+			err := cmd.Execute()
+			agentPath := filepath.Join(dir, "myagent", "agent.yaml")
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+				_, statErr := os.Stat(agentPath)
+				assert.True(t, os.IsNotExist(statErr), "agent.yaml must not be written on a rejected ref")
+				return
+			}
+			require.NoError(t, err)
+
+			data, err := os.ReadFile(agentPath)
+			require.NoError(t, err)
+			var agent v1alpha1.Agent
+			require.NoError(t, yaml.Unmarshal(data, &agent))
+			assert.Equal(t, []v1alpha1.ResourceRef{tc.want}, agent.Spec.MCPServers)
+		})
+	}
 }

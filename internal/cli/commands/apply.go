@@ -61,6 +61,13 @@ func runApply(cmd *cobra.Command, deps cliruntime.Deps, dryRun bool) error {
 		return fmt.Errorf("getting filename flag: %w", err)
 	}
 
+	// Resolve the namespace selection first: warnings below name each object
+	// where this request will place it.
+	sel, err := selectedNamespace(deps)
+	if err != nil {
+		return err
+	}
+
 	// 1. Read and validate all input files before sending anything.
 	var allData [][]byte
 	for _, path := range filePaths {
@@ -82,16 +89,12 @@ func runApply(cmd *cobra.Command, deps cliruntime.Deps, dryRun bool) error {
 		if err != nil {
 			return fmt.Errorf("parsing %s: %w", path, err)
 		}
-		warnLegacyAgentModelConfiguration(cmd.ErrOrStderr(), objects)
+		warnLegacyAgentModelConfiguration(cmd.ErrOrStderr(), objects, sel.Namespace)
 		allData = append(allData, data)
 	}
 
 	if deps.Runtime == nil {
 		return fmt.Errorf("API client not initialized")
-	}
-	sel, err := selectedNamespace(deps)
-	if err != nil {
-		return err
 	}
 	c, err := deps.Runtime.RegistryClient(cmd.Context())
 	if err != nil {
@@ -125,7 +128,9 @@ func runApply(cmd *cobra.Command, deps cliruntime.Deps, dryRun bool) error {
 	return nil
 }
 
-func warnLegacyAgentModelConfiguration(out io.Writer, objects []v1alpha1.Object) {
+// warnLegacyAgentModelConfiguration names each legacy Agent by the namespace
+// this request places it in: its own metadata.namespace, else selected.
+func warnLegacyAgentModelConfiguration(out io.Writer, objects []v1alpha1.Object, selected string) {
 	for _, obj := range objects {
 		agent, ok := obj.(*v1alpha1.Agent)
 		if !ok || !agent.Spec.HasLegacyModelConfiguration() {
@@ -133,7 +138,7 @@ func warnLegacyAgentModelConfiguration(out io.Writer, objects []v1alpha1.Object)
 		}
 		namespace := agent.Metadata.Namespace
 		if namespace == "" {
-			namespace = v1alpha1.DefaultNamespace
+			namespace = selected
 		}
 		fmt.Fprintf(out,
 			"warning: Agent %s/%s uses deprecated spec.modelProvider/modelName; "+

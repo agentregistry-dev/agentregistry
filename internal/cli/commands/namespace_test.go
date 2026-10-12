@@ -328,6 +328,14 @@ func TestNamespaceSelection_AllNamespacesTable(t *testing.T) {
 
 func TestNamespaceSelection_Output(t *testing.T) {
 	file := writeTempYAML(t, agentYAML)
+	legacy := writeTempYAML(t, `apiVersion: ar.dev/v1alpha1
+kind: Agent
+metadata:
+  name: legacy-bot
+spec:
+  modelProvider: gemini
+  modelName: gemini-2.5-flash
+`)
 	tests := []struct {
 		name string
 		args []string
@@ -338,6 +346,8 @@ func TestNamespaceSelection_Output(t *testing.T) {
 		{name: "apply result names the namespace", args: []string{"apply", "-f", file, "-n", "team-a"}, want: "Agent/team-a/acme-bot created"},
 		{name: "default apply result is unchanged", args: []string{"apply", "-f", file}, want: "Agent/acme-bot created"},
 		{name: "delete names the namespace", args: []string{"delete", "agent", "acme-bot", "-n", "team-a"}, want: "Deleted: agent/team-a/acme-bot"},
+		{name: "legacy warning names the selected namespace", args: []string{"apply", "-f", legacy, "-n", "team-a"}, want: "warning: Agent team-a/legacy-bot uses deprecated"},
+		{name: "legacy warning defaults without a selection", args: []string{"apply", "-f", legacy}, want: "warning: Agent default/legacy-bot uses deprecated"},
 		{name: "wait names the namespace", args: []string{"wait", "deployment", "summarizer", "--for=delete", "--timeout=0", "-n", "team-a"}, want: "deployment/team-a/summarizer deleted"},
 	}
 	for _, tt := range tests {

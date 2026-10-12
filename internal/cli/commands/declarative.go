@@ -15,30 +15,21 @@ import (
 
 // registryClientMCPFetcher adapts the root registry client to mcpresolve.Fetcher
 // for use by `arctl init --mcp`. Plain `arctl init` without --mcp stays fully
-// offline because Fetch is only called when there is a ref to resolve. A ref
-// NAME resolves in the selected namespace; NAMESPACE/NAME is also accepted.
+// offline because Fetch is only called when there is a ref to resolve.
 type registryClientMCPFetcher struct {
-	cmd  *cobra.Command
-	deps cliruntime.Deps
+	cmd     *cobra.Command
+	runtime cliruntime.Runtime
 }
 
-func (f registryClientMCPFetcher) Fetch(ctx context.Context, name, tag string) (*v1alpha1.MCPServer, error) {
-	if f.deps.Runtime == nil {
+func (f registryClientMCPFetcher) Fetch(ctx context.Context, namespace, name, tag string) (*v1alpha1.MCPServer, error) {
+	if f.runtime == nil {
 		return nil, fmt.Errorf("registry runtime not configured")
 	}
-	sel, err := selectedNamespace(f.deps)
-	if err != nil {
-		return nil, err
-	}
-	ref, err := resolveResourceRef(name, sel)
-	if err != nil {
-		return nil, err
-	}
-	c, err := f.deps.Runtime.RegistryClient(ctx)
+	c, err := f.runtime.RegistryClient(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("resolving registry client: %w", err)
 	}
-	return client.GetTyped(ctx, c, v1alpha1.KindMCPServer, ref.Namespace, ref.Name, tag, func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} })
+	return client.GetTyped(ctx, c, v1alpha1.KindMCPServer, namespace, name, tag, func() *v1alpha1.MCPServer { return &v1alpha1.MCPServer{} })
 }
 
 // lookupPersistentFlag walks the cmd→parent chain to find a persistent flag
