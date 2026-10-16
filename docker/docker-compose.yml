@@ -30,13 +30,20 @@ services:
       - /bin/sh
       - -c
       - |
-        if [ -f /root/.kube/config.orig ]; then
-          mkdir -p /root/.kube
-          sed -E \
-            -e 's|https://127\.0\.0\.1|https://host.docker.internal|g' \
-            -e 's|https://localhost|https://host.docker.internal|g' \
-            -e 's|certificate-authority-data:.*|insecure-skip-tls-verify: true|g' \
-            /root/.kube/config.orig > /root/.kube/config
+        # The server runs as the unprivileged "arctl" user (UID 1001). Docker
+        # creates the bind-mount's parent directory as root, so the rewritten
+        # kubeconfig is written to /tmp, and the mounted file must be readable
+        # by that user.
+        if [ -f /kubeconfig.orig ]; then
+          if [ -r /kubeconfig.orig ]; then
+            sed -E \
+              -e 's|https://127\.0\.0\.1|https://host.docker.internal|g' \
+              -e 's|https://localhost|https://host.docker.internal|g' \
+              -e 's|certificate-authority-data:.*|insecure-skip-tls-verify: true|g' \
+              /kubeconfig.orig > /tmp/kubeconfig
+          else
+            echo "warning: /kubeconfig.orig is not readable by UID $$(id -u); Kubernetes runtime is disabled" >&2
+          fi
         fi
         exec /app/bin/arctl-server
     environment:
@@ -45,14 +52,14 @@ services:
       # Temporarily only for local development.
       AGENT_REGISTRY_ENABLE_REGISTRY_VALIDATION: "false"
       AGENT_REGISTRY_MCP_PORT: "31313"
-      KUBECONFIG: "/root/.kube/config"
+      KUBECONFIG: "/tmp/kubeconfig"
     ports:
       - "12121:8080"
       - "31313:31313"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - ~/.kube/config:/root/.kube/config.orig:ro
+      - ~/.kube/config:/kubeconfig.orig:ro
     depends_on:
       postgres:
         condition: service_healthy
