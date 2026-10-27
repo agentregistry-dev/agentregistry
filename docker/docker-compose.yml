@@ -23,41 +23,22 @@ services:
   agentregistry:
     image: ${DOCKER_REGISTRY:-ghcr.io}/agentregistry-dev/agentregistry/server:${VERSION:?set VERSION to an AgentRegistry release tag}
     container_name: agentregistry-server
-    # Rewrite the kubeconfig so that 127.0.0.1/localhost server addresses
-    # resolve to the Docker host. This supports local Kubernetes clusters
-    # whose API server listens on the host machine.
-    entrypoint:
-      - /bin/sh
-      - -c
-      - |
-        if [ -f /root/.kube/config.orig ]; then
-          mkdir -p /root/.kube
-          sed -E \
-            -e 's|https://127\.0\.0\.1|https://host.docker.internal|g' \
-            -e 's|https://localhost|https://host.docker.internal|g' \
-            -e 's|certificate-authority-data:.*|insecure-skip-tls-verify: true|g' \
-            /root/.kube/config.orig > /root/.kube/config
-        fi
-        exec /app/bin/arctl-server
     environment:
       AGENT_REGISTRY_DATABASE_URL: "postgres://agentregistry:agentregistry@postgres:5432/agentregistry?sslmode=disable"
       AGENT_REGISTRY_SERVER_ADDRESS: ":8080"
       # Temporarily only for local development.
       AGENT_REGISTRY_ENABLE_REGISTRY_VALIDATION: "false"
       AGENT_REGISTRY_MCP_PORT: "31313"
-      KUBECONFIG: "/root/.kube/config"
     ports:
       - "12121:8080"
       - "31313:31313"
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    volumes:
-      - ~/.kube/config:/root/.kube/config.orig:ro
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "bash", "-c", "</dev/tcp/127.0.0.1/8080"]
+      test: ["CMD", "/app/bin/arctl-server", "healthcheck", "127.0.0.1:8080"]
       interval: 5s
       timeout: 2s
       retries: 12

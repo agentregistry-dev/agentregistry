@@ -35,11 +35,7 @@ ARG TARGETPLATFORM
 ARG LDFLAGS
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -ldflags "$LDFLAGS" -o bin/arctl-server cmd/server/main.go
 
-FROM ubuntu:22.04 AS runtime
-
-RUN apt-get update && apt-get install -y \
-    git \
-    && rm -rf /var/lib/apt/lists/*
+FROM cgr.dev/chainguard/static:latest AS runtime
 
 COPY --from=builder /app/bin/arctl-server /app/bin/arctl-server
 
