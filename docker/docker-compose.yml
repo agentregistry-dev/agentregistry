@@ -38,7 +38,7 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "/app/bin/arctl-server", "healthcheck"]
+      test: ["CMD", "/app/bin/arctl-server", "healthcheck", "127.0.0.1:8080"]
       interval: 5s
       timeout: 2s
       retries: 12
