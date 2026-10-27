@@ -28,6 +28,7 @@ services:
   # kubeconfig changes.
   kubeconfig:
     image: busybox:1.37
+    network_mode: none
     entrypoint:
       - /bin/sh
       - -c
