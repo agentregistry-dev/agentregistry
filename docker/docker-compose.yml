@@ -20,32 +20,6 @@ services:
     networks:
       - agentregistry-network
 
-  # Rewrite the kubeconfig so that 127.0.0.1/localhost server addresses
-  # resolve to the Docker host. This supports local Kubernetes clusters
-  # whose API server listens on the host machine. The server image has no
-  # shell, so this one-shot container does the rewrite. It runs on
-  # `docker compose up`, not on a restart, so rerun `up -d` after the host
-  # kubeconfig changes.
-  kubeconfig:
-    image: busybox:1.37
-    network_mode: none
-    entrypoint:
-      - /bin/sh
-      - -c
-      - |
-        if [ -f /kube/config.orig ]; then
-          sed -E \
-            -e 's|https://127\.0\.0\.1|https://host.docker.internal|g' \
-            -e 's|https://localhost|https://host.docker.internal|g' \
-            -e 's|certificate-authority-data:.*|insecure-skip-tls-verify: true|g' \
-            /kube/config.orig > /kube/out/config
-        else
-          rm -f /kube/out/config
-        fi
-    volumes:
-      - ~/.kube/config:/kube/config.orig:ro
-      - kubeconfig:/kube/out
-
   agentregistry:
     image: ${DOCKER_REGISTRY:-ghcr.io}/agentregistry-dev/agentregistry/server:${VERSION:?set VERSION to an AgentRegistry release tag}
     container_name: agentregistry-server
@@ -55,19 +29,14 @@ services:
       # Temporarily only for local development.
       AGENT_REGISTRY_ENABLE_REGISTRY_VALIDATION: "false"
       AGENT_REGISTRY_MCP_PORT: "31313"
-      KUBECONFIG: "/home/nonroot/.kube/config"
     ports:
       - "12121:8080"
       - "31313:31313"
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    volumes:
-      - kubeconfig:/home/nonroot/.kube:ro
     depends_on:
       postgres:
         condition: service_healthy
-      kubeconfig:
-        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "/app/bin/arctl-server", "healthcheck"]
       interval: 5s
@@ -80,8 +49,6 @@ services:
 
 volumes:
   postgres_data:
-    driver: local
-  kubeconfig:
     driver: local
 
 networks:
