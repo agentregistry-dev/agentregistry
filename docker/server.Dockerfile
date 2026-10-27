@@ -36,8 +36,8 @@ ARG LDFLAGS
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -ldflags "$LDFLAGS" -o bin/arctl-server cmd/server/main.go
 
 # The server is a static binary that clones Git sources with go-git, so it needs no
-# shell, package manager or git binary at runtime.
-FROM gcr.io/distroless/static-debian13 AS runtime
+# shell, package manager or git binary at runtime. The base runs as nonroot (65532).
+FROM cgr.dev/chainguard/static:latest AS runtime
 
 COPY --from=builder /app/bin/arctl-server /app/bin/arctl-server
 
