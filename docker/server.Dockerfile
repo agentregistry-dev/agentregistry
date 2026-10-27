@@ -35,11 +35,9 @@ ARG TARGETPLATFORM
 ARG LDFLAGS
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -ldflags "$LDFLAGS" -o bin/arctl-server cmd/server/main.go
 
-FROM ubuntu:22.04 AS runtime
-
-RUN apt-get update && apt-get install -y \
-    git \
-    && rm -rf /var/lib/apt/lists/*
+# The server is a static binary that clones Git sources with go-git, so it needs no
+# shell, package manager or git binary at runtime.
+FROM gcr.io/distroless/static-debian13 AS runtime
 
 COPY --from=builder /app/bin/arctl-server /app/bin/arctl-server
 

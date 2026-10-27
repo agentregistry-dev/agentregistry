@@ -20,25 +20,32 @@ services:
     networks:
       - agentregistry-network
 
-  agentregistry:
-    image: ${DOCKER_REGISTRY:-ghcr.io}/agentregistry-dev/agentregistry/server:${VERSION:?set VERSION to an AgentRegistry release tag}
-    container_name: agentregistry-server
-    # Rewrite the kubeconfig so that 127.0.0.1/localhost server addresses
-    # resolve to the Docker host. This supports local Kubernetes clusters
-    # whose API server listens on the host machine.
+  # Rewrite the kubeconfig so that 127.0.0.1/localhost server addresses
+  # resolve to the Docker host. This supports local Kubernetes clusters
+  # whose API server listens on the host machine. The server image has no
+  # shell, so this one-shot container does the rewrite.
+  kubeconfig:
+    image: busybox:1.37
     entrypoint:
       - /bin/sh
       - -c
       - |
-        if [ -f /root/.kube/config.orig ]; then
-          mkdir -p /root/.kube
+        if [ -f /kube/config.orig ]; then
           sed -E \
             -e 's|https://127\.0\.0\.1|https://host.docker.internal|g' \
             -e 's|https://localhost|https://host.docker.internal|g' \
             -e 's|certificate-authority-data:.*|insecure-skip-tls-verify: true|g' \
-            /root/.kube/config.orig > /root/.kube/config
+            /kube/config.orig > /kube/out/config
+        else
+          rm -f /kube/out/config
         fi
-        exec /app/bin/arctl-server
+    volumes:
+      - ~/.kube/config:/kube/config.orig:ro
+      - kubeconfig:/kube/out
+
+  agentregistry:
+    image: ${DOCKER_REGISTRY:-ghcr.io}/agentregistry-dev/agentregistry/server:${VERSION:?set VERSION to an AgentRegistry release tag}
+    container_name: agentregistry-server
     environment:
       AGENT_REGISTRY_DATABASE_URL: "postgres://agentregistry:agentregistry@postgres:5432/agentregistry?sslmode=disable"
       AGENT_REGISTRY_SERVER_ADDRESS: ":8080"
@@ -52,12 +59,14 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - ~/.kube/config:/root/.kube/config.orig:ro
+      - kubeconfig:/root/.kube:ro
     depends_on:
       postgres:
         condition: service_healthy
+      kubeconfig:
+        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "bash", "-c", "</dev/tcp/127.0.0.1/8080"]
+      test: ["CMD", "/app/bin/arctl-server", "healthcheck"]
       interval: 5s
       timeout: 2s
       retries: 12
@@ -68,6 +77,8 @@ services:
 
 volumes:
   postgres_data:
+    driver: local
+  kubeconfig:
     driver: local
 
 networks:
