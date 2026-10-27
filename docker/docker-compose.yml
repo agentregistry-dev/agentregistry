@@ -23,7 +23,9 @@ services:
   # Rewrite the kubeconfig so that 127.0.0.1/localhost server addresses
   # resolve to the Docker host. This supports local Kubernetes clusters
   # whose API server listens on the host machine. The server image has no
-  # shell, so this one-shot container does the rewrite.
+  # shell, so this one-shot container does the rewrite. It runs on
+  # `docker compose up`, not on a restart, so rerun `up -d` after the host
+  # kubeconfig changes.
   kubeconfig:
     image: busybox:1.37
     entrypoint:

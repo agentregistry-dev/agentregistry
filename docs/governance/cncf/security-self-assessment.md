@@ -126,7 +126,7 @@ This document provides the CNCF TAG-Security with an initial understanding of ag
 
 - **Artifact Validation**: Published artifacts can be validated before they are made available to developers.
 
-- **Container Image Security**: Production images are built using multi-stage Docker builds, with Alpine Linux used for builder stages and `ubuntu:22.04` as the final runtime base image to reduce the attack surface. Go binaries are stripped of debug symbols (`-s -w` flags). Images are published to `ghcr.io` with multi-platform support (linux/amd64, linux/arm64).
+- **Container Image Security**: Production images are built using multi-stage Docker builds, with Alpine Linux used for builder stages and `gcr.io/distroless/static-debian13` as the final runtime base image, which has no shell, package manager or git, to reduce the attack surface. Go binaries are stripped of debug symbols (`-s -w` flags). Images are published to `ghcr.io` with multi-platform support (linux/amd64, linux/arm64).
 
 - **Namespace Denylist**: A namespace blocking mechanism prevents abuse by denying operations on restricted namespaces.
 
