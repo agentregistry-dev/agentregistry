@@ -497,7 +497,7 @@ func readMCPYAML(projectDir string) (*v1alpha1.MCPServer, error) {
 func defaultInitModelName(provider string) string {
 	switch strings.ToLower(provider) {
 	case "openai", "agentgateway":
-		return "gpt-5-mini"
+		return "gpt-5.6-terra"
 	case "anthropic":
 		return "claude-sonnet-4-6"
 	case "gemini":
