@@ -130,8 +130,9 @@ func (m ObjectMeta) NamespaceOrDefault() string {
 // (or EnvelopeFromRaw); each kind's UnmarshalStatus is the inverse of the
 // per-kind MarshalStatus and decides how to decode the bytes.
 type RawObject struct {
-	TypeMeta `json:",inline" yaml:",inline"`
-	Metadata ObjectMeta      `json:"metadata" yaml:"metadata"`
-	Spec     json.RawMessage `json:"spec,omitempty" yaml:"spec,omitempty"`
-	Status   json.RawMessage `json:"status,omitempty" yaml:"status,omitempty"`
+	TypeMeta     `json:",inline" yaml:",inline"`
+	Metadata     ObjectMeta      `json:"metadata" yaml:"metadata"`
+	Spec         json.RawMessage `json:"spec,omitempty" yaml:"spec,omitempty"`
+	Status       json.RawMessage `json:"status,omitempty" yaml:"status,omitempty"`
+	InternalMeta json.RawMessage `json:"-" yaml:"-"`
 }

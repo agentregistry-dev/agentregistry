@@ -184,7 +184,6 @@ func TestDefaultApplyFingerprintIncludesAgentHarnessCompositionDependencies(t *t
 			Name:      "assistant",
 		},
 		Spec: v1alpha1.AgentSpec{
-			CompatibleHarnesses: []v1alpha1.HarnessCompatibility{{Type: "claude-code"}},
 			Plugins: []v1alpha1.ResourceRef{{
 				Name: "deploy-tools",
 			}},
@@ -253,10 +252,9 @@ func TestDefaultApplyFingerprintIgnoresHarnessCompositionWhenDeploymentDoesNotSe
 			Name:      "assistant",
 		},
 		Spec: v1alpha1.AgentSpec{
-			CompatibleHarnesses: []v1alpha1.HarnessCompatibility{{Type: "claude-code"}},
-			Plugins:             []v1alpha1.ResourceRef{{Name: "deploy-tools"}},
-			Skills:              []v1alpha1.ResourceRef{{Name: "weather"}},
-			Instructions:        &v1alpha1.ResourceRef{Name: "writer-instructions"},
+			Plugins:      []v1alpha1.ResourceRef{{Name: "deploy-tools"}},
+			Skills:       []v1alpha1.ResourceRef{{Name: "weather"}},
+			Instructions: &v1alpha1.ResourceRef{Name: "writer-instructions"},
 		},
 	}
 
@@ -276,7 +274,7 @@ func TestDefaultApplyFingerprintIgnoresHarnessCompositionWhenDeploymentDoesNotSe
 
 func testApplyInput() ApplyInput {
 	return ApplyInput{
-		Deployment: &v1alpha1.Deployment{
+		Deployment: &DeploymentRecord{Deployment: &v1alpha1.Deployment{
 			TypeMeta: v1alpha1.TypeMeta{Kind: v1alpha1.KindDeployment},
 			Metadata: v1alpha1.ObjectMeta{
 				Namespace:  "default",
@@ -286,10 +284,10 @@ func testApplyInput() ApplyInput {
 			},
 			Spec: v1alpha1.DeploymentSpec{
 				TargetRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather"},
-				RuntimeRef: v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "local"},
+				RuntimeRef: v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "test-runtime"},
 				Env:        map[string]string{"LOG_LEVEL": "debug"},
 			},
-		},
+		}},
 		Target: testMCPServer("ghcr.io/example/weather:1.0.0"),
 		Runtime: &v1alpha1.Runtime{
 			TypeMeta: v1alpha1.TypeMeta{Kind: v1alpha1.KindRuntime},
@@ -299,7 +297,7 @@ func testApplyInput() ApplyInput {
 				UID:        "runtime-uid",
 				Generation: 1,
 			},
-			Spec: v1alpha1.RuntimeSpec{Type: "Local"},
+			Spec: v1alpha1.RuntimeSpec{Type: "Test"},
 		},
 	}
 }

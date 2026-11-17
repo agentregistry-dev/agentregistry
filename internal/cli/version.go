@@ -7,9 +7,9 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/mod/semver"
 
-	"github.com/agentregistry-dev/agentregistry/internal/version"
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	cliruntime "github.com/agentregistry-dev/agentregistry/pkg/cli/runtime"
+	"github.com/agentregistry-dev/agentregistry/pkg/version"
 )
 
 func NewVersionCommand(deps cliruntime.Deps) *cobra.Command {
@@ -17,8 +17,9 @@ func NewVersionCommand(deps cliruntime.Deps) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   cliruntime.CommandVersion,
-		Short: "Show version information",
-		Long:  `Displays the version of arctl.`,
+		Short: "Display the arctl CLI and registry server versions",
+		Long: `Displays the version, git commit, and build date of the arctl CLI, and of
+the registry server when one is reachable.`,
 		Run: func(cmd *cobra.Command, args []string) {
 			output := struct {
 				CLI                  arv0.VersionBody  `json:"cli"`

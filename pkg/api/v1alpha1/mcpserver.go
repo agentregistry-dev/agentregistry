@@ -17,6 +17,10 @@ type MCPServerSpec struct {
 	Title       string `json:"title,omitempty" yaml:"title,omitempty"`
 	Description string `json:"description,omitempty" yaml:"description,omitempty"`
 
+	// IconURL is the image a catalog UI shows for this MCP server. Either an
+	// absolute https:// URL or a root-relative path served by the UI.
+	IconURL string `json:"iconUrl,omitempty" yaml:"iconUrl,omitempty"`
+
 	// Source declares where the bundled MCP server comes from — Package (the
 	// runnable distribution) and/or Repository (the source code).
 	Source *MCPServerSource `json:"source,omitempty" yaml:"source,omitempty"`
@@ -42,16 +46,11 @@ type HTTPHeader struct {
 	Value string `json:"value,omitempty" yaml:"value,omitempty"`
 }
 
-// MCPServerSource is the distribution origin of a bundled MCP server —
-// either a published artifact (Package) or a source repository the
-// registry builds from.
+// MCPServerSource is the distribution origin of a bundled MCP server.
 type MCPServerSource struct {
 	// Package is the runnable distribution (stdio binary, container image,
 	// npm package, etc.) of this MCP server.
 	Package *MCPPackage `json:"package,omitempty" yaml:"package,omitempty"`
-
-	// Repository links to the source code the package was built from.
-	Repository *Repository `json:"repository,omitempty" yaml:"repository,omitempty"`
 }
 
 // MCPTransport describes how a deployable MCPPackage exposes itself. Used

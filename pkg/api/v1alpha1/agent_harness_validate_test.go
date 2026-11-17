@@ -15,62 +15,38 @@ func TestAgentHarnessValidate(t *testing.T) {
 		wantErr string // substring; empty means valid
 	}{
 		{
-			name: "valid compatible harness with top-level plugin ref",
+			name: "valid top-level plugin ref",
 			spec: AgentSpec{
-				Plugins:             []ResourceRef{{Kind: KindPlugin, Name: "company-deploy", Tag: "v1"}},
-				CompatibleHarnesses: []HarnessCompatibility{{Type: "claude-code"}},
+				Plugins: []ResourceRef{{Kind: KindPlugin, Name: "company-deploy", Tag: "v1"}},
 			},
 		},
 		{
-			name:    "compatible harness type required",
-			spec:    AgentSpec{CompatibleHarnesses: []HarnessCompatibility{{}}},
-			wantErr: "spec.compatibleHarnesses[0].type",
-		},
-		{
-			name: "image can coexist with harness compatibility",
+			name: "image can coexist with composition refs",
 			spec: AgentSpec{
-				Source:              &AgentSource{Image: "ghcr.io/org/agent:1.0.0"},
-				CompatibleHarnesses: []HarnessCompatibility{{Type: "claude-code"}},
+				Source:  &AgentSource{Image: "ghcr.io/org/agent:1.0.0"},
+				Plugins: []ResourceRef{{Kind: KindPlugin, Name: "x"}},
 			},
-		},
-		{
-			name: "duplicate compatible harness rejected",
-			spec: AgentSpec{
-				CompatibleHarnesses: []HarnessCompatibility{{Type: "claude-code"}, {Type: "claude-code"}},
-			},
-			wantErr: "duplicate",
 		},
 		{
 			name: "plugin ref wrong kind",
 			spec: AgentSpec{
-				Plugins:             []ResourceRef{{Kind: KindMCPServer, Name: "x"}},
-				CompatibleHarnesses: []HarnessCompatibility{{Type: "codex"}},
+				Plugins: []ResourceRef{{Kind: KindMCPServer, Name: "x"}},
 			},
 			wantErr: "must be \"Plugin\"",
 		},
 		{
 			name: "skill ref wrong kind",
 			spec: AgentSpec{
-				Skills:              []ResourceRef{{Kind: KindPlugin, Name: "x"}},
-				CompatibleHarnesses: []HarnessCompatibility{{Type: "claude-code"}},
+				Skills: []ResourceRef{{Kind: KindPlugin, Name: "x"}},
 			},
 			wantErr: "must be \"Skill\"",
 		},
 		{
 			name: "instructions must be a Prompt",
 			spec: AgentSpec{
-				Instructions:        &ResourceRef{Kind: KindSkill, Name: "x"},
-				CompatibleHarnesses: []HarnessCompatibility{{Type: "claude-code"}},
+				Instructions: &ResourceRef{Kind: KindSkill, Name: "x"},
 			},
 			wantErr: "must be \"Prompt\"",
-		},
-		{
-			name: "composition requires harness compatibility",
-			spec: AgentSpec{
-				Plugins: []ResourceRef{{Kind: KindPlugin, Name: "x"}},
-				Source:  &AgentSource{Image: "ghcr.io/org/agent:1.0.0"},
-			},
-			wantErr: "require compatibleHarnesses",
 		},
 	}
 
@@ -108,9 +84,6 @@ func TestCompositionRefKindDefaultingPersists(t *testing.T) {
 			Skills:       []ResourceRef{{Name: "skill-a"}},  // empty Kind
 			Instructions: &ResourceRef{Name: "instr-a"},     // empty Kind
 			MCPServers:   []ResourceRef{{Name: "top-mcp"}},  // empty Kind
-			CompatibleHarnesses: []HarnessCompatibility{
-				{Type: "claude-code"},
-			},
 		},
 	}
 	if err := a.Validate(); err != nil {
@@ -125,17 +98,6 @@ func TestCompositionRefKindDefaultingPersists(t *testing.T) {
 	} {
 		if c.got != c.want {
 			t.Errorf("%s: kind not defaulted in place: got %q, want %q", c.field, c.got, c.want)
-		}
-	}
-}
-
-// TestHarnessCompatibilityIsMatrixOnly asserts Agent compatibility is a
-// harness-type matrix; the deployment owns concrete policy selection.
-func TestHarnessCompatibilityIsMatrixOnly(t *testing.T) {
-	harnessType := reflect.TypeFor[HarnessCompatibility]()
-	for _, removed := range []string{"Version", "Plugins", "Skills", "Instructions", "MCPServers"} {
-		if _, ok := harnessType.FieldByName(removed); ok {
-			t.Fatalf("HarnessCompatibility must not expose %s; selection and composition live elsewhere", removed)
 		}
 	}
 }

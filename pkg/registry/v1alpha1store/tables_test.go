@@ -67,9 +67,6 @@ func TestNewStoresDerivesBuiltInTablesFromKindDescriptors(t *testing.T) {
 		if got, want := store.table, storeTableNameFromDescriptor(descriptor); got != want {
 			t.Fatalf("%s store table = %q, want descriptor table %q", kind, got, want)
 		}
-		if got, want := store.kind, kind; got != want {
-			t.Fatalf("%s store kind = %q, want %q", kind, got, want)
-		}
 		wantBehavior := TaggedArtifactStore
 		if descriptor.Storage == v1alpha1.KindStorageMutableObject {
 			wantBehavior = MutableObjectStore

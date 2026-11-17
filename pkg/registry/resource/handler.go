@@ -31,6 +31,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
@@ -120,6 +121,10 @@ type Config struct {
 	// write and surface to the caller.
 	Prepare func(ctx context.Context, obj v1alpha1.Object) error
 
+	// OnUpsertError compensates side effects performed by Prepare when the
+	// metadata upsert fails.
+	OnUpsertError func(ctx context.Context, obj v1alpha1.Object, cause error) error
+
 	// DeleteAdmission optionally owns the final delete after authz. Nil uses
 	// ProductionDeleteAdmission, which deletes from the configured Store and
 	// runs PostDelete.
@@ -202,10 +207,12 @@ type AuthorizeInput struct {
 	// Tag is populated for exact tagged content resource operations.
 	// Batch delete leaves Tag empty when deleting every tag for a name.
 	Tag string
-	// Object is non-nil only when Verb == "apply"; it carries the decoded
-	// request body post-validation-stamping (path identity already merged
-	// into metadata), so the hook can inspect labels / annotations / spec
-	// in authz decisions.
+	// Object carries the resource document for the hook to inspect: nil for
+	// "get" and "list", the decoded request body post-validation-stamping on
+	// "apply", and deleteOpts.PreDeleteObject on "delete".
+	// That delete value is nil unless DeleteAdmission or PostDelete is wired
+	// and is the caller's own document on the batch path, so a delete
+	// authorizer must re-read the stored document rather than trust it.
 	Object v1alpha1.Object
 }
 
@@ -443,17 +450,22 @@ func registerListTags[T v1alpha1.Object](api huma.API, cfg Config, newObj func()
 		if err != nil {
 			return nil, err
 		}
-		if cfg.Authorize != nil {
-			if err := cfg.Authorize(ctx, AuthorizeInput{Verb: "list", Kind: kind, Namespace: ns, Name: name}); err != nil {
-				return nil, err
-			}
-		}
 		rows, err := cfg.Store.ListTags(ctx, ns, name)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("list tags "+kind, err)
 		}
 		items := make([]T, 0, len(rows))
 		for _, row := range rows {
+			// Each tag is its own object with its own labels, so the response holds the tags the caller may get.
+			if cfg.Authorize != nil {
+				err := cfg.Authorize(ctx, AuthorizeInput{Verb: "get", Kind: kind, Namespace: ns, Name: name, Tag: row.Metadata.Tag})
+				if isForbidden(err) {
+					continue
+				}
+				if err != nil {
+					return nil, err
+				}
+			}
 			obj, err := v1alpha1.EnvelopeFromRaw(newObj, row, kind)
 			if err != nil {
 				return nil, huma.Error500InternalServerError("decode "+kind, err)
@@ -511,6 +523,7 @@ func registerApplyMutable[T v1alpha1.Object](api huma.API, cfg Config, newObj fu
 			PostUpsert:        cfg.PostUpsert,
 			InitialFinalizers: cfg.InitialFinalizers,
 			Prepare:           cfg.Prepare,
+			OnUpsertError:     cfg.OnUpsertError,
 		}, false); ae != nil {
 			return nil, mapApplyErrorToHuma(ae, kind, ns, name, "")
 		}
@@ -572,28 +585,25 @@ func registerDelete[T v1alpha1.Object](api huma.API, cfg Config, newObj func() T
 }
 
 func runDeleteLatest[T v1alpha1.Object](ctx context.Context, cfg Config, newObj func() T, kind, ns, name string) (*deleteOutput, error) {
-	// Use the terminating-aware lookup so a repeated DELETE on a row that's
-	// already mid-teardown stays idempotent. Without this the second call
-	// 404s the moment deletion_timestamp lands (GetLatest filters those
-	// out), which contradicts LIST for kinds that opt into
-	// IncludeTerminatingByDefault, and breaks scripts that retry DELETE
-	// expecting the same response shape. Store.Delete is already a no-op
-	// on terminating rows (see v1alpha1store.deleteMutable), and the
-	// PostDelete re-fire mirrors PostUpsert's operator-friendly retry path
-	// for transient runtime-adapter failures.
-	row, err := cfg.Store.GetLatestIncludingTerminating(ctx, ns, name)
-	if err != nil {
-		return nil, mapNotFound(err, kind, ns, name, "")
-	}
-	obj, err := v1alpha1.EnvelopeFromRaw(newObj, row, kind)
-	if err != nil {
-		return nil, huma.Error500InternalServerError("decode "+kind, err)
-	}
 	dopts := deleteOpts{Authorize: cfg.Authorize}
 	if cfg.PostDelete != nil {
 		dopts.PostDelete = cfg.PostDelete
 	}
+	// Only load the object when a delete callback needs it. Otherwise
+	// deleteCore must authorize before store I/O, and deletion must not
+	// depend on decoding an unused spec.
 	if cfg.DeleteAdmission != nil || dopts.PostDelete != nil {
+		// Use the terminating-aware lookup so repeated DELETE stays idempotent.
+		// Store.Delete is a no-op on terminating rows, while PostDelete re-fires
+		// to allow retries after transient callback failures.
+		row, err := cfg.Store.GetLatestIncludingTerminating(ctx, ns, name)
+		if err != nil {
+			return nil, mapNotFound(err, kind, ns, name, "")
+		}
+		obj, err := v1alpha1.EnvelopeFromRaw(newObj, row, kind)
+		if err != nil {
+			return nil, huma.Error500InternalServerError("decode "+kind, err)
+		}
 		dopts.PreDeleteObject = obj
 	}
 	dopts.DeleteAdmission = cfg.DeleteAdmission
@@ -648,8 +658,8 @@ func runDelete[T v1alpha1.Object](ctx context.Context, cfg Config, newObj func()
 // policy that used to be inlined in each closure.
 func mapApplyErrorToHuma(ae *applyError, kind, ns, name, tag string) error {
 	switch ae.Stage {
-	case stageAuth:
-		// Auth callbacks already return huma errors; propagate.
+	case stageAuth, stagePrepare, stageAdmission:
+		// Preserve the HTTP status chosen by these hooks.
 		return ae.Err
 	case stageValidation:
 		return huma.Error400BadRequest("validation: " + ae.Err.Error())
@@ -657,8 +667,6 @@ func mapApplyErrorToHuma(ae *applyError, kind, ns, name, tag string) error {
 		return huma.Error400BadRequest("refs: " + ae.Err.Error())
 	case stageRegistries:
 		return huma.Error400BadRequest("registries: " + ae.Err.Error())
-	case stageAdmission:
-		return ae.Err
 	case stageMarshal:
 		return huma.Error400BadRequest("marshal spec: " + ae.Err.Error())
 	case stageUpsert:
@@ -803,6 +811,12 @@ func appendExtraWhere(opts *v1alpha1store.ListOpts, predicateFormat string, arg 
 		return
 	}
 	opts.ExtraWhere = "(" + opts.ExtraWhere + ") AND (" + predicate + ")"
+}
+
+// isForbidden reports a denial, returned as the auth sentinel or a Huma 403, rather than a failure.
+func isForbidden(err error) bool {
+	var status huma.StatusError
+	return errors.Is(err, auth.ErrForbidden) || (errors.As(err, &status) && status.GetStatus() == http.StatusForbidden)
 }
 
 // mapNotFound converts a pkgdb.ErrNotFound error into a Huma 404 with a

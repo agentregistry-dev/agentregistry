@@ -43,12 +43,23 @@ replicaCount: 1
 config:
   # -- Listen address for the HTTP server
   serverAddress: ":8080"
-  # -- Agent Gateway gRPC port
-  agentGatewayPort: "21212"
   # -- Agent Registry MCP server port
   agentRegistryMcpPort: "31313"
   # -- Enable input validation on the registry API
   enableRegistryValidation: "false"
+
+# @section Secret store
+
+# -- Backend used to persist Secret resource payloads.
+secretStore:
+  # -- "Kubernetes" stores core/v1.Secrets; "Database" encrypts payloads in Postgres.
+  type: Kubernetes
+  # -- Existing Secret containing the hex-encoded 32-byte AES-256 key for Database.
+  encryptionKeySecretRef:
+    # -- Name of the Secret in the install namespace.
+    name: ""
+    # -- Key containing the encryption key.
+    key: SECRET_STORE_ENCRYPTION_KEY
 
 # @section Deployment parameters
 

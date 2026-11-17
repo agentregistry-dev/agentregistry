@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
 	"slices"
 
 	"k8s.io/client-go/util/workqueue"
@@ -19,15 +18,7 @@ import (
 const (
 	DeploymentControllerFinalizer = "agentregistry.dev/deployment-controller"
 	DeploymentForceAnnotation     = "reconcile.agentregistry.dev/force"
-
-	deploymentControllerDetailsKey = "deploymentController"
 )
-
-type deploymentControllerDetails struct {
-	LastAppliedFingerprint string                          `json:"lastAppliedFingerprint,omitempty"`
-	LastForceToken         string                          `json:"lastForceToken,omitempty"`
-	Dependencies           []types.ApplyDependencySnapshot `json:"dependencies,omitempty"`
-}
 
 func (c *DeploymentController) processQueueItem(
 	ctx context.Context,
@@ -61,10 +52,10 @@ func (c *DeploymentController) reconcileKey(ctx context.Context, key deploymentQ
 	if !found {
 		return "missing", "deployment row no longer exists", nil
 	}
-	if v1alpha1.IsDiscoveredDeployment(deployment) {
+	if v1alpha1.IsDiscoveredDeployment(deployment.Deployment) {
 		return "skipped", "discovered deployment is provider-observed state", nil
 	}
-	action, err := deploymentAction(deployment)
+	action, err := deploymentAction(deployment.Deployment)
 	if err != nil {
 		return "", "", err
 	}
@@ -79,7 +70,7 @@ func (c *DeploymentController) reconcileKey(ctx context.Context, key deploymentQ
 	}
 }
 
-func (c *DeploymentController) apply(ctx context.Context, deployment *v1alpha1.Deployment) (string, string, error) {
+func (c *DeploymentController) apply(ctx context.Context, deployment *types.DeploymentRecord) (string, string, error) {
 	target, err := c.resolveTarget(ctx, deployment)
 	if err != nil {
 		if errors.Is(err, v1alpha1.ErrDanglingRef) {
@@ -124,19 +115,29 @@ func (c *DeploymentController) apply(ctx context.Context, deployment *v1alpha1.D
 	}
 	result, err := adapter.Apply(ctx, input)
 	if err != nil {
+		if c.DeploymentApplied != nil {
+			c.DeploymentApplied(ctx, input, nil, err)
+		}
 		if errors.Is(err, v1alpha1.ErrDanglingRef) {
 			return c.blockReference(ctx, deployment, err)
 		}
 		return "", "", fmt.Errorf("adapter %q apply: %w", adapter.Type(), err)
 	}
-	if err := c.persistApplyResult(ctx, deployment, result, fingerprint, forceToken, fingerprintResult.Dependencies); err != nil {
+	if err := c.persistApplyResult(ctx, deployment, result, fingerprint, forceToken); err != nil {
+		if c.DeploymentApplied != nil {
+			c.DeploymentApplied(ctx, input, result, err)
+		}
 		return "", "", err
 	}
 	return c.reconcileReadiness(ctx, deployment, adapter, input, "success", "deployment applied")
+	if c.DeploymentApplied != nil {
+		c.DeploymentApplied(ctx, input, result, nil)
+	}
+	return "success", "deployment applied", nil
 }
 
-func (c *DeploymentController) remove(ctx context.Context, deployment *v1alpha1.Deployment) (string, string, error) {
-	runtime, err := c.resolveRuntime(ctx, deployment)
+func (c *DeploymentController) remove(ctx context.Context, deployment *types.DeploymentRecord) (string, string, error) {
+	runtime, err := c.resolveRuntimeIncludingTerminating(ctx, deployment)
 	if err != nil {
 		return c.handleRemoveRuntimeError(ctx, deployment, err)
 	}
@@ -162,9 +163,40 @@ func (c *DeploymentController) remove(ctx context.Context, deployment *v1alpha1.
 	return "success", "deployment removed", nil
 }
 
+// resolveRuntimeIncludingTerminating keeps the parent Runtime available after
+// its deletion is accepted. Deployment removal still needs that Runtime to
+// select and configure the provider responsible for child cleanup; filtering
+// terminating rows would orphan the provider resources. A truly absent parent
+// falls through to the existing dangling-reference finalization path.
+func (c *DeploymentController) resolveRuntimeIncludingTerminating(
+	ctx context.Context,
+	deployment *types.DeploymentRecord,
+) (*v1alpha1.Runtime, error) {
+	store := c.Stores[v1alpha1.KindRuntime]
+	if store == nil {
+		return nil, errors.New("deployment controller: no Runtime store registered")
+	}
+	ref := deployment.Spec.RuntimeRef
+	ref.Namespace = refNamespace(ref.Namespace, deployment.Metadata.NamespaceOrDefault())
+	raw, err := store.GetLatestIncludingTerminating(ctx, ref.Namespace, ref.Name)
+	if err != nil {
+		if errors.Is(err, pkgdb.ErrNotFound) {
+			return nil, v1alpha1.ErrDanglingRef
+		}
+		return nil, fmt.Errorf("resolve runtimeRef %s/%s: %w", ref.Namespace, ref.Name, err)
+	}
+	runtime, err := v1alpha1.EnvelopeFromRaw(func() *v1alpha1.Runtime {
+		return &v1alpha1.Runtime{}
+	}, raw, v1alpha1.KindRuntime)
+	if err != nil {
+		return nil, fmt.Errorf("resolve runtimeRef %s/%s: %w", ref.Namespace, ref.Name, err)
+	}
+	return runtime, nil
+}
+
 func (c *DeploymentController) handleRemoveRuntimeError(
 	ctx context.Context,
-	deployment *v1alpha1.Deployment,
+	deployment *types.DeploymentRecord,
 	cause error,
 ) (string, string, error) {
 	if !errors.Is(cause, v1alpha1.ErrDanglingRef) {
@@ -179,7 +211,7 @@ func (c *DeploymentController) handleRemoveRuntimeError(
 	return "success", "deployment finalized without adapter remove because runtimeRef is unavailable", nil
 }
 
-func (c *DeploymentController) blockReference(ctx context.Context, deployment *v1alpha1.Deployment, cause error) (string, string, error) {
+func (c *DeploymentController) blockReference(ctx context.Context, deployment *types.DeploymentRecord, cause error) (string, string, error) {
 	message := "referenced resource is not available yet"
 	if cause != nil {
 		message = cause.Error()
@@ -192,13 +224,13 @@ func (c *DeploymentController) blockReference(ctx context.Context, deployment *v
 			Message:            message,
 			ObservedGeneration: deployment.Metadata.Generation,
 		}},
-	}, "", "", nil); err != nil {
+	}, "", ""); err != nil {
 		return "", "", err
 	}
 	return "blocked", message, nil
 }
 
-func (c *DeploymentController) loadDeployment(ctx context.Context, key deploymentQueueKey) (*v1alpha1.Deployment, bool, error) {
+func (c *DeploymentController) loadDeployment(ctx context.Context, key deploymentQueueKey) (*types.DeploymentRecord, bool, error) {
 	store := c.deploymentStore()
 	if store == nil {
 		return nil, false, errors.New("deployment controller: no Deployment store registered")
@@ -214,14 +246,14 @@ func (c *DeploymentController) loadDeployment(ctx context.Context, key deploymen
 		}
 		return nil, false, err
 	}
-	deployment, err := v1alpha1.EnvelopeFromRaw(func() *v1alpha1.Deployment { return &v1alpha1.Deployment{} }, raw, v1alpha1.KindDeployment)
+	deployment, err := types.DeploymentRecordFromRaw(raw)
 	if err != nil {
 		return nil, false, err
 	}
 	return deployment, true, nil
 }
 
-func (c *DeploymentController) resolveTarget(ctx context.Context, deployment *v1alpha1.Deployment) (v1alpha1.Object, error) {
+func (c *DeploymentController) resolveTarget(ctx context.Context, deployment *types.DeploymentRecord) (v1alpha1.Object, error) {
 	if c.Getter == nil {
 		return nil, errors.New("deployment controller: getter is nil")
 	}
@@ -237,7 +269,7 @@ func (c *DeploymentController) resolveTarget(ctx context.Context, deployment *v1
 	return obj, nil
 }
 
-func (c *DeploymentController) resolveRuntime(ctx context.Context, deployment *v1alpha1.Deployment) (*v1alpha1.Runtime, error) {
+func (c *DeploymentController) resolveRuntime(ctx context.Context, deployment *types.DeploymentRecord) (*v1alpha1.Runtime, error) {
 	if c.Getter == nil {
 		return nil, errors.New("deployment controller: getter is nil")
 	}
@@ -264,50 +296,36 @@ func (c *DeploymentController) resolveAdapter(runtimeType string) (types.Deploym
 
 func (c *DeploymentController) persistApplyResult(
 	ctx context.Context,
-	deployment *v1alpha1.Deployment,
+	deployment *types.DeploymentRecord,
 	result *types.ApplyResult,
 	fingerprint string,
 	forceToken string,
-	dependencies []types.ApplyDependencySnapshot,
 ) error {
-	patch := v1alpha1store.PatchOpts{
-		Finalizers: ensureFinalizer(DeploymentControllerFinalizer),
+	store := c.deploymentStore()
+	namespace, name := deployment.Metadata.NamespaceOrDefault(), deployment.Metadata.Name
+	if err := store.PatchFinalizers(ctx, namespace, name, "", ensureFinalizer(DeploymentControllerFinalizer)); err != nil {
+		return fmt.Errorf("persist apply finalizer: %w", err)
 	}
-	if result == nil {
-		if fingerprint != "" {
-			patch.Status = deploymentControllerStatusPatch(deployment, nil, fingerprint, forceToken, dependencies)
-		}
-		if err := c.deploymentStore().ApplyPatch(ctx, deployment.Metadata.NamespaceOrDefault(), deployment.Metadata.Name, "", patch); err != nil {
-			return fmt.Errorf("persist apply result: %w", err)
-		}
+
+	meta := deployment.InternalMeta
+	if result != nil && result.InternalMeta != nil {
+		meta = *result.InternalMeta
+	}
+	if fingerprint != "" {
+		meta.LastAppliedFingerprint = fingerprint
+		meta.LastForceToken = forceToken
+	}
+	if result == nil && fingerprint == "" {
 		return nil
 	}
-	if len(result.Conditions) > 0 || len(result.Details) > 0 || fingerprint != "" {
-		patch.Status = deploymentControllerStatusPatch(deployment, result, fingerprint, forceToken, dependencies)
-	}
-	if len(result.RuntimeMetadata) > 0 {
-		patch.Annotations = func(annotations map[string]string) map[string]string {
-			if annotations == nil {
-				annotations = map[string]string{}
-			}
-			maps.Copy(annotations, result.RuntimeMetadata)
-			return annotations
-		}
-	}
-	if err := c.deploymentStore().ApplyPatch(ctx, deployment.Metadata.NamespaceOrDefault(), deployment.Metadata.Name, "", patch); err != nil {
+	if err := store.PatchStatusAndMeta(ctx, namespace, name, deploymentStatusPatch(deployment, result), meta); err != nil {
 		return fmt.Errorf("persist apply result: %w", err)
 	}
 	return nil
 }
 
-func deploymentControllerStatusPatch(
-	deployment *v1alpha1.Deployment,
-	result *types.ApplyResult,
-	fingerprint string,
-	forceToken string,
-	dependencies []types.ApplyDependencySnapshot,
-) func(current json.RawMessage) (json.RawMessage, error) {
-	return v1alpha1.StatusPatcher(func(s *v1alpha1.Status) {
+func deploymentStatusPatch(deployment *types.DeploymentRecord, result *types.ApplyResult) func(current json.RawMessage) (json.RawMessage, error) {
+	return v1alpha1.DeploymentStatusPatcher(func(s *v1alpha1.DeploymentStatus) {
 		if s.ObservedGeneration < deployment.Metadata.Generation {
 			s.ObservedGeneration = deployment.Metadata.Generation
 		}
@@ -326,30 +344,22 @@ func deploymentControllerStatusPatch(
 				s.Conditions = slices.DeleteFunc(s.Conditions, func(cond v1alpha1.Condition) bool {
 					return cond.Type == "Ready"
 				})
+			if result.Runtime != nil {
+				s.Runtime = result.Runtime
 			}
 			for _, cond := range result.Conditions {
 				s.SetCondition(cond)
 			}
-			for key, encoded := range result.Details {
-				_ = s.SetDetailsKeyJSON(key, encoded)
-			}
-		}
-		if fingerprint != "" {
-			_ = s.SetDetailsKey(deploymentControllerDetailsKey, deploymentControllerDetails{
-				LastAppliedFingerprint: fingerprint,
-				LastForceToken:         forceToken,
-				Dependencies:           dependencies,
-			})
 		}
 	})
 }
 
-func (c *DeploymentController) persistRemoveResult(ctx context.Context, deployment *v1alpha1.Deployment, result *types.RemoveResult) error {
+func (c *DeploymentController) persistRemoveResult(ctx context.Context, deployment *types.DeploymentRecord, result *types.RemoveResult) error {
 	if result == nil || len(result.Conditions) == 0 {
 		return nil
 	}
 	patch := v1alpha1store.PatchOpts{
-		Status: v1alpha1.StatusPatcher(func(s *v1alpha1.Status) {
+		Status: v1alpha1.DeploymentStatusPatcher(func(s *v1alpha1.DeploymentStatus) {
 			if s.ObservedGeneration < deployment.Metadata.Generation {
 				s.ObservedGeneration = deployment.Metadata.Generation
 			}
@@ -364,7 +374,7 @@ func (c *DeploymentController) persistRemoveResult(ctx context.Context, deployme
 	return nil
 }
 
-func (c *DeploymentController) finalizeDeletedDeployment(ctx context.Context, deployment *v1alpha1.Deployment) error {
+func (c *DeploymentController) finalizeDeletedDeployment(ctx context.Context, deployment *types.DeploymentRecord) error {
 	err := c.deploymentStore().PatchFinalizers(ctx, deployment.Metadata.NamespaceOrDefault(), deployment.Metadata.Name, "", removeFinalizer(DeploymentControllerFinalizer))
 	if err != nil {
 		if errors.Is(err, pkgdb.ErrNotFound) {
@@ -374,6 +384,9 @@ func (c *DeploymentController) finalizeDeletedDeployment(ctx context.Context, de
 	}
 	if _, err := c.deploymentStore().PurgeFinalized(ctx); err != nil {
 		return fmt.Errorf("purge finalized deployment: %w", err)
+	}
+	if c.DeploymentFinalized != nil {
+		c.DeploymentFinalized(ctx, deployment.Deployment)
 	}
 	return nil
 }
@@ -416,8 +429,7 @@ func adapterSupportsKind(adapter types.DeploymentAdapter, kind string) bool {
 }
 
 type desiredApplyFingerprintResult struct {
-	Fingerprint  string
-	Dependencies []types.ApplyDependencySnapshot
+	Fingerprint string
 }
 
 func desiredApplyFingerprint(ctx context.Context, adapter types.DeploymentAdapter, input types.ApplyInput) (desiredApplyFingerprintResult, error) {
@@ -433,28 +445,20 @@ func desiredApplyFingerprint(ctx context.Context, adapter types.DeploymentAdapte
 	if err != nil {
 		return desiredApplyFingerprintResult{}, err
 	}
-	return desiredApplyFingerprintResult{
-		Fingerprint:  result.Fingerprint,
-		Dependencies: result.Dependencies,
-	}, nil
+	return desiredApplyFingerprintResult{Fingerprint: result.Fingerprint}, nil
 }
 
-func shouldSkipApply(deployment *v1alpha1.Deployment, fingerprint string, forceToken string) (bool, error) {
+func shouldSkipApply(deployment *types.DeploymentRecord, fingerprint string, forceToken string) (bool, error) {
 	if deployment == nil || fingerprint == "" {
 		return false, nil
 	}
-	var details deploymentControllerDetails
-	ok, err := deployment.Status.GetDetailsKey(deploymentControllerDetailsKey, &details)
-	if err != nil {
-		return false, err
-	}
-	if !ok || details.LastAppliedFingerprint != fingerprint {
+	if deployment.InternalMeta.LastAppliedFingerprint != fingerprint {
 		return false, nil
 	}
-	return forceToken == "" || details.LastForceToken == forceToken, nil
+	return forceToken == "" || deployment.InternalMeta.LastForceToken == forceToken, nil
 }
 
-func deploymentForceToken(deployment *v1alpha1.Deployment) string {
+func deploymentForceToken(deployment *types.DeploymentRecord) string {
 	if deployment == nil || deployment.Metadata.Annotations == nil {
 		return ""
 	}

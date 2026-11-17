@@ -9,9 +9,6 @@ const mockAgent: AgentResponse = {
     tag: "2.1.0",
     source: {
       image: "registry.example.com/code-review-agent:2.1.0",
-      repository: {
-        url: "https://github.com/example/code-review-agent",
-      },
     },
   },
   _meta: {

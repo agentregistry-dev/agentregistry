@@ -50,6 +50,9 @@ type ApplyConfig struct {
 	// hooks. Built-in Deployment apply is controller-owned and does not use
 	// this synchronous surface.
 	PostUpserts map[string]func(ctx context.Context, obj v1alpha1.Object) error
+	// OnUpsertErrors compensates per-kind Prepare side effects after a failed
+	// production metadata upsert.
+	OnUpsertErrors map[string]func(ctx context.Context, obj v1alpha1.Object, cause error) error
 
 	// PostDeletes mirrors resource.Config.PostDelete per kind for extension
 	// hooks. Built-in Deployment teardown is controller-owned and does not use
@@ -85,9 +88,15 @@ type ApplyConfig struct {
 //
 // DryRun runs validate + resolve + registries + uniqueness but does not
 // mutate the store.
+//
+// Namespace selects one namespace for the whole stream, matching the
+// single-object PUT rule: a document that omits metadata.namespace takes
+// it, and a document whose metadata.namespace differs fails. Empty keeps
+// each document's own namespace, defaulting to "default".
 type applyInput struct {
-	DryRun  bool   `query:"dryRun" doc:"Run validation without mutating the store. Defaults to false."`
-	RawBody []byte `contentType:"application/yaml" doc:"Multi-document YAML stream of v1alpha1 resources."`
+	DryRun    bool   `query:"dryRun" doc:"Run validation without mutating the store. Defaults to false."`
+	Namespace string `query:"namespace" doc:"Namespace for documents that omit metadata.namespace; documents naming a different namespace fail. Empty keeps each document's namespace (default 'default'). 'all' is rejected."`
+	RawBody   []byte `contentType:"application/yaml" doc:"Multi-document YAML stream of v1alpha1 resources."`
 }
 
 type applyOutput struct {
@@ -121,6 +130,9 @@ func RegisterApply(api huma.API, cfg ApplyConfig) {
 		Path:        cfg.BasePrefix + "/apply",
 		Summary:     "Apply a multi-doc YAML stream of v1alpha1 resources",
 	}, func(ctx context.Context, in *applyInput) (*applyOutput, error) {
+		if in.Namespace == namespaceAll {
+			return nil, errBatchNamespaceAll()
+		}
 		return runApplyBatch(ctx, cfg, scheme, in, false), nil
 	})
 
@@ -130,8 +142,17 @@ func RegisterApply(api huma.API, cfg ApplyConfig) {
 		Path:        cfg.BasePrefix + "/apply",
 		Summary:     "Delete v1alpha1 resources identified by a multi-doc YAML stream",
 	}, func(ctx context.Context, in *applyInput) (*applyOutput, error) {
+		if in.Namespace == namespaceAll {
+			return nil, errBatchNamespaceAll()
+		}
 		return runApplyBatch(ctx, cfg, scheme, in, true), nil
 	})
+}
+
+// errBatchNamespaceAll rejects ?namespace=all on batch writes: "all" is a
+// list selector, and every write lands in exactly one namespace.
+func errBatchNamespaceAll() error {
+	return huma.Error400BadRequest("?namespace=all is read-only; select one namespace")
 }
 
 func runApplyBatch(ctx context.Context, cfg ApplyConfig, scheme *v1alpha1.Scheme, in *applyInput, del bool) *applyOutput {
@@ -155,9 +176,9 @@ func runApplyBatch(ctx context.Context, cfg ApplyConfig, scheme *v1alpha1.Scheme
 			continue
 		}
 		if del {
-			out.Body.Results = append(out.Body.Results, deleteOne(ctx, cfg, obj, in.DryRun))
+			out.Body.Results = append(out.Body.Results, deleteOne(ctx, cfg, obj, in.Namespace, in.DryRun))
 		} else {
-			out.Body.Results = append(out.Body.Results, applyOne(ctx, cfg, obj, in.DryRun))
+			out.Body.Results = append(out.Body.Results, applyOne(ctx, cfg, obj, in.Namespace, in.DryRun))
 		}
 	}
 	return out
@@ -168,19 +189,20 @@ func runApplyBatch(ctx context.Context, cfg ApplyConfig, scheme *v1alpha1.Scheme
 // a previously accepted object without duplicating validation, authz,
 // persistence, or post-upsert behavior.
 func ApplyObject(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun bool) arv0.ApplyResult {
-	return applyOne(ctx, cfg, obj, dryRun)
+	return applyOne(ctx, cfg, obj, "", dryRun)
 }
 
 // DeleteObject runs one already-decoded object through the same production
 // delete path used by DELETE /v0/apply.
 func DeleteObject(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun bool) arv0.ApplyResult {
-	return deleteOne(ctx, cfg, obj, dryRun)
+	return deleteOne(ctx, cfg, obj, "", dryRun)
 }
 
 // applyOne runs a single document through the shared apply pipeline.
+// namespace is the batch's ?namespace= selection (empty for none).
 // Never errors; encodes any failure into the returned ApplyResult.
-func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun bool) arv0.ApplyResult {
-	store, meta, ae := resolveBatchTarget(cfg, obj, "apply")
+func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, namespace string, dryRun bool) arv0.ApplyResult {
+	store, meta, ae := resolveBatchTarget(cfg, obj, "apply", namespace)
 	res := arv0.ApplyResult{
 		APIVersion: obj.GetAPIVersion(),
 		Kind:       obj.GetKind(),
@@ -196,6 +218,7 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 		Resolver:          cfg.Resolver,
 		RegistryValidator: cfg.RegistryValidator,
 		PostUpsert:        cfg.PostUpserts[obj.GetKind()],
+		OnUpsertError:     cfg.OnUpsertErrors[obj.GetKind()],
 		InitialFinalizers: cfg.InitialFinalizers[obj.GetKind()],
 		Admission:         cfg.Admission,
 		Source:            cfg.Source,
@@ -224,8 +247,8 @@ func applyOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun 
 // deletes every tag for (namespace, name); setting metadata.tag deletes that
 // exact tag. Mutable-object rows keep their single-row delete since those rows
 // are control-plane state rather than append-only tags.
-func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun bool) arv0.ApplyResult {
-	store, meta, ae := resolveBatchTarget(cfg, obj, "delete")
+func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, namespace string, dryRun bool) arv0.ApplyResult {
+	store, meta, ae := resolveBatchTarget(cfg, obj, "delete", namespace)
 	res := arv0.ApplyResult{
 		APIVersion: obj.GetAPIVersion(),
 		Kind:       obj.GetKind(),
@@ -255,13 +278,16 @@ func deleteOne(ctx context.Context, cfg ApplyConfig, obj v1alpha1.Object, dryRun
 }
 
 // resolveBatchTarget looks up the per-kind store and applies the
-// "default to default-namespace" + fail-closed authz-map invariants.
-// Returns a non-nil applyError on a missing kind / missing authorizer
-// so the caller can short-circuit the document. The returned meta is
-// the namespace-defaulted view (caller must SetMetadata if needed —
+// namespace-selection + fail-closed authz-map invariants. A document
+// without metadata.namespace takes the selected namespace (or "default"
+// when none is selected); a document naming a different namespace than
+// the selection fails. Returns a non-nil applyError on a missing kind /
+// namespace conflict / missing authorizer so the caller can
+// short-circuit the document. The returned meta is the
+// namespace-defaulted view (caller must SetMetadata if needed —
 // applyCore re-reads metadata after authorize so the defaulting is
 // enough as long as we mutate the obj here too).
-func resolveBatchTarget(cfg ApplyConfig, obj v1alpha1.Object, verb string) (*v1alpha1store.Store, v1alpha1.ObjectMeta, *applyError) {
+func resolveBatchTarget(cfg ApplyConfig, obj v1alpha1.Object, verb, namespace string) (*v1alpha1store.Store, v1alpha1.ObjectMeta, *applyError) {
 	kind := obj.GetKind()
 	meta := obj.GetMetadata()
 
@@ -274,10 +300,20 @@ func resolveBatchTarget(cfg ApplyConfig, obj v1alpha1.Object, verb string) (*v1a
 	}
 
 	// Default namespace before authorize/applyCore see it. The handler.go
-	// PUT path stamps namespace from the URL; the batch path has only the
-	// YAML body to look at, so default explicitly here.
+	// PUT path stamps namespace from the URL and rejects a body that names
+	// another; the batch path does the same when ?namespace= selects one,
+	// and otherwise defaults from the YAML body alone.
+	if namespace != "" && meta.Namespace != "" && meta.Namespace != namespace {
+		return nil, *meta, &applyError{
+			Stage: stageValidation,
+			Err:   fmt.Errorf("metadata.namespace %q does not match ?namespace=%q", meta.Namespace, namespace),
+		}
+	}
 	if meta.Namespace == "" {
-		meta.Namespace = v1alpha1.DefaultNamespace
+		meta.Namespace = namespace
+		if meta.Namespace == "" {
+			meta.Namespace = v1alpha1.DefaultNamespace
+		}
 		obj.SetMetadata(*meta)
 	}
 

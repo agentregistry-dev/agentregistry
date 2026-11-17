@@ -2,15 +2,15 @@ package types
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/status"
 )
 
 // DeploymentAdapter is the v1alpha1 runtime surface for deploying
-// Agent or MCPServer targets onto a concrete runtime (local
-// docker daemon, Kubernetes, hosted cloud runtimes, etc.).
+// Agent or MCPServer targets onto a concrete runtime (Kubernetes,
+// hosted cloud runtimes, etc.).
 //
 // One adapter per runtime type. Adapters are registered at app boot in
 // a map keyed by Type() string; the reconciler looks up by
@@ -42,7 +42,7 @@ import (
 // discovery is intentionally opt-in and is not part of the lifecycle contract.
 type DeploymentAdapter interface {
 	// Type returns the canonical CamelCase discriminator string
-	// ("Local", "Kubernetes", "BedrockAgentCore", ...). Runtime.Validate
+	// ("Kubernetes", "BedrockAgentCore", ...). Runtime.Validate
 	// canonicalizes Spec.Type at admission, so the reconciler's adapter
 	// lookup compares Type() against Spec.Type with exact-match equality.
 	Type() string
@@ -84,7 +84,7 @@ type DeploymentAdapter interface {
 // and hands in concrete objects.
 type ApplyInput struct {
 	// Deployment is the resource being applied.
-	Deployment *v1alpha1.Deployment
+	Deployment *DeploymentRecord
 
 	// Target is the resolved TargetRef — either *v1alpha1.Agent or
 	// *v1alpha1.MCPServer. Adapters type-switch on it.
@@ -105,8 +105,8 @@ type ApplyInput struct {
 	Getter v1alpha1.GetterFunc
 }
 
-// ApplyResult captures the status + annotation deltas the reconciler
-// should persist after Apply.
+// ApplyResult captures the status updates the reconciler should persist after
+// Apply.
 type ApplyResult struct {
 	// Conditions to merge into Deployment.Status via
 	// Store.PatchStatus. Canonical types:
@@ -116,34 +116,26 @@ type ApplyResult struct {
 	//   - "Degraded"    — transient failure, will retry
 	Conditions []v1alpha1.Condition
 
-	// RuntimeMetadata carries adapter-internal state to persist
-	// into Deployment.Metadata.Annotations (keyed under
-	// runtimes.agentregistry.solo.io/<type>/*). Callers marshal
-	// to string values since Annotations is map[string]string.
-	RuntimeMetadata map[string]string
+	// InternalMeta is durable state shared by internal reconcilers.
+	InternalMeta *DeploymentInternalMeta
 
-	// Details is a map of top-level keys to JSON-encoded values to merge into
-	// Deployment.Status.Details via Status.SetDetailsKeyJSON. Each adapter owns its
-	// own top-level key; other keys in Status.Details are preserved across
-	// the patch. A nil value at a key removes that key.
-	//
-	// Use Details for structured state that Conditions cannot express cleanly;
-	// stable, typed status should still be modeled as Conditions.
-	Details map[string]json.RawMessage
+	// Runtime is the public provider runtime identity.
+	Runtime *v1alpha1.DeploymentRuntimeStatus
 }
+
+// RuntimeMetadataRemoteIDKey is the stable provider identity used to correlate discoveries.
+const RuntimeMetadataRemoteIDKey = status.RuntimeMetadataRemoteIDKey
 
 // RemoveInput carries the Deployment being torn down plus its resolved
 // Runtime (the Target has already been dereferenced and is not
 // included; teardown operates on the recorded runtime state).
 type RemoveInput struct {
-	Deployment *v1alpha1.Deployment
+	Deployment *DeploymentRecord
 	Runtime    *v1alpha1.Runtime
 }
 
-// RemoveResult describes the outcome of a Remove call. The reconciler
-// merges Conditions into Deployment.Status; idempotent re-Remove on a
-// completed teardown is the expected pattern (no separate finalizer
-// drain — soft-delete + GC handle the lifetime).
+// RemoveResult contains status updates persisted before finalizer release.
+// Remove must return an error until required provider cleanup completes.
 type RemoveResult struct {
 	// Conditions to merge into Deployment.Status (typically
 	// Progressing with Reason="Terminating", then Ready=False with
@@ -153,7 +145,7 @@ type RemoveResult struct {
 
 // LogsInput selects a log stream for the deployed workload.
 type LogsInput struct {
-	Deployment *v1alpha1.Deployment
+	Deployment *DeploymentRecord
 	// Follow ⇒ stream indefinitely until ctx is cancelled. !Follow ⇒
 	// return the available backlog and close.
 	Follow bool
@@ -218,10 +210,8 @@ type DiscoveryResult struct {
 	Namespace string
 	Name      string
 	Tag       string
-	// RuntimeMetadata mirrors what Apply writes so the caller can
-	// correlate this discovery with an existing Deployment's
-	// annotations.
-	RuntimeMetadata map[string]string
+	// InternalMeta identifies the provider workload without exposing it in status.
+	InternalMeta DeploymentInternalMeta
 }
 
 // -----------------------------------------------------------------------------
@@ -248,7 +238,7 @@ type DiscoveryResult struct {
 // state.
 type RuntimeAdapter interface {
 	// Type returns the canonical CamelCase discriminator string
-	// ("Local", "Kubernetes", "BedrockAgentCore", "GeminiAgentRuntime",
+	// ("Kubernetes", "BedrockAgentCore", "GeminiAgentRuntime",
 	// ...). Runtime.Validate canonicalizes Spec.Type at admission so
 	// dispatch can compare with exact-match equality.
 	Type() string

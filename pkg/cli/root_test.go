@@ -6,7 +6,59 @@ import (
 	"github.com/spf13/cobra"
 
 	dbmigrate "github.com/agentregistry-dev/agentregistry/pkg/cli/db/migrate"
+	cliruntime "github.com/agentregistry-dev/agentregistry/pkg/cli/runtime"
 )
+
+func TestRootExtraCommandsReceiveDeps(t *testing.T) {
+	var (
+		factoryCalls int
+		gotDeps      cliruntime.Deps
+		gotTarget    cliruntime.RegistryTarget
+	)
+	cfg := DefaultConfig()
+	cfg.ExtraCommands = func(deps cliruntime.Deps) []*cobra.Command {
+		factoryCalls++
+		gotDeps = deps
+		return []*cobra.Command{{
+			Use: "enterprise",
+			RunE: func(cmd *cobra.Command, _ []string) error {
+				var err error
+				gotTarget, err = deps.Runtime.ResolveRegistryTarget(cmd.Context())
+				return err
+			},
+		}}
+	}
+
+	root := Root(cfg)
+	root.SetArgs([]string{
+		"--registry-url", "registry.example.com",
+		"--registry-token", "flag-token",
+		"enterprise",
+	})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if factoryCalls != 1 {
+		t.Fatalf("ExtraCommands() calls = %d, want 1", factoryCalls)
+	}
+	if gotDeps.Runtime == nil {
+		t.Fatal("ExtraCommands() received nil Runtime")
+	}
+	if gotDeps.Auth != cfg.Auth {
+		t.Fatal("ExtraCommands() received a different Auth provider")
+	}
+	if gotDeps.Kinds == nil {
+		t.Fatal("ExtraCommands() received nil Kinds registry")
+	}
+	wantTarget := cliruntime.RegistryTarget{
+		BaseURL: "http://registry.example.com",
+		Token:   "flag-token",
+	}
+	if gotTarget != wantTarget {
+		t.Fatalf("resolved target = %#v, want %#v", gotTarget, wantTarget)
+	}
+}
 
 func TestRootDisabledCommandPaths(t *testing.T) {
 	cfg := DefaultConfig()
@@ -38,4 +90,29 @@ func childCommand(parent *cobra.Command, name string) *cobra.Command {
 		}
 	}
 	return nil
+}
+
+// TestRootPersistentFlagsMergeIntoEveryCommand pins that no subcommand
+// redefines a shorthand of a root persistent flag such as -n/--namespace.
+// pflag panics on that collision when the command's flags are merged.
+func TestRootPersistentFlagsMergeIntoEveryCommand(t *testing.T) {
+	var walk func(cmd *cobra.Command)
+	walk = func(cmd *cobra.Command) {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("merging persistent flags into %q panicked: %v", cmd.CommandPath(), r)
+				}
+			}()
+			_ = cmd.InheritedFlags()
+		}()
+		for _, child := range cmd.Commands() {
+			walk(child)
+		}
+	}
+	walk(Root(DefaultConfig()))
+
+	if f := Root(DefaultConfig()).PersistentFlags().ShorthandLookup("n"); f == nil || f.Name != "namespace" {
+		t.Fatalf("-n shorthand = %v, want --namespace", f)
+	}
 }

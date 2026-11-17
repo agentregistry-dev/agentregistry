@@ -14,6 +14,7 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
+	registrytypes "github.com/agentregistry-dev/agentregistry/pkg/types"
 )
 
 const testTable = "agents"
@@ -127,11 +128,17 @@ func TestStore_GetByRefMutableRejectsTag(t *testing.T) {
 	runtimes := NewMutableObjectStore(pool, TestSchema(), "runtimes")
 	ctx := context.Background()
 
-	local, err := runtimes.GetByRef(ctx, testNS, "local", "")
+	_, err := runtimes.Upsert(ctx, &v1alpha1.Runtime{
+		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "test-runtime"},
+		Spec:     v1alpha1.RuntimeSpec{Type: "Test"},
+	})
 	require.NoError(t, err)
-	require.Equal(t, "local", local.Metadata.Name)
 
-	_, err = runtimes.GetByRef(ctx, testNS, "local", "stable")
+	runtime, err := runtimes.GetByRef(ctx, testNS, "test-runtime", "")
+	require.NoError(t, err)
+	require.Equal(t, "test-runtime", runtime.Metadata.Name)
+
+	_, err = runtimes.GetByRef(ctx, testNS, "test-runtime", "stable")
 	require.ErrorContains(t, err, "tag pinning is not supported")
 }
 
@@ -159,11 +166,17 @@ func TestStore_DeleteByRefMutableDeletesByName(t *testing.T) {
 	runtimes := NewMutableObjectStore(pool, TestSchema(), "runtimes")
 	ctx := context.Background()
 
-	require.NoError(t, runtimes.DeleteByRef(ctx, testNS, "local", ""))
-	_, err := runtimes.GetByRef(ctx, testNS, "local", "")
+	_, err := runtimes.Upsert(ctx, &v1alpha1.Runtime{
+		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "custom"},
+		Spec:     v1alpha1.RuntimeSpec{Type: "Test"},
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, runtimes.DeleteByRef(ctx, testNS, "custom", ""))
+	_, err = runtimes.GetByRef(ctx, testNS, "custom", "")
 	require.ErrorIs(t, err, pkgdb.ErrNotFound)
 
-	err = runtimes.DeleteByRef(ctx, testNS, "kubernetes-default", "stable")
+	err = runtimes.DeleteByRef(ctx, testNS, "test-runtime", "stable")
 	require.ErrorContains(t, err, "tag pinning is not supported")
 }
 
@@ -197,6 +210,63 @@ func TestStore_PatchStatusNotFound(t *testing.T) {
 
 	err := store.PatchStatus(ctx, testNS, "nope", "1", v1alpha1.StatusPatcher(func(*v1alpha1.Status) {}))
 	require.ErrorIs(t, err, pkgdb.ErrNotFound)
+}
+
+func TestStore_PatchInternalMeta(t *testing.T) {
+	pool := NewTestPool(t)
+	store := NewMutableObjectStore(pool, TestSchema(), "deployments", WithInternalMeta())
+	ctx := context.Background()
+
+	_, err := store.Upsert(ctx, &v1alpha1.Deployment{
+		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "internal-meta"},
+		Spec: v1alpha1.DeploymentSpec{
+			TargetRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindAgent, Name: "agent"},
+			RuntimeRef: v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "runtime"},
+		},
+	})
+	require.NoError(t, err)
+
+	meta := registrytypes.DeploymentInternalMeta{RuntimeID: "runtime-1"}
+	require.NoError(t, store.PatchInternalMeta(ctx, testNS, "internal-meta", meta))
+
+	object, err := store.Get(ctx, testNS, "internal-meta", "")
+	require.NoError(t, err)
+	require.JSONEq(t, `{"runtimeId":"runtime-1"}`, string(object.InternalMeta))
+	require.JSONEq(t, `{}`, string(object.Status))
+}
+
+func TestStore_PatchStatusAndMeta(t *testing.T) {
+	pool := NewTestPool(t)
+	store := NewMutableObjectStore(pool, TestSchema(), "runtimes", WithInternalMeta())
+	ctx := context.Background()
+
+	_, err := store.Upsert(ctx, &v1alpha1.Runtime{
+		Metadata: v1alpha1.ObjectMeta{Namespace: testNS, Name: "combined-patch"},
+		Spec:     v1alpha1.RuntimeSpec{Type: "Test"},
+	})
+	require.NoError(t, err)
+
+	meta := struct {
+		Value string `json:"value"`
+	}{Value: "runtime-meta"}
+	err = store.PatchStatusAndMeta(ctx, testNS, "combined-patch", v1alpha1.StatusPatcher(func(status *v1alpha1.Status) {
+		status.SetCondition(v1alpha1.Condition{Type: "Ready", Status: v1alpha1.ConditionTrue})
+	}), meta)
+	require.NoError(t, err)
+
+	object, err := store.Get(ctx, testNS, "combined-patch", "")
+	require.NoError(t, err)
+	require.JSONEq(t, `{"value":"runtime-meta"}`, string(object.InternalMeta))
+	var status v1alpha1.Status
+	require.NoError(t, v1alpha1.UnmarshalStatusFromStorage(object.Status, &status))
+	require.Equal(t, v1alpha1.ConditionTrue, status.GetCondition("Ready").Status)
+
+	require.NoError(t, store.PatchStatus(ctx, testNS, "combined-patch", "", v1alpha1.StatusPatcher(func(status *v1alpha1.Status) {
+		status.SetCondition(v1alpha1.Condition{Type: "Ready", Status: v1alpha1.ConditionFalse})
+	})))
+	object, err = store.Get(ctx, testNS, "combined-patch", "")
+	require.NoError(t, err)
+	require.JSONEq(t, `{"value":"runtime-meta"}`, string(object.InternalMeta))
 }
 
 // TestStore_ApplyPatchSkipsUnchangedWrites verifies that re-asserting the
@@ -537,23 +607,17 @@ func TestStore_FindReferrers(t *testing.T) {
 	require.Equal(t, "refs-bar", results[0].Metadata.Name)
 }
 
-func TestStore_SeededRuntimes(t *testing.T) {
+func TestStore_NoSeededRuntimes(t *testing.T) {
 	pool := NewTestPool(t)
 	// Runtime is a mutable object keyed by namespace/name.
 	runtimes := NewMutableObjectStore(pool, TestSchema(), "runtimes")
 	ctx := context.Background()
 
-	local, err := runtimes.GetLatest(ctx, "default", "local")
-	require.NoError(t, err)
+	_, err := runtimes.GetLatest(ctx, "default", "kubernetes-default")
+	require.ErrorIs(t, err, pkgdb.ErrNotFound)
 
-	var spec v1alpha1.RuntimeSpec
-	require.NoError(t, json.Unmarshal(local.Spec, &spec))
-	require.Equal(t, v1alpha1.TypeLocal, spec.Type)
-
-	k8s, err := runtimes.GetLatest(ctx, "default", "kubernetes-default")
-	require.NoError(t, err)
-	require.NoError(t, json.Unmarshal(k8s.Spec, &spec))
-	require.Equal(t, v1alpha1.TypeKubernetes, spec.Type)
+	_, err = runtimes.GetLatest(ctx, "default", "local")
+	require.ErrorIs(t, err, pkgdb.ErrNotFound)
 }
 
 // TestStore_NotifyPayloadDiscreteFields guards the R2 fix:
@@ -797,6 +861,12 @@ func TestControlPlaneEventStore_PruneBeforeHonorsKeepAfterRevision(t *testing.T)
 	store := NewStore(pool, TestSchema(), testTable)
 	events := NewControlPlaneEventStore(pool, TestSchema())
 	ctx := context.Background()
+
+	// Migrations may legitimately emit control-plane invalidations. This test
+	// owns its event fixture, so discard bootstrap history before asserting
+	// exact prune counts.
+	_, err := pool.Exec(ctx, `TRUNCATE `+events.qualified+` RESTART IDENTITY`)
+	require.NoError(t, err)
 
 	upsertAgent(t, store, "pruned", v1alpha1.AgentSpec{Title: "first"}, nil)
 	upsertAgent(t, store, "pruned", v1alpha1.AgentSpec{Title: "second"}, nil)

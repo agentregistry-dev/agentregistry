@@ -5,6 +5,7 @@ package resource_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -76,6 +77,89 @@ spec:
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
 	require.Equal(t, arv0.ApplyStatusUnchanged, out.Results[0].Status)
 	require.Equal(t, arv0.ApplyStatusUnchanged, out.Results[1].Status)
+}
+
+// TestRegisterApply_NamespaceSelection pins the ?namespace= rule for batch
+// writes: an omitted metadata.namespace takes the selection, a different one
+// fails without writing, no selection keeps the document's own namespace, and
+// "all" is rejected.
+func TestRegisterApply_NamespaceSelection(t *testing.T) {
+	agentDoc := func(namespace string) string {
+		doc := "apiVersion: ar.dev/v1alpha1\nkind: Agent\nmetadata:\n"
+		if namespace != "" {
+			doc += "  namespace: " + namespace + "\n"
+		}
+		return doc + "  name: alice\nspec:\n  title: Alice\n"
+	}
+
+	tests := []struct {
+		name          string
+		query         string
+		docNamespace  string
+		wantStatus    string
+		wantNamespace string
+		wantError     string
+	}{
+		{name: "omitted namespace takes selection", query: "?namespace=team-a", wantStatus: arv0.ApplyStatusCreated, wantNamespace: "team-a"},
+		{name: "matching namespace", query: "?namespace=team-a", docNamespace: "team-a", wantStatus: arv0.ApplyStatusCreated, wantNamespace: "team-a"},
+		{name: "conflicting namespace fails", query: "?namespace=team-a", docNamespace: "team-b", wantStatus: arv0.ApplyStatusFailed, wantNamespace: "team-b", wantError: `metadata.namespace "team-b" does not match ?namespace="team-a"`},
+		{name: "no selection keeps document namespace", docNamespace: "team-b", wantStatus: arv0.ApplyStatusCreated, wantNamespace: "team-b"},
+		{name: "no selection defaults", wantStatus: arv0.ApplyStatusCreated, wantNamespace: v1alpha1.DefaultNamespace},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pool := v1alpha1store.NewTestPool(t)
+			agents := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
+			_, api := humatest.New(t)
+			resource.RegisterApply(api, resource.ApplyConfig{
+				BasePrefix: "/v0",
+				Stores:     map[string]*v1alpha1store.Store{v1alpha1.KindAgent: agents},
+			})
+
+			resp := api.Post("/v0/apply"+tt.query, "Content-Type: application/yaml", strings.NewReader(agentDoc(tt.docNamespace)))
+			require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+			var out struct {
+				Results []arv0.ApplyResult `json:"results"`
+			}
+			require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+			require.Len(t, out.Results, 1)
+			require.Equal(t, tt.wantStatus, out.Results[0].Status, out.Results[0].Error)
+			require.Equal(t, tt.wantNamespace, out.Results[0].Namespace)
+			if tt.wantError != "" {
+				require.Contains(t, out.Results[0].Error, tt.wantError)
+				_, err := agents.GetLatest(t.Context(), tt.wantNamespace, "alice")
+				require.ErrorIs(t, err, pkgdb.ErrNotFound)
+				return
+			}
+			_, err := agents.GetLatest(t.Context(), tt.wantNamespace, "alice")
+			require.NoError(t, err)
+
+			// The same selection deletes what it applied.
+			resp = api.Do(http.MethodDelete, "/v0/apply"+tt.query, "Content-Type: application/yaml", strings.NewReader(agentDoc(tt.docNamespace)))
+			require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+			require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+			require.Len(t, out.Results, 1)
+			require.Equal(t, arv0.ApplyStatusDeleted, out.Results[0].Status, out.Results[0].Error)
+			require.Equal(t, tt.wantNamespace, out.Results[0].Namespace)
+		})
+	}
+
+	t.Run("all is rejected", func(t *testing.T) {
+		pool := v1alpha1store.NewTestPool(t)
+		agents := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
+		_, api := humatest.New(t)
+		resource.RegisterApply(api, resource.ApplyConfig{
+			BasePrefix: "/v0",
+			Stores:     map[string]*v1alpha1store.Store{v1alpha1.KindAgent: agents},
+		})
+		for _, method := range []string{http.MethodPost, http.MethodDelete} {
+			resp := api.Do(method, "/v0/apply?namespace=all", "Content-Type: application/yaml", strings.NewReader(agentDoc("")))
+			require.Equal(t, http.StatusBadRequest, resp.Code, method)
+			require.Contains(t, resp.Body.String(), "read-only", method)
+		}
+		_, err := agents.GetLatest(t.Context(), v1alpha1.DefaultNamespace, "alice")
+		require.ErrorIs(t, err, pkgdb.ErrNotFound)
+	})
 }
 
 func TestRegisterApply_PerDocFailureDoesntAbortBatch(t *testing.T) {
@@ -263,6 +347,30 @@ func TestApplyObject_ReusesProductionApplyPath(t *testing.T) {
 	require.Equal(t, "stable", row.Metadata.Tag)
 }
 
+func TestApplyObject_CompensatesPrepareWhenAdmissionFails(t *testing.T) {
+	obj := &v1alpha1.Agent{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindAgent},
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "failed-agent", Tag: "latest"},
+		Spec:     v1alpha1.AgentSpec{Title: "Failed Agent"},
+	}
+	compensated := false
+	res := resource.ApplyObject(t.Context(), resource.ApplyConfig{
+		Stores: map[string]*v1alpha1store.Store{v1alpha1.KindAgent: {}},
+		Admission: func(context.Context, types.AdmissionInput) (types.AdmissionResult, error) {
+			return types.AdmissionResult{}, errors.New("admission failed")
+		},
+		OnUpsertErrors: map[string]func(context.Context, v1alpha1.Object, error) error{
+			v1alpha1.KindAgent: func(context.Context, v1alpha1.Object, error) error {
+				compensated = true
+				return nil
+			},
+		},
+	}, obj, false)
+
+	require.Equal(t, arv0.ApplyStatusFailed, res.Status)
+	require.True(t, compensated)
+}
+
 func TestRegisterApply_MutableObjectResultsDoNotExposeVersion(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
 	runtimes := v1alpha1store.NewMutableObjectStore(pool, v1alpha1store.TestSchema(), "runtimes")
@@ -281,9 +389,9 @@ func TestRegisterApply_MutableObjectResultsDoNotExposeVersion(t *testing.T) {
 kind: Runtime
 metadata:
   namespace: default
-  name: local-test-runtime
+  name: test-runtime
 spec:
-  type: local
+  type: Test
 ---
 apiVersion: ar.dev/v1alpha1
 kind: Deployment
@@ -297,7 +405,7 @@ spec:
     tag: stable
   runtimeRef:
     kind: Runtime
-    name: local-test-runtime
+    name: test-runtime
 `)
 	resp := api.Post("/v0/apply", "Content-Type: application/yaml", strings.NewReader(string(yaml)))
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
@@ -324,7 +432,7 @@ spec:
 	require.Equal(t, arv0.ApplyStatusUnchanged, out.Results[0].Status)
 	require.Equal(t, arv0.ApplyStatusUnchanged, out.Results[1].Status)
 
-	runtimeRow, err := runtimes.Get(t.Context(), "default", "local-test-runtime", "")
+	runtimeRow, err := runtimes.Get(t.Context(), "default", "test-runtime", "")
 	require.NoError(t, err)
 	require.Empty(t, runtimeRow.Metadata.Tag)
 	deploymentRow, err := deployments.Get(t.Context(), "default", "summarizer", "")
@@ -376,6 +484,64 @@ metadata:
 	require.ErrorIs(t, err, pkgdb.ErrNotFound)
 	_, err = agents.Get(t.Context(), "default", "alice", v1alpha1store.DefaultTag())
 	require.ErrorIs(t, err, pkgdb.ErrNotFound)
+}
+
+// TestRegisterDeleteApply_AllTagDeleteAuthorizesEachTag pins that a delete without a tag authorizes every
+// live tag on its own, that one denial deletes nothing, and that with no live tag the name alone is checked.
+func TestRegisterDeleteApply_AllTagDeleteAuthorizesEachTag(t *testing.T) {
+	pool := v1alpha1store.NewTestPool(t)
+	agents := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
+	for _, tag := range []string{"stable", v1alpha1store.DefaultTag()} {
+		_, err := agents.Upsert(t.Context(), &v1alpha1.Agent{
+			Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "alice", Tag: tag},
+			Spec:     v1alpha1.AgentSpec{Title: "Alice"},
+		})
+		require.NoError(t, err)
+	}
+	var seen []string
+	var deny string
+	_, api := humatest.New(t)
+	resource.RegisterApply(api, resource.ApplyConfig{
+		BasePrefix: "/v0",
+		Stores:     map[string]*v1alpha1store.Store{v1alpha1.KindAgent: agents},
+		Authorizers: map[string]func(context.Context, resource.AuthorizeInput) error{
+			v1alpha1.KindAgent: func(_ context.Context, in resource.AuthorizeInput) error {
+				seen = append(seen, in.Tag)
+				if in.Tag == deny {
+					return errors.New("denied")
+				}
+				return nil
+			},
+		},
+	})
+	deleteAll := func(t *testing.T) arv0.ApplyResult {
+		t.Helper()
+		seen = nil
+		resp := api.Do(http.MethodDelete, "/v0/apply", "Content-Type: application/yaml", strings.NewReader("apiVersion: ar.dev/v1alpha1\nkind: Agent\nmetadata:\n  namespace: default\n  name: alice\n"))
+		require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+		var out struct {
+			Results []arv0.ApplyResult `json:"results"`
+		}
+		require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &out))
+		require.Len(t, out.Results, 1)
+		return out.Results[0]
+	}
+	both := []string{"stable", v1alpha1store.DefaultTag()}
+
+	deny = "stable"
+	require.Equal(t, arv0.ApplyStatusFailed, deleteAll(t).Status)
+	require.Subset(t, seen, []string{"stable"}, "each live tag is authorized with its own tag")
+	for _, tag := range both {
+		_, err := agents.Get(t.Context(), "default", "alice", tag)
+		require.NoError(t, err, "one denial deletes no tag")
+	}
+
+	deny = "none"
+	require.Equal(t, arv0.ApplyStatusDeleted, deleteAll(t).Status)
+	require.ElementsMatch(t, both, seen)
+
+	deleteAll(t)
+	require.Equal(t, []string{""}, seen, "with no live tag the name alone is authorized")
 }
 
 func TestRegisterDeleteApply_TagDeletesOnlyExactTag(t *testing.T) {

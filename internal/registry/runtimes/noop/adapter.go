@@ -3,8 +3,7 @@
 // intended for:
 //   - integration tests that exercise the reconciler lifecycle without
 //     needing docker-compose or a kubernetes cluster
-//   - a placeholder Type="noop" Runtime entry while local+kubernetes
-//     native ports are in progress
+//   - a placeholder Type="noop" Runtime entry in adapter test harnesses
 //   - a baseline for contributors implementing new adapters — demonstrates
 //     the expected Apply/Remove/Logs/Discover shape end-to-end
 //
@@ -63,9 +62,6 @@ func (a *Adapter) Apply(ctx context.Context, in types.ApplyInput) (*types.ApplyR
 				Message:            "noop runtime requires no configuration",
 				LastTransitionTime: now,
 			},
-		},
-		RuntimeMetadata: map[string]string{
-			"runtimes.agentregistry.solo.io/noop/applied-at": now.Format(time.RFC3339),
 		},
 	}, nil
 }

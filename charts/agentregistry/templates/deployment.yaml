@@ -146,6 +146,17 @@ spec:
             - name: AGENT_REGISTRY_DATABASE_URL
               value: {{ printf "postgres://agentregistry:$(POSTGRES_PASSWORD)@%s:5432/agentregistry?sslmode=disable" (include "agentregistry.postgresql.fullname" .) | quote }}
             {{- end }}
+            - name: AGENT_REGISTRY_SECRET_STORE
+              value: {{ .Values.secretStore.type | quote }}
+            - name: AGENT_REGISTRY_SECRET_STORE_KUBERNETES_NAMESPACE
+              value: {{ .Release.Namespace | quote }}
+            {{- if and (eq .Values.secretStore.type "Database") .Values.secretStore.encryptionKeySecretRef.name }}
+            - name: AGENT_REGISTRY_SECRET_STORE_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretStore.encryptionKeySecretRef.name }}
+                  key: {{ .Values.secretStore.encryptionKeySecretRef.key }}
+            {{- end }}
             {{- if .Values.extraEnvVars }}
             {{- tpl (toYaml .Values.extraEnvVars) . | nindent 12 }}
             {{- end }}

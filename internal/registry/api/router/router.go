@@ -165,9 +165,8 @@ func NewHumaAPI(
 			auth.WithSkipPaths("/health", "/metrics", "/ping", "/docs", "/version"),
 		}
 		if cfg.MCPRegistryCompatEnabled {
-			// The /v0.1 compatibility API is a public catalogue that still goes through
-			// authorization (for listing resources), so add to public paths with append a
-			// PublicSession, allowing it to successfully pass authz hooks on anonymous sessions.
+			// The /v0.1 compatibility API is a public catalogue that still goes through authorization:
+			// anonymous requests carry a PublicSession for the hooks, and credentialed ones authenticate.
 			middlewareOpts = append(middlewareOpts, auth.WithPublicPaths(
 				mcpregistrycompat.BasePath(cfg.MCPRegistryCompatPathPrefix)+"/"))
 		}

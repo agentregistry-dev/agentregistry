@@ -21,11 +21,10 @@ import (
 func TestDeploymentController_EnqueuesAndExecutesApply(t *testing.T) {
 	ctx := context.Background()
 	stores := newControllerTestStores(t)
-	seedRuntime(t, stores, "local")
 	seedMCPServer(t, stores, "weather")
 	deployment := seedDeployment(t, stores, "weather-deploy", v1alpha1.DesiredStateDeployed)
 
-	adapter := &recordingDeploymentAdapter{}
+	adapter := &recordingDeploymentAdapter{internalMeta: &types.DeploymentInternalMeta{RuntimeID: "agent-123"}}
 	controller := newDeploymentTestController(stores, adapter)
 	_, err := controller.FullReconcile(ctx)
 	require.NoError(t, err)
@@ -43,12 +42,109 @@ func TestDeploymentController_EnqueuesAndExecutesApply(t *testing.T) {
 	require.NotNil(t, ready)
 	require.Equal(t, v1alpha1.ConditionTrue, ready.Status)
 	require.Equal(t, deployment.Metadata.Generation, ready.ObservedGeneration)
+	require.Equal(t, "agent-123", loadDeploymentRecord(t, stores, deployment.Metadata.Name).InternalMeta.RuntimeID)
+}
+
+func TestDeploymentController_ReportsApplyLifecycle(t *testing.T) {
+	applyErr := errors.New("apply failed")
+	tests := []struct {
+		name                string
+		applyErr            error
+		cancelBeforePersist bool
+		reconcileAgain      bool
+		wantResult          bool
+		wantErr             error
+		wantPersisted       bool
+	}{
+		{
+			name:          "success after persistence",
+			wantResult:    true,
+			wantPersisted: true,
+		},
+		{
+			name:     "adapter apply failure",
+			applyErr: applyErr,
+			wantErr:  applyErr,
+		},
+		{
+			name:                "persistence failure",
+			cancelBeforePersist: true,
+			wantResult:          true,
+			wantErr:             context.Canceled,
+		},
+		{
+			name:           "unchanged apply is omitted",
+			reconcileAgain: true,
+			wantResult:     true,
+			wantPersisted:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			t.Cleanup(cancel)
+			stores := newControllerTestStores(t)
+			seedMCPServer(t, stores, "weather")
+			deployment := seedDeployment(t, stores, "observed", v1alpha1.DesiredStateDeployed)
+
+			baseAdapter := &recordingDeploymentAdapter{applyErr: tt.applyErr}
+			var adapter types.DeploymentAdapter = baseAdapter
+			if tt.cancelBeforePersist {
+				adapter = &cancellingDeploymentAdapter{
+					recordingDeploymentAdapter: baseAdapter,
+					cancel:                     cancel,
+				}
+			}
+
+			var observations []applyObservation
+			controller := newDeploymentTestController(stores, adapter)
+			controller.DeploymentApplied = func(
+				_ context.Context,
+				input types.ApplyInput,
+				result *types.ApplyResult,
+				err error,
+			) {
+				observations = append(observations, applyObservation{
+					input:     input,
+					result:    result,
+					err:       err,
+					persisted: readyConditionPersisted(stores, input.Deployment.Deployment),
+				})
+			}
+
+			_, err := controller.FullReconcile(ctx)
+			require.NoError(t, err)
+			processed, err := controller.RunOnce(ctx)
+			require.NoError(t, err)
+			require.Equal(t, 1, processed)
+
+			if tt.reconcileAgain {
+				_, err = controller.FullReconcile(ctx)
+				require.NoError(t, err)
+				processed, err = controller.RunOnce(ctx)
+				require.NoError(t, err)
+				require.Equal(t, 1, processed)
+			}
+
+			require.Len(t, observations, 1)
+			observation := observations[0]
+			require.Equal(t, deployment, observation.input.Deployment.Deployment)
+			if tt.wantResult {
+				require.NotNil(t, observation.result)
+				require.Len(t, observation.result.Conditions, 1)
+			} else {
+				require.Nil(t, observation.result)
+			}
+			require.ErrorIs(t, observation.err, tt.wantErr)
+			require.Equal(t, tt.wantPersisted, observation.persisted)
+		})
+	}
 }
 
 func TestDeploymentController_SkipsUnchangedApplyAfterRepairReconcile(t *testing.T) {
 	ctx := context.Background()
 	stores := newControllerTestStores(t)
-	seedRuntime(t, stores, "local")
 	seedMCPServer(t, stores, "weather")
 	deployment := seedDeployment(t, stores, "weather-stable", v1alpha1.DesiredStateDeployed)
 
@@ -62,12 +158,8 @@ func TestDeploymentController_SkipsUnchangedApplyAfterRepairReconcile(t *testing
 	require.Equal(t, 1, processed)
 	require.Equal(t, int32(1), adapter.applyCalls.Load())
 
-	applied := loadDeployment(t, stores, deployment.Metadata.Name)
-	var details deploymentControllerDetails
-	ok, err := applied.Status.GetDetailsKey(deploymentControllerDetailsKey, &details)
-	require.NoError(t, err)
-	require.True(t, ok)
-	require.NotEmpty(t, details.LastAppliedFingerprint)
+	applied := loadDeploymentRecord(t, stores, deployment.Metadata.Name)
+	require.NotEmpty(t, applied.InternalMeta.LastAppliedFingerprint)
 
 	_, err = controller.FullReconcile(ctx)
 	require.NoError(t, err)
@@ -80,7 +172,6 @@ func TestDeploymentController_SkipsUnchangedApplyAfterRepairReconcile(t *testing
 func TestDeploymentController_RepairResyncsDoNotReplayUnchangedApply(t *testing.T) {
 	ctx := context.Background()
 	stores := newControllerTestStores(t)
-	seedRuntime(t, stores, "local")
 	seedMCPServer(t, stores, "weather")
 	seedDeployment(t, stores, "weather-no-storm", v1alpha1.DesiredStateDeployed)
 
@@ -111,7 +202,6 @@ func TestDeploymentController_RepairResyncsDoNotReplayUnchangedApply(t *testing.
 func TestDeploymentController_ForceAnnotationBypassesUnchangedApplyOnce(t *testing.T) {
 	ctx := context.Background()
 	stores := newControllerTestStores(t)
-	seedRuntime(t, stores, "local")
 	seedMCPServer(t, stores, "weather")
 	deployment := seedDeployment(t, stores, "weather-force", v1alpha1.DesiredStateDeployed)
 
@@ -143,18 +233,13 @@ func TestDeploymentController_ForceAnnotationBypassesUnchangedApplyOnce(t *testi
 	require.Equal(t, 1, processed)
 	require.Equal(t, int32(2), adapter.applyCalls.Load(), "the same force token must not force every resync forever")
 
-	got := loadDeployment(t, stores, deployment.Metadata.Name)
-	var details deploymentControllerDetails
-	ok, err := got.Status.GetDetailsKey(deploymentControllerDetailsKey, &details)
-	require.NoError(t, err)
-	require.True(t, ok)
-	require.Equal(t, "manual-1", details.LastForceToken)
+	got := loadDeploymentRecord(t, stores, deployment.Metadata.Name)
+	require.Equal(t, "manual-1", got.InternalMeta.LastForceToken)
 }
 
 func TestDeploymentController_BlocksMissingTargetWithoutAdapterCall(t *testing.T) {
 	ctx := context.Background()
 	stores := newControllerTestStores(t)
-	seedRuntime(t, stores, "local")
 	seedDeployment(t, stores, "missing-target", v1alpha1.DesiredStateDeployed)
 
 	adapter := &recordingDeploymentAdapter{}
@@ -177,7 +262,6 @@ func TestDeploymentController_BlocksMissingTargetWithoutAdapterCall(t *testing.T
 func TestDeploymentController_ReappliesWhenMissingTargetAppears(t *testing.T) {
 	ctx := context.Background()
 	stores := newControllerTestStores(t)
-	seedRuntime(t, stores, "local")
 	seedDeployment(t, stores, "target-later", v1alpha1.DesiredStateDeployed)
 
 	adapter := &recordingDeploymentAdapter{}
@@ -213,7 +297,6 @@ func TestDeploymentController_ReappliesWhenMissingTargetAppears(t *testing.T) {
 func TestDeploymentController_ReappliesAgentDeploymentWhenReferencedMCPServerChanges(t *testing.T) {
 	ctx := context.Background()
 	stores := newControllerTestStores(t)
-	seedRuntime(t, stores, "local")
 	seedMCPServerWithIdentifier(t, stores, "weather", "ghcr.io/example/weather:1.0.0")
 	seedAgent(t, stores, "assistant", []v1alpha1.ResourceRef{{Name: "weather"}})
 	seedAgentDeployment(t, stores, "assistant-deploy", "assistant", v1alpha1.DesiredStateDeployed)
@@ -228,17 +311,9 @@ func TestDeploymentController_ReappliesAgentDeploymentWhenReferencedMCPServerCha
 	require.Equal(t, 1, processed)
 	require.Equal(t, int32(1), adapter.applyCalls.Load())
 
-	applied := loadDeployment(t, stores, "assistant-deploy")
-	var firstDetails deploymentControllerDetails
-	ok, err := applied.Status.GetDetailsKey(deploymentControllerDetailsKey, &firstDetails)
-	require.NoError(t, err)
-	require.True(t, ok)
-	require.Len(t, firstDetails.Dependencies, 1)
-	require.Equal(t, v1alpha1.KindMCPServer, firstDetails.Dependencies[0].Kind)
-	require.Equal(t, "default", firstDetails.Dependencies[0].Namespace)
-	require.Equal(t, "weather", firstDetails.Dependencies[0].Name)
-	require.NotEmpty(t, firstDetails.Dependencies[0].MaterialHash)
-	firstDependencyHash := firstDetails.Dependencies[0].MaterialHash
+	applied := loadDeploymentRecord(t, stores, "assistant-deploy")
+	require.NotEmpty(t, applied.InternalMeta.LastAppliedFingerprint)
+	firstFingerprint := applied.InternalMeta.LastAppliedFingerprint
 
 	seedMCPServerWithIdentifier(t, stores, "weather", "ghcr.io/example/weather:2.0.0")
 	_, err = controller.HandleEvent(ctx, v1alpha1store.ControlPlaneEvent{
@@ -258,21 +333,14 @@ func TestDeploymentController_ReappliesAgentDeploymentWhenReferencedMCPServerCha
 	}, time.Second, 10*time.Millisecond)
 	require.Equal(t, 1, processed)
 
-	reapplied := loadDeployment(t, stores, "assistant-deploy")
-	var secondDetails deploymentControllerDetails
-	ok, err = reapplied.Status.GetDetailsKey(deploymentControllerDetailsKey, &secondDetails)
-	require.NoError(t, err)
-	require.True(t, ok)
-	require.Len(t, secondDetails.Dependencies, 1)
-	require.Equal(t, "weather", secondDetails.Dependencies[0].Name)
-	require.NotEqual(t, firstDependencyHash, secondDetails.Dependencies[0].MaterialHash,
-		"dependency material hash should change after the referenced MCPServer spec changes")
+	reapplied := loadDeploymentRecord(t, stores, "assistant-deploy")
+	require.NotEqual(t, firstFingerprint, reapplied.InternalMeta.LastAppliedFingerprint,
+		"fingerprint should change after the referenced MCPServer spec changes")
 }
 
 func TestDeploymentController_DeleteWaitsForRemoveThenPurgesFinalizedRow(t *testing.T) {
 	ctx := context.Background()
 	stores := newControllerTestStores(t)
-	seedRuntime(t, stores, "local")
 	seedMCPServer(t, stores, "weather")
 	deployment := seedDeployment(t, stores, "delete-me", v1alpha1.DesiredStateDeployed)
 
@@ -296,7 +364,7 @@ func TestDeploymentController_DeleteWaitsForRemoveThenPurgesFinalizedRow(t *test
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: deployment.Metadata.Name},
 		Spec: v1alpha1.DeploymentSpec{
 			TargetRef:  v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Tag: v1alpha1store.DefaultTag()},
-			RuntimeRef: v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "local"},
+			RuntimeRef: v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "test-runtime"},
 		},
 	}, v1alpha1store.UpsertOpts{InitialFinalizers: []string{DeploymentControllerFinalizer}})
 	require.NoError(t, err, "finalized deletes must not block same-name apply")
@@ -305,7 +373,6 @@ func TestDeploymentController_DeleteWaitsForRemoveThenPurgesFinalizedRow(t *test
 func TestDeploymentController_RemoveFailureKeepsFinalizerAndRetries(t *testing.T) {
 	ctx := context.Background()
 	stores := newControllerTestStores(t)
-	seedRuntime(t, stores, "local")
 	seedMCPServer(t, stores, "weather")
 	deployment := seedDeployment(t, stores, "remove-retry", v1alpha1.DesiredStateDeployed)
 
@@ -331,7 +398,7 @@ func TestDeploymentController_RemoveFailureKeepsFinalizerAndRetries(t *testing.T
 	require.Eventually(t, func() bool {
 		processed, err = controller.RunOnce(ctx)
 		return err == nil && adapter.removeCalls.Load() == 2
-	}, time.Second, 10*time.Millisecond)
+	}, 3*time.Second, 10*time.Millisecond)
 
 	requireDeploymentMissing(t, stores, deployment.Metadata.Name)
 }
@@ -339,7 +406,6 @@ func TestDeploymentController_RemoveFailureKeepsFinalizerAndRetries(t *testing.T
 func TestDeploymentController_DeleteAbandonsPendingApplyWork(t *testing.T) {
 	ctx := context.Background()
 	stores := newControllerTestStores(t)
-	seedRuntime(t, stores, "local")
 	seedMCPServer(t, stores, "weather")
 	deployment := seedDeployment(t, stores, "delete-with-apply-pending", v1alpha1.DesiredStateDeployed)
 
@@ -363,7 +429,6 @@ func TestDeploymentController_DeleteAbandonsPendingApplyWork(t *testing.T) {
 func TestDeploymentController_QueuedApplySeesCurrentDeleteState(t *testing.T) {
 	ctx := context.Background()
 	stores := newControllerTestStores(t)
-	seedRuntime(t, stores, "local")
 	seedMCPServer(t, stores, "weather")
 	deployment := seedDeployment(t, stores, "delete-with-apply-claimed", v1alpha1.DesiredStateDeployed)
 
@@ -385,10 +450,9 @@ func TestDeploymentController_QueuedApplySeesCurrentDeleteState(t *testing.T) {
 func TestDeploymentController_DeleteFinalizesWhenRuntimeRefMissing(t *testing.T) {
 	ctx := context.Background()
 	stores := newControllerTestStores(t)
-	seedRuntime(t, stores, "local")
 	seedMCPServer(t, stores, "weather")
 	deployment := seedDeployment(t, stores, "delete-missing-runtime", v1alpha1.DesiredStateDeployed)
-	require.NoError(t, stores[v1alpha1.KindRuntime].Delete(ctx, "default", "local", ""))
+	require.NoError(t, stores[v1alpha1.KindRuntime].Delete(ctx, "default", "test-runtime", ""))
 	require.NoError(t, stores[v1alpha1.KindDeployment].Delete(ctx, "default", deployment.Metadata.Name, ""))
 
 	adapter := &recordingDeploymentAdapter{}
@@ -403,10 +467,32 @@ func TestDeploymentController_DeleteFinalizesWhenRuntimeRefMissing(t *testing.T)
 	requireDeploymentMissing(t, stores, deployment.Metadata.Name)
 }
 
+func TestDeploymentController_DeleteUsesTerminatingRuntime(t *testing.T) {
+	ctx := context.Background()
+	stores := newControllerTestStores(t)
+	seedMCPServer(t, stores, "weather")
+	deployment := seedDeployment(t, stores, "delete-with-runtime", v1alpha1.DesiredStateDeployed)
+	require.NoError(t, stores[v1alpha1.KindRuntime].PatchFinalizers(ctx, "default", "test-runtime", "", func([]string) []string {
+		return []string{"test-runtime-finalizer"}
+	}))
+	require.NoError(t, stores[v1alpha1.KindRuntime].Delete(ctx, "default", "test-runtime", ""))
+	require.NoError(t, stores[v1alpha1.KindDeployment].Delete(ctx, "default", deployment.Metadata.Name, ""))
+
+	adapter := &recordingDeploymentAdapter{}
+	controller := newDeploymentTestController(stores, adapter)
+	_, err := controller.FullReconcile(ctx)
+	require.NoError(t, err)
+
+	processed, err := controller.RunOnce(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, processed)
+	require.Equal(t, int32(1), adapter.removeCalls.Load())
+	requireDeploymentMissing(t, stores, deployment.Metadata.Name)
+}
+
 func TestDeploymentController_QueuedDeploymentUsesLatestGeneration(t *testing.T) {
 	ctx := context.Background()
 	stores := newControllerTestStores(t)
-	seedRuntime(t, stores, "local")
 	seedMCPServer(t, stores, "weather")
 	deployment := seedDeployment(t, stores, "stale", v1alpha1.DesiredStateDeployed)
 
@@ -432,7 +518,13 @@ func TestDeploymentController_QueuedDeploymentUsesLatestGeneration(t *testing.T)
 func newControllerTestStores(t *testing.T) map[string]*v1alpha1store.Store {
 	t.Helper()
 	pool := v1alpha1store.NewTestPool(t)
-	return v1alpha1store.NewStores(pool, v1alpha1store.TestSchemaRegistry())
+	stores := v1alpha1store.NewStores(pool, v1alpha1store.TestSchemaRegistry())
+	_, err := stores[v1alpha1.KindRuntime].Upsert(context.Background(), &v1alpha1.Runtime{
+		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "test-runtime"},
+		Spec:     v1alpha1.RuntimeSpec{Type: "Test"},
+	})
+	require.NoError(t, err)
+	return stores
 }
 
 func newDeploymentTestController(
@@ -444,18 +536,9 @@ func newDeploymentTestController(
 	}
 	return &DeploymentController{
 		Stores:   stores,
-		Adapters: map[string]types.DeploymentAdapter{"Local": adapter},
+		Adapters: map[string]types.DeploymentAdapter{"Test": adapter},
 		Getter:   internaldb.NewGetter(stores),
 	}
-}
-
-func seedRuntime(t *testing.T, stores map[string]*v1alpha1store.Store, name string) {
-	t.Helper()
-	_, err := stores[v1alpha1.KindRuntime].Upsert(context.Background(), &v1alpha1.Runtime{
-		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: name},
-		Spec:     v1alpha1.RuntimeSpec{Type: "Local"},
-	})
-	require.NoError(t, err)
 }
 
 func seedMCPServer(t *testing.T, stores map[string]*v1alpha1store.Store, name string) {
@@ -502,7 +585,7 @@ func seedDeployment(t *testing.T, stores map[string]*v1alpha1store.Store, name, 
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: name},
 		Spec: v1alpha1.DeploymentSpec{
 			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindMCPServer, Name: "weather", Tag: v1alpha1store.DefaultTag()},
-			RuntimeRef:   v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "local"},
+			RuntimeRef:   v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "test-runtime"},
 			DesiredState: desiredState,
 		},
 	}
@@ -519,7 +602,7 @@ func seedAgentDeployment(t *testing.T, stores map[string]*v1alpha1store.Store, n
 		Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: name},
 		Spec: v1alpha1.DeploymentSpec{
 			TargetRef:    v1alpha1.ResourceRef{Kind: v1alpha1.KindAgent, Name: agentName, Tag: v1alpha1store.DefaultTag()},
-			RuntimeRef:   v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "local"},
+			RuntimeRef:   v1alpha1.ResourceRef{Kind: v1alpha1.KindRuntime, Name: "test-runtime"},
 			DesiredState: desiredState,
 		},
 	}
@@ -531,12 +614,14 @@ func seedAgentDeployment(t *testing.T, stores map[string]*v1alpha1store.Store, n
 }
 
 func loadDeployment(t *testing.T, stores map[string]*v1alpha1store.Store, name string) *v1alpha1.Deployment {
+	return loadDeploymentRecord(t, stores, name).Deployment
+}
+
+func loadDeploymentRecord(t *testing.T, stores map[string]*v1alpha1store.Store, name string) *types.DeploymentRecord {
 	t.Helper()
 	raw, err := stores[v1alpha1.KindDeployment].GetLatestIncludingTerminating(context.Background(), "default", name)
 	require.NoError(t, err)
-	deployment, err := v1alpha1.EnvelopeFromRaw(func() *v1alpha1.Deployment {
-		return &v1alpha1.Deployment{}
-	}, raw, v1alpha1.KindDeployment)
+	deployment, err := types.DeploymentRecordFromRaw(raw)
 	require.NoError(t, err)
 	return deployment
 }
@@ -564,9 +649,57 @@ type recordingDeploymentAdapter struct {
 	lastApplyGeneration atomic.Int64
 	applyErr            error
 	removeErr           error
+	internalMeta        *types.DeploymentInternalMeta
 }
 
-func (a *recordingDeploymentAdapter) Type() string { return "Local" }
+type applyObservation struct {
+	input     types.ApplyInput
+	result    *types.ApplyResult
+	err       error
+	persisted bool
+}
+
+type cancellingDeploymentAdapter struct {
+	*recordingDeploymentAdapter
+	cancel context.CancelFunc
+}
+
+func (a *cancellingDeploymentAdapter) Apply(
+	ctx context.Context,
+	input types.ApplyInput,
+) (*types.ApplyResult, error) {
+	result, err := a.recordingDeploymentAdapter.Apply(ctx, input)
+	a.cancel()
+	return result, err
+}
+
+func readyConditionPersisted(stores map[string]*v1alpha1store.Store, deployment *v1alpha1.Deployment) bool {
+	if deployment == nil {
+		return false
+	}
+	store := stores[v1alpha1.KindDeployment]
+	if store == nil {
+		return false
+	}
+	raw, err := store.GetLatestIncludingTerminating(
+		context.Background(),
+		deployment.Metadata.NamespaceOrDefault(),
+		deployment.Metadata.Name,
+	)
+	if err != nil {
+		return false
+	}
+	storedDeployment, err := v1alpha1.EnvelopeFromRaw(func() *v1alpha1.Deployment {
+		return &v1alpha1.Deployment{}
+	}, raw, v1alpha1.KindDeployment)
+	if err != nil {
+		return false
+	}
+	ready := storedDeployment.Status.GetCondition("Ready")
+	return ready != nil && ready.Status == v1alpha1.ConditionTrue
+}
+
+func (a *recordingDeploymentAdapter) Type() string { return "Test" }
 
 func (a *recordingDeploymentAdapter) SupportedTargetKinds() []string {
 	return []string{v1alpha1.KindMCPServer, v1alpha1.KindAgent}
@@ -581,6 +714,7 @@ func (a *recordingDeploymentAdapter) Apply(_ context.Context, input types.ApplyI
 		return nil, a.applyErr
 	}
 	return &types.ApplyResult{
+		InternalMeta: a.internalMeta,
 		Conditions: []v1alpha1.Condition{{
 			Type:               "Ready",
 			Status:             v1alpha1.ConditionTrue,

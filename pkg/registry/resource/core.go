@@ -3,6 +3,7 @@ package resource
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
@@ -22,6 +23,7 @@ type applyOpts struct {
 	Resolver          v1alpha1.ResolverFunc
 	RegistryValidator v1alpha1.RegistryValidatorFunc
 	PostUpsert        func(ctx context.Context, obj v1alpha1.Object) error
+	OnUpsertError     func(ctx context.Context, obj v1alpha1.Object, cause error) error
 	InitialFinalizers func(obj v1alpha1.Object) []string
 	Admission         types.Admission
 	Source            string
@@ -149,12 +151,33 @@ func applyCore(
 		InitialFinalizers: opts.InitialFinalizers,
 	})
 	if err != nil {
-		if ae, ok := err.(*applyError); ok {
-			return types.AdmissionResult{}, ae
+		return types.AdmissionResult{}, compensateAdmissionError(ctx, obj, opts.OnUpsertError, err)
+	}
+	if dryRun && opts.OnUpsertError != nil {
+		if rollbackErr := opts.OnUpsertError(context.WithoutCancel(ctx), obj, errors.New("dry-run completed without persistence")); rollbackErr != nil {
+			return types.AdmissionResult{}, &applyError{Stage: stageAdmission, Err: fmt.Errorf("compensate dry-run prepare: %w", rollbackErr)}
 		}
-		return types.AdmissionResult{}, &applyError{Stage: stageAdmission, Err: err}
 	}
 	return result, nil
+}
+
+func compensateAdmissionError(
+	ctx context.Context,
+	obj v1alpha1.Object,
+	onUpsertError func(context.Context, v1alpha1.Object, error) error,
+	err error,
+) *applyError {
+	ae, ok := err.(*applyError)
+	if !ok {
+		ae = &applyError{Stage: stageAdmission, Err: err}
+	}
+	if onUpsertError == nil || ae.Stage == stagePostUpsert {
+		return ae
+	}
+	if rollbackErr := onUpsertError(context.WithoutCancel(ctx), obj, err); rollbackErr != nil {
+		ae.Err = errors.Join(ae.Err, rollbackErr)
+	}
+	return ae
 }
 
 // ProductionAdmission is the OSS admission implementation: dry-runs stop after
@@ -239,13 +262,31 @@ func deleteCore(
 	opts deleteOpts,
 	dryRun bool,
 ) (types.DeleteAdmissionResult, *applyError) {
+	tags := []string{tag}
+	// A tagged delete without a tag removes every tag, and each tag carries its own labels, so each live
+	// tag is authorized; with none live, the name alone is.
+	if opts.Authorize != nil && tag == "" && v1alpha1.IsTaggedArtifactKind(kind) {
+		rows, err := store.ListTags(ctx, namespace, name)
+		if err != nil {
+			return types.DeleteAdmissionResult{}, &applyError{Stage: stageDelete, Err: err}
+		}
+		live := make([]string, 0, len(rows))
+		for _, row := range rows {
+			live = append(live, row.Metadata.Tag)
+		}
+		if len(live) > 0 {
+			tags = live
+		}
+	}
 	if opts.Authorize != nil {
-		if err := opts.Authorize(ctx, AuthorizeInput{
-			Verb: "delete", Kind: kind,
-			Namespace: namespace, Name: name, Tag: tag,
-			Object: opts.PreDeleteObject,
-		}); err != nil {
-			return types.DeleteAdmissionResult{}, &applyError{Stage: stageAuth, Err: err}
+		for _, each := range tags {
+			if err := opts.Authorize(ctx, AuthorizeInput{
+				Verb: "delete", Kind: kind,
+				Namespace: namespace, Name: name, Tag: each,
+				Object: opts.PreDeleteObject,
+			}); err != nil {
+				return types.DeleteAdmissionResult{}, &applyError{Stage: stageAuth, Err: err}
+			}
 		}
 	}
 

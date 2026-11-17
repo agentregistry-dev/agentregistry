@@ -14,13 +14,12 @@ export type Agent = {
 
 export type AgentSource = {
     image?: string;
-    protocol?: 'A2A' | 'HTTP';
-    repository?: Repository;
+    protocol?: 'A2A' | 'HTTP' | 'OpenAIResponses';
 };
 
 export type AgentSpec = {
-    compatibleHarnesses?: Array<HarnessCompatibility> | null;
     description?: string;
+    iconUrl?: string;
     instructions?: ResourceRef;
     mcpServers?: Array<ResourceRef> | null;
     /**
@@ -80,7 +79,7 @@ export type Deployment = {
     kind: string;
     metadata: ObjectMeta;
     spec: DeploymentSpec;
-    status?: Status;
+    status?: DeploymentStatus;
 };
 
 export type DeploymentHarness = {
@@ -93,13 +92,19 @@ export type DeploymentRef = {
     namespace?: string;
 };
 
+export type DeploymentRuntimeStatus = {
+    endpoint?: string;
+    id?: string;
+    name?: string;
+    resourceId?: string;
+};
+
 export type DeploymentSpec = {
     deploymentRefs?: Array<DeploymentRef> | null;
     desiredState?: string;
     env?: {
         [key: string]: string;
     };
-    envFrom?: Array<EnvFromSource> | null;
     harness?: DeploymentHarness;
     modelRef?: ModelRef;
     runtimeConfig?: {
@@ -109,8 +114,9 @@ export type DeploymentSpec = {
     targetRef: ResourceRef;
 };
 
-export type EnvFromSource = {
-    secretRef?: SecretEnvSource;
+export type DeploymentStatus = {
+    conditions?: Array<Condition> | null;
+    runtime?: DeploymentRuntimeStatus;
 };
 
 export type ErrorDetail = {
@@ -160,15 +166,7 @@ export type HttpHeader = {
     value?: string;
 };
 
-export type HarnessCompatibility = {
-    type: string;
-};
-
 export type HealthBody = {
-    /**
-     * Platform mode
-     */
-    platform_mode?: 'docker' | 'kubernetes';
     /**
      * Health status
      */
@@ -275,9 +273,18 @@ export type ListOutputRuntimeBody = {
     nextCursor?: string;
 };
 
+export type ListOutputSecretBody = {
+    items: Array<Secret> | null;
+    nextCursor?: string;
+};
+
 export type ListOutputSkillBody = {
     items: Array<Skill> | null;
     nextCursor?: string;
+};
+
+export type LocalSecretReference = {
+    name: string;
 };
 
 export type McpArgument = {
@@ -366,11 +373,11 @@ export type McpServerOAuth = {
 
 export type McpServerSource = {
     package?: McpPackage;
-    repository?: Repository;
 };
 
 export type McpServerSpec = {
     description?: string;
+    iconUrl?: string;
     remote?: McpRemote;
     source?: McpServerSource;
     title?: string;
@@ -388,6 +395,13 @@ export type McpTransport = {
     path?: string;
     port?: number;
     type: string;
+};
+
+export type MarketplaceResponse = {
+    $schema?: string;
+    name: string;
+    owner: Owner;
+    plugins: Array<PluginEntry>;
 };
 
 export type Model = {
@@ -419,6 +433,7 @@ export type ModelSpec = {
     auth?: ModelAuthConfig;
     description?: string;
     endpoint?: ModelEndpointConfig;
+    iconUrl?: string;
     model: string;
     provider: 'bedrock';
     title?: string;
@@ -465,6 +480,11 @@ export type OfficialMeta = {
     updatedAt?: string;
 };
 
+export type Owner = {
+    email?: string;
+    name: string;
+};
+
 export type PathOrPaths = {
     Values: Array<string> | null;
     WasArray: boolean;
@@ -502,6 +522,13 @@ export type PluginChannel = {
 export type PluginDependency = {
     marketplace?: string;
     name?: string;
+    version?: string;
+};
+
+export type PluginEntry = {
+    description?: string;
+    name: string;
+    source: unknown;
     version?: string;
 };
 
@@ -581,14 +608,13 @@ export type PluginSourceOci = {
 
 export type PluginSpec = {
     description?: string;
-    harnesses?: Array<string> | null;
+    iconUrl?: string;
     source?: PluginSource;
     title?: string;
 };
 
 export type PluginStatus = {
     conditions?: Array<Condition> | null;
-    details?: unknown;
     inventory?: PluginInventory;
     manifest?: PluginManifest;
     resolvedSource?: PluginResolvedSource;
@@ -617,11 +643,13 @@ export type Prompt = {
 export type PromptSpec = {
     content?: string;
     description?: string;
+    iconUrl?: string;
 };
 
 export type Repository = {
     branch?: string;
     commit?: string;
+    credentialsRef?: LocalSecretReference;
     subfolder?: string;
     url?: string;
 };
@@ -642,7 +670,7 @@ export type Runtime = {
     kind: string;
     metadata: ObjectMeta;
     spec: RuntimeSpec;
-    status?: Status;
+    status?: RuntimeStatus;
 };
 
 export type RuntimeSpec = {
@@ -653,14 +681,37 @@ export type RuntimeSpec = {
     type: string;
 };
 
-export type SecretEnvSource = {
-    name: string;
+export type RuntimeStatus = {
+    conditions?: Array<Condition> | null;
+};
+
+export type Secret = {
+    apiVersion: string;
+    kind: string;
+    metadata: ObjectMeta;
+    spec: SecretSpec;
+    status?: SecretStatus;
 };
 
 export type SecretKeyRef = {
     key?: string;
     name: string;
     namespace?: string;
+};
+
+export type SecretSpec = {
+    data?: {
+        [key: string]: string;
+    };
+    immutable?: boolean;
+    stringData?: {
+        [key: string]: string;
+    };
+    type?: string;
+};
+
+export type SecretStatus = {
+    dataKeys?: Array<string> | null;
 };
 
 export type ServerArgument = {
@@ -675,7 +726,6 @@ export type ServerDetail = {
     name: string;
     packages?: Array<ServerPackage> | null;
     remotes?: Array<ServerTransport> | null;
-    repository?: ServerRepository;
     title?: string;
     version: string;
     websiteUrl?: string;
@@ -703,13 +753,6 @@ export type ServerPackage = {
     runtimeHint?: string;
     transport: ServerTransport;
     version: string;
-};
-
-export type ServerRepository = {
-    id?: string;
-    source?: string;
-    subfolder?: string;
-    url: string;
 };
 
 export type ServerResponse = {
@@ -741,19 +784,18 @@ export type SkillSource = {
 
 export type SkillSpec = {
     description?: string;
+    iconUrl?: string;
     source?: SkillSource;
     title?: string;
 };
 
 export type SkillStatus = {
     conditions?: Array<Condition> | null;
-    details?: unknown;
     resolvedSource?: SkillResolvedSource;
 };
 
 export type Status = {
     conditions?: Array<Condition> | null;
-    details?: unknown;
 };
 
 export type VersionBody = {
@@ -770,6 +812,31 @@ export type VersionBody = {
      */
     version: string;
 };
+
+export type PluginMarketplaceGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/plugin-marketplace/marketplace.json';
+};
+
+export type PluginMarketplaceGetErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type PluginMarketplaceGetError = PluginMarketplaceGetErrors[keyof PluginMarketplaceGetErrors];
+
+export type PluginMarketplaceGetResponses = {
+    /**
+     * OK
+     */
+    200: MarketplaceResponse;
+};
+
+export type PluginMarketplaceGetResponse = PluginMarketplaceGetResponses[keyof PluginMarketplaceGetResponses];
 
 export type McpRegistryListServersData = {
     body?: never;
@@ -1081,6 +1148,10 @@ export type DeleteBatchData = {
          * Run validation without mutating the store. Defaults to false.
          */
         dryRun?: boolean;
+        /**
+         * Namespace for documents that omit metadata.namespace; documents naming a different namespace fail. Empty keeps each document's namespace (default 'default'). 'all' is rejected.
+         */
+        namespace?: string;
     };
     url: '/v0/apply';
 };
@@ -1111,6 +1182,10 @@ export type ApplyBatchData = {
          * Run validation without mutating the store. Defaults to false.
          */
         dryRun?: boolean;
+        /**
+         * Namespace for documents that omit metadata.namespace; documents naming a different namespace fail. Empty keeps each document's namespace (default 'default'). 'all' is rejected.
+         */
+        namespace?: string;
     };
     url: '/v0/apply';
 };
@@ -2222,6 +2297,156 @@ export type ApplyRuntimeResponses = {
 };
 
 export type ApplyRuntimeResponse = ApplyRuntimeResponses[keyof ApplyRuntimeResponses];
+
+export type ListSecretsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Namespace (defaults to 'default'; 'all' lists across all namespaces).
+         */
+        namespace?: string;
+        /**
+         * Max items to return (default 50).
+         */
+        limit?: number;
+        /**
+         * Opaque pagination cursor.
+         */
+        cursor?: string;
+        /**
+         * Label selector: key=value,key2=value2.
+         */
+        labels?: string;
+        /**
+         * Restrict the result set to one tag value (tagged artifact kinds only).
+         */
+        tag?: string;
+        /**
+         * Only return the literal latest tag per (namespace, name). Equivalent to tag=latest for tagged kinds.
+         */
+        latestOnly?: boolean;
+        /**
+         * Include rows with a deletionTimestamp.
+         */
+        includeTerminating?: boolean;
+    };
+    url: '/v0/secrets';
+};
+
+export type ListSecretsErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type ListSecretsError = ListSecretsErrors[keyof ListSecretsErrors];
+
+export type ListSecretsResponses = {
+    /**
+     * OK
+     */
+    200: ListOutputSecretBody;
+};
+
+export type ListSecretsResponse = ListSecretsResponses[keyof ListSecretsResponses];
+
+export type DeleteSecretData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/secrets/{name}';
+};
+
+export type DeleteSecretErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type DeleteSecretError = DeleteSecretErrors[keyof DeleteSecretErrors];
+
+export type DeleteSecretResponses = {
+    /**
+     * No Content
+     */
+    204: void;
+};
+
+export type DeleteSecretResponse = DeleteSecretResponses[keyof DeleteSecretResponses];
+
+export type GetLatestSecretData = {
+    body?: never;
+    path: {
+        name: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/secrets/{name}';
+};
+
+export type GetLatestSecretErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type GetLatestSecretError = GetLatestSecretErrors[keyof GetLatestSecretErrors];
+
+export type GetLatestSecretResponses = {
+    /**
+     * OK
+     */
+    200: Secret;
+};
+
+export type GetLatestSecretResponse = GetLatestSecretResponses[keyof GetLatestSecretResponses];
+
+export type ApplySecretData = {
+    body?: Secret;
+    path: {
+        name: string;
+    };
+    query?: {
+        /**
+         * Namespace (internal; defaults to 'default').
+         */
+        namespace?: string;
+    };
+    url: '/v0/secrets/{name}';
+};
+
+export type ApplySecretErrors = {
+    /**
+     * Error
+     */
+    default: ErrorModel;
+};
+
+export type ApplySecretError = ApplySecretErrors[keyof ApplySecretErrors];
+
+export type ApplySecretResponses = {
+    /**
+     * OK
+     */
+    200: Secret;
+};
+
+export type ApplySecretResponse = ApplySecretResponses[keyof ApplySecretResponses];
 
 export type ListSkillsData = {
     body?: never;

@@ -17,13 +17,6 @@ import (
 
 const (
 	deploymentDiscoveryCondition = "Discovered"
-	deploymentRuntimeDetailsKey  = "runtimeMetadata"
-
-	// deploymentDiscoveryMissesKey tracks, in status details, how many
-	// consecutive successful polls omitted a discovered row. Provider list
-	// APIs (notably AWS) are eventually consistent, so a single missing poll
-	// is not evidence the workload is gone.
-	deploymentDiscoveryMissesKey = "discoveryMisses"
 	// defaultDeploymentDiscoveryStaleAfterMisses is how many consecutive misses it
 	// takes before the Discovered/Ready conditions flip to False.
 	defaultDeploymentDiscoveryStaleAfterMisses = 3
@@ -34,12 +27,12 @@ const (
 	defaultDeploymentDiscoveryDeleteAfterMisses = 5
 )
 
-// DeploymentDiscoveryController materializes adapter discovery snapshots into
+// DeploymentDiscoveryController materializes provider discovery snapshots into
 // persisted Deployment rows. It owns provider-observed state; the normal
 // DeploymentController skips these rows so they do not become desired state.
 type DeploymentDiscoveryController struct {
 	Stores            map[string]*v1alpha1store.Store
-	Adapters          map[string]types.DeploymentAdapter
+	Sources           map[string]types.DeploymentDiscoverySource
 	StaleAfterMisses  int
 	DeleteAfterMisses int
 }
@@ -106,12 +99,8 @@ func (c *DeploymentDiscoveryController) Sync(ctx context.Context) (DeploymentDis
 			continue
 		}
 		knownRuntimes[runtimeDiscoveryKey(runtime.Metadata.NamespaceOrDefault(), runtime.Metadata.Name)] = struct{}{}
-		adapter := c.Adapters[strings.TrimSpace(runtime.Spec.Type)]
-		if adapter == nil {
-			continue
-		}
-		source, ok := adapter.(types.DeploymentDiscoverySource)
-		if !ok {
+		source := c.Sources[strings.TrimSpace(runtime.Spec.Type)]
+		if source == nil {
 			continue
 		}
 		discovered, err := source.Discover(ctx, types.DiscoverInput{Runtime: runtime})
@@ -139,7 +128,7 @@ func (c *DeploymentDiscoveryController) Sync(ctx context.Context) (DeploymentDis
 				}
 				continue
 			}
-			if err := c.patchDiscoveredStatus(ctx, deployment, upserted.Generation, discovery.RuntimeMetadata); err != nil {
+			if err := c.patchDiscoveredStatus(ctx, deployment, upserted.Generation, discovery.InternalMeta); err != nil {
 				if firstErr == nil {
 					firstErr = err
 				}
@@ -154,7 +143,7 @@ func (c *DeploymentDiscoveryController) Sync(ctx context.Context) (DeploymentDis
 		if _, ok := observed[key]; ok {
 			continue
 		}
-		runtimeKey := deploymentRuntimeKey(deployment)
+		runtimeKey := deploymentRuntimeKey(deployment.Deployment)
 		if _, ok := knownRuntimes[runtimeKey]; !ok {
 			// The owning Runtime row is gone, so no future poll can confirm
 			// this workload again. Remove the row immediately.
@@ -198,9 +187,11 @@ func (c *DeploymentDiscoveryController) Sync(ctx context.Context) (DeploymentDis
 }
 
 type deploymentDiscoveryIndex struct {
-	discovered     map[string]*v1alpha1.Deployment
-	managedNames   map[string]struct{}
-	managedTargets map[string]struct{}
+	discovered          map[string]*types.DeploymentRecord
+	discoveredRemoteIDs map[string]*types.DeploymentRecord
+	managedNames        map[string]struct{}
+	managedTargets      map[string]struct{}
+	managedRemoteIDs    map[string]struct{}
 }
 
 func (c *DeploymentDiscoveryController) listRuntimes(ctx context.Context) ([]*v1alpha1.Runtime, error) {
@@ -237,9 +228,11 @@ func (c *DeploymentDiscoveryController) loadDiscoveryIndex(ctx context.Context) 
 		return deploymentDiscoveryIndex{}, fmt.Errorf("deployment discovery controller: no Deployment store registered")
 	}
 	index := deploymentDiscoveryIndex{
-		discovered:     map[string]*v1alpha1.Deployment{},
-		managedNames:   map[string]struct{}{},
-		managedTargets: map[string]struct{}{},
+		discovered:          map[string]*types.DeploymentRecord{},
+		discoveredRemoteIDs: map[string]*types.DeploymentRecord{},
+		managedNames:        map[string]struct{}{},
+		managedTargets:      map[string]struct{}{},
+		managedRemoteIDs:    map[string]struct{}{},
 	}
 	opts := v1alpha1store.ListOpts{Limit: defaultControllerListPageSize}
 	for {
@@ -248,25 +241,29 @@ func (c *DeploymentDiscoveryController) loadDiscoveryIndex(ctx context.Context) 
 			return deploymentDiscoveryIndex{}, fmt.Errorf("deployment discovery controller: list Deployments: %w", err)
 		}
 		for _, raw := range rows {
-			deployment, err := v1alpha1.EnvelopeFromRaw(func() *v1alpha1.Deployment {
-				return &v1alpha1.Deployment{}
-			}, raw, v1alpha1.KindDeployment)
+			deployment, err := types.DeploymentRecordFromRaw(raw)
 			if err != nil {
 				return deploymentDiscoveryIndex{}, fmt.Errorf("deployment discovery controller: decode Deployment: %w", err)
 			}
 			key := deploymentKey(deployment.Metadata.NamespaceOrDefault(), deployment.Metadata.Name)
-			if v1alpha1.IsDiscoveredDeployment(deployment) {
+			if v1alpha1.IsDiscoveredDeployment(deployment.Deployment) {
 				index.discovered[key] = deployment
+				if remoteID := deploymentDiscoveryRemoteID(deployment); remoteID != "" {
+					index.discoveredRemoteIDs[deploymentRemoteIDKey(deployment, remoteID)] = deployment
+				}
 				continue
 			}
 			index.managedNames[key] = struct{}{}
-			for _, targetName := range managedDeploymentTargetNames(deployment) {
+			for _, targetName := range managedDeploymentTargetNames(deployment.Deployment) {
 				index.managedTargets[managedDeploymentTargetKey(
 					deployment.Metadata.NamespaceOrDefault(),
 					deployment.Spec.RuntimeRef.Name,
 					deployment.Spec.TargetRef.Kind,
 					targetName,
 				)] = struct{}{}
+			}
+			if remoteID := deploymentDiscoveryRemoteID(deployment); remoteID != "" {
+				index.managedRemoteIDs[deploymentRemoteIDKey(deployment, remoteID)] = struct{}{}
 			}
 		}
 		if cursor == "" {
@@ -307,8 +304,18 @@ func discoveredDeploymentFromResult(
 	if _, ok := index.managedTargets[managedDeploymentTargetKey(ns, runtimeName, targetKind, targetName)]; ok {
 		return nil, false
 	}
+	remoteID := result.InternalMeta.RuntimeID
+	remoteKey := discoveryRemoteIDKey(ns, runtimeName, targetKind, remoteID)
+	if remoteID != "" {
+		if _, ok := index.managedRemoteIDs[remoteKey]; ok {
+			return nil, false
+		}
+	}
 
 	name := discoveredDeploymentName(runtimeName, targetKind, targetName, tag, ns)
+	if existing := index.discoveredRemoteIDs[remoteKey]; remoteID != "" && existing != nil {
+		name = existing.Metadata.Name
+	}
 	if _, ok := index.managedNames[deploymentKey(ns, name)]; ok {
 		return nil, false
 	}
@@ -344,14 +351,49 @@ func discoveredDeploymentFromResult(
 	}, true
 }
 
+// deploymentDiscoveryRemoteID reads provider identity from internal metadata.
+func deploymentDiscoveryRemoteID(deployment *types.DeploymentRecord) string {
+	if deployment == nil {
+		return ""
+	}
+	return deployment.InternalMeta.RuntimeID
+}
+
+// deploymentRemoteIDKey scopes a provider identity to its deployment runtime.
+func deploymentRemoteIDKey(deployment *types.DeploymentRecord, remoteID string) string {
+	if deployment == nil {
+		return ""
+	}
+	return discoveryRemoteIDKey(
+		deployment.Metadata.NamespaceOrDefault(),
+		deployment.Spec.RuntimeRef.Name,
+		deployment.Spec.TargetRef.Kind,
+		remoteID,
+	)
+}
+
+// discoveryRemoteIDKey prevents unrelated runtimes and target kinds from colliding.
+func discoveryRemoteIDKey(namespace, runtimeName, targetKind, remoteID string) string {
+	return strings.Join([]string{
+		strings.TrimSpace(namespace),
+		strings.TrimSpace(runtimeName),
+		strings.TrimSpace(targetKind),
+		strings.TrimSpace(remoteID),
+	}, "\x00")
+}
+
 func (c *DeploymentDiscoveryController) patchDiscoveredStatus(
 	ctx context.Context,
 	deployment *v1alpha1.Deployment,
 	generation int64,
-	runtimeMetadata map[string]string,
+	internalMeta types.DeploymentInternalMeta,
 ) error {
 	now := time.Now().UTC()
-	err := c.deploymentStore().PatchStatus(ctx, deployment.Metadata.NamespaceOrDefault(), deployment.Metadata.Name, "", v1alpha1.StatusPatcher(func(s *v1alpha1.Status) {
+	internalMeta.DiscoveryMisses = 0
+	err := c.deploymentStore().PatchStatusAndMeta(ctx, deployment.Metadata.NamespaceOrDefault(), deployment.Metadata.Name, v1alpha1.DeploymentStatusPatcher(func(s *v1alpha1.DeploymentStatus) {
+		s.Runtime = &v1alpha1.DeploymentRuntimeStatus{
+			ID: internalMeta.RuntimeID, Name: internalMeta.RuntimeName, ResourceID: internalMeta.RuntimeResourceID,
+		}
 		if s.ObservedGeneration < generation {
 			s.ObservedGeneration = generation
 		}
@@ -371,13 +413,7 @@ func (c *DeploymentDiscoveryController) patchDiscoveredStatus(
 			LastTransitionTime: now,
 			ObservedGeneration: generation,
 		})
-		if len(runtimeMetadata) > 0 {
-			_ = s.SetDetailsKey(deploymentRuntimeDetailsKey, runtimeMetadata)
-		} else {
-			_ = s.SetDetailsKey(deploymentRuntimeDetailsKey, nil)
-		}
-		_ = s.SetDetailsKey(deploymentDiscoveryMissesKey, nil)
-	}))
+	}), internalMeta)
 	if err != nil {
 		return fmt.Errorf("patch discovered Deployment status %s/%s: %w", deployment.Metadata.NamespaceOrDefault(), deployment.Metadata.Name, err)
 	}
@@ -388,14 +424,15 @@ func (c *DeploymentDiscoveryController) patchDiscoveredStatus(
 // Below the staleness threshold only the counter changes; at or past it the
 // Discovered and Ready conditions flip to False so list consumers can see the
 // workload is no longer observed on the provider.
-func (c *DeploymentDiscoveryController) patchMissedStatus(ctx context.Context, deployment *v1alpha1.Deployment, misses int) error {
+func (c *DeploymentDiscoveryController) patchMissedStatus(ctx context.Context, deployment *types.DeploymentRecord, misses int) error {
 	now := time.Now().UTC()
 	generation := deployment.Metadata.Generation
-	err := c.deploymentStore().PatchStatus(ctx, deployment.Metadata.NamespaceOrDefault(), deployment.Metadata.Name, "", v1alpha1.StatusPatcher(func(s *v1alpha1.Status) {
+	internalMeta := deployment.InternalMeta
+	internalMeta.DiscoveryMisses = misses
+	err := c.deploymentStore().PatchStatusAndMeta(ctx, deployment.Metadata.NamespaceOrDefault(), deployment.Metadata.Name, v1alpha1.DeploymentStatusPatcher(func(s *v1alpha1.DeploymentStatus) {
 		if s.ObservedGeneration < generation {
 			s.ObservedGeneration = generation
 		}
-		_ = s.SetDetailsKey(deploymentDiscoveryMissesKey, misses)
 		if misses < c.staleAfterMisses() {
 			return
 		}
@@ -415,7 +452,7 @@ func (c *DeploymentDiscoveryController) patchMissedStatus(ctx context.Context, d
 			LastTransitionTime: now,
 			ObservedGeneration: generation,
 		})
-	}))
+	}), internalMeta)
 	if err != nil {
 		return fmt.Errorf("patch missed discovered Deployment status %s/%s: %w", deployment.Metadata.NamespaceOrDefault(), deployment.Metadata.Name, err)
 	}
@@ -425,7 +462,7 @@ func (c *DeploymentDiscoveryController) patchMissedStatus(ctx context.Context, d
 // deleteDiscoveredDeployment hard-deletes a discovered row. Discovered rows
 // never carry the controller finalizer, so Delete removes them in one step; a
 // concurrent deletion is treated as success.
-func (c *DeploymentDiscoveryController) deleteDiscoveredDeployment(ctx context.Context, deployment *v1alpha1.Deployment) error {
+func (c *DeploymentDiscoveryController) deleteDiscoveredDeployment(ctx context.Context, deployment *types.DeploymentRecord) error {
 	namespace := deployment.Metadata.NamespaceOrDefault()
 	name := deployment.Metadata.Name
 	if err := c.deploymentStore().Delete(ctx, namespace, name, ""); err != nil && !errors.Is(err, pkgdb.ErrNotFound) {
@@ -436,13 +473,11 @@ func (c *DeploymentDiscoveryController) deleteDiscoveredDeployment(ctx context.C
 
 // discoveredMissCount reads the consecutive-miss counter persisted in status
 // details. Absent or malformed values count as zero misses.
-func discoveredMissCount(deployment *v1alpha1.Deployment) int {
-	var misses int
-	ok, err := deployment.Status.GetDetailsKey(deploymentDiscoveryMissesKey, &misses)
-	if err != nil || !ok || misses < 0 {
+func discoveredMissCount(deployment *types.DeploymentRecord) int {
+	if deployment.InternalMeta.DiscoveryMisses < 0 {
 		return 0
 	}
-	return misses
+	return deployment.InternalMeta.DiscoveryMisses
 }
 
 func (c *DeploymentDiscoveryController) staleAfterMisses() int {
@@ -477,12 +512,10 @@ func discoveredTargetName(result types.DiscoveryResult) string {
 	if name := strings.TrimSpace(result.Name); name != "" {
 		return name
 	}
-	for _, key := range []string{"remoteName", "remoteId"} {
-		if value := strings.TrimSpace(result.RuntimeMetadata[key]); value != "" {
-			return value
-		}
+	if name := result.InternalMeta.RuntimeName; name != "" {
+		return name
 	}
-	return ""
+	return result.InternalMeta.RuntimeID
 }
 
 func managedDeploymentTargetNames(deployment *v1alpha1.Deployment) []string {
@@ -492,7 +525,7 @@ func managedDeploymentTargetNames(deployment *v1alpha1.Deployment) []string {
 	names := []string{deployment.Spec.TargetRef.Name}
 	for key, value := range deployment.Metadata.Annotations {
 		key = strings.TrimSpace(key)
-		if strings.HasSuffix(key, "/remoteName") || strings.HasSuffix(key, "/remoteId") {
+		if strings.HasSuffix(key, "/remoteName") || strings.HasSuffix(key, "/"+types.RuntimeMetadataRemoteIDKey) {
 			if value = strings.TrimSpace(value); value != "" {
 				names = append(names, value)
 			}

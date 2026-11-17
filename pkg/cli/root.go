@@ -6,15 +6,15 @@ import (
 	"github.com/spf13/cobra"
 
 	internalcli "github.com/agentregistry-dev/agentregistry/internal/cli"
+	"github.com/agentregistry-dev/agentregistry/internal/cli/commands"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/configure"
-	"github.com/agentregistry-dev/agentregistry/internal/cli/declarative"
 	"github.com/agentregistry-dev/agentregistry/internal/cli/scheme"
-	"github.com/agentregistry-dev/agentregistry/internal/version"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
 	"github.com/agentregistry-dev/agentregistry/pkg/cli/db"
 	"github.com/agentregistry-dev/agentregistry/pkg/cli/db/migrate"
 	cliruntime "github.com/agentregistry-dev/agentregistry/pkg/cli/runtime"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/database/legacymigrate"
+	"github.com/agentregistry-dev/agentregistry/pkg/version"
 )
 
 const (
@@ -35,15 +35,18 @@ func Root(cfg Config) *cobra.Command {
 	}
 	var registryURL string
 	var registryToken string
+	var namespace string
 	rt := cliruntime.New(cliruntime.Config{
 		Env:             cfg.Env,
 		Auth:            cfg.Auth,
 		RegistryURL:     &registryURL,
 		RegistryToken:   &registryToken,
+		Namespace:       &namespace,
 		OnTokenResolved: cfg.OnTokenResolved,
 	})
 	root.PersistentFlags().StringVar(&registryURL, "registry-url", cfg.Env.Getenv("ARCTL_API_BASE_URL"), "Registry URL (overrides ARCTL_API_BASE_URL env var; defaults to http://localhost:12121)")
 	root.PersistentFlags().StringVar(&registryToken, "registry-token", "", "Registry bearer token (defaults to value of ARCTL_API_TOKEN env var)")
+	root.PersistentFlags().StringVarP(&namespace, "namespace", "n", "", `Registry namespace to operate in (defaults to value of ARCTL_NAMESPACE env var, else "default")`)
 
 	kinds := scheme.NewRegistry(scheme.All()...)
 	for _, kind := range cfg.DeclarativeKinds {
@@ -54,7 +57,7 @@ func Root(cfg Config) *cobra.Command {
 		for _, header := range kind.TableColumns {
 			columns = append(columns, scheme.Column{Header: header})
 		}
-		kinds.Register(declarative.NewExtensionKind(declarative.ExtensionKind{
+		kinds.Register(commands.NewExtensionKind(commands.ExtensionKind{
 			Name:          kind.Name,
 			Plural:        kind.Plural,
 			CanonicalKind: kind.CanonicalKind,
@@ -72,24 +75,26 @@ func Root(cfg Config) *cobra.Command {
 	}
 	root.AddCommand(configure.NewCommand(deps))
 	root.AddCommand(internalcli.NewVersionCommand(deps))
-	root.AddCommand(declarative.NewApplyCmd(deps))
-	root.AddCommand(declarative.NewGetCmd(deps))
-	root.AddCommand(declarative.NewDeleteCmd(deps))
-	root.AddCommand(declarative.NewInitCmd(deps))
-	root.AddCommand(declarative.NewBuildCmd(deps))
-	root.AddCommand(declarative.NewRunCmd(deps))
-	root.AddCommand(declarative.NewPullCmd(deps))
-	root.AddCommand(declarative.NewWaitCmd(deps))
+	root.AddCommand(commands.NewApplyCmd(deps))
+	root.AddCommand(commands.NewGetCmd(deps))
+	root.AddCommand(commands.NewDeleteCmd(deps))
+	root.AddCommand(commands.NewInitCmd(deps))
+	root.AddCommand(commands.NewBuildCmd(deps))
+	root.AddCommand(commands.NewRunCmd(deps))
+	root.AddCommand(commands.NewPullCmd(deps))
+	root.AddCommand(commands.NewWaitCmd(deps))
 	migrationSources := append([]migrate.Source{legacymigrate.OSSSource()}, cfg.ExtraMigrationSources...)
 	root.AddCommand(db.NewCommand(migrationSources...))
 
 	removeDisabledCommands(root, cfg.Disabled)
 
-	for _, cmd := range cfg.ExtraCommands {
-		if cmd == nil {
-			continue
+	if cfg.ExtraCommands != nil {
+		for _, cmd := range cfg.ExtraCommands(deps) {
+			if cmd == nil {
+				continue
+			}
+			root.AddCommand(cmd)
 		}
-		root.AddCommand(cmd)
 	}
 
 	return root
@@ -136,7 +141,7 @@ type Config struct {
 	Env  cliruntime.Env
 	Auth cliruntime.AuthProvider
 
-	ExtraCommands []*cobra.Command
+	ExtraCommands func(cliruntime.Deps) []*cobra.Command
 	Disabled      map[string]bool // command paths to remove, such as "db migrate goto"
 
 	ExtraMigrationSources []migrate.Source

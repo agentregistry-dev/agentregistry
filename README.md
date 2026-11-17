@@ -147,7 +147,7 @@ Move from discovery to usage without reinventing the same delivery path for ever
 
 - Run workflows locally with `arctl`
 - Deploy Agent Registry into Kubernetes with Helm
-- Support local environments and shared platform environments from the same registry
+- Support local `arctl run` workflows and shared Kubernetes environments from the same registry
 - Build and push agents — blueprints bundle an agent with its MCP servers and skills into a single deployable unit
 
 ### Client and Gateway Integration
@@ -162,7 +162,7 @@ Make approved artifacts easier to consume from the tools developers already use.
 
 1. Platform teams curate and publish approved MCP servers, agents, and skills in Agent Registry
 2. Developers discover those artifacts through the web UI or `arctl`
-3. Teams pull and deploy what they need in local environments or Kubernetes
+3. Teams run artifacts locally with `arctl` or deploy them to Kubernetes
 4. AI clients and shared gateway infrastructure connect to approved artifacts through a consistent workflow
 
 ## Secure Access with agentgateway

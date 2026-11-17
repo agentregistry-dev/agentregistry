@@ -49,7 +49,7 @@ agentregistry/
 
 Deployment/runtime code should be organized by **clear ownership**, not by vague helper layers:
 
-1. **`internal/registry/runtimes/<runtime>/` owns runtime behavior** - local and kubernetes packages should contain their adapter plus the concrete runtime-specific materialization/apply/discovery logic they need
+1. **`internal/registry/runtimes/<runtime>/` owns runtime behavior** - concrete packages such as kubernetes should contain their adapter plus the runtime-specific materialization/apply/discovery logic they need
 2. **`internal/registry/runtimes/utils/` is for narrowly shared deployment utilities only** - use it for adapter-shared materialization helpers, validation, name generation, and request parsing that are truly cross-runtime
 3. **`internal/registry/runtimes/types/` is for shared contracts only** - keep shared schemas and DTO-style runtime types here, not behavior-heavy logic
 4. **`internal/registry/api/handlers/` is transport only** - HTTP handlers should parse requests, call services/adapters, and map errors; they should not own deployment/runtime behavior

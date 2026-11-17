@@ -3,6 +3,7 @@ package mcpregistry_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -264,6 +265,29 @@ func TestListServers_RBACListFilterApplied(t *testing.T) {
 	require.Len(t, store.lastOpts.ExtraArgs, 2)
 	assert.Equal(t, []string{"team-a", "team-b"}, store.lastOpts.ExtraArgs[0])
 	assert.Equal(t, "%weather%", store.lastOpts.ExtraArgs[1])
+}
+
+// A list filter that cannot authorize the caller answers with an auth status, not a server error.
+func TestListServers_ListFilterAuthErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want int
+	}{
+		{"unauthenticated", auth.ErrUnauthenticated, http.StatusUnauthorized},
+		{"forbidden", auth.ErrForbidden, http.StatusForbidden},
+		{"filter failure", errors.New("snapshot unavailable"), http.StatusInternalServerError},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := newAPIConfig(t, handler.Config{
+				Store:      &fakeStore{},
+				ListFilter: func(context.Context, resource.AuthorizeInput) (string, []any, error) { return "", nil, tc.err },
+			})
+			w := httptest.NewRecorder()
+			srv.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/v0.1/servers", nil))
+			assert.Equal(t, tc.want, w.Code, w.Body.String())
+		})
+	}
 }
 
 // A forbidden single-server read is surfaced as 404 (never leaks existence).

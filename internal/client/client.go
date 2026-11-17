@@ -35,7 +35,8 @@ type VersionBody = arv0.VersionBody
 
 // ErrNotFound is returned by Get / GetLatest / Delete / PatchStatus when
 // the server responds with 404. Callers can errors.Is(err, ErrNotFound)
-// to branch cleanly.
+// to branch cleanly; the server's error detail, when present, is wrapped
+// around it.
 var ErrNotFound = errors.New("resource not found")
 
 // NewClient constructs a client with explicit baseURL and token.
@@ -108,6 +109,10 @@ func (c *Client) doJSON(req *http.Request, out any) error {
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode == http.StatusNotFound {
+		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		if msg := extractAPIErrorMessage(errBody); msg != "" {
+			return fmt.Errorf("%w: %s", ErrNotFound, msg)
+		}
 		return ErrNotFound
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -346,9 +351,14 @@ func (c *Client) Delete(ctx context.Context, kind, namespace, name, tag string) 
 // Apply batch — multi-doc YAML
 // =============================================================================
 
-// ApplyOpts carries cross-cutting batch options for the POST /v0/apply endpoint.
+// ApplyOpts carries cross-cutting batch options for the /v0/apply endpoints.
 type ApplyOpts struct {
 	DryRun bool
+	// Namespace, when set, is sent as ?namespace=: the server places
+	// documents that omit metadata.namespace there and rejects documents
+	// whose metadata.namespace differs. Empty keeps each document's own
+	// namespace, defaulting to "default".
+	Namespace string
 }
 
 // Apply sends a multi-doc YAML body to POST /v0/apply and returns per-resource results.
@@ -360,8 +370,8 @@ func (c *Client) Apply(ctx context.Context, body []byte, opts ApplyOpts) ([]arv0
 
 // DeleteViaApply sends a DELETE /v0/apply with a YAML body and returns per-resource results.
 // Mirrors Apply but uses the DELETE HTTP method.
-func (c *Client) DeleteViaApply(ctx context.Context, body []byte) ([]arv0.ApplyResult, error) {
-	return c.applyBatch(ctx, http.MethodDelete, body, ApplyOpts{})
+func (c *Client) DeleteViaApply(ctx context.Context, body []byte, opts ApplyOpts) ([]arv0.ApplyResult, error) {
+	return c.applyBatch(ctx, http.MethodDelete, body, opts)
 }
 
 func (c *Client) applyBatch(ctx context.Context, method string, body []byte, opts ApplyOpts) ([]arv0.ApplyResult, error) {
@@ -369,6 +379,9 @@ func (c *Client) applyBatch(ctx context.Context, method string, body []byte, opt
 	q := url.Values{}
 	if opts.DryRun {
 		q.Set("dryRun", "true")
+	}
+	if opts.Namespace != "" {
+		q.Set("namespace", opts.Namespace)
 	}
 	if enc := q.Encode(); enc != "" {
 		path += "?" + enc

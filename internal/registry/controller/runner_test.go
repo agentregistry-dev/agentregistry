@@ -4,9 +4,27 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestDeploymentControllerTermStopsWhenEitherWorkerExits(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	done := runDeploymentControllerWorkers(
+		ctx,
+		cancel,
+		&DeploymentController{},
+		&DeploymentDiscoveryController{},
+		time.Hour,
+	)
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("controller generation did not stop after one worker exited")
+	}
+}
 
 func TestControlPlaneWakeupLoopReconnectsAfterListenerError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())

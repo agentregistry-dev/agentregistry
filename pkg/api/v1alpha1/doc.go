@@ -32,6 +32,7 @@ const (
 	KindDeployment = "Deployment"
 	KindRuntime    = "Runtime"
 	KindModel      = "Model"
+	KindSecret     = "Secret"
 )
 
 var (

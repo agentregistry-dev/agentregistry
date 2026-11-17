@@ -11,4 +11,14 @@ type Repository struct {
 	Branch    string `json:"branch,omitempty" yaml:"branch,omitempty"`
 	Commit    string `json:"commit,omitempty" yaml:"commit,omitempty"`
 	Subfolder string `json:"subfolder,omitempty" yaml:"subfolder,omitempty"`
+
+	// CredentialsRef names a Secret holding credentials for a private
+	// repository. Git needs a pair, so resolvers read username/password.
+	CredentialsRef *LocalSecretReference `json:"credentialsRef,omitempty" yaml:"credentialsRef,omitempty"`
+}
+
+// LocalSecretReference names a Secret in the referring resource's namespace.
+// Unlike SecretKeyRef it indexes no key: the consumer owns the key convention.
+type LocalSecretReference struct {
+	Name string `json:"name" yaml:"name"`
 }

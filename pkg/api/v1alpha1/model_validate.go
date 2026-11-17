@@ -42,6 +42,8 @@ func (m *Model) Validate() error {
 func validateModelSpec(s *ModelSpec) FieldErrors {
 	var errs FieldErrors
 
+	errs.Append("spec.iconUrl", validateIconURL(s.IconURL))
+
 	provider := s.Provider
 	providerInfo, providerKnown := KnownModelProviders[provider]
 	if provider == "" {

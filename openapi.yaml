@@ -28,20 +28,15 @@ components:
           enum:
           - A2A
           - HTTP
+          - OpenAIResponses
           type: string
-        repository:
-          $ref: '#/components/schemas/Repository'
       type: object
     AgentSpec:
       additionalProperties: false
       properties:
-        compatibleHarnesses:
-          items:
-            $ref: '#/components/schemas/HarnessCompatibility'
-          type:
-          - array
-          - "null"
         description:
+          type: string
+        iconUrl:
           type: string
         instructions:
           $ref: '#/components/schemas/ResourceRef'
@@ -170,7 +165,7 @@ components:
         spec:
           $ref: '#/components/schemas/DeploymentSpec'
         status:
-          $ref: '#/components/schemas/Status'
+          $ref: '#/components/schemas/DeploymentStatus'
       required:
       - metadata
       - spec
@@ -197,6 +192,18 @@ components:
       required:
       - name
       type: object
+    DeploymentRuntimeStatus:
+      additionalProperties: false
+      properties:
+        endpoint:
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        resourceId:
+          type: string
+      type: object
     DeploymentSpec:
       additionalProperties: false
       properties:
@@ -212,12 +219,6 @@ components:
           additionalProperties:
             type: string
           type: object
-        envFrom:
-          items:
-            $ref: '#/components/schemas/EnvFromSource'
-          type:
-          - array
-          - "null"
         harness:
           $ref: '#/components/schemas/DeploymentHarness'
         modelRef:
@@ -233,11 +234,17 @@ components:
       - targetRef
       - runtimeRef
       type: object
-    EnvFromSource:
+    DeploymentStatus:
       additionalProperties: false
       properties:
-        secretRef:
-          $ref: '#/components/schemas/SecretEnvSource'
+        conditions:
+          items:
+            $ref: '#/components/schemas/Condition'
+          type:
+          - array
+          - "null"
+        runtime:
+          $ref: '#/components/schemas/DeploymentRuntimeStatus'
       type: object
     ErrorDetail:
       additionalProperties: false
@@ -304,25 +311,9 @@ components:
       required:
       - name
       type: object
-    HarnessCompatibility:
-      additionalProperties: false
-      properties:
-        type:
-          type: string
-      required:
-      - type
-      type: object
     HealthBody:
       additionalProperties: false
       properties:
-        platform_mode:
-          description: Platform mode
-          enum:
-          - docker
-          - kubernetes
-          examples:
-          - docker
-          type: string
         status:
           description: Health status
           examples:
@@ -569,6 +560,20 @@ components:
       required:
       - items
       type: object
+    ListOutputSecretBody:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/Secret'
+          type:
+          - array
+          - "null"
+        nextCursor:
+          type: string
+      required:
+      - items
+      type: object
     ListOutputSkillBody:
       additionalProperties: false
       properties:
@@ -582,6 +587,14 @@ components:
           type: string
       required:
       - items
+      type: object
+    LocalSecretReference:
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+      required:
+      - name
       type: object
     MCPArgument:
       additionalProperties: false
@@ -775,13 +788,13 @@ components:
       properties:
         package:
           $ref: '#/components/schemas/MCPPackage'
-        repository:
-          $ref: '#/components/schemas/Repository'
       type: object
     MCPServerSpec:
       additionalProperties: false
       properties:
         description:
+          type: string
+        iconUrl:
           type: string
         remote:
           $ref: '#/components/schemas/MCPRemote'
@@ -818,6 +831,24 @@ components:
           type: string
       required:
       - type
+      type: object
+    MarketplaceResponse:
+      additionalProperties: false
+      properties:
+        $schema:
+          type: string
+        name:
+          type: string
+        owner:
+          $ref: '#/components/schemas/Owner'
+        plugins:
+          items:
+            $ref: '#/components/schemas/PluginEntry'
+          type: array
+      required:
+      - name
+      - owner
+      - plugins
       type: object
     Model:
       additionalProperties: false
@@ -883,6 +914,8 @@ components:
           type: string
         endpoint:
           $ref: '#/components/schemas/ModelEndpointConfig'
+        iconUrl:
+          type: string
         model:
           type: string
         provider:
@@ -981,6 +1014,16 @@ components:
       required:
       - isLatest
       type: object
+    Owner:
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+        name:
+          type: string
+      required:
+      - name
+      type: object
     PathOrPaths:
       additionalProperties: false
       properties:
@@ -1061,6 +1104,20 @@ components:
           type: string
         version:
           type: string
+      type: object
+    PluginEntry:
+      additionalProperties: false
+      properties:
+        description:
+          type: string
+        name:
+          type: string
+        source: {}
+        version:
+          type: string
+      required:
+      - name
+      - source
       type: object
     PluginExperimental:
       additionalProperties: false
@@ -1244,12 +1301,8 @@ components:
       properties:
         description:
           type: string
-        harnesses:
-          items:
-            type: string
-          type:
-          - array
-          - "null"
+        iconUrl:
+          type: string
         source:
           $ref: '#/components/schemas/PluginSource'
         title:
@@ -1264,7 +1317,6 @@ components:
           type:
           - array
           - "null"
-        details: {}
         inventory:
           $ref: '#/components/schemas/PluginInventory'
         manifest:
@@ -1325,6 +1377,8 @@ components:
           type: string
         description:
           type: string
+        iconUrl:
+          type: string
       type: object
     Repository:
       additionalProperties: false
@@ -1333,6 +1387,8 @@ components:
           type: string
         commit:
           type: string
+        credentialsRef:
+          $ref: '#/components/schemas/LocalSecretReference'
         subfolder:
           type: string
         url:
@@ -1371,7 +1427,7 @@ components:
         spec:
           $ref: '#/components/schemas/RuntimeSpec'
         status:
-          $ref: '#/components/schemas/Status'
+          $ref: '#/components/schemas/RuntimeStatus'
       required:
       - metadata
       - spec
@@ -1391,13 +1447,34 @@ components:
       required:
       - type
       type: object
-    SecretEnvSource:
+    RuntimeStatus:
       additionalProperties: false
       properties:
-        name:
+        conditions:
+          items:
+            $ref: '#/components/schemas/Condition'
+          type:
+          - array
+          - "null"
+      type: object
+    Secret:
+      additionalProperties: false
+      properties:
+        apiVersion:
           type: string
+        kind:
+          type: string
+        metadata:
+          $ref: '#/components/schemas/ObjectMeta'
+        spec:
+          $ref: '#/components/schemas/SecretSpec'
+        status:
+          $ref: '#/components/schemas/SecretStatus'
       required:
-      - name
+      - metadata
+      - spec
+      - apiVersion
+      - kind
       type: object
     SecretKeyRef:
       additionalProperties: false
@@ -1410,6 +1487,32 @@ components:
           type: string
       required:
       - name
+      type: object
+    SecretSpec:
+      additionalProperties: false
+      properties:
+        data:
+          additionalProperties:
+            type: string
+          type: object
+        immutable:
+          type: boolean
+        stringData:
+          additionalProperties:
+            type: string
+          type: object
+        type:
+          type: string
+      type: object
+    SecretStatus:
+      additionalProperties: false
+      properties:
+        dataKeys:
+          items:
+            type: string
+          type:
+          - array
+          - "null"
       type: object
     ServerArgument:
       additionalProperties: false
@@ -1444,8 +1547,6 @@ components:
           type:
           - array
           - "null"
-        repository:
-          $ref: '#/components/schemas/ServerRepository'
         title:
           type: string
         version:
@@ -1525,20 +1626,6 @@ components:
       - version
       - transport
       type: object
-    ServerRepository:
-      additionalProperties: false
-      properties:
-        id:
-          type: string
-        source:
-          type: string
-        subfolder:
-          type: string
-        url:
-          type: string
-      required:
-      - url
-      type: object
     ServerResponse:
       additionalProperties: false
       properties:
@@ -1601,6 +1688,8 @@ components:
       properties:
         description:
           type: string
+        iconUrl:
+          type: string
         source:
           $ref: '#/components/schemas/SkillSource'
         title:
@@ -1615,7 +1704,6 @@ components:
           type:
           - array
           - "null"
-        details: {}
         resolvedSource:
           $ref: '#/components/schemas/SkillResolvedSource'
       type: object
@@ -1628,7 +1716,6 @@ components:
           type:
           - array
           - "null"
-        details: {}
       type: object
     VersionBody:
       additionalProperties: false
@@ -1659,6 +1746,27 @@ info:
   version: dev
 openapi: 3.1.0
 paths:
+  /plugin-marketplace/marketplace.json:
+    get:
+      description: Read-only listing of resolved plugins in the Claude Code marketplace.json
+        format.
+      operationId: plugin-marketplace-get
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketplaceResponse'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorModel'
+          description: Error
+      summary: Get the plugin marketplace (Claude Code marketplace.json compatibility)
+      tags:
+      - plugins
   /v0.1/servers:
     get:
       description: Read-only listing of registered MCP servers in the official MCP
@@ -2010,6 +2118,17 @@ paths:
         schema:
           description: Run validation without mutating the store. Defaults to false.
           type: boolean
+      - description: Namespace for documents that omit metadata.namespace; documents
+          naming a different namespace fail. Empty keeps each document's namespace
+          (default 'default'). 'all' is rejected.
+        explode: false
+        in: query
+        name: namespace
+        schema:
+          description: Namespace for documents that omit metadata.namespace; documents
+            naming a different namespace fail. Empty keeps each document's namespace
+            (default 'default'). 'all' is rejected.
+          type: string
       requestBody:
         content:
           application/yaml:
@@ -2042,6 +2161,17 @@ paths:
         schema:
           description: Run validation without mutating the store. Defaults to false.
           type: boolean
+      - description: Namespace for documents that omit metadata.namespace; documents
+          naming a different namespace fail. Empty keeps each document's namespace
+          (default 'default'). 'all' is rejected.
+        explode: false
+        in: query
+        name: namespace
+        schema:
+          description: Namespace for documents that omit metadata.namespace; documents
+            naming a different namespace fail. Empty keeps each document's namespace
+            (default 'default'). 'all' is rejected.
+          type: string
       requestBody:
         content:
           application/yaml:
@@ -3227,6 +3357,168 @@ paths:
                 $ref: '#/components/schemas/ErrorModel'
           description: Error
       summary: Apply a Runtime (idempotent upsert)
+  /v0/secrets:
+    get:
+      operationId: list-secrets
+      parameters:
+      - description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
+        explode: false
+        in: query
+        name: namespace
+        schema:
+          description: Namespace (defaults to 'default'; 'all' lists across all namespaces).
+          type: string
+      - description: Max items to return (default 50).
+        explode: false
+        in: query
+        name: limit
+        schema:
+          default: 50
+          description: Max items to return (default 50).
+          format: int64
+          type: integer
+      - description: Opaque pagination cursor.
+        explode: false
+        in: query
+        name: cursor
+        schema:
+          description: Opaque pagination cursor.
+          type: string
+      - description: 'Label selector: key=value,key2=value2.'
+        explode: false
+        in: query
+        name: labels
+        schema:
+          description: 'Label selector: key=value,key2=value2.'
+          type: string
+      - description: Restrict the result set to one tag value (tagged artifact kinds
+          only).
+        explode: false
+        in: query
+        name: tag
+        schema:
+          description: Restrict the result set to one tag value (tagged artifact kinds
+            only).
+          type: string
+      - description: Only return the literal latest tag per (namespace, name). Equivalent
+          to tag=latest for tagged kinds.
+        explode: false
+        in: query
+        name: latestOnly
+        schema:
+          description: Only return the literal latest tag per (namespace, name). Equivalent
+            to tag=latest for tagged kinds.
+          type: boolean
+      - description: Include rows with a deletionTimestamp.
+        explode: false
+        in: query
+        name: includeTerminating
+        schema:
+          description: Include rows with a deletionTimestamp.
+          type: boolean
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListOutputSecretBody'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorModel'
+          description: Error
+      summary: List Secret (scoped by ?namespace)
+  /v0/secrets/{name}:
+    delete:
+      operationId: delete-secret
+      parameters:
+      - description: Namespace (internal; defaults to 'default').
+        explode: false
+        in: query
+        name: namespace
+        schema:
+          description: Namespace (internal; defaults to 'default').
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorModel'
+          description: Error
+      summary: 'Delete a Secret (soft-delete: sets deletionTimestamp)'
+    get:
+      operationId: get-latest-secret
+      parameters:
+      - description: Namespace (internal; defaults to 'default').
+        explode: false
+        in: query
+        name: namespace
+        schema:
+          description: Namespace (internal; defaults to 'default').
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Secret'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorModel'
+          description: Error
+      summary: Get the latest Secret
+    put:
+      operationId: apply-secret
+      parameters:
+      - description: Namespace (internal; defaults to 'default').
+        explode: false
+        in: query
+        name: namespace
+        schema:
+          description: Namespace (internal; defaults to 'default').
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Secret'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Secret'
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorModel'
+          description: Error
+      summary: Apply a Secret (idempotent upsert)
   /v0/skills:
     get:
       operationId: list-skills

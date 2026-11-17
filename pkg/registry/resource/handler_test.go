@@ -18,10 +18,18 @@ import (
 
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	"github.com/agentregistry-dev/agentregistry/pkg/api/v1alpha1"
+	"github.com/agentregistry-dev/agentregistry/pkg/registry/auth"
+	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/resource"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
 	"github.com/agentregistry-dev/agentregistry/pkg/types"
 )
+
+const testRuntimeType = "Test"
+
+func init() {
+	v1alpha1.KnownRuntimeTypes[testRuntimeType] = struct{}{}
+}
 
 // registerAgent wires the generic resource handler for *v1alpha1.Agent and
 // the multi-doc apply endpoint onto the given Huma API, against the supplied
@@ -191,6 +199,69 @@ spec:
 	require.Equal(t, http.StatusOK, resp.Code)
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &list))
 	require.Empty(t, list.Items)
+}
+
+// TestResourceRegister_ListTagsReturnsTheTagsTheCallerMayGet pins per-tag authorization on the tags list:
+// each tag is a get with its own tag, a denied tag is left out, and any other error fails the request.
+func TestResourceRegister_ListTagsReturnsTheTagsTheCallerMayGet(t *testing.T) {
+	pool := v1alpha1store.NewTestPool(t)
+	store := v1alpha1store.NewStore(pool, v1alpha1store.TestSchema(), "agents")
+	for _, tag := range []string{"v1", "v2"} {
+		_, err := store.Upsert(t.Context(), &v1alpha1.Agent{
+			Metadata: v1alpha1.ObjectMeta{Namespace: "default", Name: "foo", Tag: tag},
+			Spec:     v1alpha1.AgentSpec{Title: tag},
+		})
+		require.NoError(t, err)
+	}
+	var seen []resource.AuthorizeInput
+	var denied map[string]error
+	_, api := humatest.New(t)
+	resource.Register[*v1alpha1.Agent](api, resource.Config{
+		Kind:       v1alpha1.KindAgent,
+		BasePrefix: "/v0",
+		Store:      store,
+		Authorize: func(_ context.Context, in resource.AuthorizeInput) error {
+			seen = append(seen, in)
+			return denied[in.Tag]
+		},
+	}, func() *v1alpha1.Agent { return &v1alpha1.Agent{} })
+
+	for _, tc := range []struct {
+		name   string
+		denied map[string]error
+		want   int
+		tags   []string
+	}{
+		{"every tag readable", nil, http.StatusOK, []string{"v2", "v1"}},
+		{"a Huma 403 leaves that tag out", map[string]error{"v1": huma.Error403Forbidden("denied")}, http.StatusOK, []string{"v2"}},
+		{"the auth sentinel leaves that tag out", map[string]error{"v2": auth.ErrForbidden}, http.StatusOK, []string{"v1"}},
+		{"no readable tag is an empty list", map[string]error{"v1": auth.ErrForbidden, "v2": auth.ErrForbidden}, http.StatusOK, nil},
+		{"any other error fails the request", map[string]error{"v1": huma.Error401Unauthorized("no session")}, http.StatusUnauthorized, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			seen, denied = nil, tc.denied
+			resp := api.Get("/v0/agents/foo/tags")
+			require.Equal(t, tc.want, resp.Code, resp.Body.String())
+			for _, in := range seen {
+				require.Equal(t, "get", in.Verb, "a tag is read like any other object")
+				require.Equal(t, "foo", in.Name)
+				require.NotEmpty(t, in.Tag)
+				require.Nil(t, in.Object)
+			}
+			if tc.want != http.StatusOK {
+				return
+			}
+			var list struct {
+				Items []v1alpha1.Agent `json:"items"`
+			}
+			require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &list))
+			var tags []string
+			for _, item := range list.Items {
+				tags = append(tags, item.Metadata.Tag)
+			}
+			require.Equal(t, tc.tags, tags)
+		})
+	}
 }
 
 func TestResourceRegister_DeleteTaggedPassesTagToAuthorizer(t *testing.T) {
@@ -584,21 +655,21 @@ func TestResourceRegister_MutableObjectUsesNameOnlyRoute(t *testing.T) {
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindRuntime},
 		Metadata: v1alpha1.ObjectMeta{
 			Namespace: "default",
-			Name:      "local-test",
+			Name:      "test-runtime",
 		},
-		Spec: v1alpha1.RuntimeSpec{Type: v1alpha1.TypeLocal},
+		Spec: v1alpha1.RuntimeSpec{Type: testRuntimeType},
 	}
 
-	resp := api.Put("/v0/runtimes/local-test", runtime)
+	resp := api.Put("/v0/runtimes/test-runtime", runtime)
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 
-	resp = api.Get("/v0/runtimes/local-test")
+	resp = api.Get("/v0/runtimes/test-runtime")
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 
-	resp = api.Put("/v0/runtimes/local-test/1", runtime)
+	resp = api.Put("/v0/runtimes/test-runtime/1", runtime)
 	require.Equal(t, http.StatusNotFound, resp.Code, "mutable object route must be name-only")
 
-	resp = api.Delete("/v0/runtimes/local-test")
+	resp = api.Delete("/v0/runtimes/test-runtime")
 	require.Equal(t, http.StatusNoContent, resp.Code, resp.Body.String())
 }
 
@@ -872,43 +943,173 @@ func TestResourceRegister_IncludeTerminatingByDefault(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, resp.Code, resp.Body.String())
 }
 
-// TestResourceRegister_DeleteIdempotentOnTerminating pins the
-// idempotent-DELETE contract for mutable-object kinds: even without
-// IncludeTerminatingByDefault, a DELETE on an already-terminating row
-// returns 204 rather than 404. The handler uses the terminating-aware
-// lookup so retry scripts get a coherent response shape.
-func TestResourceRegister_DeleteIdempotentOnTerminating(t *testing.T) {
+// malformedSpecRuntime seeds structurally invalid Runtime JSON through the
+// store interface, without requiring direct SQL access from handler tests.
+type malformedSpecRuntime struct {
+	v1alpha1.Runtime
+}
+
+func (*malformedSpecRuntime) MarshalSpec() (json.RawMessage, error) {
+	return json.RawMessage(`{"type":123}`), nil
+}
+
+func TestResourceRegister_DeleteMutableDeniedBeforeStoreRead(t *testing.T) {
+	var seen []resource.AuthorizeInput
+	_, api := humatest.New(t)
+	resource.Register[*v1alpha1.Runtime](api, resource.Config{
+		Kind:       v1alpha1.KindRuntime,
+		BasePrefix: "/v0",
+		// A nil store makes any pre-authorization lookup fail. No delete
+		// callbacks are configured, so the stored object is not needed.
+		Store: nil,
+		Authorize: func(_ context.Context, in resource.AuthorizeInput) error {
+			seen = append(seen, in)
+			return huma.Error403Forbidden("delete denied")
+		},
+	}, func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} })
+
+	var resp *httptest.ResponseRecorder
+	require.NotPanics(t, func() {
+		resp = api.Delete("/v0/runtimes/example.com%2Fbroken?namespace=delete-auth")
+	}, "denied DELETE must not read the store")
+	require.Equal(t, http.StatusForbidden, resp.Code, resp.Body.String())
+	require.Equal(t, []resource.AuthorizeInput{{
+		Verb: "delete", Kind: v1alpha1.KindRuntime,
+		Namespace: "delete-auth", Name: "example.com/broken",
+	}}, seen, "authorize exactly once, with path identity and no unused object")
+}
+
+func TestResourceRegister_DeleteMutableWithoutCallbacksRemovesMalformedSpec(t *testing.T) {
 	pool := v1alpha1store.NewTestPool(t)
 	store := v1alpha1store.NewMutableObjectStore(pool, v1alpha1store.TestSchema(), "runtimes")
-	const testNamespace = "delete-idempotent"
+	const testNamespace = "delete-malformed"
+	_, err := store.Upsert(t.Context(), &malformedSpecRuntime{Runtime: v1alpha1.Runtime{
+		Metadata: v1alpha1.ObjectMeta{Namespace: testNamespace, Name: "broken"},
+	}})
+	require.NoError(t, err)
 
+	row, err := store.GetLatest(t.Context(), testNamespace, "broken")
+	require.NoError(t, err)
+	_, err = v1alpha1.EnvelopeFromRaw(func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} }, row, v1alpha1.KindRuntime)
+	require.ErrorContains(t, err, "unmarshal spec", "fixture must fail typed spec decoding")
+
+	var seen []resource.AuthorizeInput
 	_, api := humatest.New(t)
 	resource.Register[*v1alpha1.Runtime](api, resource.Config{
 		Kind:       v1alpha1.KindRuntime,
 		BasePrefix: "/v0",
 		Store:      store,
+		Authorize: func(_ context.Context, in resource.AuthorizeInput) error {
+			seen = append(seen, in)
+			return nil
+		},
 	}, func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} })
 
-	_, err := store.Upsert(t.Context(), &v1alpha1.Runtime{
-		TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindRuntime},
-		Metadata: v1alpha1.ObjectMeta{Namespace: testNamespace, Name: "draining"},
-		Spec:     v1alpha1.RuntimeSpec{Type: "noop"},
-	})
-	require.NoError(t, err)
-
-	// Attach a finalizer so the first DELETE soft-deletes (leaves the row
-	// in terminating state) instead of hard-deleting.
-	require.NoError(t, store.PatchFinalizers(t.Context(), testNamespace, "draining", "",
-		func([]string) []string { return []string{"finalizer.example.com"} }))
-
-	// First DELETE → soft-delete, 204.
-	resp := api.Delete("/v0/runtimes/draining?namespace=" + testNamespace)
+	resp := api.Delete("/v0/runtimes/broken?namespace=" + testNamespace)
 	require.Equal(t, http.StatusNoContent, resp.Code, resp.Body.String())
+	require.Equal(t, []resource.AuthorizeInput{{
+		Verb: "delete", Kind: v1alpha1.KindRuntime,
+		Namespace: testNamespace, Name: "broken",
+	}}, seen)
+	_, err = store.GetLatestIncludingTerminating(t.Context(), testNamespace, "broken")
+	require.ErrorIs(t, err, pkgdb.ErrNotFound, "finalizer-free malformed row must be removed")
 
-	// Second DELETE on the terminating row must remain 204 (idempotent),
-	// not 404; otherwise retry scripts can't distinguish "still
-	// terminating" from "fully purged".
-	resp = api.Delete("/v0/runtimes/draining?namespace=" + testNamespace)
-	require.Equal(t, http.StatusNoContent, resp.Code, resp.Body.String(),
-		"DELETE on an already-terminating row must stay idempotent")
+	seen = nil
+	resp = api.Delete("/v0/runtimes/broken?namespace=" + testNamespace)
+	require.Equal(t, http.StatusNotFound, resp.Code, resp.Body.String())
+	require.Len(t, seen, 1, "authorized missing-row DELETE must still pass through authorization")
+}
+
+// TestResourceRegister_DeleteIdempotentOnTerminating pins the
+// idempotent-DELETE contract for mutable-object kinds: even without
+// IncludeTerminatingByDefault, a DELETE on an already-terminating row
+// returns 204 rather than 404. Callbacks must still receive the stored
+// object and re-fire on retry.
+func TestResourceRegister_DeleteIdempotentOnTerminating(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		admission bool
+		post      bool
+	}{
+		{name: "no callbacks"},
+		{name: "admission only", admission: true},
+		{name: "post-delete only", post: true},
+		{name: "both callbacks", admission: true, post: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			pool := v1alpha1store.NewTestPool(t)
+			store := v1alpha1store.NewMutableObjectStore(pool, v1alpha1store.TestSchema(), "runtimes")
+			const testNamespace = "delete-idempotent"
+
+			_, err := store.Upsert(t.Context(), &v1alpha1.Runtime{
+				TypeMeta: v1alpha1.TypeMeta{APIVersion: v1alpha1.GroupVersion, Kind: v1alpha1.KindRuntime},
+				Metadata: v1alpha1.ObjectMeta{Namespace: testNamespace, Name: "draining"},
+				Spec:     v1alpha1.RuntimeSpec{Type: "noop"},
+			})
+			require.NoError(t, err)
+			require.NoError(t, store.PatchFinalizers(t.Context(), testNamespace, "draining", "",
+				func([]string) []string { return []string{"finalizer.example.com"} }))
+
+			var events []string
+			var authorizedObject v1alpha1.Object
+			cfg := resource.Config{
+				Kind:       v1alpha1.KindRuntime,
+				BasePrefix: "/v0",
+				Store:      store,
+				Authorize: func(_ context.Context, in resource.AuthorizeInput) error {
+					events = append(events, "authorize")
+					authorizedObject = in.Object
+					return nil
+				},
+			}
+			wantEvents := []string{"authorize"}
+			if tt.admission {
+				wantEvents = append(wantEvents, "admission")
+				cfg.DeleteAdmission = func(ctx context.Context, in types.DeleteAdmissionInput) (types.DeleteAdmissionResult, error) {
+					events = append(events, "admission")
+					require.Same(t, authorizedObject, in.Object)
+					return resource.ProductionDeleteAdmission(ctx, in)
+				}
+			}
+			if tt.post {
+				wantEvents = append(wantEvents, "post-delete")
+				cfg.PostDelete = func(ctx context.Context, obj v1alpha1.Object) error {
+					events = append(events, "post-delete")
+					require.Same(t, authorizedObject, obj)
+					row, err := store.GetLatestIncludingTerminating(ctx, testNamespace, "draining")
+					require.NoError(t, err)
+					require.NotNil(t, row.Metadata.DeletionTimestamp, "post-delete runs after persistence")
+					return nil
+				}
+			}
+
+			_, api := humatest.New(t)
+			resource.Register[*v1alpha1.Runtime](api, cfg, func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} })
+			for range 2 {
+				row, err := store.GetLatestIncludingTerminating(t.Context(), testNamespace, "draining")
+				require.NoError(t, err)
+				beforeDelete, err := v1alpha1.EnvelopeFromRaw(func() *v1alpha1.Runtime { return &v1alpha1.Runtime{} }, row, v1alpha1.KindRuntime)
+				require.NoError(t, err)
+
+				events = nil
+				resp := api.Delete("/v0/runtimes/draining?namespace=" + testNamespace)
+				require.Equal(t, http.StatusNoContent, resp.Code, resp.Body.String(),
+					"DELETE on an already-terminating row must stay idempotent")
+				require.Equal(t, wantEvents, events, "callbacks must re-fire in order on each DELETE")
+				if tt.admission || tt.post {
+					require.Equal(t, beforeDelete, authorizedObject, "callbacks receive the pre-delete stored object, including terminating metadata on retry")
+				} else {
+					require.Nil(t, authorizedObject)
+				}
+
+				row, err = store.GetLatestIncludingTerminating(t.Context(), testNamespace, "draining")
+				require.NoError(t, err)
+				require.NotNil(t, row.Metadata.DeletionTimestamp)
+				if beforeDelete.Metadata.DeletionTimestamp != nil {
+					require.Equal(t, beforeDelete.Metadata.DeletionTimestamp, row.Metadata.DeletionTimestamp,
+						"retry must preserve the original deletion timestamp")
+				}
+			}
+		})
+	}
 }

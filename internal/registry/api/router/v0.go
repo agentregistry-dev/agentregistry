@@ -8,6 +8,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	mcpregistrycompat "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/mcpregistry"
+	pluginmarketplacecompat "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/pluginmarketplace"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/crud"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/deploymentlogs"
 	v0health "github.com/agentregistry-dev/agentregistry/internal/registry/api/handlers/v0/health"
@@ -162,6 +163,29 @@ func RegisterRoutes(
 			})
 		}
 	}
+
+	// Read-only Claude Code marketplace.json compatibility surface. Re-exposes
+	// resolved Plugin rows in the marketplace.json shape at
+	// `/plugin-marketplace/marketplace.json` (plus an optional configured
+	// prefix) so the URL can be registered directly with
+	// `claude plugin marketplace add`. Mounted here — not via ExtraRoutes —
+	// because it's a first-party OSS read feature that needs the Plugin store
+	// already wired into opts.Stores.
+	if cfg.PluginMarketplaceCompatEnabled {
+		if store := opts.Stores[v1alpha1.KindPlugin]; store != nil {
+			// Reuse the same per-kind RBAC list filter the native Plugin read
+			// path uses, so a downstream build that gates Plugin reads gates the
+			// compat endpoint identically. nil hook = public OSS behavior.
+			//
+			// The normal authn middleware applies when a provider is configured.
+			// OSS remains permissive when no provider is configured.
+			pluginmarketplacecompat.Register(api, pluginmarketplacecompat.Config{
+				PathPrefix: cfg.PluginMarketplaceCompatPathPrefix,
+				Store:      store,
+				ListFilter: opts.PerKindHooks.ListFilters[v1alpha1.KindPlugin],
+			})
+		}
+	}
 	return nil
 }
 
@@ -231,6 +255,7 @@ func registerKindRoutes(
 		RegistryValidator: registryValidator,
 		Authorizers:       perKind.Authorizers,
 		PostUpserts:       perKind.PostUpserts,
+		OnUpsertErrors:    perKind.OnUpsertErrors,
 		PostDeletes:       perKind.PostDeletes,
 		InitialFinalizers: perKind.InitialFinalizers,
 		Admission:         admission,

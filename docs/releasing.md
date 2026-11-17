@@ -19,7 +19,6 @@ For a `vX.Y.Z` release, `.github/workflows/release.yaml` publishes:
 
 - Multi-architecture Linux container images for `amd64` and `arm64`:
   - `ghcr.io/agentregistry-dev/agentregistry/server:vX.Y.Z`
-  - `ghcr.io/agentregistry-dev/agentregistry/arctl-agentgateway:vX.Y.Z`
 - CLI binaries and individual SHA-256 files for:
   - Linux `amd64` and `arm64`
   - macOS `amd64` and `arm64`
@@ -29,6 +28,32 @@ For a `vX.Y.Z` release, `.github/workflows/release.yaml` publishes:
   with chart version `X.Y.Z` and application version `vX.Y.Z`.
 - A GitHub Release with generated release notes, the CLI files, the packaged
   Helm chart, and the chart checksum file.
+
+## Nightly images
+
+The `Nightly Release` workflow checks `main` once per day at 02:00 UTC. When
+`main` has changed since the previous successful nightly run, it publishes the
+multi-architecture server image with two tags:
+
+- `ghcr.io/agentregistry-dev/agentregistry/server:v0.0.0-alpha.<commit-sha>` is
+  immutable and identifies the exact source commit.
+- `ghcr.io/agentregistry-dev/agentregistry/server:latest-dev` moves to the most
+  recent successful nightly image.
+
+Nightly runs do not publish CLI binaries, Helm charts, Git tags, or GitHub
+Releases. They can also be started manually from GitHub Actions, including when
+`main` has not changed since the previous nightly. Manual runs must target the
+`main` branch.
+
+Prefer the immutable tag for repeatable deployments. To evaluate the moving
+tag with the Helm chart, override the image tag and pull policy explicitly:
+
+```bash
+helm upgrade --install agentregistry \
+  oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry \
+  --set image.tag=latest-dev \
+  --set image.pullPolicy=Always
+```
 
 ## Cut a release
 
@@ -45,7 +70,7 @@ For a `vX.Y.Z` release, `.github/workflows/release.yaml` publishes:
    ```
 
 5. Monitor the `Release` workflow. The GitHub Release is created only after
-   both container images and the Helm chart have been published successfully.
+   the server image and Helm chart have been published successfully.
 
 Do not move or reuse a published release tag. If released content needs to
 change, publish a new patch version.
@@ -58,7 +83,6 @@ artifact:
 ```bash
 gh release view vX.Y.Z
 docker pull ghcr.io/agentregistry-dev/agentregistry/server:vX.Y.Z
-docker pull ghcr.io/agentregistry-dev/agentregistry/arctl-agentgateway:vX.Y.Z
 helm show chart \
   oci://ghcr.io/agentregistry-dev/agentregistry/charts/agentregistry \
   --version X.Y.Z

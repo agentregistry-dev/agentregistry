@@ -70,18 +70,6 @@ export function AgentCard({ agent, onDeploy, showDeploy = false, onClick, tagCou
               <span>{formatDate(official.publishedAt)}</span>
             )}
 
-            {source?.repository?.url && (
-              <a
-                href={source.repository.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 hover:text-primary transition-colors"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <Github className="h-3 w-3" aria-hidden="true" />
-                Repo
-              </a>
-            )}
           </div>
         </div>
 

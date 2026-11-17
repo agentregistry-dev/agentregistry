@@ -1,6 +1,10 @@
 package client
 
 import (
+	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
@@ -127,5 +131,76 @@ func TestNewClient_HttpClientNotNil(t *testing.T) {
 	c := NewClient("", "")
 	if c.httpClient == nil {
 		t.Error("NewClient httpClient should not be nil")
+	}
+}
+
+func TestDoJSON_NotFoundKeepsServerDetail(t *testing.T) {
+	tests := []struct {
+		name    string
+		body    string
+		wantMsg string
+	}{
+		{name: "detail", body: `{"detail":"\"all\" is read-only; select one namespace"}`, wantMsg: `resource not found: "all" is read-only; select one namespace`},
+		{name: "no body", wantMsg: "resource not found"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = w.Write([]byte(tt.body))
+			}))
+			t.Cleanup(srv.Close)
+
+			_, err := NewClient(srv.URL, "").GetLatest(context.Background(), "Agent", "team-a", "acme")
+			if !errors.Is(err, ErrNotFound) {
+				t.Fatalf("GetLatest() error = %v, want ErrNotFound", err)
+			}
+			if err.Error() != tt.wantMsg {
+				t.Fatalf("GetLatest() error = %q, want %q", err.Error(), tt.wantMsg)
+			}
+		})
+	}
+}
+
+func TestApplyBatch_SendsNamespace(t *testing.T) {
+	tests := []struct {
+		name      string
+		opts      ApplyOpts
+		del       bool
+		wantQuery string
+	}{
+		{name: "no options", wantQuery: ""},
+		{name: "namespace", opts: ApplyOpts{Namespace: "team-a"}, wantQuery: "namespace=team-a"},
+		{name: "dry run and namespace", opts: ApplyOpts{DryRun: true, Namespace: "team-a"}, wantQuery: "dryRun=true&namespace=team-a"},
+		{name: "delete with namespace", opts: ApplyOpts{Namespace: "team-a"}, del: true, wantQuery: "namespace=team-a"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var gotMethod, gotQuery string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotMethod, gotQuery = r.Method, r.URL.RawQuery
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"results":[]}`))
+			}))
+			t.Cleanup(srv.Close)
+
+			c := NewClient(srv.URL, "")
+			var err error
+			if tt.del {
+				_, err = c.DeleteViaApply(context.Background(), []byte("{}"), tt.opts)
+			} else {
+				_, err = c.Apply(context.Background(), []byte("{}"), tt.opts)
+			}
+			if err != nil {
+				t.Fatalf("apply error = %v", err)
+			}
+			wantMethod := http.MethodPost
+			if tt.del {
+				wantMethod = http.MethodDelete
+			}
+			if gotMethod != wantMethod || gotQuery != tt.wantQuery {
+				t.Fatalf("request = %s ?%s, want %s ?%s", gotMethod, gotQuery, wantMethod, tt.wantQuery)
+			}
+		})
 	}
 }

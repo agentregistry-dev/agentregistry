@@ -40,7 +40,7 @@ endif
 ifndef VERSION
 VERSION := $(shell git describe --tags --always 2>/dev/null | grep v || echo "v0.0.0-g$(GIT_COMMIT)")
 endif
-KAGENT_VERSION ?= v0.8.0-beta6
+KAGENT_VERSION ?= v0.10.1
 ifndef KAGENT_HELM_VERSION
 KAGENT_HELM_VERSION := $(shell echo $(KAGENT_VERSION) | sed 's/^v//')
 endif
@@ -55,10 +55,9 @@ KAGENT_HELM_CHART ?= oci://ghcr.io/kagent-dev/kagent/helm/kagent
 
 LDFLAGS := \
 	-s -w \
-	-X 'github.com/agentregistry-dev/agentregistry/internal/version.Version=$(VERSION)' \
-	-X 'github.com/agentregistry-dev/agentregistry/internal/version.GitCommit=$(GIT_COMMIT)' \
-	-X 'github.com/agentregistry-dev/agentregistry/internal/version.BuildDate=$(BUILD_DATE)' \
-	-X 'github.com/agentregistry-dev/agentregistry/internal/version.DockerRegistry=$(DOCKER_REGISTRY)'
+	-X 'github.com/agentregistry-dev/agentregistry/pkg/version.Version=$(VERSION)' \
+	-X 'github.com/agentregistry-dev/agentregistry/pkg/version.GitCommit=$(GIT_COMMIT)' \
+	-X 'github.com/agentregistry-dev/agentregistry/pkg/version.BuildDate=$(BUILD_DATE)'
 
 # Local architecture detection to build for the current platform
 ifndef LOCALARCH
@@ -74,6 +73,8 @@ GOLANGCI_LINT ?= $(GO_TOOL) golangci-lint
 GOTESTSUM     ?= $(GO_TOOL) gotestsum
 HELM          ?= $(GO_TOOL) helm
 HELM_DOCS     ?= $(GO_TOOL) helm-docs --log-level=fatal
+# Extra flags appended to the local AgentRegistry Helm install.
+HELM_EXTRA_ARGS ?=
 KIND          ?= $(GO_TOOL) kind
 
 ## Helm / Chart settings
@@ -130,9 +131,8 @@ clean-ui: ## Clean UI build artifacts
 
 # Build the Go CLI
 .PHONY: build-cli
-build-cli: mod-download ## Build the Go CLI
+build-cli: ## Build the Go CLI
 	@echo "Building Go CLI..."
-	@echo "Downloading Go dependencies..."
 	@echo "Building binary..."
 	go build -ldflags "$(LDFLAGS)" \
 		-o bin/arctl cmd/cli/main.go
@@ -140,9 +140,8 @@ build-cli: mod-download ## Build the Go CLI
 
 # Build the Go server (with embedded UI)
 .PHONY: build-server
-build-server: mod-download ## Build the Go server binary
+build-server: ## Build the Go server binary
 	@echo "Building Go CLI..."
-	@echo "Downloading Go dependencies..."
 	@echo "Building binary..."
 	go build -ldflags "$(LDFLAGS)" \
 		-o bin/arctl-server cmd/server/main.go
@@ -182,7 +181,7 @@ run-docker: local-registry docker docker-tag-as-dev ## Start local development e
 
 # Start local development environment with Kind cluster
 .PHONY: run-k8s
-run-k8s: local-registry create-kind-cluster build-cli ## Start local development environment with Kind cluster
+run-k8s: setup-kind-cluster build-cli ## Start local development environment with Kind cluster
 	@echo ""
 	@echo "agentregistry is running (k8s backend):"
 	@echo "  UI:  http://localhost:12121"
@@ -229,10 +228,41 @@ test-cli-e2e: ## Run CLI subprocess e2e tests (no docker/k8s required; DB cases 
 	$(GOTESTSUM) --format testdox -- -tags=e2e -timeout 5m ./pkg/cli/...
 
 # Run e2e tests against a local Kind cluster.
+E2E_SETUP ?= true
+E2E_SUITE ?= all
+E2E_RUN ?=
+E2E_GEN_DOCS ?= false
+E2E_DISCOVERY_INTERVAL ?= 5s
+
+ifeq ($(E2E_SUITE),all)
+E2E_PACKAGES := ./test/e2e/...
+else ifeq ($(E2E_SUITE),registry)
+E2E_PACKAGES := ./test/e2e
+else ifeq ($(E2E_SUITE),kagent)
+E2E_PACKAGES := ./test/e2e/kagent/...
+else
+$(error unsupported E2E_SUITE "$(E2E_SUITE)"; expected all, registry, or kagent)
+endif
+
 .PHONY: test-e2e
-test-e2e: setup-kind-cluster build-cli ## Run end-to-end tests against Kubernetes
-	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) GOOGLE_API_KEY=$(GOOGLE_API_KEY) OPENAI_API_KEY=$(OPENAI_API_KEY) \
-	  $(GOTESTSUM) --format testdox -- -v -tags=e2e -timeout 45m ./test/e2e/...
+test-e2e: build-cli ## Run end-to-end tests against Kubernetes
+ifeq ($(E2E_SETUP),true)
+test-e2e: setup-kind-cluster
+	@kubectl --context $(KIND_CLUSTER_CONTEXT) -n $(KIND_NAMESPACE) set env \
+	  deployment/agentregistry AGENT_REGISTRY_CONTROLLER_DISCOVERY_INTERVAL=$(E2E_DISCOVERY_INTERVAL)
+	@kubectl --context $(KIND_CLUSTER_CONTEXT) -n $(KIND_NAMESPACE) rollout status \
+	  deployment/agentregistry --timeout=2m
+else ifneq ($(E2E_SETUP),false)
+$(error unsupported E2E_SETUP "$(E2E_SETUP)"; expected true or false)
+endif
+	@KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) KIND_NAMESPACE=$(KIND_NAMESPACE) KAGENT_NAMESPACE=$(KAGENT_NAMESPACE) \
+	  GOOGLE_API_KEY=$(GOOGLE_API_KEY) OPENAI_API_KEY=$(OPENAI_API_KEY) E2E_GEN_DOCS=$(E2E_GEN_DOCS) \
+	  $(GOTESTSUM) --format testdox -- -count=1 -v -tags=e2e -timeout 45m \
+	  $(if $(strip $(E2E_RUN)),-run '^$(E2E_RUN)$$') $(E2E_PACKAGES)
+
+.PHONY: generate-e2e-docs
+generate-e2e-docs: E2E_GEN_DOCS := true
+generate-e2e-docs: test-e2e ## Generate scenario docs from E2E tests
 
 .PHONY: gen-openapi
 gen-openapi: ## Generate the OpenAPI specification
@@ -277,13 +307,6 @@ dev-build: build-ui ## Build quickly for local development
 	go build -o bin/arctl cmd/cli/main.go
 	@echo "Development build complete!"
 
-
-# Build custom agent gateway image with npx/uvx support
-.PHONY: docker-agentgateway
-docker-agentgateway: buildx-create ## Build the custom agent gateway image
-	@echo "Building custom agent gateway image..."
-	$(DOCKER_BUILDER) build --builder $(BUILDX_BUILDER_NAME) $(DOCKER_BUILD_ARGS) -f docker/agentgateway.Dockerfile -t $(DOCKER_BUILD_REGISTRY)/$(DOCKER_REPO)/arctl-agentgateway:$(VERSION) .
-	echo "✓ Agent gateway image built successfully";
 
 .PHONY: docker-server
 docker-server: .env buildx-create ## Build the server Docker image
@@ -333,7 +356,7 @@ buildx-create: local-registry ## Create the buildx builder on buildnet (run once
 	fi
 
 .PHONY: docker
-docker: docker-agentgateway docker-server ## Build the project Docker images
+docker: docker-server ## Build the project Docker image
 
 .PHONY: docker-tag-as-dev
 docker-tag-as-dev: ## Tag and push Docker images as :dev
@@ -341,9 +364,6 @@ docker-tag-as-dev: ## Tag and push Docker images as :dev
 	docker pull $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION)
 	docker tag $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:$(VERSION) $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:dev
 	docker push $(DOCKER_REGISTRY)/$(DOCKER_REPO)/server:dev
-	docker pull $(DOCKER_REGISTRY)/$(DOCKER_REPO)/arctl-agentgateway:$(VERSION)
-	docker tag $(DOCKER_REGISTRY)/$(DOCKER_REPO)/arctl-agentgateway:$(VERSION) $(DOCKER_REGISTRY)/$(DOCKER_REPO)/arctl-agentgateway:dev
-	docker push $(DOCKER_REGISTRY)/$(DOCKER_REPO)/arctl-agentgateway:dev
 	@echo "✓ Docker image pulled successfully"
 
 KIND_CLUSTER_NAME ?= agentregistry
@@ -371,9 +391,9 @@ create-kind-cluster: local-registry ## Create a local Kind cluster with MetalLB 
 		KIND_IMAGE_VERSION=$(KIND_IMAGE_VERSION) \
 		REG_NAME=kind-registry \
 		REG_PORT=5001 \
-		bash ./scripts/kind/setup-kind.sh; \
+		bash ./hack/kind/setup-kind.sh; \
 	fi
-	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) bash ./scripts/kind/setup-metallb.sh
+	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) bash ./hack/kind/setup-metallb.sh
 
 .PHONY: delete-kind-cluster
 delete-kind-cluster: ## Delete the local Kind cluster (no-op if it does not exist)
@@ -401,7 +421,7 @@ BUILD ?= true
 .PHONY: install-agentregistry
 install-agentregistry: charts-generate ## Build images and Helm install AgentRegistry into the Kind cluster (BUILD=false to skip image builds)
 ifeq ($(BUILD),true)
-install-agentregistry: docker-server docker-agentgateway
+install-agentregistry: docker-server
 endif
 	@$(HELM) upgrade --install agentregistry charts/agentregistry \
 	    --kube-context $(KIND_CLUSTER_CONTEXT) \
@@ -412,6 +432,7 @@ endif
 	    --set image.repository=$(DOCKER_REPO) \
 	    --set image.tag=$(VERSION) \
 	    --set service.type=LoadBalancer \
+	    $(HELM_EXTRA_ARGS) \
 	    --wait \
 	    --timeout=5m;
 
@@ -436,18 +457,18 @@ install-kagent-controller: ## Deploy kagent controller (minimal, no agents/tools
 	  --version $(KAGENT_HELM_VERSION) \
 	  --set ui.replicas=0 \
 	  --set kagent-tools.enabled=false \
-	  --set tools.grafana-mcp.enabled=false \
-	  --set tools.querydoc.enabled=false \
-	  --set agents.argo-rollouts-agent.enabled=false \
-	  --set agents.cilium-debug-agent.enabled=false \
-	  --set agents.cilium-manager-agent.enabled=false \
-	  --set agents.cilium-policy-agent.enabled=false \
-	  --set agents.helm-agent.enabled=false \
-	  --set agents.istio-agent.enabled=false \
-	  --set agents.k8s-agent.enabled=false \
-	  --set agents.kgateway-agent.enabled=false \
-	  --set agents.observability-agent.enabled=false \
-	  --set agents.promql-agent.enabled=false \
+	  --set grafana-mcp.enabled=false \
+	  --set querydoc.enabled=false \
+	  --set argo-rollouts-agent.enabled=false \
+	  --set cilium-debug-agent.enabled=false \
+	  --set cilium-manager-agent.enabled=false \
+	  --set cilium-policy-agent.enabled=false \
+	  --set helm-agent.enabled=false \
+	  --set istio-agent.enabled=false \
+	  --set k8s-agent.enabled=false \
+	  --set kgateway-agent.enabled=false \
+	  --set observability-agent.enabled=false \
+	  --set promql-agent.enabled=false \
 	  --wait \
 	  --timeout=5m
 
@@ -475,10 +496,10 @@ dump-kind-state: ## Dump Kind cluster state for debugging (pods, events, kagent 
 	@kubectl get events -A --sort-by='.lastTimestamp' --context $(KIND_CLUSTER_CONTEXT) 2>/dev/null | tail -50 || true
 	@echo ""
 	@echo "=== Kagent pods ==="
-	@kubectl get pods -n kagent --context $(KIND_CLUSTER_CONTEXT) 2>/dev/null || true
+	@kubectl get pods -n $(KAGENT_NAMESPACE) --context $(KIND_CLUSTER_CONTEXT) 2>/dev/null || true
 	@echo ""
 	@echo "=== Kagent controller logs ==="
-	@kubectl logs deployment/kagent-controller -n kagent --context $(KIND_CLUSTER_CONTEXT) --tail=100 2>/dev/null || true
+	@kubectl logs deployment/kagent-controller -n $(KAGENT_NAMESPACE) --context $(KIND_CLUSTER_CONTEXT) --tail=100 2>/dev/null || true
 
 bin/arctl-linux-amd64:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o bin/arctl-linux-amd64 cmd/cli/main.go
@@ -537,10 +558,6 @@ verify: fmt mod-tidy gen-client charts-docs ## Run all verification checks
 mod-tidy: ## Run go mod tidy on the main module and tools module
 	go mod tidy
 	cd $(TOOLS_DIR) && go mod tidy
-
-.PHONY: mod-download
-mod-download: ## Run go mod download
-	go mod download
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Helm / Chart targets
@@ -627,4 +644,4 @@ helm-unittest-install: ## Install the helm-unittest plugin if needed
 	HELM_PLUGIN_UNITTEST_URL=$(HELM_PLUGIN_UNITTEST_URL) \
 	HELM_PLUGIN_UNITTEST_VERSION=$(HELM_PLUGIN_UNITTEST_VERSION) \
 	HELM_PLUGIN_INSTALL_FLAGS="$(HELM_PLUGIN_INSTALL_FLAGS)" \
-	bash ./scripts/install-helm-unittest.sh
+	bash ./hack/install-helm-unittest.sh

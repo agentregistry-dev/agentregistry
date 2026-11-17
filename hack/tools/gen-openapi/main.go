@@ -14,10 +14,10 @@ import (
 
 	"github.com/agentregistry-dev/agentregistry/internal/registry/api/router"
 	"github.com/agentregistry-dev/agentregistry/internal/registry/config"
-	"github.com/agentregistry-dev/agentregistry/internal/version"
 	arv0 "github.com/agentregistry-dev/agentregistry/pkg/api/v0"
 	pkgdb "github.com/agentregistry-dev/agentregistry/pkg/registry/database"
 	"github.com/agentregistry-dev/agentregistry/pkg/registry/v1alpha1store"
+	"github.com/agentregistry-dev/agentregistry/pkg/version"
 )
 
 func main() {
@@ -66,6 +66,10 @@ func generateSpec(apiVersion string) *huma.OpenAPI {
 		// (opt-in via AGENT_REGISTRY_MCP_REGISTRY_COMPAT_ENABLED); documenting
 		// the surface regardless keeps the published OpenAPI complete.
 		MCPRegistryCompatEnabled: true,
+		// Same reasoning for the read-only Claude Code marketplace.json
+		// compatibility route (opt-in via
+		// AGENT_REGISTRY_PLUGIN_MARKETPLACE_COMPAT_ENABLED at runtime).
+		PluginMarketplaceCompatEnabled: true,
 	}
 
 	// Register all routes. Services and metrics are nil because they are only

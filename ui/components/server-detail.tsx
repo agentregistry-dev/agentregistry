@@ -167,29 +167,6 @@ export function ServerDetail({ server, onServerCopied }: ServerDetailProps) {
                 <p className="text-[15px] leading-relaxed">{serverData.description}</p>
               </section>
 
-              {(() => {
-                const repoUrl = serverData.source?.repository?.url
-                if (!repoUrl) return null
-                return (
-                  <section>
-                    <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2">Repository</h3>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">URL</span>
-                        <a
-                          href={repoUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm text-primary hover:underline flex items-center gap-1"
-                        >
-                          {repoUrl} <ExternalLink className="h-3 w-3" />
-                        </a>
-                      </div>
-                    </div>
-                  </section>
-                )
-              })()}
-
               {/* Repo stats */}
               {(githubStars !== undefined || repoData) && (
                 <section>
@@ -232,21 +209,6 @@ export function ServerDetail({ server, onServerCopied }: ServerDetailProps) {
                       </div>
                     )}
                   </div>
-                  {(() => {
-                    const repoUrl = serverData.source?.repository?.url
-                    if (!repoUrl) return null
-                    return (
-                      <a
-                        href={repoUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1.5 text-xs text-primary hover:underline mt-3"
-                      >
-                        <ExternalLink className="h-3 w-3" />
-                        View Repository
-                      </a>
-                    )
-                  })()}
                 </section>
               )}
             </TabsContent>

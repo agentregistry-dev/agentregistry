@@ -276,3 +276,46 @@ tests:
     asserts:
       - isNull:
           path: spec.template.spec.initContainers
+
+  # ── Secret store ───────────────────────────────────────────────────────────
+
+  - it: configures the Kubernetes Secret store by default
+    template: deployment.yaml
+    release:
+      namespace: custom-system
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AGENT_REGISTRY_SECRET_STORE
+            value: Kubernetes
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AGENT_REGISTRY_SECRET_STORE_KUBERNETES_NAMESPACE
+            value: custom-system
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AGENT_REGISTRY_SECRET_STORE_ENCRYPTION_KEY
+
+  - it: wires the Database Secret store encryption key
+    template: deployment.yaml
+    set:
+      secretStore.type: Database
+      secretStore.encryptionKeySecretRef.name: payload-key
+      secretStore.encryptionKeySecretRef.key: KEY
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AGENT_REGISTRY_SECRET_STORE
+            value: Database
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AGENT_REGISTRY_SECRET_STORE_ENCRYPTION_KEY
+            valueFrom:
+              secretKeyRef:
+                name: payload-key
+                key: KEY
