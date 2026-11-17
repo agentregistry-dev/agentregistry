@@ -22,18 +22,18 @@ import (
 //     row; reconciler observes NOTIFY.
 //  2. reconciler calls DeploymentAdapter.Apply with the resolved
 //     Target + Runtime objects.
-//  3. Apply returns immediately with a Progressing condition. Adapter
-//     spawns its own watch loop to later PatchStatus with Ready=True
-//     when the workload converges.
+//  3. Apply returns immediately with a Progressing condition. Adapters
+//     that implement DeploymentReadinessProber are polled by the
+//     controller, which writes Ready=True once the workload converges.
 //  4. on Deployment delete, Store.Delete sets DeletionTimestamp; the
 //     reconciler calls DeploymentAdapter.Remove for external-state
 //     teardown. Row lifetime is owned by soft-delete + GC, not by
 //     adapter-returned tokens — Remove is purely an external-state
 //     hook.
 //
-// Apply is ALWAYS ASYNC. Apply returns quickly; convergence is tracked
-// via the adapter's own watch loop writing status. The reconciler
-// doesn't block on convergence.
+// Apply is ALWAYS ASYNC. Apply returns quickly; when an adapter implements
+// DeploymentReadinessProber, the controller polls it to track convergence.
+// The reconciler doesn't block on convergence.
 //
 // Adapters with expensive Apply paths can also implement
 // DeploymentDesiredFingerprinter to make unchanged reconciles cheap after the
@@ -61,8 +61,8 @@ type DeploymentAdapter interface {
 	//
 	// Idempotent. Safe to call repeatedly with the same input.
 	// Returns the initial conditions to persist (typically
-	// Progressing=True). The adapter's async watch loop later refines
-	// the conditions via PatchStatus.
+	// Progressing=True). Adapters implementing DeploymentReadinessProber
+	// report later convergence through the controller's readiness polling.
 	Apply(ctx context.Context, in ApplyInput) (*ApplyResult, error)
 
 	// Remove tears down runtime resources. Called when:
@@ -158,6 +158,28 @@ type LogLine struct {
 	Timestamp time.Time
 	Stream    string // "stdout" | "stderr" | runtime-specific
 	Line      string
+}
+
+// DeploymentReadinessProber is an optional adapter capability for runtimes
+// whose Apply returns before the workload converges (Progressing=True). The
+// deployment controller calls ProbeReadiness after a successful Apply and on
+// every later reconcile of an unchanged Deployment, persists the returned
+// conditions, and requeues the Deployment until Ready reports true.
+//
+// Implementations must be read-only against the runtime and cheap enough to
+// run on every controller resync.
+type DeploymentReadinessProber interface {
+	ProbeReadiness(ctx context.Context, in ApplyInput) (*ReadinessResult, error)
+}
+
+// ReadinessResult is the outcome of a DeploymentReadinessProber call.
+type ReadinessResult struct {
+	// Ready is true once the runtime reports every workload for the
+	// Deployment as available. When false the controller requeues.
+	Ready bool
+	// Conditions to merge into Deployment.Status. Probers normally return a
+	// "Ready" condition and, once converged, Progressing=False.
+	Conditions []v1alpha1.Condition
 }
 
 // DeploymentDiscoverySource is an optional adapter capability for runtimes

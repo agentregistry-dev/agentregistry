@@ -27,6 +27,12 @@ func (c *DeploymentController) processQueueItem(
 ) {
 	defer queue.Done(key)
 	outcome, message, err := c.reconcileKey(ctx, key)
+	if requeue, ok := asRequeueAfter(err); ok {
+		queue.Forget(key)
+		queue.AddAfter(key, requeue.after)
+		logger.Debug("deployment waiting for runtime readiness", "namespace", key.Namespace, "name", key.Name, "message", requeue.message)
+		return
+	}
 	if err != nil {
 		logger.Error("deployment reconcile failed", "namespace", key.Namespace, "name", key.Name, "error", err)
 		queue.AddRateLimited(key)
@@ -105,7 +111,7 @@ func (c *DeploymentController) apply(ctx context.Context, deployment *types.Depl
 	if skip, err := shouldSkipApply(deployment, fingerprint, forceToken); err != nil {
 		return "", "", err
 	} else if skip {
-		return "unchanged", "deployment desired input unchanged", nil
+		return c.reconcileReadiness(ctx, deployment, adapter, input, "unchanged", "deployment desired input unchanged")
 	}
 	result, err := adapter.Apply(ctx, input)
 	if err != nil {
@@ -123,6 +129,7 @@ func (c *DeploymentController) apply(ctx context.Context, deployment *types.Depl
 		}
 		return "", "", err
 	}
+	return c.reconcileReadiness(ctx, deployment, adapter, input, "success", "deployment applied")
 	if c.DeploymentApplied != nil {
 		c.DeploymentApplied(ctx, input, result, nil)
 	}
@@ -323,6 +330,20 @@ func deploymentStatusPatch(deployment *types.DeploymentRecord, result *types.App
 			s.ObservedGeneration = deployment.Metadata.Generation
 		}
 		if result != nil {
+			hasReadyCondition := false
+			hasProgressingCondition := false
+			for _, cond := range result.Conditions {
+				if cond.Type == "Ready" {
+					hasReadyCondition = true
+				}
+				if cond.Type == "Progressing" && cond.Status == v1alpha1.ConditionTrue {
+					hasProgressingCondition = true
+				}
+			}
+			if hasProgressingCondition && !hasReadyCondition {
+				s.Conditions = slices.DeleteFunc(s.Conditions, func(cond v1alpha1.Condition) bool {
+					return cond.Type == "Ready"
+				})
 			if result.Runtime != nil {
 				s.Runtime = result.Runtime
 			}

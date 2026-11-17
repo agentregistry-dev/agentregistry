@@ -50,6 +50,10 @@ type DeploymentController struct {
 	// DependencyKinds extends the built-in resource kinds whose durable events
 	// requeue Deployments. Fingerprint gating prevents unchanged adapter work.
 	DependencyKinds map[string]bool
+	// ReadinessRequeueInterval is the delay between readiness probes for
+	// adapters implementing types.DeploymentReadinessProber. Zero uses
+	// defaultReadinessRequeueInterval.
+	ReadinessRequeueInterval time.Duration
 	// DeploymentFinalized runs after required provider cleanup, finalizer removal,
 	// and row purge. It wakes owners whose cleanup is gated on child removal.
 	DeploymentFinalized func(context.Context, *v1alpha1.Deployment)
